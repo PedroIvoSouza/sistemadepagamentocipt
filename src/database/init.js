@@ -1,32 +1,57 @@
-// Importa o driver do sqlite3
 const sqlite3 = require('sqlite3').verbose();
-// Abre (ou cria, se não existir) o arquivo do banco de dados
 const db = new sqlite3.Database('./sistemacipt.db');
 
 db.serialize(() => {
-    // O .serialize garante que os comandos sejam executados em ordem
+    console.log('Iniciando a verificação/criação das tabelas...');
 
-    console.log('Iniciando a criação da tabela de permissionários...');
-
-    // Comando para criar a tabela
+    // Tabela 1: Permissionários (A que estava faltando)
     db.run(`
         CREATE TABLE IF NOT EXISTS permissionarios (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             nome_empresa TEXT NOT NULL,
             cnpj TEXT NOT NULL UNIQUE,
             email TEXT NOT NULL UNIQUE,
+            numero_sala TEXT NOT NULL,
             valor_aluguel REAL NOT NULL,
-            senha TEXT NOT NULL 
+            senha TEXT,
+            senha_reset_token TEXT,
+            senha_reset_expires INTEGER,
+            telefone TEXT,
+            email_financeiro TEXT,
+            responsavel_financeiro TEXT,
+            website TEXT,
+            email_notificacao TEXT
         );
     `, (err) => {
         if (err) {
-            return console.error('Erro ao criar a tabela:', err.message);
+            return console.error('Erro ao criar a tabela "permissionarios":', err.message);
         }
-        console.log('Tabela "permissionarios" criada ou já existente com sucesso.');
+        console.log('Tabela "permissionarios" verificada/criada com sucesso.');
+    });
+
+    // Tabela 2: DARs (Versão correta com a trava de segurança)
+    db.run(`
+        CREATE TABLE IF NOT EXISTS dars (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            permissionario_id INTEGER NOT NULL,
+            mes_referencia INTEGER NOT NULL,
+            ano_referencia INTEGER NOT NULL,
+            valor REAL NOT NULL,
+            data_vencimento TEXT NOT NULL,
+            status TEXT NOT NULL,
+            codigo_barras TEXT,
+            link_pdf TEXT,
+            FOREIGN KEY (permissionario_id) REFERENCES permissionarios (id),
+            UNIQUE (permissionario_id, mes_referencia, ano_referencia)
+        );
+    `, (err) => {
+        if (err) {
+            return console.error('Erro ao criar a tabela "dars":', err.message);
+        }
+        console.log('Tabela "dars" verificada/criada com sucesso.');
     });
 });
 
-// Fecha a conexão com o banco de dados
 db.close((err) => {
     if (err) {
         return console.error(err.message);

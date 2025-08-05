@@ -1,51 +1,56 @@
+require('dotenv').config();
 const express = require('express');
-const sqlite3 = require('sqlite3').verbose(); // Importe o sqlite3
+const sqlite3 = require('sqlite3').verbose();
+const path = require('path'); // <-- 1. Importe o módulo 'path'
+
+// Importa as nossas novas rotas de autenticação
+const authRoutes = require('./api/authRoutes');
+const userRoutes = require('./api/userRoutes'); 
+const darsRoutes = require('./api/darsRoutes'); 
+const adminAuthRoutes = require('./api/adminAuthRoutes'); // <-- ADICIONE ESTA LINHA
+const adminRoutes = require('./api/adminRoutes'); // <-- ADICIONE ESTA LINHA
+const adminManagementRoutes = require('./api/adminManagementRoutes');
+const adminDarsRoutes = require('./api/adminDarsRoutes');
 
 const app = express();
 const PORT = 3000;
 
-// Middleware ESSENCIAL para o Express entender JSON no corpo das requisições
 app.use(express.json());
+
+// --- CORREÇÃO PRINCIPAL AQUI ---
+// 2. Usamos path.join para criar um caminho absoluto para a pasta 'public'
+// __dirname é o diretório do arquivo atual (src)
+// '..' sobe um nível (para a raiz do projeto)
+// 'public' entra na pasta public
+const publicPath = path.join(__dirname, '..', 'public');
+console.log(`Servindo arquivos estáticos da pasta: ${publicPath}`); // Log para depuração
+app.use(express.static(publicPath));
+// --------------------------------
 
 // Conecta ao banco de dados
 const db = new sqlite3.Database('./sistemacipt.db');
 
-app.get('/', (req, res) => {
+app.get('/api', (req, res) => { // Mudei a rota raiz para /api para não conflitar
   res.send('API do Sistema de Pagamento CIPT no ar!');
 });
 
-// --- NOSSA NOVA ROTA DE CADASTRO ---
-app.post('/api/permissionarios', (req, res) => {
-    console.log('Recebendo dados para cadastro:', req.body);
+// Diz ao app para usar as rotas de autenticação
+app.use('/api/auth', authRoutes);
+app.use('/api/user', userRoutes);
+app.use('/api/dars', darsRoutes); 
 
-    // Pega os dados do corpo da requisição
-    const { nome_empresa, cnpj, email, valor_aluguel, senha } = req.body;
+// --- ROTAS DE ADMIN ---
+// As mais específicas devem vir primeiro:
+app.use('/api/admin/auth', adminAuthRoutes); 
+app.use('/api/admin/dars', adminDarsRoutes); // <-- ESTA SOBE
+app.use('/api/admins', adminManagementRoutes);
 
-    // Validação básica
-    if (!nome_empresa || !cnpj || !email || !valor_aluguel || !senha) {
-        return res.status(400).json({ error: 'Todos os campos são obrigatórios.' });
-    }
+// A rota mais genérica de admin vem por ÚLTIMO:
+app.use('/api/admin', adminRoutes); 
+// --------------------
 
-    const sql = `INSERT INTO permissionarios (nome_empresa, cnpj, email, valor_aluguel, senha) VALUES (?, ?, ?, ?, ?)`;
-
-    db.run(sql, [nome_empresa, cnpj, email, valor_aluguel, senha], function(err) {
-        if (err) {
-            console.error('Erro no banco de dados:', err.message);
-            // Verifica erro de CNPJ/email duplicado
-            if (err.message.includes('UNIQUE constraint failed')) {
-                return res.status(409).json({ error: 'CNPJ ou E-mail já cadastrado.' });
-            }
-            return res.status(500).json({ error: 'Erro ao cadastrar permissionário.' });
-        }
-
-        // Se tudo deu certo, retorna o ID do novo usuário
-        res.status(201).json({
-            message: 'Permissionário cadastrado com sucesso!',
-            id: this.lastID
-        });
-    });
-});
-// ------------------------------------
+// Inicia o agendador de tarefas mensais
+require('../cron/gerarDarsMensais.js');
 
 app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}.`);
