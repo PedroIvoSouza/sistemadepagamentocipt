@@ -1,8 +1,7 @@
-// Em: src/services/cobrancaService.js
 const axios = require('axios');
-const https = require('https'); // Adicionado para o agente HTTPS
+const https = require('https';
 
-// --- Funções de Data (sem alterações) ---
+// ... (Suas funções de data isFeriado, isDiaUtil, etc. continuam aqui sem alterações) ...
 function isFeriado(data) {
     const dia = String(data.getDate()).padStart(2, '0');
     const mes = String(data.getMonth() + 1).padStart(2, '0');
@@ -28,7 +27,9 @@ function getProximoDiaUtil(data) {
 }
 // -----------------------------------------------------------
 
+
 async function calcularEncargosAtraso(dar) {
+    // ... (lógica de data e multa continua a mesma) ...
     const hoje = new Date();
     
     let novaDataVencimento = new Date(hoje);
@@ -52,22 +53,17 @@ async function calcularEncargosAtraso(dar) {
     const multa = dar.valor * 0.02;
     let juros = 0;
 
-    // --- BLOCO DE CÓDIGO CORRIGIDO E ROBUSTO PARA BUSCAR A SELIC ---
+    // --- BLOCO DE CÓDIGO FINAL E ROBUSTO PARA BUSCAR A SELIC ---
     try {
         console.log('[INFO] Buscando taxa SELIC da API BrasilAPI...');
         
-        // Cria um agente HTTPS que ignora erros de certificado (útil para APIs do governo)
-        const httpsAgent = new https.Agent({
-          rejectUnauthorized: false,
-        });
-
-        // URL da BrasilAPI para a taxa SELIC
+        const httpsAgent = new https.Agent({ rejectUnauthorized: false });
         const url = 'https://brasilapi.com.br/api/taxas/v1/selic';
 
-        const response = await axios.get(url, {
-            httpsAgent, // Usa o agente para evitar problemas de certificado
-            timeout: 15000, // Timeout de 15 segundos
-        });
+        const response = await axios.get(url, { httpsAgent, timeout: 15000 });
+
+        // LOG DETALHADO DA RESPOSTA - A CHAVE ESTÁ AQUI
+        console.log('[DEBUG] Resposta recebida da API da SELIC:', JSON.stringify(response.data, null, 2));
 
         // Verificação de segurança para garantir que a resposta é válida
         if (response && response.data && Array.isArray(response.data) && response.data.length > 0 && response.data[0].hasOwnProperty('valor')) {
@@ -81,8 +77,8 @@ async function calcularEncargosAtraso(dar) {
         }
 
     } catch (error) {
-        console.error("Erro ao buscar a taxa SELIC. Juros não serão calculados.", error.message);
-        juros = 0; // Retorna um valor seguro para não quebrar o resto da aplicação
+        console.error("[ERRO] Falha ao buscar a taxa SELIC:", error.message);
+        juros = 0;
     }
     // ------------------------------------------------------------------
 
