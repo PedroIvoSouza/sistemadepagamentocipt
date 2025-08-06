@@ -17,34 +17,21 @@
             --raio-borda: 0.5rem;
             --cor-texto: #343a40;
         }
-
-        html, body {
-            height: 100%;
-        }
-
+        html, body { height: 100%; }
         body {
             font-family: 'Montserrat', sans-serif;
             display: flex;
             flex-direction: column;
             background-color: var(--cor-footer); 
         }
-
-        .navbar {
-            background-color: var(--cor-primaria);
-            padding: 0.8rem 0;
-        }
-
-        .navbar > .container {
-            justify-content: center !important;
-        }
-
+        .navbar { background-color: var(--cor-primaria); padding: 0.8rem 0; }
+        .navbar > .container { justify-content: center !important; }
         .navbar-brand img {
             filter: brightness(0) invert(1);
             max-width: 602px;
             height: 55px;
             object-fit: contain;
         }
-
         .main-container {
             flex-grow: 1;
             display: flex;
@@ -54,16 +41,13 @@
             background-position: center;
             padding: 4rem 1rem;
         }
-        
         .headline-logo {
-            /* --- AJUSTES REALIZADOS AQUI --- */
-            max-width: 350px; /* Reduzido para 400px */
+            max-width: 350px;
             height: auto;
             display: block;
-            margin-left: 30%; /* Aumentado para 30% para mover mais para a direita */
+            margin-left: 30%;
             margin-right: auto;
         }
-
         .login-card {
             background-color: white;
             color: var(--cor-texto);
@@ -73,29 +57,22 @@
             width: 100%;
             max-width: 420px;
         }
-
         .btn-primary {
             background-color: var(--cor-primaria);
             border-color: var(--cor-primaria);
             border-radius: var(--raio-borda);
         }
-
-        .form-control {
-            border-radius: var(--raio-borda);
-        }
-
+        .form-control { border-radius: var(--raio-borda); }
         .footer {
             background-color: var(--cor-footer);
             padding: 1.5rem 0;
             color: rgba(255, 255, 255, 0.8);
         }
-        
         .footer-top { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1.5rem; margin-bottom: 1rem; }
         .footer-info h5 { color: white; font-weight: 700; font-size: 1rem; margin-bottom: 0.5rem; }
         .footer-info p { margin-bottom: 0.2rem; font-size: 0.85rem; }
         .footer-info .bi { margin-right: 0.4rem; vertical-align: text-top; }
         .footer-bottom { border-top: 1px solid rgba(255,255,255,0.2); padding-top: 1rem; margin-top: 1rem; font-size: 0.8rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.8rem; }
-        
     </style>
 </head>
 <body>
@@ -123,21 +100,26 @@
                                 <h2 class="h3 mb-1 fw-bold">Acesso Administrativo</h2>
                                 <p class="text-muted">Use seu e-mail e senha para continuar.</p>
                             </div>
-                
+                            
                             <form id="adminLoginForm">
                                 <div class="form-floating mb-3">
                                     <input type="email" class="form-control" id="email" name="email" placeholder="E-mail" required>
                                     <label for="email">E-mail</label>
                                 </div>
-                
+                                
                                 <div class="form-floating mb-3">
                                     <input type="password" class="form-control" id="senha" name="senha" placeholder="Senha" required>
                                     <label for="senha">Senha</label>
                                 </div>
-                
+
+                                <div class="d-flex justify-content-end mb-3">
+                                    <a href="/admin/solicitar-redefinicao.html">Esqueci minha senha</a>
+                                </div>
+                                
                                 <button class="w-100 btn btn-lg btn-primary" type="submit">Entrar</button>
+
+                                <div id="message" class="alert alert-danger mt-4" style="display:none;" role="alert"></div>
                             </form>
-                            <div id="message" class="alert alert-danger mt-4" style="display:none;" role="alert"></div>
                         </div>
                     </div>
                 </div>
@@ -145,27 +127,7 @@
         </main>
 
         <footer class="footer">
-            <div class="container">
-                <div class="footer-top">
-                    <div class="footer-info">
-                        <h5>SECTI</h5>
-                        <p>Secretaria de Estado da Ciência, da Tecnologia e da Inovação</p>
-                    </div>
-                    <div class="footer-info">
-                        <p><i class="bi bi-envelope-fill"></i> supcti@secti.al.gov.br</p>
-                        <p><i class="bi bi-geo-alt-fill"></i> R. Barão de Jaraguá, nº590 - Jaraguá, CEP 57022-140 - Maceió</p>
-                    </div>
-                </div>
-                <div class="footer-bottom">
-                    <div class="text-center text-md-start">
-                         © 2025 - Todos os direitos reservados.
-                    </div>
-                    <div class="text-center text-md-end">
-                        <img src="/images/logo-governo.png" alt="Logo Governo de Alagoas" height="35">
-                    </div>
-                </div>
-            </div>
-        </footer>
+            </footer>
     </div>
 
     <script>
