@@ -45,7 +45,7 @@
                 <li class="nav-item"><a class="nav-link" href="/admin/permissionarios.html"><i class="bi bi-people-fill"></i>Permissionários</a></li>
                 <li class="nav-item"><a class="nav-link" href="/admin/dars.html"><i class="bi bi-file-earmark-text-fill"></i>DARs</a></li>
                 <li class="nav-item"><a class="nav-link" href="/admin/admin-management.html"><i class="bi bi-person-badge-fill"></i>Administradores</a></li>
-                <li class="nav-item"><a id="logoutButton" class="nav-link" href="#" style="color:#ffc107;"><i class="bi bi-box-arrow-right"></i>Sair</a></li>
+                <li class="nav-item"><a id="logoutButton" class="nav-link" href="#" style="color: #ffc107;"><i class="bi bi-box-arrow-right"></i>Sair</a></li>
             </ul>
             <div class="sidebar-footer"><img src="/images/logo-secti-vertical.png" alt="Logo SECTI"></div>
         </aside>
@@ -53,7 +53,7 @@
         <div class="main-content">
             <header class="topbar">
                 <div id="userInfo" class="text-end">
-                    <strong id="adminName">Carregando...</strong>
+                    <strong id="adminNameDisplay">Carregando...</strong>
                 </div>
             </header>
 
@@ -112,8 +112,8 @@
                                 <option value="SUPER_ADMIN">Super Administrador</option>
                             </select>
                         </div>
-                        <div id="formMessage" class="mt-3"></div>
-                        <div class="modal-footer">
+                        <div id="formMessage" class="mt-3" style="display:none;" role="alert"></div>
+                        <div class="modal-footer pb-0">
                             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
                             <button type="submit" class="btn btn-primary">Salvar</button>
                         </div>
@@ -129,19 +129,18 @@
             const token = localStorage.getItem('adminAuthToken');
             if (!token) { window.location.href = '/admin/login.html'; return; }
 
-            // LÓGICA DO MENU ATIVO
+            // Lógica do menu ativo
             const path = window.location.pathname;
-            const navLinks = document.querySelectorAll('.sidebar-nav .nav-link');
-            navLinks.forEach(link => {
+            document.querySelectorAll('.sidebar-nav .nav-link').forEach(link => {
                 if (link.getAttribute('href') === path) {
                     link.classList.add('active');
                 }
             });
             
-            // Preenche nome e logout
+            // Preenche nome do admin e logout
             try {
                 const payload = JSON.parse(atob(token.split('.')[1]));
-                document.getElementById('adminName').innerText = payload.nome;
+                document.getElementById('adminNameDisplay').innerText = payload.nome;
             } catch (e) { console.error('Erro ao decodificar token:', e); }
 
             document.getElementById('logoutButton').addEventListener('click', (e) => {
@@ -150,11 +149,11 @@
                 window.location.href = '/admin/login.html';
             });
 
-            // Lógica da página (Editar/Remover/Adicionar)
+            // Lógica da página
             const adminModalEl = document.getElementById('adminModal');
             const adminModal = new bootstrap.Modal(adminModalEl);
             const adminForm = document.getElementById('adminForm');
-            const formMessage = document.getElementById('formMessage');
+            const tableBody = document.getElementById('adminsTableBody');
             
             async function fetchAdmins() {
                 try {
@@ -171,7 +170,6 @@
             }
             
             function renderTable(admins) {
-                const tableBody = document.getElementById('adminsTableBody');
                 tableBody.innerHTML = '';
                 admins.forEach(admin => {
                     const roleLabel = admin.role === 'SUPER_ADMIN' 
@@ -196,53 +194,54 @@
                 adminForm.reset();
                 document.getElementById('adminId').value = '';
                 document.getElementById('adminModalLabel').textContent = 'Novo Administrador';
+                const formMessage = document.getElementById('formMessage');
                 formMessage.style.display = 'none';
                 formMessage.textContent = '';
                 adminModal.show();
             });
 
-            document.querySelector('#adminsTableBody').addEventListener('click', async (e) => {
-                const editButton = e.target.closest('.edit-btn');
-                if (!editButton) return;
-                
-                const adminId = editButton.dataset.id;
-                try {
-                    const response = await fetch(`/api/admins/${adminId}`, { headers: { 'Authorization': `Bearer ${token}` } });
-                    if (!response.ok) throw new Error('Falha ao buscar dados do admin.');
-                    const admin = await response.json();
+            tableBody.addEventListener('click', async (e) => {
+                const target = e.target.closest('button');
+                if (!target) return;
 
-                    document.getElementById('adminId').value = admin.id;
-                    document.getElementById('adminName').value = admin.nome;
-                    document.getElementById('adminEmail').value = admin.email;
-                    document.getElementById('adminRole').value = admin.role;
-                    document.getElementById('adminModalLabel').textContent = 'Editar Administrador';
-                    formMessage.style.display = 'none';
-                    formMessage.textContent = '';
-                    adminModal.show();
-                } catch (error) {
-                    alert('Erro: ' + error.message);
+                const adminId = target.dataset.id;
+                
+                // Lógica de Edição
+                if (target.classList.contains('edit-btn')) {
+                    try {
+                        const response = await fetch(`/api/admins/${adminId}`, { headers: { 'Authorization': `Bearer ${token}` } });
+                        if (!response.ok) throw new Error('Falha ao buscar dados do admin.');
+                        const admin = await response.json();
+
+                        document.getElementById('adminId').value = admin.id;
+                        document.getElementById('adminName').value = admin.nome;
+                        document.getElementById('adminEmail').value = admin.email;
+                        document.getElementById('adminRole').value = admin.role;
+                        document.getElementById('adminModalLabel').textContent = 'Editar Administrador';
+                        const formMessage = document.getElementById('formMessage');
+                        formMessage.style.display = 'none';
+                        formMessage.textContent = '';
+                        adminModal.show();
+                    } catch (error) {
+                        alert('Erro: ' + error.message);
+                    }
                 }
-            });
 
-            document.querySelector('#adminsTableBody').addEventListener('click', async (e) => {
-                const deleteButton = e.target.closest('.delete-btn');
-                if (!deleteButton) return;
-                
-                const adminId = deleteButton.dataset.id;
-                if (!confirm('Tem certeza que deseja remover este administrador? Esta ação não pode ser desfeita.')) return;
-
-                try {
-                    const response = await fetch(`/api/admins/${adminId}`, {
-                        method: 'DELETE',
-                        headers: { 'Authorization': `Bearer ${token}` }
-                    });
-                    const result = await response.json();
-                    if (!response.ok) throw new Error(result.error);
-                    
-                    document.querySelector(`tr[data-id="${adminId}"]`).remove();
-                    
-                } catch (error) {
-                    alert('Erro: ' + error.message);
+                // Lógica de Remoção
+                if (target.classList.contains('delete-btn')) {
+                    if (!confirm('Tem certeza que deseja remover este administrador? Esta ação não pode ser desfeita.')) return;
+                    try {
+                        const response = await fetch(`/api/admins/${adminId}`, {
+                            method: 'DELETE',
+                            headers: { 'Authorization': `Bearer ${token}` }
+                        });
+                        const result = await response.json();
+                        if (!response.ok) throw new Error(result.error);
+                        
+                        document.querySelector(`tr[data-id="${adminId}"]`).remove();
+                    } catch (error) {
+                        alert('Erro: ' + error.message);
+                    }
                 }
             });
 
@@ -250,6 +249,7 @@
                 e.preventDefault();
                 const adminId = document.getElementById('adminId').value;
                 const isEdit = !!adminId;
+                const formMessage = document.getElementById('formMessage');
 
                 const data = {
                     nome: document.getElementById('adminName').value,
@@ -269,15 +269,14 @@
                     const result = await response.json();
                     if (!response.ok) throw new Error(result.error);
                     
-                    formMessage.className = 'alert alert-success';
+                    formMessage.className = 'alert alert-success mt-3';
                     formMessage.textContent = result.message;
                     formMessage.style.display = 'block';
 
                     fetchAdmins();
                     setTimeout(() => { adminModal.hide(); }, 1500);
-
                 } catch (error) {
-                    formMessage.className = 'alert alert-danger';
+                    formMessage.className = 'alert alert-danger mt-3';
                     formMessage.textContent = error.message;
                     formMessage.style.display = 'block';
                 }
