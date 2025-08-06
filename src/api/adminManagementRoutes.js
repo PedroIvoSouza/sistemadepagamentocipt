@@ -29,19 +29,30 @@ router.get('/:id', [authMiddleware, authorizeRole(['SUPER_ADMIN'])], (req, res) 
     });
 });
 
-// ROTA PARA CRIAR UM NOVO ADMINISTRADOR (Apenas SUPER_ADMIN)
+// --- ROTA DE CRIAR ADMINISTRADOR CORRIGIDA ---
 router.post('/', [authMiddleware, authorizeRole(['SUPER_ADMIN'])], (req, res) => {
     const { nome, email, role } = req.body;
     if (!nome || !email || !role) return res.status(400).json({ error: 'Nome, email e nível são obrigatórios.' });
 
-    const sql = `INSERT INTO administradores (nome, email, role) VALUES (?, ?, ?)`;
-    db.run(sql, [nome, email, role], async function(err) {
+    // MUDANÇA 1: Adicionamos a coluna 'senha' no INSERT
+    const sql = `INSERT INTO administradores (nome, email, role, senha) VALUES (?, ?, ?, ?)`;
+    
+    // MUDANÇA 2: Adicionamos um valor temporário para a senha
+    const senhaTemporaria = 'AGUARDANDO_DEFINICAO';
+
+    db.run(sql, [nome, email, role, senhaTemporaria], async function(err) {
         if (err) {
-            if (err.message.includes('UNIQUE constraint failed')) return res.status(409).json({ error: 'Este e-mail já está cadastrado.' });
+            if (err.message.includes('UNIQUE constraint failed')) {
+                return res.status(409).json({ error: 'Este e-mail já está cadastrado.' });
+            }
+            // Este log nos ajudará a ver o erro real no terminal se algo mais der errado
+            console.error("Erro ao inserir admin no DB:", err); 
             return res.status(500).json({ error: 'Erro ao cadastrar novo administrador.' });
         }
+        
         const adminId = this.lastID;
         const token = jwt.sign({ id: adminId, email: email, type: 'primeiro-acesso-admin' }, process.env.JWT_SECRET, { expiresIn: '1h' });
+        
         try {
             await enviarEmailPrimeiroAcesso(email, token);
             res.status(201).json({ message: 'Administrador criado com sucesso! Um e-mail foi enviado para ele definir a senha.' });
@@ -51,6 +62,7 @@ router.post('/', [authMiddleware, authorizeRole(['SUPER_ADMIN'])], (req, res) =>
         }
     });
 });
+
 
 // ROTA PARA ATUALIZAR UM ADMIN (Apenas SUPER_ADMIN)
 router.put('/:id', [authMiddleware, authorizeRole(['SUPER_ADMIN'])], (req, res) => {
