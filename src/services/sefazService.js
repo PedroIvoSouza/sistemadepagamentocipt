@@ -1,9 +1,10 @@
 // Em: src/services/sefazService.js
-
-// 1. Importa os módulos 'https' e 'fs' necessários
 const https = require('https');
 const fs = require('fs');
 const axios = require('axios');
+
+// --- Variáveis de depuração ---
+const CERT_PATH = '/etc/ssl/certs/sefaz_homolog_ca.crt';
 
 async function emitirGuiaSefaz(dadosPermissionario, dadosDar) {
     const apiUrl = `${process.env.SEFAZ_API_URL_HOM}/api/public/guia/emitir`;
@@ -33,34 +34,49 @@ async function emitirGuiaSefaz(dadosPermissionario, dadosDar) {
     };
 
     try {
-        // 2. Cria um agente HTTPS que confia no certificado da SEFAZ
+        // --- Bloco de Depuração do Certificado ---
+        console.log('[DEBUG] Verificando o arquivo de certificado...');
+        if (fs.existsSync(CERT_PATH)) {
+            console.log(`[DEBUG] Arquivo de certificado encontrado em: ${CERT_PATH}`);
+        } else {
+            // Se o arquivo não existir, o erro será claro.
+            console.error(`[ERRO FATAL] O arquivo de certificado não foi encontrado em: ${CERT_PATH}`);
+            throw new Error(`Arquivo de certificado não encontrado: ${CERT_PATH}`);
+        }
+        // -----------------------------------------
+
+        // Cria o agente HTTPS que confia no certificado da SEFAZ
         const httpsAgent = new https.Agent({
-            ca: fs.readFileSync('/etc/ssl/certs/sefaz_homolog_ca.crt'),
+            ca: fs.readFileSync(CERT_PATH),
         });
+        
+        console.log('[DEBUG] Agente HTTPS com certificado customizado foi criado.');
 
         console.log("Enviando para SEFAZ (Homologação):", JSON.stringify(payload, null, 2));
 
-        // 3. Modifica a chamada do axios para usar o agente HTTPS
         const response = await axios.post(apiUrl, payload, {
             headers: {
                 'Content-Type': 'application/json',
                 'Accept': 'application/json',
                 'appToken': appToken
             },
-            httpsAgent // <--- A MÁGICA ACONTECE AQUI
+            httpsAgent // Usando o agente customizado
         });
         
-        return response.data; // Retorna a resposta real da SEFAZ
+        console.log('[SUCESSO] Resposta recebida da SEFAZ.');
+        return response.data;
         
     } catch (error) {
-        // Log aprimorado para ver o erro de certificado, se houver
-        console.error("Erro ao comunicar com a API da SEFAZ:", error.message);
+        // Log completo do erro para depuração máxima
+        console.error("----------------- ERRO DETALHADO -----------------");
+        console.error("Mensagem de Erro:", error.message);
         if (error.response) {
-            console.error("Detalhes do erro da SEFAZ:", error.response.data);
+            console.error("Status da Resposta:", error.response.status);
+            console.error("Dados da Resposta:", JSON.stringify(error.response.data, null, 2));
         }
+        console.error("----------------------------------------------------");
         
-        const sefazError = error.response?.data?.message || 'Falha na comunicação com a SEFAZ.';
-        throw new Error(sefazError);
+        throw new Error('Falha na comunicação com a SEFAZ. Verifique os logs de erro para detalhes.');
     }
 }
 
