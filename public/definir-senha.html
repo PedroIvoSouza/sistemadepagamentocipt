@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Definir Nova Senha - Gestão CIPT</title>
+    
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="icon" type="image/png" href="/images/logo-cipt.png">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;700&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --cor-primaria: #0056a0;
+            --cor-footer: #004480;
+            --cor-texto: #343a40;
+            --raio-borda: 0.5rem;
+        }
+
+        body {
+            font-family: 'Montserrat', sans-serif;
+            background-color: #f8f9fa;
+            color: var(--cor-texto);
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        /* --- CABEÇALHO COM LOGO MAIOR --- */
+        .navbar {
+            background-color: var(--cor-primaria);
+            padding: 0.8rem 0;
+        }
+
+        .navbar > .container {
+            justify-content: center !important;
+        }
+
+        .navbar-brand img {
+            filter: brightness(0) invert(1);
+            width: 100%; /* Faz a imagem ocupar o espaço do link */
+            max-width: 602px; /* Largura máxima da nova imagem */
+            height: auto; /* Mantém a proporção */
+            display: block;
+        }
+
+        .main-content {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            padding: 2rem 0;
+        }
+        
+        .card {
+            border: none;
+            border-radius: var(--raio-borda);
+            width: 100%;
+            max-width: 450px;
+        }
+
+        .btn-primary {
+            background-color: var(--cor-primaria);
+            border-color: var(--cor-primaria);
+            border-radius: var(--raio-borda);
+        }
+
+        .form-control {
+            border-radius: var(--raio-borda);
+        }
+
+        /* --- RODAPÉ COM ANO ATUALIZADO --- */
+        .footer {
+            background-color: var(--cor-footer);
+            padding: 2.5rem 0;
+            color: rgba(255, 255, 255, 0.8);
+        }
+        
+        .footer-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            flex-wrap: wrap;
+            gap: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .footer-info h5 {
+            color: white;
+            font-weight: 700;
+            font-size: 1.1rem;
+            margin-bottom: 0.8rem;
+        }
+
+        .footer-info p {
+            margin-bottom: 0.3rem;
+            font-size: 0.9rem;
+        }
+
+        .footer-info .bi {
+            margin-right: 0.5rem;
+            vertical-align: text-top;
+        }
+
+        .footer-bottom {
+            border-top: 1px solid rgba(255,255,255,0.2);
+            padding-top: 1.5rem;
+            margin-top: 1.5rem;
+            font-size: 0.8rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <nav class="navbar navbar-dark">
+            <div class="container">
+                <a class="navbar-brand" href="#">
+                    <img src="/images/logos-cabecalho.png" alt="Logos SECTI e Centro de Inovação Jaraguá">
+                </a>
+            </div>
+        </nav>
+    </header>
+
+    <main class="main-content">
+        <div class="container">
+            <div class="row justify-content-center">
+                <div class="col-lg-5">
+                    <div class="card shadow-sm">
+                        <div class="card-body p-5">
+                            <div class="text-center mb-4">
+                                <h1 class="h3 mb-3 fw-normal">Crie sua Senha</h1>
+                                <p class="text-muted">Defina uma nova senha de acesso para o portal.</p>
+                            </div>
+                            
+                            <form id="passwordForm">
+                                <input type="hidden" id="token" name="token">
+                                <div class="form-floating mb-3">
+                                    <input type="password" class="form-control" id="password" name="password" placeholder="Nova Senha" required>
+                                    <label for="password">Nova Senha (mínimo 8 caracteres)</label>
+                                </div>
+                                <div class="form-floating mb-3">
+                                    <input type="password" class="form-control" id="passwordConfirmation" name="passwordConfirmation" placeholder="Confirme a Nova Senha" required>
+                                    <label for="passwordConfirmation">Confirme a Nova Senha</label>
+                                </div>
+                                <button class="w-100 btn btn-lg btn-primary" type="submit">Salvar Nova Senha</button>
+                            </form>
+                            <div id="message" class="alert mt-4" style="display:none;" role="alert"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-top">
+                <div class="footer-info">
+                    <h5>SECTI</h5>
+                    <p>Secretaria de Estado da Ciência, da Tecnologia e da Inovação</p>
+                </div>
+                <div class="footer-info">
+                    <p><i class="bi bi-envelope-fill"></i> supcti@secti.al.gov.br</p>
+                    <p><i class="bi bi-geo-alt-fill"></i> R. Barão de Jaraguá, nº590 - Jaraguá, CEP 57022-140 - Maceió</p>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <div class="text-center text-md-start">
+                     © 2025 - Todos os direitos reservados.
+                </div>
+                <div class="text-center text-md-end">
+                    <img src="/images/logo-governo.png" alt="Logo Governo de Alagoas" height="35">
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+    // Pega o "crachá de acesso temporário" que salvamos na tela anterior
+    const passwordResetToken = localStorage.getItem('passwordResetToken');
+
+    window.onload = () => {
+        if (!passwordResetToken) {
+            // Se não houver a permissão, não deixa o usuário prosseguir
+            const messageDiv = document.getElementById('message');
+            messageDiv.innerText = 'ERRO: Permissão para redefinir a senha não encontrada. Por favor, reinicie o processo.';
+            messageDiv.className = 'alert alert-danger';
+            messageDiv.style.display = 'block';
+            document.getElementById('passwordForm').style.display = 'none';
+        }
+    };
+
+    document.getElementById('passwordForm').addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const form = event.target;
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
+        const messageDiv = document.getElementById('message');
+
+        // Adiciona o token ao pacote de dados que será enviado
+        data.token = passwordResetToken;
+
+        try {
+            const response = await fetch('/api/auth/definir-senha', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+
+            const result = await response.json();
+            if (response.ok) {
+                messageDiv.innerText = result.message;
+                messageDiv.className = 'alert alert-success';
+                form.style.display = 'none';
+                // Limpa o token usado para que não possa ser reutilizado
+                localStorage.removeItem('passwordResetToken');
+                // Adiciona um link para o login
+                const loginLink = document.createElement('a');
+                loginLink.href = '/login.html';
+                loginLink.className = 'btn btn-primary w-100 mt-3';
+                loginLink.innerText = 'Ir para o Login';
+                messageDiv.parentNode.appendChild(loginLink);
+            } else {
+                throw new Error(result.error);
+            }
+        } catch (error) {
+            messageDiv.innerText = error.message;
+            messageDiv.className = 'alert alert-danger';
+        } finally {
+            messageDiv.style.display = 'block';
+        }
+    });
+</script>
+</body>
+</html>
