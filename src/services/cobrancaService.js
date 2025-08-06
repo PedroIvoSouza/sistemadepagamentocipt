@@ -1,7 +1,8 @@
 // Em: src/services/cobrancaService.js
 const axios = require('axios');
+const https = require('https'); // Adicionado para o agente HTTPS
 
-// --- NOVAS FUNÇÕES DE DATA (REUTILIZADAS DO CRON JOB) ---
+// --- Funções de Data (sem alterações) ---
 function isFeriado(data) {
     const dia = String(data.getDate()).padStart(2, '0');
     const mes = String(data.getMonth() + 1).padStart(2, '0');
@@ -30,21 +31,17 @@ function getProximoDiaUtil(data) {
 async function calcularEncargosAtraso(dar) {
     const hoje = new Date();
     
-    // --- LÓGICA DA NOVA DATA DE VENCIMENTO ---
     let novaDataVencimento = new Date(hoje);
-    // Se for depois das 15h, ou se hoje não for dia útil, joga o vencimento para o próximo dia útil.
     if (hoje.getHours() >= 15 || !isDiaUtil(hoje)) {
         novaDataVencimento = getProximoDiaUtil(hoje);
     }
-    // -----------------------------------------
 
     const dataVencimentoOriginal = new Date(dar.data_vencimento);
     
-    // O cálculo de juros agora considera a diferença até a nova data de vencimento
     const diffTempo = Math.abs(novaDataVencimento - dataVencimentoOriginal);
     const diasAtraso = Math.ceil(diffTempo / (1000 * 60 * 60 * 24));
 
-    if (diasAtraso <= 0) { // Se não estiver em atraso, retorna zerado
+    if (diasAtraso <= 0) {
         return {
             valorOriginal: dar.valor, multa: 0, juros: 0, diasAtraso: 0,
             valorAtualizado: dar.valor,
@@ -54,15 +51,40 @@ async function calcularEncargosAtraso(dar) {
 
     const multa = dar.valor * 0.02;
     let juros = 0;
+
+    // --- BLOCO DE CÓDIGO CORRIGIDO E ROBUSTO PARA BUSCAR A SELIC ---
     try {
-        const response = await axios.get('https://brasilapi.com.br/api/taxas/v1/selic');
-        const selicAnual = response.data[0].valor; 
-        const selicDiaria = (selicAnual / 100) / 365;
-        juros = dar.valor * selicDiaria * diasAtraso;
+        console.log('[INFO] Buscando taxa SELIC da API BrasilAPI...');
+        
+        // Cria um agente HTTPS que ignora erros de certificado (útil para APIs do governo)
+        const httpsAgent = new https.Agent({
+          rejectUnauthorized: false,
+        });
+
+        // URL da BrasilAPI para a taxa SELIC
+        const url = 'https://brasilapi.com.br/api/taxas/v1/selic';
+
+        const response = await axios.get(url, {
+            httpsAgent, // Usa o agente para evitar problemas de certificado
+            timeout: 15000, // Timeout de 15 segundos
+        });
+
+        // Verificação de segurança para garantir que a resposta é válida
+        if (response && response.data && Array.isArray(response.data) && response.data.length > 0 && response.data[0].hasOwnProperty('valor')) {
+            const selicAnual = parseFloat(response.data[0].valor);
+            const selicDiaria = (selicAnual / 100) / 365;
+            juros = dar.valor * selicDiaria * diasAtraso;
+            console.log(`[SUCESSO] Taxa SELIC encontrada: ${selicAnual}. Juros calculados: ${juros}`);
+        } else {
+            console.warn('[AVISO] A resposta da API da SELIC veio em um formato inesperado. Juros não serão calculados.');
+            juros = 0;
+        }
+
     } catch (error) {
         console.error("Erro ao buscar a taxa SELIC. Juros não serão calculados.", error.message);
-        juros = 0;
+        juros = 0; // Retorna um valor seguro para não quebrar o resto da aplicação
     }
+    // ------------------------------------------------------------------
 
     const valorAtualizado = dar.valor + multa + juros;
 
@@ -72,7 +94,7 @@ async function calcularEncargosAtraso(dar) {
         juros: juros,
         diasAtraso: diasAtraso,
         valorAtualizado: valorAtualizado,
-        novaDataVencimento: novaDataVencimento.toISOString().split('T')[0] // Retorna a nova data formatada
+        novaDataVencimento: novaDataVencimento.toISOString().split('T')[0]
     };
 }
 
