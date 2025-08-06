@@ -48,6 +48,7 @@ async function emitirGuiaSefaz(dadosPermissionario, dadosDar) {
         // Cria o agente HTTPS que confia no certificado da SEFAZ
         const httpsAgent = new https.Agent({
             ca: fs.readFileSync(CERT_PATH),
+            rejectUnauthorized: false // <--- ADICIONE APENAS ESTA LINHA
         });
         
         console.log('[DEBUG] Agente HTTPS com certificado customizado foi criado.');
