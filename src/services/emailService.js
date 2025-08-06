@@ -19,8 +19,6 @@ async function enviarEmailNovaDar(emailDestino, dadosDoDar) {
     const meses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
     const competencia = `${meses[dadosDoDar.mes_referencia - 1]} de ${dadosDoDar.ano_referencia}`;
     const valorFormatado = dadosDoDar.valor.toFixed(2).replace('.', ',');
-
-    // LINHA CORRIGIDA: Usa a variável de ambiente BASE_URL
     const linkPortal = `${process.env.BASE_URL}/dars.html`; 
 
     const mailOptions = {
@@ -89,10 +87,11 @@ async function enviarEmailRedefinicao(emailDestino, codigo) {
 }
 
 /**
- * Envia um e-mail com link direto para o primeiro acesso.
+ * Envia um e-mail com link direto para o primeiro acesso do ADMINISTRADOR.
  */
 async function enviarEmailPrimeiroAcesso(emailDestino, token) {
-    const link = `${process.env.BASE_URL}/definir-senha.html?token=${token}`;
+    // MUDANÇA AQUI: O link agora aponta para a página de admin
+    const link = `${process.env.BASE_URL}/admin/definir-senha.html?token=${token}`;
     
     const mailOptions = {
         from: `"Gestão CIPT" <${process.env.EMAIL_USER}>`,
@@ -117,14 +116,15 @@ async function enviarEmailPrimeiroAcesso(emailDestino, token) {
         console.log(`Email de configuração de senha enviado para: ${emailDestino}`);
     } catch (error) {
         console.error(`Erro ao enviar e-mail para ${emailDestino}:`, error);
+        // Silenciando o throw de erro aqui para não quebrar a criação do admin se o email falhar
     }
 }
 
-// Lembrete DAR:
-
+/**
+ * Envia um e-mail de notificação de DAR a partir do painel do admin.
+ */
 async function enviarEmailNotificacaoDar(emailDestino, dadosDar) {
-    // Assumindo que seu portal do permissionário está na raiz do seu site
-    const linkPortal = process.env.BASE_URL || 'http://localhost:3000'; 
+    const linkPortal = `${process.env.BASE_URL}/dars.html`;
 
     const mailOptions = {
         from: `"Gestão CIPT" <${process.env.EMAIL_USER}>`,
@@ -138,7 +138,7 @@ async function enviarEmailNotificacaoDar(emailDestino, dadosDar) {
             <p><strong>Vencimento:</strong> ${new Date(dadosDar.data_vencimento).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</p>
             <hr>
             <p>Para gerar seu DAR e efetuar o pagamento, por favor, acesse o Portal do Permissionário clicando no botão abaixo:</p>
-            <a href="${linkPortal}/dars.html" style="background-color: #007bff; color: white; padding: 15px 25px; text-align: center; text-decoration: none; display: inline-block; border-radius: 5px;">
+            <a href="${linkPortal}" style="background-color: #007bff; color: white; padding: 15px 25px; text-align: center; text-decoration: none; display: inline-block; border-radius: 5px;">
                 Acessar Portal e Gerar DAR
             </a>
             <br><br>
