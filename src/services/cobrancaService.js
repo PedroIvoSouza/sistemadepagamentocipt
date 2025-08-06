@@ -1,5 +1,5 @@
 const axios = require('axios');
-const https = require('https';
+const https = require('https');
 
 // ... (Suas funções de data isFeriado, isDiaUtil, etc. continuam aqui sem alterações) ...
 function isFeriado(data) {
