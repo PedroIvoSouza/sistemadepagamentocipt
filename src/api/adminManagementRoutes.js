@@ -1,90 +1,289 @@
-// Em: src/api/adminManagementRoutes.js
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestão de Administradores - Painel de Gestão</title>
+    
+    <link rel="icon" type="image/png" href="/images/logo-cipt.png">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;700&display=swap" rel="stylesheet">
 
-const express = require('express');
-const sqlite3 = require('sqlite3').verbose();
-const authMiddleware = require('../middleware/authMiddleware');
-const authorizeRole = require('../middleware/roleMiddleware');
-const { enviarEmailPrimeiroAcesso } = require('../services/emailService');
-const jwt = require('jsonwebtoken');
-const bcrypt = require('bcrypt');
-
-const router = express.Router();
-const db = new sqlite3.Database('./sistemacipt.db');
-
-// ROTA PARA LISTAR TODOS OS ADMINISTRADORES (Apenas SUPER_ADMIN)
-router.get('/', [authMiddleware, authorizeRole(['SUPER_ADMIN'])], (req, res) => {
-    const sql = `SELECT id, nome, email, role FROM administradores`;
-    db.all(sql, [], (err, admins) => {
-        if (err) return res.status(500).json({ error: 'Erro ao buscar administradores.' });
-        res.status(200).json(admins);
-    });
-});
-
-// --- NOVA ROTA ADICIONADA ---
-// ROTA PARA BUSCAR UM ADMIN ESPECÍFICO POR ID (Apenas SUPER_ADMIN)
-router.get('/:id', [authMiddleware, authorizeRole(['SUPER_ADMIN'])], (req, res) => {
-    const sql = `SELECT id, nome, email, role FROM administradores WHERE id = ?`;
-    db.get(sql, [req.params.id], (err, admin) => {
-        if (err) return res.status(500).json({ error: 'Erro de banco de dados.' });
-        if (!admin) return res.status(404).json({ error: 'Administrador não encontrado.' });
-        res.status(200).json(admin);
-    });
-});
-
-// ROTA PARA CRIAR UM NOVO ADMINISTRADOR (Apenas SUPER_ADMIN)
-router.post('/', [authMiddleware, authorizeRole(['SUPER_ADMIN'])], (req, res) => {
-    const { nome, email, role } = req.body;
-    if (!nome || !email || !role) return res.status(400).json({ error: 'Nome, email e nível são obrigatórios.' });
-
-    const sql = `INSERT INTO administradores (nome, email, role) VALUES (?, ?, ?)`;
-    db.run(sql, [nome, email, role], async function(err) {
-        if (err) {
-            if (err.message.includes('UNIQUE constraint failed')) return res.status(409).json({ error: 'Este e-mail já está cadastrado.' });
-            return res.status(500).json({ error: 'Erro ao cadastrar novo administrador.' });
+    <style>
+        :root {
+            --cor-primaria: #0056a0;
+            --cor-sidebar: #004480;
+            --raio-borda: 0.5rem;
         }
-        const adminId = this.lastID;
-        const token = jwt.sign({ id: adminId, email: email, type: 'primeiro-acesso-admin' }, process.env.JWT_SECRET, { expiresIn: '1h' });
-        try {
-            await enviarEmailPrimeiroAcesso(email, token);
-            res.status(201).json({ message: 'Administrador criado com sucesso! Um e-mail foi enviado para ele definir a senha.' });
-        } catch (emailError) {
-            console.error('API: Erro ao enviar email, mas o usuário foi criado.', emailError);
-            res.status(207).json({ message: 'Administrador criado, mas houve uma falha ao enviar o e-mail de configuração de senha.' });
-        }
-    });
-});
+        body { font-family: 'Montserrat', sans-serif; background-color: #f4f7f6; }
+        .wrapper { display: flex; width: 100%; min-height: 100vh; }
+        .sidebar { width: 260px; background-color: var(--cor-sidebar); color: rgba(255, 255, 255, 0.8); display: flex; flex-direction: column; }
+        .sidebar-header { padding: 1.5rem; text-align: center; background-color: rgba(0,0,0,0.1); }
+        .sidebar-header img { max-width: 180px; height: auto; }
+        .sidebar-nav { padding: 1rem 0; flex-grow: 1; }
+        .sidebar-nav .nav-link { color: rgba(255, 255, 255, 0.8); padding: 0.8rem 1.5rem; display: flex; align-items: center; font-weight: 500; }
+        .sidebar-nav .nav-link .bi { margin-right: 1rem; font-size: 1.2rem; }
+        .sidebar-nav .nav-link:hover { color: #ffffff; background-color: rgba(255,255,255,0.05); }
+        .sidebar-nav .nav-link.active { color: white; background-color: var(--cor-primaria); }
+        .sidebar-footer { padding: 1.5rem; text-align: center; border-top: 1px solid rgba(255,255,255,0.1); }
+        .sidebar-footer img { max-height: 100px; width: auto; }
+        .main-content { flex-grow: 1; display: flex; flex-direction: column; }
+        .topbar { background-color: #ffffff; padding: 1rem 2rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); display: flex; justify-content: flex-end; align-items: center; }
+        .content { padding: 2rem; }
+        .card { border: none; border-radius: var(--raio-borda); box-shadow: 0 2px 5px rgba(0,0,0,0.05); margin-bottom: 2rem; }
+    </style>
+</head>
+<body>
+    <div class="wrapper">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <a href="/admin/dashboard.html"><img src="/images/painel-gestao.png" alt="Painel de Gestão"></a>
+            </div>
+            <ul class="nav flex-column sidebar-nav">
+                <li class="nav-item"><a class="nav-link" href="/admin/dashboard.html"><i class="bi bi-grid-1x2-fill"></i>Dashboard</a></li>
+                <li class="nav-item"><a class="nav-link" href="/admin/permissionarios.html"><i class="bi bi-people-fill"></i>Permissionários</a></li>
+                <li class="nav-item"><a class="nav-link" href="/admin/dars.html"><i class="bi bi-file-earmark-text-fill"></i>DARs</a></li>
+                <li class="nav-item"><a class="nav-link" href="/admin/admin-management.html"><i class="bi bi-person-badge-fill"></i>Administradores</a></li>
+                <li class="nav-item"><a id="logoutButton" class="nav-link" href="#" style="color: #ffc107;"><i class="bi bi-box-arrow-right"></i>Sair</a></li>
+            </ul>
+            <div class="sidebar-footer"><img src="/images/logo-secti-vertical.png" alt="Logo SECTI"></div>
+        </aside>
 
-// --- NOVA ROTA ADICIONADA ---
-// ROTA PARA ATUALIZAR UM ADMIN (Apenas SUPER_ADMIN)
-router.put('/:id', [authMiddleware, authorizeRole(['SUPER_ADMIN'])], (req, res) => {
-    const { nome, email, role } = req.body;
-    if (!nome || !email || !role) return res.status(400).json({ error: 'Nome, email e nível são obrigatórios.' });
+        <div class="main-content">
+            <header class="topbar">
+                <div id="userInfo" class="text-end">
+                    <strong id="adminNameDisplay">Carregando...</strong>
+                </div>
+            </header>
 
-    const sql = `UPDATE administradores SET nome = ?, email = ?, role = ? WHERE id = ?`;
-    db.run(sql, [nome, email, role, req.params.id], function(err) {
-        if (err) return res.status(500).json({ error: 'Erro ao atualizar administrador.' });
-        if (this.changes === 0) return res.status(404).json({ error: 'Administrador não encontrado.' });
-        res.status(200).json({ message: 'Administrador atualizado com sucesso!' });
-    });
-});
+            <main class="content">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h1 class="h2">Gestão de Administradores</h1>
+                    <button id="addAdminButton" class="btn btn-primary">
+                        <i class="bi bi-plus-circle-fill me-2"></i>Adicionar Administrador
+                    </button>
+                </div>
 
-// --- NOVA ROTA ADICIONADA ---
-// ROTA PARA REMOVER UM ADMIN (Apenas SUPER_ADMIN)
-router.delete('/:id', [authMiddleware, authorizeRole(['SUPER_ADMIN'])], (req, res) => {
-    const adminIdParaRemover = req.params.id;
-    const adminLogadoId = req.user.id;
+                <div class="card">
+                    <div class="card-body p-4">
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle">
+                                <thead>
+                                    <tr>
+                                        <th>Nome</th>
+                                        <th>Email</th>
+                                        <th class="text-center">Nível</th>
+                                        <th class="text-end">Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="adminsTableBody">
+                                    </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
 
-    // Medida de segurança: um super admin não pode remover a si mesmo.
-    if (Number(adminIdParaRemover) === Number(adminLogadoId)) {
-        return res.status(403).json({ error: 'Você não pode remover sua própria conta.' });
-    }
+    <div class="modal fade" id="adminModal" tabindex="-1" aria-labelledby="adminModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="adminModalLabel">Novo Administrador</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="adminForm">
+                        <input type="hidden" id="adminId">
+                        <div class="mb-3">
+                            <label for="adminName" class="form-label">Nome Completo</label>
+                            <input type="text" class="form-control" id="adminName" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="adminEmail" class="form-label">Email</label>
+                            <input type="email" class="form-control" id="adminEmail" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="adminRole" class="form-label">Nível de Acesso</label>
+                            <select class="form-select" id="adminRole" required>
+                                <option value="FINANCE_ADMIN" selected>Administrador Financeiro</option>
+                                <option value="SUPER_ADMIN">Super Administrador</option>
+                            </select>
+                        </div>
+                        <div id="formMessage" class="mt-3" style="display:none;" role="alert"></div>
+                        <div class="modal-footer pb-0">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                            <button type="submit" class="btn btn-primary">Salvar</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
 
-    const sql = `DELETE FROM administradores WHERE id = ?`;
-    db.run(sql, [adminIdParaRemover], function(err) {
-        if (err) return res.status(500).json({ error: 'Erro ao remover administrador.' });
-        if (this.changes === 0) return res.status(404).json({ error: 'Administrador não encontrado.' });
-        res.status(200).json({ message: 'Administrador removido com sucesso!' });
-    });
-});
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const token = localStorage.getItem('adminAuthToken');
+            if (!token) { window.location.href = '/admin/login.html'; return; }
 
-module.exports = router;
+            // Lógica do menu ativo
+            const path = window.location.pathname;
+            document.querySelectorAll('.sidebar-nav .nav-link').forEach(link => {
+                if (link.getAttribute('href') === path) {
+                    link.classList.add('active');
+                }
+            });
+            
+            // Preenche nome do admin e logout
+            try {
+                const payload = JSON.parse(atob(token.split('.')[1]));
+                document.getElementById('adminNameDisplay').innerText = payload.nome;
+            } catch (e) { console.error('Erro ao decodificar token:', e); }
+
+            document.getElementById('logoutButton').addEventListener('click', (e) => {
+                e.preventDefault();
+                localStorage.removeItem('adminAuthToken');
+                window.location.href = '/admin/login.html';
+            });
+
+            // Lógica da página
+            const adminModalEl = document.getElementById('adminModal');
+            const adminModal = new bootstrap.Modal(adminModalEl);
+            const adminForm = document.getElementById('adminForm');
+            const tableBody = document.getElementById('adminsTableBody');
+            
+            async function fetchAdmins() {
+                try {
+                    const response = await fetch('/api/admins', { headers: { 'Authorization': `Bearer ${token}` } });
+                    if (!response.ok) {
+                        if (response.status === 403) {
+                             document.querySelector('main.content').innerHTML = `<div class="alert alert-danger"><h4>Acesso Negado</h4><p>Você não tem permissão para gerenciar administradores.</p></div>`;
+                        }
+                        throw new Error('Falha ao carregar administradores.');
+                    }
+                    const admins = await response.json();
+                    renderTable(admins);
+                } catch (error) { console.error('Erro:', error); }
+            }
+            
+            function renderTable(admins) {
+                tableBody.innerHTML = '';
+                admins.forEach(admin => {
+                    const roleLabel = admin.role === 'SUPER_ADMIN' 
+                        ? '<span class="badge bg-success">Super Admin</span>' 
+                        : '<span class="badge bg-info">Financeiro</span>';
+                    
+                    tableBody.innerHTML += `
+                        <tr data-id="${admin.id}">
+                            <td>${admin.nome}</td>
+                            <td>${admin.email}</td>
+                            <td class="text-center">${roleLabel}</td>
+                            <td class="text-end">
+                                <button class="btn btn-sm btn-outline-primary edit-btn" data-id="${admin.id}"><i class="bi bi-pencil-fill"></i></button>
+                                <button class="btn btn-sm btn-outline-danger delete-btn" data-id="${admin.id}"><i class="bi bi-trash-fill"></i></button>
+                            </td>
+                        </tr>
+                    `;
+                });
+            }
+
+            document.getElementById('addAdminButton').addEventListener('click', () => {
+                adminForm.reset();
+                document.getElementById('adminId').value = '';
+                document.getElementById('adminModalLabel').textContent = 'Novo Administrador';
+                const formMessage = document.getElementById('formMessage');
+                formMessage.style.display = 'none';
+                formMessage.textContent = '';
+                adminModal.show();
+            });
+
+            tableBody.addEventListener('click', async (e) => {
+                const target = e.target.closest('button');
+                if (!target) return;
+
+                const adminId = target.dataset.id;
+                
+                // Lógica de Edição
+                if (target.classList.contains('edit-btn')) {
+                    try {
+                        const response = await fetch(`/api/admins/${adminId}`, { headers: { 'Authorization': `Bearer ${token}` } });
+                        if (!response.ok) throw new Error('Falha ao buscar dados do admin.');
+                        const admin = await response.json();
+
+                        document.getElementById('adminId').value = admin.id;
+                        document.getElementById('adminName').value = admin.nome;
+                        document.getElementById('adminEmail').value = admin.email;
+                        document.getElementById('adminRole').value = admin.role;
+                        document.getElementById('adminModalLabel').textContent = 'Editar Administrador';
+                        const formMessage = document.getElementById('formMessage');
+                        formMessage.style.display = 'none';
+                        formMessage.textContent = '';
+                        adminModal.show();
+                    } catch (error) {
+                        alert('Erro: ' + error.message);
+                    }
+                }
+
+                // Lógica de Remoção
+                if (target.classList.contains('delete-btn')) {
+                    if (!confirm('Tem certeza que deseja remover este administrador? Esta ação não pode ser desfeita.')) return;
+                    try {
+                        const response = await fetch(`/api/admins/${adminId}`, {
+                            method: 'DELETE',
+                            headers: { 'Authorization': `Bearer ${token}` }
+                        });
+                        const result = await response.json();
+                        if (!response.ok) throw new Error(result.error);
+                        
+                        document.querySelector(`tr[data-id="${adminId}"]`).remove();
+                    } catch (error) {
+                        alert('Erro: ' + error.message);
+                    }
+                }
+            });
+
+            adminForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const adminId = document.getElementById('adminId').value;
+                const isEdit = !!adminId;
+                const formMessage = document.getElementById('formMessage');
+
+                const data = {
+                    nome: document.getElementById('adminName').value,
+                    email: document.getElementById('adminEmail').value,
+                    role: document.getElementById('adminRole').value,
+                };
+                
+                const url = isEdit ? `/api/admins/${adminId}` : '/api/admins';
+                const method = isEdit ? 'PUT' : 'POST';
+
+                try {
+                    const response = await fetch(url, {
+                        method: method,
+                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                        body: JSON.stringify(data)
+                    });
+                    const result = await response.json();
+                    if (!response.ok) throw new Error(result.error);
+                    
+                    formMessage.className = 'alert alert-success mt-3';
+                    formMessage.textContent = result.message;
+                    formMessage.style.display = 'block';
+
+                    fetchAdmins();
+                    setTimeout(() => { adminModal.hide(); }, 1500);
+                } catch (error) {
+                    formMessage.className = 'alert alert-danger mt-3';
+                    formMessage.textContent = error.message;
+                    formMessage.style.display = 'block';
+                }
+            });
+
+            fetchAdmins();
+        });
+    </script>
+</body>
+</html>
