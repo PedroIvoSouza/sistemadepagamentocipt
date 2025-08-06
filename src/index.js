@@ -1,7 +1,12 @@
 require('dotenv').config();
+
+// ADICIONE ESTA LINHA PARA IGNORAR ERROS DE CERTIFICADO EM AMBIENTE DE TESTE
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
-const path = require('path'); // <-- 1. Importe o módulo 'path'
+const path = require('path');
+// ... resto do seu arquivo ...
 
 // Importa as nossas novas rotas de autenticação
 const authRoutes = require('./api/authRoutes');

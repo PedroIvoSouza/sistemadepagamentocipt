@@ -14,30 +14,28 @@
         :root {
             --cor-primaria: #0056a0;
             --cor-sidebar: #004480;
-            --cor-sidebar-texto: rgba(255, 255, 255, 0.8);
-            --cor-sidebar-texto-hover: #ffffff;
-            --cor-sidebar-fundo-ativo: var(--cor-primaria);
             --raio-borda: 0.5rem;
         }
         body { font-family: 'Montserrat', sans-serif; background-color: #f4f7f6; }
         .wrapper { display: flex; width: 100%; min-height: 100vh; }
-        .sidebar { width: 260px; background-color: var(--cor-sidebar); color: var(--cor-sidebar-texto); transition: all 0.3s; display: flex; flex-direction: column; }
+        .sidebar { width: 260px; background-color: var(--cor-sidebar); color: rgba(255, 255, 255, 0.8); display: flex; flex-direction: column; }
         .sidebar-header { padding: 1.5rem; text-align: center; background-color: rgba(0,0,0,0.1); }
         .sidebar-header img { max-width: 180px; height: auto; }
         .sidebar-nav { padding: 1rem 0; flex-grow: 1; }
-        .sidebar-nav .nav-link { color: var(--cor-sidebar-texto); padding: 0.8rem 1.5rem; display: flex; align-items: center; font-weight: 500; }
+        .sidebar-nav .nav-link { color: rgba(255, 255, 255, 0.8); padding: 0.8rem 1.5rem; display: flex; align-items: center; font-weight: 500; }
         .sidebar-nav .nav-link .bi { margin-right: 1rem; font-size: 1.2rem; }
-        .sidebar-nav .nav-link:hover { color: var(--cor-sidebar-texto-hover); background-color: rgba(255,255,255,0.05); }
-        .sidebar-nav .nav-link.active { color: white; background-color: var(--cor-sidebar-fundo-ativo); }
+        .sidebar-nav .nav-link:hover { color: #ffffff; background-color: rgba(255,255,255,0.05); }
+        .sidebar-nav .nav-link.active { color: white; background-color: var(--cor-primaria); }
         .sidebar-footer { padding: 1.5rem; text-align: center; border-top: 1px solid rgba(255,255,255,0.1); }
         .sidebar-footer img { max-height: 100px; width: auto; }
         .main-content { flex-grow: 1; display: flex; flex-direction: column; }
         .topbar { background-color: #ffffff; padding: 1rem 2rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); display: flex; justify-content: flex-end; align-items: center; }
         .content { padding: 2rem; }
         .card { border: none; border-radius: var(--raio-borda); box-shadow: 0 2px 5px rgba(0,0,0,0.05); margin-bottom: 2rem; }
-        .card-title { color: var(--cor-primaria); font-weight: 700; }
+        .stat-card .card-body { display: flex; justify-content: space-between; align-items: center; }
+        .stat-card .stat-number { font-size: 2.2rem; font-weight: 700; color: var(--cor-primaria); }
+        .stat-card .stat-icon { font-size: 3rem; color: var(--cor-primaria); opacity: 0.2; }
         .table-hover tbody tr:hover { background-color: #f8f9fa; }
-        .badge { font-size: 0.8rem; padding: 0.5em 0.8em; }
     </style>
 </head>
 <body>
@@ -47,9 +45,9 @@
                 <a href="/dashboard.html"><img src="/images/logo-cipt.png" alt="Logo Centro de Inovação Jaraguá"></a>
             </div>
             <ul class="nav flex-column sidebar-nav">
-                <li class="nav-item"><a class="nav-link active" href="/dashboard.html"><i class="bi bi-grid-1x2-fill"></i>Dashboard</a></li>
-                <li class="nav-item"></li><a class="nav-link" href="/dars.html"><i class="bi bi-file-earmark-text-fill"></i>Meus DAR's</a>
-                <li class="nav-item"></li><a class="nav-link" href="/perfil.html"><i class="bi bi-person-fill"></i>Meu Perfil</a>
+                <li class="nav-item"><a class="nav-link" href="/dashboard.html"><i class="bi bi-grid-1x2-fill"></i>Dashboard</a></li>
+                <li class="nav-item"><a class="nav-link" href="/dars.html"><i class="bi bi-file-earmark-text-fill"></i>Meus DAR's</a></li>
+                <li class="nav-item"><a class="nav-link" href="/perfil.html"><i class="bi bi-person-fill"></i>Meu Perfil</a></li>
                 <li class="nav-item"><a id="logoutButton" class="nav-link" href="#" style="color: #ffc107;"><i class="bi bi-box-arrow-right"></i>Sair</a></li>
             </ul>
             <div class="sidebar-footer"><img src="/images/logo-secti-vertical.png" alt="Logo SECTI"></div>
@@ -65,6 +63,12 @@
 
             <main class="content">
                 <h1 id="welcomeMessage" class="h2 mb-4">Carregando...</h1>
+                
+                <div class="row">
+                    <div class="col-md-4"><div class="card stat-card"><div class="card-body"><div><h6 class="card-title text-secondary">DARs Pendentes</h6><h2 id="stat-pendentes" class="stat-number">...</h2></div><i class="bi bi-clock-history stat-icon"></i></div></div></div>
+                    <div class="col-md-4"><div class="card stat-card"><div class="card-body"><div><h6 class="card-title text-secondary">DARs Vencidos</h6><h2 id="stat-vencidos" class="stat-number text-danger">...</h2></div><i class="bi bi-exclamation-triangle-fill stat-icon text-danger"></i></div></div></div>
+                    <div class="col-md-4"><div class="card stat-card"><div class="card-body"><div><h6 class="card-title text-secondary">Valor Total Pendente</h6><h2 id="stat-devido" class="stat-number">...</h2></div><i class="bi bi-cash-coin stat-icon"></i></div></div></div>
+                </div>
 
                 <div class="row">
                     <div class="col-lg-6">
@@ -73,7 +77,7 @@
                                 <h5 class="card-title">DADOS DO PERMISSIONÁRIO</h5>
                                 <hr>
                                 <p><strong>Sala(s):</strong> <span id="companyAddress">...</span></p>
-                                <p><strong>E-mail:</strong> <span id="companyEmail">...</span></p>
+                                <p><strong>E-mail Principal:</strong> <span id="companyEmail">...</span></p>
                                 <p><strong>Valor Base do Aluguel:</strong> <span id="companyRent">...</span></p>
                             </div>
                         </div>
@@ -93,129 +97,116 @@
 
                 <div class="card">
                     <div class="card-body p-4">
-                        <h5 class="card-title">MEUS DAR's</h5>
+                        <h5 class="card-title">MEU ÚLTIMO DAR</h5>
                         <hr>
                         <div class="table-responsive">
                             <table class="table table-hover align-middle">
                                 <thead>
                                     <tr>
-                                        <th scope="col">Competência</th><th scope="col">Vencimento</th><th scope="col" class="text-end">Valor (R$)</th><th scope="col" class="text-center">Status</th><th scope="col" class="text-center">Ações</th>
+                                        <th>Competência</th><th>Vencimento</th><th class="text-end">Valor (R$)</th><th class="text-center">Status</th><th class="text-center">Ações</th>
                                     </tr>
                                 </thead>
-                                <tbody id="dars-table-body"></tbody>
+                                <tbody id="last-dar-table-body">
+                                    <tr><td colspan="5" class="text-center text-muted">Carregando...</td></tr>
+                                </tbody>
                             </table>
+                        </div>
+                        <div class="text-end mt-3">
+                            <a href="/dars.html" class="btn btn-outline-primary">Ver Histórico Completo</a>
                         </div>
                     </div>
                 </div>
             </main>
         </div>
     </div>
-
-    <div class="modal fade" id="recalculoModal" tabindex="-1">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header"><h5 class="modal-title">DAR Vencido - Cálculo de Encargos</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-                <div class="modal-body">
-                    <p>Este DAR está vencido há <strong id="modalDiasAtraso">...</strong> dias. Os valores foram recalculados para pagamento hoje:</p>
-                    <ul class="list-group">
-                        <li class="list-group-item d-flex justify-content-between">Valor Original: <span id="modalValorOriginal">R$ 0,00</span></li>
-                        <li class="list-group-item d-flex justify-content-between">Multa (2%): <span id="modalMulta">R$ 0,00</span></li>
-                        <li class="list-group-item d-flex justify-content-between">Juros (SELIC): <span id="modalJuros">R$ 0,00</span></li>
-                        <li class="list-group-item d-flex justify-content-between active"><strong>Valor Total Atualizado:</strong> <strong id="modalValorAtualizado">R$ 0,00</strong></li>
-                    </ul>
-                </div>
-                <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button><button type="button" class="btn btn-primary">Confirmar e Emitir DAR Atualizado</button></div>
-            </div>
-        </div>
-    </div>
     
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        document.getElementById('logoutButton').addEventListener('click', () => {
-            localStorage.removeItem('authToken');
-            window.location.href = '/login.html';
-        });
+        function formatarCNPJ(cnpj) {
+            if (!cnpj) return '';
+            const cnpjLimpo = cnpj.toString().replace(/\D/g, '');
+            if (cnpjLimpo.length === 14) {
+                return cnpjLimpo.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
+            }
+            return cnpj;
+        }
 
-        const recalculateModal = new bootstrap.Modal(document.getElementById('recalculoModal'));
-
-        window.onload = async () => {
+        document.addEventListener('DOMContentLoaded', async () => {
             const token = localStorage.getItem('authToken');
             if (!token) { window.location.href = '/login.html'; return; }
             const headers = { 'Authorization': `Bearer ${token}` };
 
+            document.querySelector('a[href="/dashboard.html"]').classList.add('active');
+
+            document.getElementById('logoutButton').addEventListener('click', (e) => {
+                e.preventDefault();
+                localStorage.removeItem('authToken');
+                window.location.href = '/login.html';
+            });
+
             async function fetchUserData() {
                 const response = await fetch('/api/user/me', { headers });
-                if (!response.ok) throw new Error('Sessão inválida ou expirada.');
+                if (!response.ok) throw new Error('Sessão inválida.');
                 const userData = await response.json();
                 
                 document.getElementById('userName').innerText = userData.nome_empresa;
-                document.getElementById('userCnpj').innerText = userData.cnpj;
-                document.getElementById('welcomeMessage').innerText = `Boa tarde, ${userData.nome_empresa.split(' ')[0]}!`;
+                document.getElementById('userCnpj').innerText = formatarCNPJ(userData.cnpj);
+                document.getElementById('welcomeMessage').innerText = `Bem-vindo(a), ${userData.nome_empresa.split(' ')[0]}!`;
                 
-                document.getElementById('companyAddress').innerText = userData.numero_sala;
-                document.getElementById('companyEmail').innerText = userData.email;
+                // --- LINHAS RESTAURADAS PARA PREENCHER OS CARDS DE INFO ---
+                document.getElementById('companyAddress').innerText = userData.numero_sala || 'Não informado';
+                document.getElementById('companyEmail').innerText = userData.email || 'Não informado';
                 document.getElementById('companyRent').innerText = `R$ ${userData.valor_aluguel.toFixed(2).replace('.', ',')}`;
             }
 
-            async function fetchDarsData() {
-                const response = await fetch('/api/dars', { headers });
+            async function fetchDashboardStats() {
+                const response = await fetch('/api/user/dashboard-stats', { headers });
+                if (!response.ok) throw new Error('Falha ao buscar estatísticas.');
+                const stats = await response.json();
+
+                document.getElementById('stat-pendentes').innerText = stats.darsPendentes;
+                document.getElementById('stat-vencidos').innerText = stats.darsVencidos;
+                document.getElementById('stat-devido').innerText = `R$ ${stats.valorTotalDevido.replace('.', ',')}`;
+            }
+
+            async function fetchLastDar() {
+                const response = await fetch('/api/dars?ano=todos&status=todos', { headers });
                 if (!response.ok) throw new Error('Falha ao buscar os DARs.');
                 const dars = await response.json();
-                const tableBody = document.getElementById('dars-table-body');
-                if (dars.length === 0) { tableBody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Nenhum DAR encontrado.</td></tr>'; return; }
-
-                const statusColors = { 'Pendente': 'bg-warning text-dark', 'Pago': 'bg-success text-white', 'Vencido': 'bg-danger text-white' };
-                let tableHTML = '';
-                dars.forEach(dar => {
-                    const statusColor = statusColors[dar.status] || 'bg-secondary text-white';
-                    tableHTML += `
-                        <tr>
-                            <td>${String(dar.mes_referencia).padStart(2, '0')}/${dar.ano_referencia}</td>
-                            <td>${new Date(dar.data_vencimento).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</td>
-                            <td class="text-end">${dar.valor.toFixed(2).replace('.', ',')}</td>
-                            <td class="text-center"><span class="badge ${statusColor}">${dar.status}</span></td>
-                            <td class="text-center"><button class="btn btn-primary btn-sm emitir-btn" data-id="${dar.id}" data-status="${dar.status}">Emitir</button></td>
-                        </tr>
-                    `;
-                });
-                tableBody.innerHTML = tableHTML;
                 
-                document.querySelectorAll('.emitir-btn').forEach(button => {
-                    button.addEventListener('click', handleEmitirClick);
-                });
-            }
-
-            async function handleEmitirClick(event) {
-                const darId = event.target.dataset.id;
-                const darStatus = event.target.dataset.status;
-
-                if (darStatus === 'Vencido') {
-                    const response = await fetch(`/api/dars/${darId}/recalcular`, { headers });
-                    if (!response.ok) { alert('Erro ao recalcular o DAR.'); return; }
-                    const calculo = await response.json();
-                    
-                    document.getElementById('modalDiasAtraso').innerText = calculo.diasAtraso;
-                    document.getElementById('modalValorOriginal').innerText = `R$ ${calculo.valorOriginal.toFixed(2).replace('.', ',')}`;
-                    document.getElementById('modalMulta').innerText = `R$ ${calculo.multa.toFixed(2).replace('.', ',')}`;
-                    document.getElementById('modalJuros').innerText = `R$ ${calculo.juros.toFixed(2).replace('.', ',')}`;
-                    document.getElementById('modalValorAtualizado').innerText = `R$ ${calculo.valorAtualizado.toFixed(2).replace('.', ',')}`;
-                    
-                    recalculateModal.show();
-                } else if (darStatus === 'Pago') {
-                    alert('Este DAR já foi pago.');
-                } else {
-                    alert('Funcionalidade de emissão de DAR pendente será integrada com a SEFAZ.');
+                const tableBody = document.getElementById('last-dar-table-body');
+                if (dars.length === 0) {
+                    tableBody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Nenhum DAR encontrado.</td></tr>';
+                    return;
                 }
+                
+                const ultimoDar = dars[0];
+                const statusColors = { 'Pendente': 'bg-warning text-dark', 'Pago': 'bg-success text-white', 'Vencido': 'bg-danger text-white' };
+                const statusColor = statusColors[ultimoDar.status] || 'bg-secondary';
+                
+                tableBody.innerHTML = `
+                    <tr>
+                        <td>${String(ultimoDar.mes_referencia).padStart(2, '0')}/${ultimoDar.ano_referencia}</td>
+                        <td>${new Date(ultimoDar.data_vencimento).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</td>
+                        <td class="text-end">${ultimoDar.valor.toFixed(2).replace('.', ',')}</td>
+                        <td class="text-center"><span class="badge ${statusColor}">${ultimoDar.status}</span></td>
+                        <td class="text-center"><a href="/dars.html" class="btn btn-primary btn-sm">Ver Detalhes</a></td>
+                    </tr>
+                `;
             }
-            
+
             try {
-                await Promise.all([ fetchUserData(), fetchDarsData() ]);
+                await Promise.all([
+                    fetchUserData(),
+                    fetchDashboardStats(),
+                    fetchLastDar()
+                ]);
             } catch (error) {
-                console.error('Erro de autenticação ou ao carregar dados:', error);
+                console.error('Erro ao carregar dados do dashboard:', error);
                 localStorage.removeItem('authToken');
                 window.location.href = '/login.html';
             }
-        };
+        });
     </script>
 </body>
 </html>

@@ -34,6 +34,31 @@ router.put('/me', authMiddleware, (req, res) => {
     });
 });
 
+// --- ROTA QUE FALTAVA ADICIONADA AQUI ---
+// Rota para buscar as estatísticas do dashboard do permissionário
+router.get('/dashboard-stats', authMiddleware, async (req, res) => {
+    const userId = req.user.id;
+
+    const dbGetAsync = (sql, params = []) => new Promise((resolve, reject) => {
+        db.get(sql, params, (err, row) => (err ? reject(err) : resolve(row)));
+    });
+
+    try {
+        const pendentes = await dbGetAsync(`SELECT COUNT(*) as count FROM dars WHERE permissionario_id = ? AND status = 'Pendente'`, [userId]);
+        const vencidos = await dbGetAsync(`SELECT COUNT(*) as count FROM dars WHERE permissionario_id = ? AND status = 'Vencido'`, [userId]);
+        const totalDevido = await dbGetAsync(`SELECT SUM(valor) as total FROM dars WHERE permissionario_id = ? AND (status = 'Pendente' OR status = 'Vencido')`, [userId]);
+
+        res.status(200).json({
+            darsPendentes: pendentes.count || 0,
+            darsVencidos: vencidos.count || 0,
+            valorTotalDevido: (totalDevido.total || 0).toFixed(2)
+        });
+    } catch (error) {
+        console.error("Erro ao buscar estatísticas do usuário:", error);
+        res.status(500).json({ error: "Erro ao buscar estatísticas do dashboard." });
+    }
+});
+
 // Rota para ALTERAR A SENHA
 router.post('/change-password', authMiddleware, (req, res) => {
     const userId = req.user.id;

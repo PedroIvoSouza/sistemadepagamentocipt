@@ -9,14 +9,16 @@ const { emitirGuiaSefaz } = require('../services/sefazService');
 const router = express.Router();
 const db = new sqlite3.Database('./sistemacipt.db');
 
-// Rota para listar os DARs do usuário logado
+const dbGetAsync = (sql, params = []) => new Promise((resolve, reject) => {
+    db.get(sql, params, (err, row) => (err ? reject(err) : resolve(row)));
+});
+
+// Rota de listagem (sem alterações)
 router.get('/', authMiddleware, (req, res) => {
     const userId = req.user.id;
     const { ano, status } = req.query;
-
     let sql = `SELECT * FROM dars WHERE permissionario_id = ?`;
     const params = [userId];
-
     if (ano && ano !== 'todos') {
         sql += ` AND ano_referencia = ?`;
         params.push(ano);
@@ -26,23 +28,20 @@ router.get('/', authMiddleware, (req, res) => {
         params.push(status);
     }
     sql += ` ORDER BY ano_referencia DESC, mes_referencia DESC`;
-    
     db.all(sql, params, (err, rows) => {
         if (err) return res.status(500).json({ error: 'Erro de banco de dados.' });
         res.status(200).json(rows);
     });
 });
 
-// Rota para recalcular um DAR vencido
+// Rota de recálculo para o modal (sem alterações)
 router.get('/:id/recalcular', authMiddleware, (req, res) => {
     const userId = req.user.id;
     const darId = req.params.id;
-
     const sql = `SELECT * FROM dars WHERE id = ? AND permissionario_id = ?`;
     db.get(sql, [darId, userId], async (err, dar) => {
         if (err) return res.status(500).json({ error: 'Erro de banco de dados.' });
         if (!dar) return res.status(404).json({ error: 'DAR não encontrado.' });
-
         try {
             const calculo = await calcularEncargosAtraso(dar);
             res.status(200).json(calculo);
@@ -52,23 +51,32 @@ router.get('/:id/recalcular', authMiddleware, (req, res) => {
     });
 });
 
-// ROTA PARA EMITIR O DAR VIA SEFAZ (SIMPLIFICADA)
+// ROTA DE EMISSÃO ATUALIZADA (sem 'termo_permissao')
 router.post('/:id/emitir', authMiddleware, async (req, res) => {
     const userId = req.user.id;
     const darId = req.params.id;
 
-    const dbGetAsync = (sql, params) => new Promise((resolve, reject) => db.get(sql, params, (e, r) => e ? reject(e) : resolve(r)));
-
     try {
-        const dar = await dbGetAsync(`SELECT * FROM dars WHERE id = ? AND permissionario_id = ?`, [darId, userId]);
+        let dar = await dbGetAsync(`SELECT * FROM dars WHERE id = ? AND permissionario_id = ?`, [darId, userId]);
         if (!dar) return res.status(404).json({ error: 'DAR não encontrado.' });
 
-        // A consulta SQL agora é mais simples, não precisa mais do termo_permissao
+        // MUDANÇA AQUI: A consulta não busca mais o termo_permissao
         const user = await dbGetAsync(`SELECT id, nome_empresa, cnpj FROM permissionarios WHERE id = ?`, [userId]);
         
-        // A validação do termo_permissao foi removida
-
-        const sefazResponse = await emitirGuiaSefaz(user, dar);
+        let sefazResponse;
+        
+        if (dar.status === 'Vencido') {
+            const calculo = await calcularEncargosAtraso(dar);
+            const darAtualizado = {
+                ...dar,
+                valor: calculo.valorAtualizado,
+                data_vencimento: calculo.novaDataVencimento
+            };
+            sefazResponse = await emitirGuiaSefaz(user, darAtualizado);
+        } else {
+            sefazResponse = await emitirGuiaSefaz(user, dar);
+        }
+        
         res.status(200).json(sefazResponse);
 
     } catch (error) {
