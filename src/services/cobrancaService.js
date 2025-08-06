@@ -1,7 +1,8 @@
+// Em: src/services/cobrancaService.js
 const axios = require('axios');
 const https = require('https');
 
-// ... (Suas funções de data isFeriado, isDiaUtil, etc. continuam aqui sem alterações) ...
+// --- Funções de Data (sem alterações) ---
 function isFeriado(data) {
     const dia = String(data.getDate()).padStart(2, '0');
     const mes = String(data.getMonth() + 1).padStart(2, '0');
@@ -26,7 +27,6 @@ function getProximoDiaUtil(data) {
     return proximoDia;
 }
 // -----------------------------------------------------------
-
 
 async function calcularEncargosAtraso(dar) {
     // ... (lógica de data e multa continua a mesma) ...
@@ -53,7 +53,7 @@ async function calcularEncargosAtraso(dar) {
     const multa = dar.valor * 0.02;
     let juros = 0;
 
-    // --- BLOCO DE CÓDIGO FINAL E ROBUSTO PARA BUSCAR A SELIC ---
+    // --- BLOCO DE CÓDIGO FINAL E CORRIGIDO PARA BUSCAR A SELIC ---
     try {
         console.log('[INFO] Buscando taxa SELIC da API BrasilAPI...');
         
@@ -62,17 +62,15 @@ async function calcularEncargosAtraso(dar) {
 
         const response = await axios.get(url, { httpsAgent, timeout: 15000 });
 
-        // LOG DETALHADO DA RESPOSTA - A CHAVE ESTÁ AQUI
-        console.log('[DEBUG] Resposta recebida da API da SELIC:', JSON.stringify(response.data, null, 2));
-
-        // Verificação de segurança para garantir que a resposta é válida
-        if (response && response.data && Array.isArray(response.data) && response.data.length > 0 && response.data[0].hasOwnProperty('valor')) {
-            const selicAnual = parseFloat(response.data[0].valor);
+        // Verificação de segurança AJUSTADA para esperar um OBJETO, não um array.
+        if (response && response.data && typeof response.data === 'object' && response.data.hasOwnProperty('valor')) {
+            const selicAnual = parseFloat(response.data.valor); // Acessa o valor diretamente
             const selicDiaria = (selicAnual / 100) / 365;
             juros = dar.valor * selicDiaria * diasAtraso;
             console.log(`[SUCESSO] Taxa SELIC encontrada: ${selicAnual}. Juros calculados: ${juros}`);
         } else {
             console.warn('[AVISO] A resposta da API da SELIC veio em um formato inesperado. Juros não serão calculados.');
+            console.warn('[DEBUG] Resposta recebida:', JSON.stringify(response.data, null, 2));
             juros = 0;
         }
 
