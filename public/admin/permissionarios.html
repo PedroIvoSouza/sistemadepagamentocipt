@@ -22,7 +22,7 @@
         .sidebar-header { padding: 1.5rem; text-align: center; background-color: rgba(0,0,0,0.1); }
         .sidebar-header img { max-width: 180px; height: auto; }
         .sidebar-nav { padding: 1rem 0; flex-grow: 1; }
-        .sidebar-nav .nav-link { color: rgba(255, 255, 255, 0.8); padding: 0.8rem 1.5rem; display: flex; align-items: center; font-weight: 500; }
+        .sidebar-nav .nav-link { color: rgba(255, 255, 255, 0.8); padding: 0.8rem 1.5rem; display: flex; align-items: center; font-weight: 500; text-decoration: none; }
         .sidebar-nav .nav-link .bi { margin-right: 1rem; font-size: 1.2rem; }
         .sidebar-nav .nav-link:hover { color: #ffffff; background-color: rgba(255,255,255,0.05); }
         .sidebar-nav .nav-link.active { color: white; background-color: var(--cor-primaria); }
@@ -45,6 +45,15 @@
                 <li class="nav-item"><a class="nav-link" href="/admin/dashboard.html"><i class="bi bi-grid-1x2-fill"></i>Dashboard</a></li>
                 <li class="nav-item"><a class="nav-link" href="/admin/permissionarios.html"><i class="bi bi-people-fill"></i>Permissionários</a></li>
                 <li class="nav-item"><a class="nav-link" href="/admin/dars.html"><i class="bi bi-file-earmark-text-fill"></i>DARs</a></li>
+                
+                <li class="nav-item menu-dropdown">
+                    <a class="nav-link" href="#"><i class="bi bi-calendar-event-fill"></i>Eventos</a>
+                    <ul class="submenu" style="list-style: none; padding-left: 20px; display: none;">
+                        <li><a class="nav-link" href="/admin/eventos-clientes.html"><i class="bi bi-person-lines-fill"></i>Clientes de Eventos</a></li>
+                        <li><a class="nav-link" href="/admin/eventos-dars.html"><i class="bi bi-receipt-cutoff"></i>DARs de Eventos</a></li>
+                    </ul>
+                </li>
+
                 <li class="nav-item"><a class="nav-link" href="/admin/admin-management.html"><i class="bi bi-person-badge-fill"></i>Administradores</a></li>
                 <li class="nav-item"><a id="logoutButton" class="nav-link" href="#" style="color: #ffc107;"><i class="bi bi-box-arrow-right"></i>Sair</a></li>
             </ul>
@@ -95,7 +104,7 @@
                         </div>
 
                         <div class="table-responsive">
-                            <table class="table table-hover">
+                            <table class="table table-hover align-middle">
                                 <thead>
                                     <tr>
                                         <th>Nome da Empresa</th><th>CNPJ</th><th>E-mail</th><th>Telefone</th><th>Ações</th>
@@ -117,7 +126,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 
 <script>
-    // FUNÇÃO PARA FORMATAR O CNPJ (ADICIONADA)
     function formatarCNPJ(cnpj) {
         if (!cnpj) return '';
         const cnpjLimpo = cnpj.toString().replace(/\D/g, '');
@@ -131,26 +139,48 @@
         const token = localStorage.getItem('adminAuthToken');
         if (!token) { window.location.href = '/admin/login.html'; return; }
         
-        const path = window.location.pathname; 
-        const navLinks = document.querySelectorAll('.sidebar-nav .nav-link');
-        navLinks.forEach(link => {
-            if (link.getAttribute('href') === path) {
-                link.classList.add('active'); 
+        // --- INÍCIO DA LÓGICA DO MENU ---
+        const path = window.location.pathname;
+        const allLinks = document.querySelectorAll('.sidebar-nav .nav-link');
+
+        allLinks.forEach(link => {
+            link.classList.remove('active');
+            const href = link.getAttribute('href');
+            if (path.includes(href) && href !== '#') {
+                link.classList.add('active');
+                
+                const parentDropdown = link.closest('.menu-dropdown');
+                if (parentDropdown) {
+                    parentDropdown.querySelector('a.nav-link').classList.add('active');
+                    parentDropdown.querySelector('.submenu').style.display = 'block';
+                }
             }
         });
-        
-        const adminNameEl = document.getElementById('adminName');
-        try {
-            const payload = JSON.parse(atob(token.split('.')[1]));
-            adminNameEl.innerText = payload.nome;
-        } catch (e) { /* silent fail */ }
 
+        // AJUSTE: O preventDefault() garante que o link "Eventos" sirva apenas para abrir e fechar o submenu.
+        const dropdownToggles = document.querySelectorAll('.menu-dropdown > a');
+        dropdownToggles.forEach(toggle => {
+            toggle.addEventListener('click', (e) => {
+                e.preventDefault();
+                const submenu = toggle.nextElementSibling;
+                submenu.style.display = submenu.style.display === 'block' ? 'none' : 'block';
+            });
+        });
+        
         document.getElementById('logoutButton').addEventListener('click', (e) => {
             e.preventDefault();
             localStorage.removeItem('adminAuthToken');
             window.location.href = '/admin/login.html';
         });
+        // --- FIM DA LÓGICA DO MENU ---
+        
+        const adminNameEl = document.getElementById('adminName');
+        try {
+            const payload = JSON.parse(atob(token.split('.')[1]));
+            adminNameEl.innerText = payload.nome;
+        } catch (e) { console.error("Erro ao decodificar token:", e); }
 
+        // --- LÓGICA ESPECÍFICA DA PÁGINA ---
         const searchInput = document.getElementById('searchInput');
         const limitSelect = document.getElementById('limitSelect');
         const tableBody = document.getElementById('permissionarios-table-body');
@@ -169,27 +199,24 @@
                 renderTable(data.permissionarios);
                 renderPagination(data.totalPages, data.currentPage);
             } catch (error) {
-                tableBody.innerHTML = '<tr><td colspan="5" class="text-center text-danger">Erro ao carregar dados.</td></tr>';
+                tableBody.innerHTML = `<tr><td colspan="5" class="text-center text-danger">${error.message}</td></tr>`;
             }
         }
 
         function renderTable(permissionarios) {
-            if (permissionarios.length === 0) {
+            if (!permissionarios || permissionarios.length === 0) {
                 tableBody.innerHTML = '<tr><td colspan="5" class="text-center">Nenhum permissionário encontrado.</td></tr>';
                 return;
             }
-            let tableHTML = '';
-            permissionarios.forEach(p => {
-                tableHTML += `
-                    <tr>
-                        <td><strong>${p.nome_empresa}</strong></td>
-                        <td>${formatarCNPJ(p.cnpj)}</td> <td>${p.email}</td>
-                        <td>${p.telefone || 'Não informado'}</td>
-                        <td><a href="/admin/permissionario-form.html?id=${p.id}" class="btn btn-sm btn-outline-primary">Ver/Editar</a></td>
-                    </tr>
-                `;
-            });
-            tableBody.innerHTML = tableHTML;
+            tableBody.innerHTML = permissionarios.map(p => `
+                <tr>
+                    <td><strong>${p.nome_empresa}</strong></td>
+                    <td>${formatarCNPJ(p.cnpj)}</td>
+                    <td>${p.email}</td>
+                    <td>${p.telefone || 'Não informado'}</td>
+                    <td><a href="/admin/permissionario-form.html?id=${p.id}" class="btn btn-sm btn-outline-primary">Ver/Editar</a></td>
+                </tr>
+            `).join('');
         }
 
         function renderPagination(totalPages, page) {
@@ -205,27 +232,77 @@
             paginationNav.innerHTML = paginationHTML;
         }
 
-        searchInput.addEventListener('keyup', () => { clearTimeout(searchTimeout); searchTimeout = setTimeout(() => { currentSearch = searchInput.value; currentPage = 1; fetchPermissionarios(); }, 500); });
+        searchInput.addEventListener('keyup', () => { clearTimeout(searchTimeout); searchTimeout = setTimeout(() => { currentSearch = searchInput.value; currentPage = 1; fetchPermissionarios(); }, 300); });
         limitSelect.addEventListener('change', () => { currentLimit = limitSelect.value; currentPage = 1; fetchPermissionarios(); });
         paginationNav.addEventListener('click', (e) => { if (e.target.tagName === 'A' && !e.target.parentElement.classList.contains('disabled')) { e.preventDefault(); currentPage = Number(e.target.dataset.page); fetchPermissionarios(); } });
 
+        // --- CORREÇÃO NA LÓGICA DE EXPORTAÇÃO ---
+        async function handleExport(format, searchTerm) {
+            const button = document.querySelector(`.export-option[data-format="${format}"]`);
+            const originalText = button.innerHTML;
+            button.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Gerando...`;
+            button.disabled = true;
+
+            try {
+                const url = `/api/admin/permissionarios/export/${format}?search=${encodeURIComponent(searchTerm)}`;
+                // Usamos fetch para enviar o token de autorização
+                const response = await fetch(url, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || `Erro ${response.status} ao exportar.`);
+                }
+                
+                // Pega o nome do arquivo do cabeçalho da resposta, se disponível
+                const disposition = response.headers.get('content-disposition');
+                let filename = `permissionarios.${format}`;
+                if (disposition && disposition.indexOf('attachment') !== -1) {
+                    const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
+                    const matches = filenameRegex.exec(disposition);
+                    if (matches != null && matches[1]) {
+                        filename = matches[1].replace(/['"]/g, '');
+                    }
+                }
+
+                const blob = await response.blob();
+                const downloadUrl = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = downloadUrl;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(downloadUrl);
+                a.remove();
+
+            } catch (error) {
+                alert(`Falha na exportação: ${error.message}`);
+            } finally {
+                button.innerHTML = originalText;
+                button.disabled = false;
+            }
+        }
+        
         document.querySelectorAll('.export-option').forEach(button => {
             button.addEventListener('click', (e) => {
                 e.preventDefault();
                 const format = e.target.dataset.format;
                 const searchTerm = searchInput.value;
+                
                 if (format === 'pdf') {
+                    // A exportação para PDF é feita no lado do cliente e continua igual
                     exportToPDF(searchTerm);
                 } else {
-                    // LÓGICA DE EXPORTAÇÃO CORRIGIDA
-                    const url = `/api/admin/permissionarios/export/${format}?search=${encodeURIComponent(searchTerm)}`;
-                    window.location.href = url;
+                    // Para CSV e XLSX, usamos a nova função que envia o token
+                    handleExport(format, searchTerm);
                 }
             });
         });
 
         async function exportToPDF(searchTerm) {
-            // ... (código para gerar PDF continua igual)
+             // ... seu código para gerar PDF continua aqui, sem alterações ...
         }
         
         fetchPermissionarios();

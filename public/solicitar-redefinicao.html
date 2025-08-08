@@ -87,11 +87,9 @@
     
     <script src="https://unpkg.com/imask"></script>
     <script>
-        // Máscara para o campo CNPJ
         const cnpjInput = document.getElementById('cnpj');
         IMask(cnpjInput, { mask: '00.000.000/0000-00' });
 
-        // Lógica do formulário
         document.getElementById('requestCodeForm').addEventListener('submit', async (event) => {
             event.preventDefault();
             const form = event.target;
@@ -107,20 +105,16 @@
                 });
 
                 const result = await response.json();
-
                 if (!response.ok) {
                     throw new Error(result.error || 'Ocorreu um erro.');
                 }
                 
-                // Mostra mensagem de sucesso e redireciona
                 messageDiv.innerText = 'Código enviado com sucesso! Verifique seu e-mail. Redirecionando...';
                 messageDiv.className = 'alert alert-success';
                 messageDiv.style.display = 'block';
                 formContainer.style.display = 'none';
 
-                // Redireciona para a página de verificação após 3 segundos
                 setTimeout(() => {
-                    // Passamos o CNPJ na URL para a próxima página saber de quem é o código
                     window.location.href = `/verificar-codigo.html?cnpj=${encodeURIComponent(cnpj)}`;
                 }, 3000);
 

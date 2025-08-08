@@ -22,12 +22,12 @@
         .sidebar-header { padding: 1.5rem; text-align: center; background-color: rgba(0,0,0,0.1); }
         .sidebar-header img { max-width: 180px; }
         .sidebar-nav { padding: 1rem 0; flex-grow: 1; }
-        .sidebar-nav .nav-link { color: rgba(255,255,255,.8); padding: .8rem 1.5rem; display:flex; align-items:center; font-weight:500; }
+        .sidebar-nav .nav-link { color: rgba(255,255,255,.8); padding: .8rem 1.5rem; display:flex; align-items:center; font-weight:500; text-decoration: none;}
         .sidebar-nav .nav-link .bi { margin-right:1rem; font-size:1.2rem; }
         .sidebar-nav .nav-link:hover { color:#fff; background-color:rgba(255,255,255,.05); }
         .sidebar-nav .nav-link.active { color:#fff; background-color:var(--cor-primaria); }
         .sidebar-footer { padding:1.5rem; text-align:center; border-top:1px solid rgba(255,255,255,.1); }
-        .sidebar-footer img { max-height: 100px; width: auto; } /* <-- Regra do logo corrigida */
+        .sidebar-footer img { max-height: 100px; width: auto; }
         .main-content { flex-grow:1; display:flex; flex-direction:column; }
         .topbar { background:#fff; padding:1rem 2rem; box-shadow:0 1px 3px rgba(0,0,0,.1); display:flex; justify-content:flex-end; align-items:center; }
         .content { padding:2rem; }
@@ -39,22 +39,27 @@
 <body>
     <div class="wrapper">
         <aside class="sidebar">
-            <div class="sidebar-header">
-                <a href="/admin/dashboard.html">
-                    <img src="/images/painel-gestao.png" alt="Painel de Gestão">
-                </a>
-            </div>
-            <ul class="nav flex-column sidebar-nav">
-                <li class="nav-item"><a class="nav-link" href="/admin/dashboard.html"><i class="bi bi-grid-1x2-fill"></i>Dashboard</a></li>
-                <li class="nav-item"><a class="nav-link" href="/admin/permissionarios.html"><i class="bi bi-people-fill"></i>Permissionários</a></li>
-                <li class="nav-item"><a class="nav-link" href="/admin/dars.html"><i class="bi bi-file-earmark-text-fill"></i>DARs</a></li>
-                <li class="nav-item"><a class="nav-link" href="/admin/admin-management.html"><i class="bi bi-person-badge-fill"></i>Administradores</a></li>
-                <li class="nav-item"><a id="logoutButton" class="nav-link" href="#" style="color:#ffc107;"><i class="bi bi-box-arrow-right"></i>Sair</a></li>
+    <div class="sidebar-header">
+        <a href="/admin/dashboard.html"><img src="/images/painel-gestao.png" alt="Painel de Gestão"></a>
+    </div>
+    <ul class="nav flex-column sidebar-nav">
+        <li class="nav-item"><a class="nav-link" href="/admin/dashboard.html"><i class="bi bi-grid-1x2-fill"></i>Dashboard</a></li>
+        <li class="nav-item"><a class="nav-link" href="/admin/permissionarios.html"><i class="bi bi-people-fill"></i>Permissionários</a></li>
+        <li class="nav-item"><a class="nav-link" href="/admin/dars.html"><i class="bi bi-file-earmark-text-fill"></i>DARs</a></li>
+        
+        <li class="nav-item menu-dropdown">
+            <a class="nav-link" href="#"><i class="bi bi-calendar-event-fill"></i>Eventos</a>
+            <ul class="submenu" style="list-style: none; padding-left: 20px; display: none;">
+                <li><a class="nav-link" href="/admin/eventos-clientes.html">Clientes de Eventos</a></li>
+                <li><a class="nav-link" href="/admin/eventos-dars.html">DARs de Eventos</a></li>
             </ul>
-            <div class="sidebar-footer">
-                <img src="/images/logo-secti-vertical.png" alt="Logo SECTI">
-            </div>
-        </aside>
+        </li>
+
+        <li class="nav-item"><a class="nav-link" href="/admin/admin-management.html"><i class="bi bi-person-badge-fill"></i>Administradores</a></li>
+        <li class="nav-item"><a id="logoutButton" class="nav-link" href="#" style="color: #ffc107;"><i class="bi bi-box-arrow-right"></i>Sair</a></li>
+    </ul>
+    <div class="sidebar-footer"><img src="/images/logo-secti-vertical.png" alt="Logo SECTI"></div>
+</aside>
 
         <div class="main-content">
             <header class="topbar">
@@ -123,7 +128,6 @@
 
    <script src="https://unpkg.com/imask"></script>
 <script>
-    // --- FUNÇÃO DE FORMATAÇÃO QUE FALTAVA ---
     function formatarCNPJ(cnpj) {
         if (!cnpj) return '';
         const cnpjLimpo = cnpj.toString().replace(/\D/g, '');
@@ -133,22 +137,41 @@
         return cnpj;
     }
 
-        
-        // SEU SCRIPT JAVASCRIPT CONTINUA EXATAMENTE O MESMO, SEM ALTERAÇÕES
-        document.addEventListener('DOMContentLoaded', () => {
+    document.addEventListener('DOMContentLoaded', () => {
         const token = localStorage.getItem('adminAuthToken');
         if (!token) {
             window.location.href = '/admin/login.html';
             return;
         }
 
-        const navLinks = document.querySelectorAll('.sidebar-nav .nav-link');
-        navLinks.forEach(link => {
-            const linkPath = link.getAttribute('href');
-            if (linkPath === '/admin/permissionarios.html') {
-                link.classList.add('active'); 
+        // --- INÍCIO DA LÓGICA DO MENU ---
+        const path = window.location.pathname;
+        document.querySelectorAll('.sidebar-nav .nav-link').forEach(link => {
+            const href = link.getAttribute('href');
+            if (path.endsWith(href)) {
+                link.classList.add('active');
+                const parentDropdown = link.closest('.menu-dropdown');
+                if (parentDropdown) {
+                    parentDropdown.querySelector('.submenu').style.display = 'block';
+                }
             }
         });
+        
+        const dropdownToggles = document.querySelectorAll('.menu-dropdown > a');
+        dropdownToggles.forEach(toggle => {
+            toggle.addEventListener('click', (e) => {
+                e.preventDefault();
+                const submenu = toggle.nextElementSibling;
+                submenu.style.display = submenu.style.display === 'block' ? 'none' : 'block';
+            });
+        });
+        
+        document.getElementById('logoutButton').addEventListener('click', (e) => {
+            e.preventDefault();
+            localStorage.removeItem('adminAuthToken');
+            window.location.href = '/admin/login.html';
+        });
+        // --- FIM DA LÓGICA DO MENU ---
 
         try {
             const payload = JSON.parse(atob(token.split('.')[1]));
@@ -157,13 +180,7 @@
             console.error('Erro ao decodificar token:', e);
         }
 
-        document.getElementById('logoutButton')
-            .addEventListener('click', (e) => {
-                e.preventDefault();
-                localStorage.removeItem('adminAuthToken');
-                window.location.href = '/admin/login.html';
-            });
-
+        // --- LÓGICA ESPECÍFICA DA PÁGINA ---
         const urlParams = new URLSearchParams(window.location.search);
         const permissionarioId = urlParams.get('id');
         const isEditMode = !!permissionarioId;
@@ -207,7 +224,7 @@
             })
             .then(data => {
                 document.getElementById('nome_empresa').value = data.nome_empresa;
-                document.getElementById('cnpj').value = formatarCNPJ(data.cnpj); // A chamada correta
+                document.getElementById('cnpj').value = formatarCNPJ(data.cnpj);
                 document.getElementById('email').value = data.email;
                 document.getElementById('telefone').value = data.telefone || '';
                 document.getElementById('numero_sala').value = data.numero_sala;

@@ -1,5 +1,8 @@
+// Em: src/services/emailService.js
+
 const nodemailer = require('nodemailer');
-require('dotenv').config();
+// O dotenv é geralmente carregado no index.js principal, mas não há problema em tê-lo aqui.
+require('dotenv').config(); 
 
 const transporter = nodemailer.createTransport({
     host: process.env.EMAIL_HOST,
@@ -13,6 +16,7 @@ const transporter = nodemailer.createTransport({
 
 /**
  * Envia um e-mail de notificação sobre um novo DAR gerado.
+ * (Sua função existente)
  */
 async function enviarEmailNovaDar(emailDestino, dadosDoDar) {
     const dataVencimentoFormatada = new Date(dadosDoDar.data_vencimento).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
@@ -57,6 +61,7 @@ async function enviarEmailNovaDar(emailDestino, dadosDoDar) {
 
 /**
  * Envia um e-mail com o código de verificação para redefinir a senha.
+ * (Sua função existente)
  */
 async function enviarEmailRedefinicao(emailDestino, codigo) {
     const mailOptions = {
@@ -88,9 +93,9 @@ async function enviarEmailRedefinicao(emailDestino, codigo) {
 
 /**
  * Envia um e-mail com link direto para o primeiro acesso do ADMINISTRADOR.
+ * (Sua função existente)
  */
 async function enviarEmailPrimeiroAcesso(emailDestino, token) {
-    // MUDANÇA AQUI: O link agora aponta para a página de admin
     const link = `${process.env.BASE_URL}/admin/definir-senha.html?token=${token}`;
     
     const mailOptions = {
@@ -116,12 +121,12 @@ async function enviarEmailPrimeiroAcesso(emailDestino, token) {
         console.log(`Email de configuração de senha enviado para: ${emailDestino}`);
     } catch (error) {
         console.error(`Erro ao enviar e-mail para ${emailDestino}:`, error);
-        // Silenciando o throw de erro aqui para não quebrar a criação do admin se o email falhar
     }
 }
 
 /**
  * Envia um e-mail de notificação de DAR a partir do painel do admin.
+ * (Sua função existente)
  */
 async function enviarEmailNotificacaoDar(emailDestino, dadosDar) {
     const linkPortal = `${process.env.BASE_URL}/dars.html`;
@@ -156,10 +161,48 @@ async function enviarEmailNotificacaoDar(emailDestino, dadosDar) {
     }
 }
 
+/**
+ * Envia um e-mail para um novo cliente de evento com um link para definir a sua senha.
+ * (Nova função)
+ */
+async function enviarEmailDefinirSenha(destinatario, nomeCliente, token) {
+    // --- CORREÇÃO APLICADA AQUI ---
+    // Remove qualquer barra final da BASE_URL para evitar a duplicação.
+    const baseUrl = process.env.BASE_URL.replace(/\/$/, ""); 
+    const linkDefinirSenha = `${baseUrl}/definir-senha-evento.html?token=${token}`;
+
+    const mailOptions = {
+        from: `"Sistema CIPT" <${process.env.EMAIL_USER}>`,
+        to: destinatario,
+        subject: 'Crie sua Senha de Acesso - Evento no CIPT',
+        html: `
+            <h1>Olá, ${nomeCliente}!</h1>
+            <p>Seu cadastro para o aluguel de espaço para evento no Centro de Inovação foi realizado com sucesso.</p>
+            <p>Para gerenciar suas DARs e informações, por favor, crie uma senha de acesso clicando no link abaixo:</p>
+            <br>
+            <p><a href="${linkDefinirSenha}" style="background-color: #0056a0; color: white; padding: 15px 25px; text-align: center; text-decoration: none; display: inline-block; border-radius: 5px;">Criar Minha Senha</a></p>
+            <br>
+            <p>Se você não solicitou este cadastro, por favor, ignore este e-mail.</p>
+            <br>
+            <p>Atenciosamente,</p>
+            <p><strong>Equipe do Centro de Inovação do Jaraguá</strong></p>
+        `
+    };
+
+    try {
+        await transporter.sendMail(mailOptions);
+        console.log(`E-mail para definir senha enviado para ${destinatario}`);
+    } catch (error) {
+        console.error(`Erro ao enviar e-mail de definição de senha para ${destinatario}:`, error);
+        throw new Error('Falha ao enviar e-mail de definição de senha.');
+    }
+}
+
 // Exporta TODAS as funções para que possam ser usadas em outros arquivos
 module.exports = { 
     enviarEmailNovaDar,
     enviarEmailRedefinicao, 
     enviarEmailPrimeiroAcesso,
-    enviarEmailNotificacaoDar  
+    enviarEmailNotificacaoDar,
+    enviarEmailDefinirSenha  
 };

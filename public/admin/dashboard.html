@@ -25,7 +25,7 @@
         .sidebar-header { padding: 1.5rem; text-align: center; background-color: rgba(0,0,0,0.1); }
         .sidebar-header img { max-width: 180px; height: auto; }
         .sidebar-nav { padding: 1rem 0; flex-grow: 1; }
-        .sidebar-nav .nav-link { color: var(--cor-sidebar-texto); padding: 0.8rem 1.5rem; display: flex; align-items: center; font-weight: 500; }
+        .sidebar-nav .nav-link { color: var(--cor-sidebar-texto); padding: 0.8rem 1.5rem; display: flex; align-items: center; font-weight: 500; text-decoration: none; }
         .sidebar-nav .nav-link .bi { margin-right: 1rem; font-size: 1.2rem; }
         .sidebar-nav .nav-link:hover { color: var(--cor-sidebar-texto-hover); background-color: rgba(255,255,255,0.05); }
         .sidebar-nav .nav-link.active { color: white; background-color: var(--cor-sidebar-fundo-ativo); }
@@ -42,19 +42,28 @@
 </head>
 <body>
     <div class="wrapper">
-        <aside class="sidebar">
-            <div class="sidebar-header">
-                <a href="/admin/dashboard.html"><img src="/images/painel-gestao.png" alt="Painel de Gestão"></a>
-            </div>
-            <ul class="nav flex-column sidebar-nav">
-                <li class="nav-item"><a class="nav-link" href="/admin/dashboard.html"><i class="bi bi-grid-1x2-fill"></i>Dashboard</a></li>
-                <li class="nav-item"><a class="nav-link" href="/admin/permissionarios.html"><i class="bi bi-people-fill"></i>Permissionários</a></li>
-                <li class="nav-item"><a class="nav-link" href="/admin/dars.html"><i class="bi bi-file-earmark-text-fill"></i>DARs</a></li>
-                <li class="nav-item"><a class="nav-link" href="/admin/admin-management.html"><i class="bi bi-person-badge-fill"></i>Administradores</a></li>
-                <li class="nav-item"><a id="logoutButton" class="nav-link" href="#" style="color:#ffc107;"><i class="bi bi-box-arrow-right"></i>Sair</a></li>
+     <aside class="sidebar">
+    <div class="sidebar-header">
+        <a href="/admin/dashboard.html"><img src="/images/painel-gestao.png" alt="Painel de Gestão"></a>
+    </div>
+    <ul class="nav flex-column sidebar-nav">
+        <li class="nav-item"><a class="nav-link" href="/admin/dashboard.html"><i class="bi bi-grid-1x2-fill"></i>Dashboard</a></li>
+        <li class="nav-item"><a class="nav-link" href="/admin/permissionarios.html"><i class="bi bi-people-fill"></i>Permissionários</a></li>
+        <li class="nav-item"><a class="nav-link" href="/admin/dars.html"><i class="bi bi-file-earmark-text-fill"></i>DARs</a></li>
+        
+        <li class="nav-item menu-dropdown">
+            <a class="nav-link" href="#"><i class="bi bi-calendar-event-fill"></i>Eventos</a>
+            <ul class="submenu" style="list-style: none; padding-left: 20px; display: none;">
+                <li><a class="nav-link" href="/admin/eventos-clientes.html">Clientes de Eventos</a></li>
+                <li><a class="nav-link" href="/admin/eventos-dars.html">DARs de Eventos</a></li>
             </ul>
-            <div class="sidebar-footer"><img src="/images/logo-secti-vertical.png" alt="Logo SECTI"></div>
-        </aside>
+        </li>
+
+        <li class="nav-item"><a class="nav-link" href="/admin/admin-management.html"><i class="bi bi-person-badge-fill"></i>Administradores</a></li>
+        <li class="nav-item"><a id="logoutButton" class="nav-link" href="#" style="color: #ffc107;"><i class="bi bi-box-arrow-right"></i>Sair</a></li>
+    </ul>
+    <div class="sidebar-footer"><img src="/images/logo-secti-vertical.png" alt="Logo SECTI"></div>
+</aside>
 
         <div class="main-content">
             <header class="topbar">
@@ -100,7 +109,6 @@
     </div>
 
     <script>
-    // Mantemos o seu window.onload, pois ele já faz tudo que precisamos.
     window.onload = async () => {
         const token = localStorage.getItem('adminAuthToken');
         if (!token) {
@@ -108,18 +116,36 @@
             return;
         }
 
-        // --- INÍCIO DO CÓDIGO DO MENU ATIVO ---
-        // Esta é a nova lógica que adicionamos aqui dentro.
+        // --- LÓGICA DO MENU ---
         const path = window.location.pathname; 
         const navLinks = document.querySelectorAll('.sidebar-nav .nav-link');
         navLinks.forEach(link => {
-            if (link.getAttribute('href') === path) {
+            const href = link.getAttribute('href');
+            if (path.endsWith(href)) {
                 link.classList.add('active'); 
+                const parentDropdown = link.closest('.menu-dropdown');
+                if (parentDropdown) {
+                    parentDropdown.querySelector('.submenu').style.display = 'block';
+                }
             }
         });
-        // --- FIM DO CÓDIGO DO MENU ATIVO ---
 
-        // Decodifica o token para pegar o nome do admin (seu código original)
+        const dropdownToggles = document.querySelectorAll('.menu-dropdown > a');
+        dropdownToggles.forEach(toggle => {
+            toggle.addEventListener('click', (e) => {
+                e.preventDefault();
+                const submenu = toggle.nextElementSibling;
+                submenu.style.display = submenu.style.display === 'block' ? 'none' : 'block';
+            });
+        });
+
+        document.getElementById('logoutButton').addEventListener('click', (e) => {
+            e.preventDefault();
+            localStorage.removeItem('adminAuthToken');
+            window.location.href = '/admin/login.html';
+        });
+        // --- FIM DA LÓGICA DO MENU ---
+
         try {
             const payload = JSON.parse(atob(token.split('.')[1]));
             document.getElementById('adminName').innerText = payload.nome;
@@ -127,22 +153,31 @@
             console.error("Erro ao decodificar token:", e);
         }
 
-        // Busca as estatísticas na API (seu código original)
+        // --- LÓGICA DE BUSCA DE DADOS COM DEPURAÇÃO MELHORADA ---
         try {
-            const response = await fetch('/api/admin/dashboard-stats', {
+            console.log("Iniciando busca de dados do dashboard com o token:", token);
+            const url = `/api/admin/dashboard-stats?t=${new Date().getTime()}`;
+            const response = await fetch(url, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
 
-            if (!response.ok) throw new Error('Falha ao buscar estatísticas.');
+            if (!response.ok) {
+                console.error("A resposta da API para /dashboard-stats não foi OK.");
+                console.error("Status da Resposta:", response.status, response.statusText);
+                const errorText = await response.text();
+                console.error("Corpo da Resposta de Erro:", errorText);
+                throw new Error(`Falha ao buscar estatísticas (Status: ${response.status})`);
+            }
+            
             const stats = await response.json();
             
-            // Popula os cards de KPI (seu código original)
             document.getElementById('stat-permissionarios').innerText = stats.totalPermissionarios;
             document.getElementById('stat-pendentes').innerText = stats.darsPendentes;
             document.getElementById('stat-vencidos').innerText = stats.darsVencidos;
-            document.getElementById('stat-receita').innerText = `R$ ${stats.receitaPendente.replace('.',',')}`;
+            // --- CORREÇÃO APLICADA AQUI ---
+            // Converte o valor para número antes de formatar
+            document.getElementById('stat-receita').innerText = `R$ ${Number(stats.receitaPendente).toFixed(2).replace('.',',')}`;
 
-            // Popula a tabela de Resumo Mensal (seu código original)
             const resumoBody = document.getElementById('resumo-mensal-body');
             if (stats.resumoMensal && stats.resumoMensal.length > 0) {
                 let resumoHtml = '';
@@ -160,7 +195,6 @@
                 resumoBody.innerHTML = '<tr><td colspan="4" class="text-muted text-center">Nenhum dado mensal para exibir.</td></tr>';
             }
 
-            // Popula a lista de Maiores Devedores (seu código original)
             const devedoresList = document.getElementById('maiores-devedores-list');
             if (stats.maioresDevedores && stats.maioresDevedores.length > 0) {
                 let devedoresHtml = '';
@@ -176,20 +210,13 @@
             }
 
         } catch (error) {
-            console.error('Erro ao carregar dados do dashboard:', error);
-            alert('Sua sessão pode ter expirado. Por favor, faça o login novamente.');
-            localStorage.removeItem('adminAuthToken');
-            window.location.href = '/admin/login.html';
+            console.error('--- ERRO DETALHADO AO CARREGAR DASHBOARD ---');
+            console.error('O objeto de erro completo é:', error);
+            console.error('-------------------------------------------');
+            alert('Ocorreu um erro CRÍTICO ao carregar os dados. Por favor, abra o console (F12) e envie uma captura de tela do erro detalhado.');
         }
     };
-
-    // A lógica de logout que você já tinha (correta!)
-    document.getElementById('logoutButton').addEventListener('click', (e) => {
-        e.preventDefault();
-        localStorage.removeItem('adminAuthToken');
-        window.location.href = '/admin/login.html';
-    });
-</script>
+    </script>
 
 </body>
 </html>

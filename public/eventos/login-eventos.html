@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Login - Portal de Eventos</title>
+
+  <link rel="icon" type="image/png" href="/images/logo-cipt.png">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;800&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --cor-primaria: #0056a0;
+      --cor-footer: #004480;
+      --raio-borda: 0.5rem;
+      --cor-texto: #343a40;
+    }
+    html, body { height: 100%; }
+    body { font-family: 'Montserrat', sans-serif; display: flex; flex-direction: column; background-color: var(--cor-footer); }
+    .navbar { background-color: var(--cor-primaria); padding: 0.8rem 0; }
+    .navbar > .container { justify-content: center !important; }
+    .navbar-brand img { filter: brightness(0) invert(1); max-width: 602px; height: 55px; object-fit: contain; }
+    .main-container { flex-grow: 1; display: flex; align-items: center; background-image: linear-gradient(rgba(0, 0, 0, 0.45), rgba(0, 0, 0, 0.45)), url('/images/background-login.jpg'); background-size: cover; background-position: center; padding: 4rem 1rem; }
+    .portal-logo { max-width: 400px; height: auto; display: block; margin-left: 25%; margin-right: auto; }
+    .login-card { background-color: white; color: var(--cor-texto); border-radius: var(--raio-borda); box-shadow: 0 0.5rem 1.5rem rgba(0,0,0,0.2); padding: 2.5rem; width: 100%; max-width: 420px; }
+    .btn-primary { background-color: var(--cor-primaria); border-color: var(--cor-primaria); border-radius: var(--raio-borda); }
+    /* Ajustes para o botão dentro do input */
+    .input-group .form-control { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+    .input-group .btn { border-top-left-radius: 0; border-bottom-left-radius: 0; border-color: #ced4da;}
+    .footer { background-color: var(--cor-footer); padding: 1.5rem 0; color: rgba(255, 255, 255, 0.8); }
+    .footer-top { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1.5rem; margin-bottom: 1rem; }
+    .footer-info h5 { color: white; font-weight: 700; font-size: 1rem; margin-bottom: 0.5rem; }
+    .footer-info p { margin-bottom: 0.2rem; font-size: 0.85rem; }
+    .footer-info .bi { margin-right: 0.4rem; vertical-align: text-top; }
+    .footer-bottom { border-top: 1px solid rgba(255,255,255,0.2); padding-top: 1rem; margin-top: 1rem; font-size: 0.8rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.8rem; }
+  </style>
+</head>
+<body>
+  <div class="d-flex flex-column min-vh-100">
+    <header>
+      <nav class="navbar navbar-dark">
+        <div class="container">
+          <a class="navbar-brand" href="#"><img src="/images/logos-cabecalho.png" alt="Logos SECTI e Centro de Inovação Jaraguá" /></a>
+        </div>
+      </nav>
+    </header>
+
+    <main class="main-container">
+      <div class="container">
+        <div class="row align-items-center">
+          <div class="col-lg-7 mb-5 mb-lg-0">
+            <img src="/images/logo-portal-cliente.png" alt="Portal do Cliente de Eventos" class="portal-logo">
+          </div>
+          <div class="col-lg-5">
+            <div class="login-card">
+              <div class="text-center mb-4">
+                <h2 class="h3 mb-1 fw-bold">Acessar o Portal de Eventos</h2>
+                <p class="text-muted">Use seu CPF, CNPJ ou e-mail cadastrado.</p>
+              </div>
+
+              <form id="login-form">
+                <div class="form-floating mb-3">
+                  <input type="text" class="form-control" id="login" name="login" placeholder="CPF, CNPJ ou E-mail" required />
+                  <label for="login">CPF, CNPJ ou E-mail</label>
+                </div>
+                
+                <label for="senha" class="form-label">Senha</label>
+                <div class="input-group mb-3">
+                  <input type="password" class="form-control" id="senha" name="senha" placeholder="Senha" required />
+                  <button class="btn btn-outline-secondary" type="button" id="toggleSenha">
+                    <i class="bi bi-eye-fill"></i>
+                  </button>
+                </div>
+
+                <button class="w-100 btn btn-lg btn-primary" type="submit">Entrar</button>
+                <div id="message" class="alert alert-danger mt-4" style="display:none;" role="alert"></div>
+              </form>
+
+              <div class="text-center mt-3">
+                <a href="/eventos/solicitar-redefinicao-evento.html" class="text-secondary">Primeiro acesso ou esqueceu a senha?</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="container">
+        <div class="footer-top">
+          <div class="footer-info"><h5>SECTI</h5><p>Secretaria de Estado da Ciência, da Tecnologia e da Inovação</p></div>
+          <div class="footer-info"><p><i class="bi bi-envelope-fill"></i> supcti@secti.al.gov.br</p><p><i class="bi bi-geo-alt-fill"></i> R. Barão de Jaraguá, nº590 - Jaraguá, CEP 57022-140 - Maceió</p></div>
+        </div>
+        <div class="footer-bottom">
+          <div class="text-center text-md-start">© 2025 - Todos os direitos reservados.</div>
+          <div class="text-center text-md-end"><img src="/images/logo-governo.png" alt="Logo Governo de Alagoas" height="35"></div>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    function setupPasswordToggle(inputId, buttonId) {
+        const toggleButton = document.getElementById(buttonId);
+        const passwordInput = document.getElementById(inputId);
+        if (!toggleButton || !passwordInput) return;
+        const icon = toggleButton.querySelector('i');
+
+        toggleButton.addEventListener('click', () => {
+            const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
+            passwordInput.setAttribute('type', type);
+            icon.classList.toggle('bi-eye-fill');
+            icon.classList.toggle('bi-eye-slash-fill');
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        setupPasswordToggle('senha', 'toggleSenha');
+
+        document.getElementById('login-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const login = document.getElementById('login').value.trim();
+            const senha = document.getElementById('senha').value;
+            const messageDiv = document.getElementById('message');
+
+            try {
+                const res = await fetch('/api/eventos/clientes/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ login, senha })
+                });
+
+                const result = await res.json();
+                if (res.ok && result.token) {
+                    localStorage.setItem('token_evento', result.token);
+                    window.location.href = '/eventos/dashboard-eventos.html';
+                } else {
+                    const msg = result.error || 'Login inválido. Verifique usuário e senha.';
+                    messageDiv.innerText = msg;
+                    messageDiv.style.display = 'block';
+                }
+            } catch (err) {
+                console.error('Erro na tentativa de login:', err);
+                messageDiv.innerText = 'Erro ao se conectar ao servidor.';
+                messageDiv.style.display = 'block';
+            }
+        });
+    });
+  </script>
+</body>
+</html>

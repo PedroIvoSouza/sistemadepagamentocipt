@@ -8,123 +8,32 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="icon" type="image/png" href="/images/logo-cipt.png">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;700&display=swap" rel="stylesheet">
 
     <style>
-        :root {
-            --cor-primaria: #0056a0;
-            --cor-footer: #004480;
-            --cor-texto: #343a40;
-            --raio-borda: 0.5rem;
-        }
-
-        body {
-            font-family: 'Montserrat', sans-serif;
-            background-color: #f8f9fa;
-            color: var(--cor-texto);
-            display: flex;
-            flex-direction: column;
-            min-height: 100vh;
-        }
-
-        /* --- CABEÇALHO COM LOGO MAIOR --- */
-        .navbar {
-            background-color: var(--cor-primaria);
-            padding: 0.8rem 0;
-        }
-
-        .navbar > .container {
-            justify-content: center !important;
-        }
-
-        .navbar-brand img {
-            filter: brightness(0) invert(1);
-            width: 100%; /* Faz a imagem ocupar o espaço do link */
-            max-width: 602px; /* Largura máxima da nova imagem */
-            height: auto; /* Mantém a proporção */
-            display: block;
-        }
-
-        .main-content {
-            flex: 1;
-            display: flex;
-            align-items: center;
-            padding: 2rem 0;
-        }
-        
-        .card {
-            border: none;
-            border-radius: var(--raio-borda);
-            width: 100%;
-            max-width: 450px;
-        }
-
-        .btn-primary {
-            background-color: var(--cor-primaria);
-            border-color: var(--cor-primaria);
-            border-radius: var(--raio-borda);
-        }
-
-        .form-control {
-            border-radius: var(--raio-borda);
-        }
-
-        /* --- RODAPÉ COM ANO ATUALIZADO --- */
-        .footer {
-            background-color: var(--cor-footer);
-            padding: 2.5rem 0;
-            color: rgba(255, 255, 255, 0.8);
-        }
-        
-        .footer-top {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            flex-wrap: wrap;
-            gap: 1.5rem;
-            margin-bottom: 1.5rem;
-        }
-
-        .footer-info h5 {
-            color: white;
-            font-weight: 700;
-            font-size: 1.1rem;
-            margin-bottom: 0.8rem;
-        }
-
-        .footer-info p {
-            margin-bottom: 0.3rem;
-            font-size: 0.9rem;
-        }
-
-        .footer-info .bi {
-            margin-right: 0.5rem;
-            vertical-align: text-top;
-        }
-
-        .footer-bottom {
-            border-top: 1px solid rgba(255,255,255,0.2);
-            padding-top: 1.5rem;
-            margin-top: 1.5rem;
-            font-size: 0.8rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 1rem;
-        }
+        :root { --cor-primaria: #0056a0; --cor-footer: #004480; --cor-texto: #343a40; --raio-borda: 0.5rem; }
+        body { font-family: 'Montserrat', sans-serif; background-color: #f8f9fa; color: var(--cor-texto); display: flex; flex-direction: column; min-height: 100vh; }
+        .navbar { background-color: var(--cor-primaria); padding: 0.8rem 0; }
+        .navbar > .container { justify-content: center !important; }
+        .navbar-brand img { filter: brightness(0) invert(1); width: 100%; max-width: 602px; height: auto; display: block; }
+        .main-content { flex: 1; display: flex; align-items: center; padding: 2rem 0; }
+        .card { border: none; border-radius: var(--raio-borda); width: 100%; max-width: 450px; }
+        .btn-primary { background-color: var(--cor-primaria); border-color: var(--cor-primaria); border-radius: var(--raio-borda); }
+        .input-group .form-control { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+        .input-group .btn { border-top-left-radius: 0; border-bottom-left-radius: 0; border-color: #ced4da; }
+        .footer { background-color: var(--cor-footer); padding: 2.5rem 0; color: rgba(255, 255, 255, 0.8); }
+        .footer-top { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1.5rem; margin-bottom: 1.5rem; }
+        .footer-info h5 { color: white; font-weight: 700; font-size: 1.1rem; margin-bottom: 0.8rem; }
+        .footer-info p { margin-bottom: 0.3rem; font-size: 0.9rem; }
+        .footer-info .bi { margin-right: 0.5rem; vertical-align: text-top; }
+        .footer-bottom { border-top: 1px solid rgba(255,255,255,0.2); padding-top: 1.5rem; margin-top: 1.5rem; font-size: 0.8rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; }
     </style>
 </head>
 <body>
     <header>
         <nav class="navbar navbar-dark">
             <div class="container">
-                <a class="navbar-brand" href="#">
-                    <img src="/images/logos-cabecalho.png" alt="Logos SECTI e Centro de Inovação Jaraguá">
-                </a>
+                <a class="navbar-brand" href="#"><img src="/images/logos-cabecalho.png" alt="Logos SECTI e Centro de Inovação Jaraguá"></a>
             </div>
         </nav>
     </header>
@@ -141,14 +50,19 @@
                             </div>
                             
                             <form id="passwordForm">
-                                <input type="hidden" id="token" name="token">
-                                <div class="form-floating mb-3">
-                                    <input type="password" class="form-control" id="password" name="password" placeholder="Nova Senha" required>
-                                    <label for="password">Nova Senha (mínimo 8 caracteres)</label>
+                                <div class="mb-3">
+                                    <label for="nova_senha" class="form-label">Nova Senha (mínimo 8 caracteres)</label>
+                                    <div class="input-group">
+                                        <input type="password" class="form-control" id="nova_senha" name="nova_senha" required minlength="8">
+                                        <button class="btn btn-outline-secondary" type="button" id="toggleNovaSenha"><i class="bi bi-eye-fill"></i></button>
+                                    </div>
                                 </div>
-                                <div class="form-floating mb-3">
-                                    <input type="password" class="form-control" id="passwordConfirmation" name="passwordConfirmation" placeholder="Confirme a Nova Senha" required>
-                                    <label for="passwordConfirmation">Confirme a Nova Senha</label>
+                                <div class="mb-3">
+                                    <label for="confirmar_nova_senha" class="form-label">Confirme a Nova Senha</label>
+                                    <div class="input-group">
+                                        <input type="password" class="form-control" id="confirmar_nova_senha" name="confirmar_nova_senha" required>
+                                        <button class="btn btn-outline-secondary" type="button" id="toggleConfirmarNovaSenha"><i class="bi bi-eye-fill"></i></button>
+                                    </div>
                                 </div>
                                 <button class="w-100 btn btn-lg btn-primary" type="submit">Salvar Nova Senha</button>
                             </form>
@@ -163,81 +77,96 @@
     <footer class="footer">
         <div class="container">
             <div class="footer-top">
-                <div class="footer-info">
-                    <h5>SECTI</h5>
-                    <p>Secretaria de Estado da Ciência, da Tecnologia e da Inovação</p>
-                </div>
-                <div class="footer-info">
-                    <p><i class="bi bi-envelope-fill"></i> supcti@secti.al.gov.br</p>
-                    <p><i class="bi bi-geo-alt-fill"></i> R. Barão de Jaraguá, nº590 - Jaraguá, CEP 57022-140 - Maceió</p>
-                </div>
+                <div class="footer-info"><h5>SECTI</h5><p>Secretaria de Estado da Ciência, da Tecnologia e da Inovação</p></div>
+                <div class="footer-info"><p><i class="bi bi-envelope-fill"></i> supcti@secti.al.gov.br</p><p><i class="bi bi-geo-alt-fill"></i> R. Barão de Jaraguá, nº590 - Jaraguá, CEP 57022-140 - Maceió</p></div>
             </div>
             <div class="footer-bottom">
-                <div class="text-center text-md-start">
-                     © 2025 - Todos os direitos reservados.
-                </div>
-                <div class="text-center text-md-end">
-                    <img src="/images/logo-governo.png" alt="Logo Governo de Alagoas" height="35">
-                </div>
+                <div class="text-center text-md-start">© 2025 - Todos os direitos reservados.</div>
+                <div class="text-center text-md-end"><img src="/images/logo-governo.png" alt="Logo Governo de Alagoas" height="35"></div>
             </div>
         </div>
     </footer>
 
     <script>
-    // Pega o "crachá de acesso temporário" que salvamos na tela anterior
-    const passwordResetToken = localStorage.getItem('passwordResetToken');
+    function setupPasswordToggle(inputId, buttonId) {
+        const toggleButton = document.getElementById(buttonId);
+        const passwordInput = document.getElementById(inputId);
+        if (!toggleButton || !passwordInput) return;
+        const icon = toggleButton.querySelector('i');
 
-    window.onload = () => {
+        toggleButton.addEventListener('click', () => {
+            const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
+            passwordInput.setAttribute('type', type);
+            icon.classList.toggle('bi-eye-fill');
+            icon.classList.toggle('bi-eye-slash-fill');
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        setupPasswordToggle('nova_senha', 'toggleNovaSenha');
+        setupPasswordToggle('confirmar_nova_senha', 'toggleConfirmarNovaSenha');
+        
+        const passwordResetToken = localStorage.getItem('passwordResetToken');
+        const form = document.getElementById('passwordForm');
+        const messageDiv = document.getElementById('message');
+
         if (!passwordResetToken) {
-            // Se não houver a permissão, não deixa o usuário prosseguir
-            const messageDiv = document.getElementById('message');
             messageDiv.innerText = 'ERRO: Permissão para redefinir a senha não encontrada. Por favor, reinicie o processo.';
             messageDiv.className = 'alert alert-danger';
             messageDiv.style.display = 'block';
-            document.getElementById('passwordForm').style.display = 'none';
+            form.style.display = 'none';
+            return;
         }
-    };
 
-    document.getElementById('passwordForm').addEventListener('submit', async (event) => {
-        event.preventDefault();
-        const form = event.target;
-        const formData = new FormData(form);
-        const data = Object.fromEntries(formData.entries());
-        const messageDiv = document.getElementById('message');
-
-        // Adiciona o token ao pacote de dados que será enviado
-        data.token = passwordResetToken;
-
-        try {
-            const response = await fetch('/api/auth/definir-senha', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data)
-            });
-
-            const result = await response.json();
-            if (response.ok) {
-                messageDiv.innerText = result.message;
-                messageDiv.className = 'alert alert-success';
-                form.style.display = 'none';
-                // Limpa o token usado para que não possa ser reutilizado
-                localStorage.removeItem('passwordResetToken');
-                // Adiciona um link para o login
-                const loginLink = document.createElement('a');
-                loginLink.href = '/login.html';
-                loginLink.className = 'btn btn-primary w-100 mt-3';
-                loginLink.innerText = 'Ir para o Login';
-                messageDiv.parentNode.appendChild(loginLink);
-            } else {
-                throw new Error(result.error);
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const senha = document.getElementById('nova_senha').value;
+            const confirmacao = document.getElementById('confirmar_nova_senha').value;
+            
+            if (senha.length < 8) {
+                messageDiv.innerText = 'A senha deve conter no mínimo 8 caracteres.';
+                messageDiv.className = 'alert alert-warning';
+                messageDiv.style.display = 'block';
+                return;
             }
-        } catch (error) {
-            messageDiv.innerText = error.message;
-            messageDiv.className = 'alert alert-danger';
-        } finally {
-            messageDiv.style.display = 'block';
-        }
+
+            if (senha !== confirmacao) {
+                messageDiv.innerText = 'As senhas não coincidem.';
+                messageDiv.className = 'alert alert-danger';
+                messageDiv.style.display = 'block';
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/auth/definir-senha', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token: passwordResetToken, senha: senha })
+                });
+
+                const result = await response.json();
+                if (response.ok) {
+                    messageDiv.innerText = result.message;
+                    messageDiv.className = 'alert alert-success';
+                    form.style.display = 'none';
+                    localStorage.removeItem('passwordResetToken');
+                    
+                    const loginLink = document.createElement('a');
+                    loginLink.href = '/login.html';
+                    loginLink.className = 'btn btn-primary w-100 mt-3';
+                    loginLink.innerText = 'Ir para o Login';
+                    messageDiv.parentNode.appendChild(loginLink);
+                } else {
+                    throw new Error(result.error);
+                }
+            } catch (error) {
+                messageDiv.innerText = error.message;
+                messageDiv.className = 'alert alert-danger';
+            } finally {
+                messageDiv.style.display = 'block';
+            }
+        });
     });
-</script>
+    </script>
 </body>
 </html>

@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gestão de DARs de Eventos - CIPT</title>
+  
+  <link rel="icon" type="image/png" href="/images/logo-cipt.png">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+
+  <style>
+    :root {
+      --cor-primaria: #0056a0;
+      --cor-sidebar: #004480;
+      --raio-borda: 0.5rem;
+    }
+    body { font-family: 'Montserrat', sans-serif; background-color: #f4f7f6; }
+    .wrapper { display: flex; width: 100%; min-height: 100vh; }
+    .sidebar { width: 260px; background-color: var(--cor-sidebar); color: rgba(255, 255, 255, 0.8); display: flex; flex-direction: column; }
+    .sidebar-header { padding: 1.5rem; text-align: center; background-color: rgba(0,0,0,0.1); }
+    .sidebar-header img { max-width: 180px; height: auto; }
+    .sidebar-nav { padding: 1rem 0; flex-grow: 1; }
+    .sidebar-nav .nav-link { color: rgba(255, 255, 255, 0.8); padding: 0.8rem 1.5rem; display: flex; align-items: center; font-weight: 500; text-decoration: none; }
+    .sidebar-nav .nav-link .bi { margin-right: 1rem; font-size: 1.2rem; }
+    .sidebar-nav .nav-link:hover { color: #ffffff; background-color: rgba(255,255,255,0.05); }
+    .sidebar-nav .nav-link.active { color: white; background-color: var(--cor-primaria); }
+    .sidebar-footer { padding: 1.5rem; text-align: center; border-top: 1px solid rgba(255,255,255,0.1); }
+    .sidebar-footer img { max-height: 100px; width: auto; }
+    .main-content { flex-grow: 1; display: flex; flex-direction: column; }
+    .topbar { background-color: #ffffff; padding: 1rem 2rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); display: flex; justify-content: flex-end; align-items: center; }
+    .content { padding: 2rem; }
+    .card { border: none; border-radius: var(--raio-borda); box-shadow: 0 2px 5px rgba(0,0,0,0.05); margin-bottom: 2rem; }
+    .modal { display: none; position: fixed; z-index: 1050; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.5); }
+    .modal-content { background-color: #fefefe; margin: 2% auto; padding: 25px; border: 1px solid #888; width: 90%; max-width: 800px; border-radius: var(--raio-borda); }
+    .modal-content.small { max-width: 500px; }
+    .modal-content fieldset { border: 1px solid #ddd; padding: 1rem; margin-bottom: 1rem; border-radius: .5rem; }
+    .modal-content legend { font-size: 1rem; font-weight: 700; color: var(--cor-primaria); padding: 0 .5rem; width: auto; }
+    .summary-row { display: flex; justify-content: space-between; font-size: 1.1rem; padding: .5rem 0; }
+    .final-value { font-size: 1.3rem; font-weight: 700; color: #198754; }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <a href="/admin/dashboard.html"><img src="/images/painel-gestao.png" alt="Painel de Gestão"></a>
+      </div>
+      <ul class="nav flex-column sidebar-nav">
+        <li class="nav-item"><a class="nav-link" href="/admin/dashboard.html"><i class="bi bi-grid-1x2-fill"></i>Dashboard</a></li>
+        <li class="nav-item"><a class="nav-link" href="/admin/permissionarios.html"><i class="bi bi-people-fill"></i>Permissionários</a></li>
+        <li class="nav-item"><a class="nav-link" href="/admin/dars.html"><i class="bi bi-file-earmark-text-fill"></i>DARs</a></li>
+        <li class="nav-item menu-dropdown">
+          <a class="nav-link" href="#"><i class="bi bi-calendar-event-fill"></i>Eventos</a>
+          <ul class="submenu" style="list-style: none; padding-left: 20px; display: none;">
+            <li><a class="nav-link" href="/admin/eventos-clientes.html">Clientes de Eventos</a></li>
+            <li><a class="nav-link" href="/admin/eventos-dars.html">DARs de Eventos</a></li>
+          </ul>
+        </li>
+        <li class="nav-item"><a class="nav-link" href="/admin/admin-management.html"><i class="bi bi-person-badge-fill"></i>Administradores</a></li>
+        <li class="nav-item"><a id="logoutButton" class="nav-link" href="#" style="color:#ffc107;"><i class="bi bi-box-arrow-right"></i>Sair</a></li>
+      </ul>
+      <div class="sidebar-footer"><img src="/images/logo-secti-vertical.png" alt="Logo SECTI"></div>
+    </aside>
+
+    <div class="main-content">
+      <header class="topbar">
+        <div id="userInfo" class="text-end">
+          <strong id="adminName">Carregando...</strong>
+        </div>
+      </header>
+
+      <main class="content">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+          <h1 class="h2">DARs de Eventos</h1>
+          <button id="add-evento-btn" class="btn btn-primary">Novo Evento</button>
+        </div>
+        <div class="card">
+          <div class="card-body p-4">
+            <h5 class="card-title">Eventos Criados</h5><hr>
+            <div class="table-responsive">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Nome do Evento</th>
+                    <th>Cliente</th>
+                    <th class="text-end">Valor Final</th>
+                    <th class="text-center">Status</th>
+                  </tr>
+                </thead>
+                <tbody id="eventos-table-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- Modal para Adicionar Novo Evento -->
+  <div id="evento-modal" class="modal">
+    <div class="modal-content">
+      <header class="d-flex justify-content-between align-items-center mb-3">
+        <h5 id="modal-title">Criar Novo Evento e Gerar DARs</h5>
+        <button id="close-modal-btn" class="btn-close"></button>
+      </header>
+      <form id="evento-form">
+        <fieldset>
+          <legend>1. Dados do Evento</legend>
+          <div class="mb-3">
+            <label for="cliente-select" class="form-label">Cliente *</label>
+            <select id="cliente-select" class="form-select" required></select>
+          </div>
+          <div class="mb-3">
+            <label for="nome-evento" class="form-label">Nome do Evento *</label>
+            <input type="text" class="form-control" id="nome-evento" required>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>2. Datas e Valores</legend>
+          <div class="mb-3">
+            <label for="datas-evento" class="form-label">Datas do Evento *</label>
+            <div class="input-group">
+              <input type="text" class="form-control" id="datas-evento" placeholder="Clique para selecionar as datas..." required>
+              <button class="btn btn-outline-secondary" type="button" id="datas-helper-btn"><i class="bi bi-magic"></i> Gerador de Datas</button>
+            </div>
+          </div>
+          <div class="summary-row">
+            <span>Total de Diárias:</span> <strong id="total-diarias">0</strong>
+          </div>
+          <div class="summary-row">
+            <span>Valor Bruto (sem descontos):</span> <strong id="valor-bruto">R$ 0,00</strong>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>3. Descontos</legend>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Tipo de Desconto Automático</label>
+              <input type="text" id="tipo-desconto-auto" class="form-control" readonly>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="desconto-manual" class="form-label">Desconto Manual (%)</label>
+              <input type="number" id="desconto-manual" class="form-control" min="0" max="100" step="0.01" value="0">
+            </div>
+          </div>
+          <div class="summary-row final-value">
+            <span>Valor Final a Pagar:</span> <strong id="valor-final">R$ 0,00</strong>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>4. Parcelamento</legend>
+          <div id="parcelas-container" class="mb-3"></div>
+          <button type="button" id="add-parcela-btn" class="btn btn-sm btn-outline-secondary">Adicionar Parcela</button>
+          <div class="summary-row mt-3">
+            <span>Total Parcelado:</span> <strong id="total-parcelado">R$ 0,00</strong>
+          </div>
+        </fieldset>
+        
+        <div id="form-error" class="alert alert-danger d-none"></div>
+
+        <div class="text-end">
+          <button type="submit" class="btn btn-primary">Salvar Evento e Gerar DARs</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Assistente de Datas -->
+  <div id="datas-helper-modal" class="modal">
+    <div class="modal-content small">
+      <header class="d-flex justify-content-between align-items-center mb-3">
+        <h5>Assistente de Datas</h5>
+        <button id="close-helper-modal-btn" class="btn-close"></button>
+      </header>
+      <nav>
+        <div class="nav nav-tabs" id="nav-tab" role="tablist">
+          <button class="nav-link active" id="nav-dias-semana-tab" data-bs-toggle="tab" data-bs-target="#nav-dias-semana" type="button">Gerar por Dias da Semana</button>
+          <button class="nav-link" id="nav-colar-datas-tab" data-bs-toggle="tab" data-bs-target="#nav-colar-datas" type="button">Colar Datas</button>
+        </div>
+      </nav>
+      <div class="tab-content p-3 border border-top-0" id="nav-tabContent">
+        <div class="tab-pane fade show active" id="nav-dias-semana">
+          <p class="small text-muted">Selecione os dias da semana e o período para gerar as datas automaticamente.</p>
+          <div id="dias-semana-checkboxes" class="d-flex justify-content-around mb-3">
+            <div class="form-check"><input class="form-check-input" type="checkbox" value="1" id="dia-seg"><label class="form-check-label" for="dia-seg">Seg</label></div>
+            <div class="form-check"><input class="form-check-input" type="checkbox" value="2" id="dia-ter"><label class="form-check-label" for="dia-ter">Ter</label></div>
+            <div class="form-check"><input class="form-check-input" type="checkbox" value="3" id="dia-qua"><label class="form-check-label" for="dia-qua">Qua</label></div>
+            <div class="form-check"><input class="form-check-input" type="checkbox" value="4" id="dia-qui"><label class="form-check-label" for="dia-qui">Qui</label></div>
+            <div class="form-check"><input class="form-check-input" type="checkbox" value="5" id="dia-sex"><label class="form-check-label" for="dia-sex">Sex</label></div>
+            <div class="form-check"><input class="form-check-input" type="checkbox" value="6" id="dia-sab"><label class="form-check-label" for="dia-sab">Sáb</label></div>
+            <div class="form-check"><input class="form-check-input" type="checkbox" value="0" id="dia-dom"><label class="form-check-label" for="dia-dom">Dom</label></div>
+          </div>
+          <div class="row">
+            <div class="col"><input type="date" id="periodo-inicio" class="form-control"></div>
+            <div class="col"><input type="date" id="periodo-fim" class="form-control"></div>
+          </div>
+          <button id="gerar-datas-btn" class="btn btn-primary w-100 mt-3">Gerar</button>
+        </div>
+        <div class="tab-pane fade" id="nav-colar-datas">
+          <p class="small text-muted">Cole uma lista de datas (ex: 25/12/2025, 01/01/2026), separadas por vírgula, espaço ou linha.</p>
+          <textarea id="datas-textarea" class="form-control" rows="5"></textarea>
+          <button id="processar-datas-btn" class="btn btn-primary w-100 mt-3">Processar</button>
+        </div>
+      </div>
+      <div class="text-end mt-3">
+        <button id="confirmar-datas-btn" class="btn btn-success">Confirmar Datas</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+  <script src="https://npmcdn.com/flatpickr/dist/l10n/pt.js"></script>
+  <script src="https://unpkg.com/imask"></script>
+  <script>
+  window.onload = () => {
+    const token = localStorage.getItem('adminAuthToken');
+    if (!token) { window.location.href = '/admin/login.html'; return; }
+
+    // LÓGICA DE MENU
+    const path = window.location.pathname;
+    document.querySelectorAll('.sidebar-nav .nav-link').forEach(link => {
+      const href = link.getAttribute('href');
+      if (path.endsWith(href)) {
+        link.classList.add('active');
+        const parent = link.closest('.menu-dropdown');
+        if (parent) parent.querySelector('.submenu').style.display = 'block';
+      }
+    });
+    document.querySelectorAll('.menu-dropdown > a').forEach(toggle => {
+      toggle.addEventListener('click', e => {
+        e.preventDefault();
+        const sub = toggle.nextElementSibling;
+        sub.style.display = sub.style.display === 'block' ? 'none' : 'block';
+      });
+    });
+    document.getElementById('logoutButton').addEventListener('click', e => {
+      e.preventDefault();
+      localStorage.removeItem('adminAuthToken');
+      window.location.href = '/admin/login.html';
+    });
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      document.getElementById('adminName').innerText = payload.nome;
+    } catch {}
+
+    // Elementos do form
+    const addEventoBtn = document.getElementById('add-evento-btn');
+    const modal = document.getElementById('evento-modal');
+    const closeModalBtn = document.getElementById('close-modal-btn');
+    const form = document.getElementById('evento-form');
+    const clienteSelect = document.getElementById('cliente-select');
+    const datasEventoInput = document.getElementById('datas-evento');
+    const totalDiariasDisplay = document.getElementById('total-diarias');
+    const valorBrutoDisplay = document.getElementById('valor-bruto');
+    const tipoDescontoAutoDisplay = document.getElementById('tipo-desconto-auto');
+    const descontoManualInput = document.getElementById('desconto-manual');
+    const valorFinalDisplay = document.getElementById('valor-final');
+    const parcelasContainer = document.getElementById('parcelas-container');
+    const addParcelaBtn = document.getElementById('add-parcela-btn');
+    const totalParceladoDisplay = document.getElementById('total-parcelado');
+    const formError = document.getElementById('form-error');
+    const eventosTableBody = document.getElementById('eventos-table-body');
+
+    // Elementos do Modal Helper de Datas
+    const datasHelperBtn = document.getElementById('datas-helper-btn');
+    const datasHelperModal = document.getElementById('datas-helper-modal');
+    const closeHelperModalBtn = document.getElementById('close-helper-modal-btn');
+    const gerarDatasBtn = document.getElementById('gerar-datas-btn');
+    const processarDatasBtn = document.getElementById('processar-datas-btn');
+    const confirmarDatasBtn = document.getElementById('confirmar-datas-btn');
+
+    const API_CLIENTES_URL = '/api/admin/eventos-clientes'; // ajuste aqui se for outro path
+
+    let generatedDates = [];
+    let clientes = [];
+    let parcelasMasks = [];
+
+    // Funções Utilitárias (Feriados, etc.)
+    const feriadosFixos = ['01/01','21/04','01/05','24/06','07/09','16/09','12/10','02/11','15/11','25/12'];
+    function isFeriado(d) {
+      const dd = String(d.getDate()).padStart(2,'0');
+      const mm = String(d.getMonth()+1).padStart(2,'0');
+      return feriadosFixos.includes(`${dd}/${mm}`);
+    }
+    function isDiaUtil(d) {
+      return d.getDay()!==0 && d.getDay()!==6 && !isFeriado(d);
+    }
+
+    // Funções de Cálculo de Valores
+    const precosPorDia = [2495.00,1996.00,1596.80,1277.44,1277.44];
+    function calcularValorBruto(n) {
+      if (n<=0) return 0;
+      let v=0;
+      if(n>=1) v+=precosPorDia[0];
+      if(n>=2) v+=precosPorDia[1];
+      if(n>=3) v+=precosPorDia[2];
+      if(n>=4) v+=(n-3)*precosPorDia[3];
+      return +v.toFixed(2);
+    }
+    function calcularValorFinal(vb,tipo,dm=0) {
+      let v=vb;
+      if(tipo==='Governo') v*=0.8;
+      else if(tipo==='Permissionario') v*=0.4;
+      if(dm>0) v*=(1-dm/100);
+      return +v.toFixed(2);
+    }
+
+    // Carregamento de Dados (Clientes, Eventos)
+    async function carregarClientes() {
+  try {
+    console.log('→ Carregando clientes de:', API_CLIENTES_URL);
+    const res = await fetch(API_CLIENTES_URL, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    console.log('← Status:', res.status, res.statusText);
+
+    const texto = await res.text(); 
+    console.log('← Body:', texto.slice(0, 200)); // mostra os primeiros 200 chars
+
+    if (!res.ok) {
+      throw new Error(`Falha ao carregar clientes (status ${res.status})`);
+    }
+
+    const clientes = JSON.parse(texto);
+    clienteSelect.innerHTML = '<option value="">Selecione um cliente...</option>';
+    clientes.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.id;
+      opt.textContent = `${c.nome_razao_social} (${c.documento})`;
+      opt.dataset.tipo = c.tipo_cliente;
+      clienteSelect.appendChild(opt);
+    });
+  } catch (e) {
+    console.error('Erro ao carregar clientes:', e);
+    clienteSelect.innerHTML = '<option value="">Erro ao carregar clientes</option>';
+  }
+}
+    async function carregarEventos() {
+      try {
+        const res = await fetch('/api/eventos',{ headers:{ Authorization:`Bearer ${token}` } });
+        const evs = await res.json();
+        eventosTableBody.innerHTML = '';
+        evs.forEach(ev=>{
+          const statusBg = ev.status === 'Pago' ? 'bg-success' : ev.status === 'Pendente' ? 'bg-warning' : 'bg-danger';
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${ev.id}</td>
+            <td>${ev.nome_evento}</td>
+            <td>${ev.nome_cliente}</td>
+            <td class="text-end">R$ ${parseFloat(ev.valor_final).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
+            <td class="text-center"><span class="badge ${statusBg}">${ev.status}</span></td>
+          `;
+          eventosTableBody.appendChild(tr);
+        });
+      } catch(e){ console.error(e); }
+    }
+    
+    // Atualiza totais gerais
+    function atualizarCalculos() {
+      const n = fp.selectedDates.length;
+      const vb = calcularValorBruto(n);
+      const tipo = clienteSelect.selectedOptions[0]?.dataset.tipo||'Geral';
+      const dm = parseFloat(descontoManualInput.value)||0;
+      const vf = calcularValorFinal(vb,tipo,dm);
+      totalDiariasDisplay.textContent = n;
+      valorBrutoDisplay.textContent   = `R$ ${vb.toLocaleString('pt-BR',{minimumFractionDigits:2})}`;
+      tipoDescontoAutoDisplay.value   = tipo;
+      valorFinalDisplay.textContent   = `R$ ${vf.toLocaleString('pt-BR',{minimumFractionDigits:2})}`;
+      
+      gerenciarEstadoParcelamento();
+      validarFormularioCompleto();
+    }
+    
+    // --- Lógica do Modal de Datas ---
+    const fp = flatpickr(datasEventoInput,{ mode:'multiple', dateFormat:'Y-m-d', locale:'pt', onChange:atualizarCalculos });
+    datasHelperBtn.addEventListener('click',()=>datasHelperModal.style.display='block');
+    closeHelperModalBtn.addEventListener('click',()=>datasHelperModal.style.display='none');
+    gerarDatasBtn.addEventListener('click',()=>{
+      const dias = Array.from(document.querySelectorAll('#dias-semana-checkboxes input:checked')).map(cb=>parseInt(cb.value));
+      const inicio = new Date(document.getElementById('periodo-inicio').value+'T12:00:00');
+      const fim    = new Date(document.getElementById('periodo-fim').value+'T12:00:00');
+      if(dias.length===0||isNaN(inicio.getTime())||isNaN(fim.getTime())){ return alert('Selecione dias e período válidos.'); }
+      generatedDates=[]; let diaAtual=new Date(inicio);
+      while(diaAtual<=fim){ if(dias.includes(diaAtual.getDay())) generatedDates.push(new Date(diaAtual)); diaAtual.setDate(diaAtual.getDate()+1); }
+      alert(`${generatedDates.length} datas geradas.`);
+    });
+    processarDatasBtn.addEventListener('click',()=>{
+      const texto = document.getElementById('datas-textarea').value;
+      const parts = texto.split(/[\s,;\n]+/).filter(Boolean);
+      generatedDates = parts.map(p=>{ const [dd,mm,aa]=p.split('/'); return new Date(`${aa}-${mm}-${dd}T12:00:00`); }).filter(d=>!isNaN(d.getTime()));
+      alert(`${generatedDates.length} datas processadas.`);
+    });
+    confirmarDatasBtn.addEventListener('click',()=>{
+      fp.setDate(generatedDates,true);
+      datasHelperModal.style.display='none';
+    });
+
+    // --- Lógica de Parcelamento ---
+    function adicionarParcela() {
+        const parcelaIndex = parcelasContainer.children.length;
+        const div = document.createElement('div');
+        div.className = 'row align-items-center mb-2 parcela-item';
+        div.innerHTML = `
+            <div class="col-auto"><label class="form-label mb-0">Parcela ${parcelaIndex + 1}</label></div>
+            <div class="col"><input type="text" class="form-control parcela-valor" placeholder="Valor (R$)" required></div>
+            <div class="col"><input type="text" class="form-control parcela-vencimento" placeholder="Vencimento" required></div>
+            <div class="col-auto"><button type="button" class="btn btn-sm btn-outline-danger btn-delete-parcela">&times;</button></div>
+        `;
+        parcelasContainer.appendChild(div);
+
+        const valorInput = div.querySelector('.parcela-valor');
+        const vencInput  = div.querySelector('.parcela-vencimento');
+
+        const valorMask = IMask(valorInput, {
+            mask: Number, scale: 2, thousandsSeparator: '.', padFractionalZeros: true, radix: ',', mapToRadix: ['.'], prefix: 'R$ '
+        });
+        
+        valorMask.on('accept', validarFormularioCompleto);
+        
+        const picker = flatpickr(vencInput, {
+            dateFormat: 'd/m/Y', locale: 'pt', disable: [d => !isDiaUtil(d)], onChange: validarFormularioCompleto
+        });
+        parcelasMasks.push({ valorMask, picker });
+    }
+
+    addParcelaBtn.addEventListener('click', adicionarParcela);
+
+    parcelasContainer.addEventListener('click', e => {
+      if (e.target.classList.contains('btn-delete-parcela')) {
+        const item = e.target.closest('.parcela-item');
+        const i = Array.from(parcelasContainer.children).indexOf(item);
+        
+        if (i > -1) {
+            parcelasMasks[i].valorMask.destroy();
+            parcelasMasks[i].picker.destroy();
+            parcelasMasks.splice(i, 1);
+        }
+        item.remove();
+        
+        parcelasContainer.querySelectorAll('.parcela-item').forEach((d, j) => {
+          d.querySelector('label').textContent = `Parcela ${j + 1}`;
+        });
+        
+        validarFormularioCompleto();
+      }
+    });
+
+    function gerenciarEstadoParcelamento() {
+        if (!fp.selectedDates.length) {
+            addParcelaBtn.disabled = true;
+            return;
+        }
+        const hoje = new Date();
+        hoje.setHours(0, 0, 0, 0);
+        const primeiraDataEvento = fp.selectedDates.slice().sort((a,b)=>a-b)[0];
+        const diffTime = primeiraDataEvento.getTime() - hoje.getTime();
+        const diffDias = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+        if (diffDias <= 30) {
+            addParcelaBtn.disabled = true;
+            while (parcelasMasks.length > 1) {
+                const lastIndex = parcelasMasks.length - 1;
+                parcelasMasks[lastIndex].valorMask.destroy();
+                parcelasMasks[lastIndex].picker.destroy();
+                parcelasMasks.pop();
+                parcelasContainer.removeChild(parcelasContainer.lastChild);
+            }
+        } else {
+            addParcelaBtn.disabled = false;
+        }
+    }
+
+    function validarFormularioCompleto() {
+        // 1. Limpa erros antigos
+        formError.textContent = '';
+        formError.classList.add('d-none');
+        formError.style.display = 'none';
+
+        // 2. RECALCULA VALORES
+        const n = fp.selectedDates.length;
+        const vb = calcularValorBruto(n);
+        const tipo = clienteSelect.selectedOptions[0]?.dataset.tipo || 'Geral';
+        const dm = parseFloat(descontoManualInput.value) || 0;
+        const vf = calcularValorFinal(vb, tipo, dm);
+
+        // 3. Calcula o total das parcelas
+        const total = parcelasMasks.reduce((sum, p) => {
+            const mask = p.valorMask;
+            let valorDaParcela = mask.number || 0;
+            if (valorDaParcela === 0 && mask.unmaskedValue) {
+                const valorParseado = parseFloat(mask.unmaskedValue.replace(/\./g, '').replace(',', '.'));
+                if (!isNaN(valorParseado)) valorDaParcela = valorParseado;
+            }
+            return sum + valorDaParcela;
+        }, 0);
+        
+        totalParceladoDisplay.textContent = `R$ ${total.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+        // 4. VALIDAÇÃO SEQUENCIAL
+        let erroMsg = '';
+        
+        // <-- INÍCIO DA LÓGICA ATUALIZADA
+        const hoje = new Date();
+        hoje.setHours(0, 0, 0, 0);
+        const primeiraDataEvento = fp.selectedDates.length > 0 ? fp.selectedDates.slice().sort((a,b)=>a-b)[0] : null;
+        const diffDias = primeiraDataEvento ? Math.ceil((primeiraDataEvento.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24)) : 0;
+        
+        if (total > vf + 0.001) {
+            erroMsg = `Total parcelado não pode exceder o Valor Final de R$ ${vf.toLocaleString('pt-BR', {minimumFractionDigits: 2})}.`;
+        } 
+        else if (total < vf - 0.001) {
+            if (diffDias <= 30 && primeiraDataEvento) {
+                erroMsg = "Valor menor que o total. Para eventos nos próximos 30 dias, o pagamento deve ser único e integral.";
+            } else {
+                erroMsg = "A soma das parcelas está menor que o Valor Final a Pagar.";
+            }
+        }
+        else if (primeiraDataEvento) { // Apenas valida datas se o valor estiver CORRETO (total == vf)
+            if (diffDias > 30) {
+                const limitePrimeiraParcela = new Date();
+                limitePrimeiraParcela.setDate(hoje.getDate() + 10);
+                const limiteUltimaParcela = new Date(primeiraDataEvento);
+                limiteUltimaParcela.setDate(limiteUltimaParcela.getDate() - 30);
+                
+                const primeiraParcelaVenc = parcelasMasks[0]?.picker.selectedDates[0];
+                const ultimaParcelaVenc = parcelasMasks[parcelasMasks.length - 1]?.picker.selectedDates[0];
+
+                if (primeiraParcelaVenc && primeiraParcelaVenc > limitePrimeiraParcela) {
+                    erroMsg = `Regra >30d: 1ª parcela deve vencer até ${limitePrimeiraParcela.toLocaleDateString('pt-BR')}.`;
+                } else if (ultimaParcelaVenc && ultimaParcelaVenc > limiteUltimaParcela) {
+                    erroMsg = `Regra >30d: Última parcela deve vencer até ${limiteUltimaParcela.toLocaleDateString('pt-BR')}.`;
+                }
+            } else if (diffDias >= 6) {
+                const limitePagamento = new Date(primeiraDataEvento);
+                limitePagamento.setDate(limitePagamento.getDate() - 5);
+                const vencimento = parcelasMasks[0]?.picker.selectedDates[0];
+                if (vencimento && vencimento > limitePagamento) {
+                    erroMsg = `Regra 6-30d: Pagamento deve ser feito até ${limitePagamento.toLocaleDateString('pt-BR')}.`;
+                }
+            } else {
+                const limitePagamento = new Date(primeiraDataEvento);
+                limitePagamento.setDate(limitePagamento.getDate() - 1);
+                const vencimento = parcelasMasks[0]?.picker.selectedDates[0];
+                if (vencimento && vencimento > limitePagamento) {
+                    erroMsg = `Regra <6d: Pagamento deve ser feito até ${limitePagamento.toLocaleDateString('pt-BR')}.`;
+                }
+            }
+        }
+        // <-- FIM DA LÓGICA ATUALIZADA
+
+        // 5. Exibe o erro, se houver um
+        if (erroMsg) {
+            formError.textContent = erroMsg;
+            formError.classList.remove('d-none');
+            formError.style.display = 'block';
+            return false;
+        }
+
+        return true;
+    }
+
+    // --- Lógica do Botão de Salvar (Submit) ---
+    form.addEventListener('submit', async e=>{
+      e.preventDefault();
+      
+      if(!validarFormularioCompleto()) {
+          alert('Corrija os erros indicados no formulário antes de salvar.');
+          return;
+      }
+      
+      const parcelas = parcelasMasks.map(({ valorMask, picker })=>{
+        const [d,m,a] = picker.input.value.split('/');
+        let valorNumerico = valorMask.number;
+        if (valorNumerico === 0 && valorMask.unmaskedValue) {
+             const valorParseado = parseFloat(valorMask.unmaskedValue.replace(/\./g, '').replace(',', '.'));
+             if (!isNaN(valorParseado)) valorNumerico = valorParseado;
+        }
+        return { valor: valorNumerico, vencimento: `${a}-${m}-${d}` };
+      });
+
+      const body = {
+        idCliente: clienteSelect.value,
+        nomeEvento: document.getElementById('nome-evento').value,
+        datasEvento: fp.selectedDates.map(d=>d.toISOString().split('T')[0]),
+        tipoDescontoAuto: tipoDescontoAutoDisplay.value,
+        descontoManualPercent: parseFloat(descontoManualInput.value)||0,
+        parcelas
+      };
+      const btn = form.querySelector('button[type="submit"]');
+      btn.disabled = true;
+      btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Gerando...`;
+      try {
+        const res = await fetch('/api/eventos',{
+          method:'POST',
+          headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${token}` },
+          body: JSON.stringify(body)
+        });
+        const result = await res.json();
+        if(!res.ok) throw new Error(result.error);
+        alert('Evento e DARs criados com sucesso!');
+        modal.style.display='none';
+        carregarEventos();
+      } catch(err){
+        formError.textContent = err.message;
+        formError.classList.remove('d-none');
+        formError.style.display = 'block';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Salvar Evento e Gerar DARs';
+      }
+    });
+
+    // --- Ações Iniciais e Event Listeners ---
+    addEventoBtn.addEventListener('click', () => {
+        form.reset();
+        fp.clear();
+        
+        parcelasContainer.innerHTML = '';
+        if (parcelasMasks) {
+          parcelasMasks.forEach(({ valorMask, picker }) => {
+            valorMask.destroy();
+            picker.destroy();
+          });
+        }
+        parcelasMasks = [];
+        
+        adicionarParcela();
+        atualizarCalculos();
+        
+        modal.style.display = 'block';
+    });
+
+    closeModalBtn.addEventListener('click', () => modal.style.display = 'none');
+    clienteSelect.addEventListener('change', atualizarCalculos);
+    descontoManualInput.addEventListener('input', atualizarCalculos);
+    
+    carregarClientes();
+    carregarEventos();
+  };
+  </script>
+</body>
+</html>

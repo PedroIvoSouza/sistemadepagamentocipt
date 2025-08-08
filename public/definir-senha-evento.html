@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Definir Senha - Portal de Eventos</title>
+    <link rel="icon" type="image/png" href="/images/logo-cipt.png">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;800&display=swap" rel="stylesheet">
+
+    <style>
+        :root { --cor-primaria: #0056a0; --cor-footer: #004480; --raio-borda: 0.5rem; --cor-texto: #343a40; }
+        html, body { height: 100%; }
+        body { font-family: 'Montserrat', sans-serif; display: flex; flex-direction: column; background-color: var(--cor-footer); }
+        .navbar { background-color: var(--cor-primaria); padding: 0.8rem 0; }
+        .navbar > .container { justify-content: center !important; }
+        .navbar-brand img { filter: brightness(0) invert(1); max-width: 602px; height: 55px; object-fit: contain; }
+        .main-container { flex-grow: 1; display: flex; align-items: center; justify-content: center; background-image: linear-gradient(rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.6)), url('/images/background-login.jpg'); background-size: cover; background-position: center; padding: 4rem 1rem; }
+        .form-card { background-color: white; color: var(--cor-texto); border-radius: var(--raio-borda); box-shadow: 0 0.5rem 1.5rem rgba(0,0,0,0.2); padding: 2.5rem; width: 100%; max-width: 480px; }
+        .btn-primary { background-color: var(--cor-primaria); border-color: var(--cor-primaria); border-radius: var(--raio-borda); }
+        .input-group .form-control { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+        .input-group .btn { border-top-left-radius: 0; border-bottom-left-radius: 0; border-color: #ced4da; }
+        .footer { background-color: var(--cor-footer); padding: 1.5rem 0; color: rgba(255, 255, 255, 0.8); }
+    </style>
+</head>
+<body>
+    <div class="d-flex flex-column min-vh-100">
+        <header>
+            <nav class="navbar navbar-dark">
+                <div class="container">
+                    <a class="navbar-brand" href="#"><img src="/images/logos-cabecalho.png" alt="Logos SECTI e Centro de Inovação Jaraguá"></a>
+                </div>
+            </nav>
+        </header>
+
+        <main class="main-container">
+            <div class="form-card">
+                <div class="text-center mb-4">
+                    <h2 class="h3 mb-3 fw-bold">Defina sua Nova Senha</h2>
+                    <p id="welcomeMessage" class="text-muted">Crie uma senha segura para acessar o portal.</p>
+                </div>
+                
+                <form id="passwordForm" novalidate>
+                    <div class="mb-3">
+                        <label for="nova_senha" class="form-label">Nova Senha (mínimo 8 caracteres)</label>
+                        <div class="input-group">
+                            <input type="password" class="form-control" id="nova_senha" name="nova_senha" required minlength="8">
+                            <button class="btn btn-outline-secondary" type="button" id="toggleNovaSenha">
+                                <i class="bi bi-eye-fill"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="confirmar_nova_senha" class="form-label">Confirmar Nova Senha</label>
+                        <div class="input-group">
+                            <input type="password" class="form-control" id="confirmar_nova_senha" name="confirmar_nova_senha" required>
+                            <button class="btn btn-outline-secondary" type="button" id="toggleConfirmarNovaSenha">
+                                <i class="bi bi-eye-fill"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <button class="w-100 btn btn-lg btn-primary mt-4" type="submit">Salvar Nova Senha</button>
+                </form>
+
+                <div id="message" class="alert mt-4" style="display:none;" role="alert"></div>
+            </div>
+        </main>
+
+        <footer class="footer">
+            <div class="container"></div>
+        </footer>
+    </div>
+
+   <script>
+    function setupPasswordToggle(inputId, buttonId) {
+        const toggleButton = document.getElementById(buttonId);
+        const passwordInput = document.getElementById(inputId);
+        if (!toggleButton || !passwordInput) return;
+        const icon = toggleButton.querySelector('i');
+
+        toggleButton.addEventListener('click', () => {
+            const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
+            passwordInput.setAttribute('type', type);
+            icon.classList.toggle('bi-eye-fill');
+            icon.classList.toggle('bi-eye-slash-fill');
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+        setupPasswordToggle('nova_senha', 'toggleNovaSenha');
+        setupPasswordToggle('confirmar_nova_senha', 'toggleConfirmarNovaSenha');
+
+        const form = document.getElementById('passwordForm');
+        const messageDiv = document.getElementById('message');
+        const welcomeMsg = document.getElementById('welcomeMessage');
+        const token = new URLSearchParams(window.location.search).get('token');
+
+        if (!token) {
+            form.style.display = 'none';
+            welcomeMsg.style.display = 'none';
+            messageDiv.className = 'alert alert-danger';
+            messageDiv.textContent = 'ERRO: Token de redefinição inválido ou ausente. Por favor, use o link enviado para o seu e-mail.';
+            messageDiv.style.display = 'block';
+            return;
+        }
+
+        // Validar o token com o backend
+        try {
+            const res = await fetch(`/api/eventos/clientes/definir-senha/validar?token=${encodeURIComponent(token)}`);
+            const result = await res.json();
+            if (!res.ok) throw new Error(result.error);
+            welcomeMsg.textContent = `Olá, ${result.cliente.nome}! Defina sua nova senha para acessar o portal.`;
+        } catch (err) {
+            form.style.display = 'none';
+            welcomeMsg.style.display = 'none';
+            messageDiv.className = 'alert alert-danger';
+            messageDiv.textContent = err.message || 'Token inválido ou expirado.';
+            messageDiv.style.display = 'block';
+        }
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            messageDiv.style.display = 'none';
+
+            const senha = document.getElementById('nova_senha').value;
+            const confirmacao = document.getElementById('confirmar_nova_senha').value;
+            
+            if (senha.length < 8) {
+                messageDiv.className = 'alert alert-warning';
+                messageDiv.textContent = 'A senha deve ter no mínimo 8 caracteres.';
+                messageDiv.style.display = 'block';
+                return;
+            }
+            
+            if (senha !== confirmacao) {
+                messageDiv.className = 'alert alert-danger';
+                messageDiv.textContent = 'As senhas não coincidem. Por favor, tente novamente.';
+                messageDiv.style.display = 'block';
+                return;
+            }
+
+            try {
+                const resp = await fetch('/api/eventos/clientes/definir-senha', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token, senha })
+                });
+                const data = await resp.json();
+                if (!resp.ok) throw new Error(data.error || 'Falha ao definir a senha.');
+
+                messageDiv.className = 'alert alert-success';
+                messageDiv.textContent = 'Senha definida com sucesso! Redirecionando para o login em 3 segundos...';
+                messageDiv.style.display = 'block';
+                form.style.display = 'none';
+                
+                setTimeout(() => window.location.href = '/eventos/login-eventos.html', 3000);
+
+            } catch (err) {
+                messageDiv.className = 'alert alert-danger';
+                messageDiv.textContent = `Erro: ${err.message}`;
+                messageDiv.style.display = 'block';
+            }
+        });
+    });
+</script>
+</body>
+</html>

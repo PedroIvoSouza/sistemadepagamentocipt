@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Meus Eventos - Portal de Eventos</title>
+
+  <link rel="icon" type="image/png" href="/images/logo-cipt.png">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --cor-primaria: #0056a0;
+      --cor-sidebar: #004480;
+      --raio-borda: 0.5rem;
+    }
+    body { font-family: 'Montserrat', sans-serif; background-color: #f4f7f6; }
+    .wrapper { display: flex; width: 100%; min-height: 100vh; }
+    .sidebar { width: 260px; background-color: var(--cor-sidebar); color: rgba(255, 255, 255, 0.8); display: flex; flex-direction: column; }
+    .sidebar-header { padding: 1.5rem; text-align: center; background-color: rgba(0,0,0,0.1); }
+    .sidebar-header img { max-width: 180px; height: auto; }
+    .sidebar-nav { padding: 1rem 0; flex-grow: 1; }
+    .sidebar-nav .nav-link { color: rgba(255, 255, 255, 0.8); padding: 0.8rem 1.5rem; display: flex; align-items: center; font-weight: 500; }
+    .sidebar-nav .nav-link .bi { margin-right: 1rem; font-size: 1.2rem; }
+    .sidebar-nav .nav-link:hover { color: #ffffff; background-color: rgba(255,255,255,0.05); }
+    .sidebar-nav .nav-link.active { color: white; background-color: var(--cor-primaria); }
+    .sidebar-footer { padding: 1.5rem; text-align: center; border-top: 1px solid rgba(255,255,255,0.1); }
+    .sidebar-footer img { max-height: 100px; width: auto; }
+    .main-content { flex-grow: 1; display: flex; flex-direction: column; }
+    .topbar { background-color: #ffffff; padding: 1rem 2rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); display: flex; justify-content: flex-end; align-items: center; }
+    .content { padding: 2rem; }
+    .card { border: none; border-radius: var(--raio-borda); box-shadow: 0 2px 5px rgba(0,0,0,0.05); margin-bottom: 2rem; }
+    .accordion-button:not(.collapsed) { color: #fff; background-color: var(--cor-primaria); }
+    .badge { font-size: 0.8rem; padding: 0.5em 0.8em; }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <a href="/eventos/dashboard-eventos.html"><img src="/images/logo-cipt.png" alt="Logo CIPT"></a>
+      </div>
+      <ul class="nav flex-column sidebar-nav">
+        <li class="nav-item"><a class="nav-link" href="/eventos/dashboard-eventos.html"><i class="bi bi-grid-1x2-fill"></i>Dashboard</a></li>
+        <li class="nav-item"><a class="nav-link active" href="/eventos/meus-eventos.html"><i class="bi bi-calendar-event-fill"></i>Meus Eventos</a></li>
+        <li class="nav-item"><a class="nav-link" href="/eventos/perfil.html"><i class="bi bi-person-fill"></i>Meu Perfil</a></li>
+        <li class="nav-item"><a id="logoutButton" class="nav-link" href="#" style="color: #ffc107;"><i class="bi bi-box-arrow-right"></i>Sair</a></li>
+      </ul>
+      <div class="sidebar-footer"><img src="/images/logo-secti-vertical.png" alt="Logo SECTI"></div>
+    </aside>
+
+    <div class="main-content">
+      <header class="topbar">
+        <div id="userInfo" class="text-end">
+          <strong id="userName">Carregando...</strong>
+          <div id="userCnpj" class="text-muted small"></div>
+        </div>
+      </header>
+
+      <main class="content">
+        <h1 class="h2 mb-4">Meus Eventos e Pagamentos</h1>
+        
+        <div class="accordion" id="eventosAccordion">
+          <div id="loadingState" class="text-center p-5">
+            <div class="spinner-border text-primary" role="status">
+              <span class="visually-hidden">Carregando...</span>
+            </div>
+            <p class="mt-2 text-muted">Buscando seus eventos...</p>
+          </div>
+        </div>
+
+      </main>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    function formatarCNPJ(cnpj) {
+      const cnpjLimpo = cnpj?.toString().replace(/\D/g, '');
+      if (cnpjLimpo?.length === 14) {
+        return cnpjLimpo.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5");
+      }
+      return cnpj || '';
+    }
+
+    function getStatusBadge(status) {
+        const statuses = {
+            'Aguardando Pagamento': 'bg-warning text-dark',
+            'Confirmado': 'bg-success',
+            'Cancelado': 'bg-danger',
+            'Realizado': 'bg-info text-dark',
+            'Pendente': 'bg-secondary'
+        };
+        const className = statuses[status] || 'bg-secondary';
+        return `<span class="badge ${className}">${status || 'N/D'}</span>`;
+    }
+
+    function getDarStatusBadge(status) {
+        const statuses = {
+            'Pendente': 'bg-warning text-dark',
+            'Pago': 'bg-success',
+            'Vencido': 'bg-danger',
+            'Cancelado': 'bg-secondary'
+        };
+        const className = statuses[status] || 'bg-secondary';
+        return `<span class="badge ${className}">${status || 'N/D'}</span>`;
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      const token = localStorage.getItem('token_evento');
+      if (!token) {
+        return window.location.href = '/eventos/login-eventos.html';
+      }
+      const headers = { 'Authorization': `Bearer ${token}` };
+
+      // Logout
+      document.getElementById('logoutButton').addEventListener('click', (e) => {
+        e.preventDefault();
+        localStorage.removeItem('token_evento');
+        window.location.href = '/eventos/login-eventos.html';
+      });
+
+      try {
+        // Fetch de todos os dados de uma vez (perfil, eventos, dars)
+        const res = await fetch('/api/eventos/clientes/me', { headers });
+        if (!res.ok) throw new Error(`Erro na resposta do servidor: ${res.status}`);
+        const data = await res.json();
+        
+        const { user, eventos, dars } = data;
+        
+        // Preencher Topbar
+        document.getElementById('userName').innerText = user.nome_razao_social || 'Cliente';
+        document.getElementById('userCnpj').innerText = formatarCNPJ(user.documento || '');
+
+        const accordionContainer = document.getElementById('eventosAccordion');
+        const loadingState = document.getElementById('loadingState');
+
+        if (!eventos || eventos.length === 0) {
+            loadingState.innerHTML = `<p class="text-center text-muted p-5">Nenhum evento encontrado para você.</p>`;
+            return;
+        }
+
+        let accordionHTML = '';
+        eventos.forEach((evento, index) => {
+          const darsDoEvento = dars.filter(dar => dar.id_evento === evento.id);
+          
+          let darsTableHTML = `<tr><td colspan="5" class="text-center text-muted">Nenhuma DAR associada a este evento.</td></tr>`;
+          if (darsDoEvento.length > 0) {
+            darsTableHTML = darsDoEvento.map(dar => `
+              <tr>
+                <td>${dar.numero_parcela ? `Parcela ${dar.numero_parcela}` : 'Única'}</td>
+                <td>${dar.data_vencimento ? new Date(dar.data_vencimento).toLocaleDateString('pt-BR') : '-'}</td>
+                <td class="text-end">R$ ${dar.valor ? dar.valor.toFixed(2).replace('.', ',') : '0,00'}</td>
+                <td class="text-center">${getDarStatusBadge(dar.status)}</td>
+                <td class="text-center">
+                   <button class="btn btn-primary btn-sm" onclick="emitirDar(${dar.id}, '${dar.status}')" ${dar.status === 'Cancelado' ? 'disabled' : ''}>
+                      <i class="bi bi-file-earmark-arrow-down-fill"></i> ${dar.status === 'Vencido' ? 'Emitir 2ª Via' : 'Visualizar'}
+                   </button>
+                </td>
+              </tr>
+            `).join('');
+          }
+
+          accordionHTML += `
+            <div class="accordion-item">
+              <h2 class="accordion-header" id="heading-${evento.id}">
+                <button class="accordion-button ${index > 0 ? 'collapsed' : ''}" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-${evento.id}" aria-expanded="${index === 0}" aria-controls="collapse-${evento.id}">
+                  <div class="d-flex justify-content-between w-100 align-items-center pe-3">
+                    <span class="fw-bold">${evento.nome_evento || 'Evento sem nome'}</span>
+                    <span>${getStatusBadge(evento.status)}</span>
+                  </div>
+                </button>
+              </h2>
+              <div id="collapse-${evento.id}" class="accordion-collapse collapse ${index === 0 ? 'show' : ''}" aria-labelledby="heading-${evento.id}" data-bs-parent="#eventosAccordion">
+                <div class="accordion-body">
+                  <div class="row mb-3">
+                    <div class="col-md-4"><strong>Data(s) do Evento:</strong> ${evento.datas_evento || '-'}</div>
+                    <div class="col-md-4"><strong>Total de Diárias:</strong> ${evento.total_diarias || 'N/A'}</div>
+                    <div class="col-md-4"><strong>Valor Final:</strong> R$ ${evento.valor_final ? evento.valor_final.toFixed(2).replace('.', ',') : '0,00'}</div>
+                  </div>
+                  <h6 class="mt-4">Documentos de Arrecadação (DARs)</h6>
+                  <div class="table-responsive">
+                    <table class="table table-sm table-hover align-middle">
+                      <thead>
+                        <tr>
+                          <th>Referência</th>
+                          <th>Vencimento</th>
+                          <th class="text-end">Valor (R$)</th>
+                          <th class="text-center">Status</th>
+                          <th class="text-center">Ação</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        ${darsTableHTML}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+          `;
+        });
+        
+        loadingState.remove();
+        accordionContainer.innerHTML = accordionHTML;
+
+      } catch (e) {
+        console.warn('[ERRO] Falha ao carregar eventos:', e);
+        document.getElementById('eventosAccordion').innerHTML = `<div class="alert alert-danger">Não foi possível carregar os dados. Sua sessão pode ter expirado. Tente <a href="/eventos/login-eventos.html">fazer login novamente</a>.</div>`;
+      }
+    });
+
+    // Função para emitir DAR (a ser implementada com a API de emissão)
+    async function emitirDar(darId, status) {
+        alert(`Funcionalidade de emissão para a DAR de ID ${darId} com status "${status}" ainda não implementada.\nAqui ocorreria o download do PDF ou a exibição de um modal para recalcular o valor vencido.`);
+        // Exemplo futuro:
+        // window.open(`/api/eventos/clientes/dars/${darId}/pdf`, '_blank');
+    }
+  </script>
+</body>
+</html>
