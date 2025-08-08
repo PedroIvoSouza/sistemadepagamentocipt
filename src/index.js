@@ -1,5 +1,3 @@
-//Em: src/index.js
-
 require('dotenv').config();
 
 const express = require('express');
@@ -8,90 +6,87 @@ const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 
 // --- Importação das Rotas ---
-const authRoutes                  = require('./api/authRoutes');
-const userRoutes                  = require('./api/userRoutes');
-const darsRoutes                  = require('./api/darsRoutes');
-const adminAuthRoutes             = require('./api/adminAuthRoutes');
-const adminRoutes                 = require('./api/adminRoutes');
-const adminManagementRoutes       = require('./api/adminManagementRoutes');
-const adminDarsRoutes             = require('./api/adminDarsRoutes');
+const authRoutes    = require('./api/authRoutes');
+const userRoutes    = require('./api/userRoutes');
+const darsRoutes    = require('./api/darsRoutes');
+const adminAuthRoutes    = require('./api/adminAuthRoutes');
+const adminRoutes        = require('./api/adminRoutes');
+const adminManagementRoutes = require('./api/adminManagementRoutes');
+const adminDarsRoutes    = require('./api/adminDarsRoutes');
+
 const {
   adminRoutes:  eventosClientesAdminRoutes,
   publicRoutes: eventosClientesPublicRoutes,
-  clientRoutes: eventosClientesClientRoutes 
+  clientRoutes: eventosClientesClientRoutes
 } = require('./api/eventosClientesRoutes');
-const adminEventosRoutes          = require('./api/adminEventosRoutes');
-// -----------------------------
 
-const app  = express();
+const eventosRoutes      = require('./api/eventosRoutes');
+const adminEventosRoutes = require('./api/adminEventosRoutes');
+
+const app = express();
+
+// CORS
 app.use(cors({
-  origin: '*', // ⚠️ permite tudo. Para produção, restrinja isso.
+  origin: '*', // ⚠️ em produção, restrinja ao domínio da sua aplicação
   credentials: true
 }));
-const PORT = process.env.PORT || 3000;
 
-// 1. PRIMEIRO: Middlewares para processar o corpo da requisição
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// 2. SEGUNDO: Registro de TODAS as rotas da API
-// Autenticação e usuário (Permissionários)
-app.use('/api/auth',              authRoutes);
-app.use('/api/user',              userRoutes);
+// --- Conexão com SQLite ---
+const dbPath = path.resolve(__dirname, '..', 'sistemacipt.db');
+const db = new sqlite3.Database(dbPath, err => {
+  if (err) {
+    console.error('[ERRO DE BANCO] Não foi possível conectar ao SQLite:', err.message);
+    process.exit(1);
+  }
+  console.log('[INFO] Conectado ao SQLite em', dbPath);
+});
+// Torna o db disponível em req.app.locals.db
+app.locals.db = db;
 
-// DARs para permissionários
-app.use('/api/dars',              darsRoutes);
+// --- Arquivos estáticos ---
+const publicPath = path.resolve(__dirname, '..', 'public');
+console.log('[INFO] Servindo estáticos em', publicPath);
+app.use(express.static(publicPath));
 
-// Administração Geral
-app.use('/api/admin/auth',        adminAuthRoutes);
-app.use('/api/admin/dars',        adminDarsRoutes);
-app.use('/api/admins',            adminManagementRoutes);
-app.use('/api/admin',             adminRoutes); // Rota para permissionários no painel admin
+// --- Rotas da API ---
+// Permissionários
+app.use('/api/auth', authRoutes);
+app.use('/api/user', userRoutes);
+app.use('/api/dars', darsRoutes);
 
-// Rotas de Clientes de Eventos
-app.use('/api/eventos/clientes',      eventosClientesPublicRoutes); // Públicas (login, etc)
-app.use('/api/portal/eventos',        eventosClientesClientRoutes); // Portal do Cliente logado
-app.use('/api/admin/eventos-clientes', eventosClientesAdminRoutes); // Admin para Clientes
+// Administração geral
+app.use('/api/admin/auth', adminAuthRoutes);
+app.use('/api/admin/dars', adminDarsRoutes);
+app.use('/api/admin/admins', adminManagementRoutes);
+app.use('/api/admin', adminRoutes);
 
-// Rotas de Eventos (gerenciadas pelo Admin)
-app.use('/api/admin/eventos',     adminEventosRoutes);
+// Eventos — clientes e portal
+app.use('/api/eventos/clientes', eventosClientesPublicRoutes);
+app.use('/api/portal/eventos',   eventosClientesClientRoutes);
+app.use('/api/admin/eventos-clientes', eventosClientesAdminRoutes);
+app.use('/api/admin/eventos', adminEventosRoutes);
+app.use('/api/eventos',       eventosRoutes);
 
-// 3. TERCEIRO: Servir arquivos estáticos da pasta 'public'
-const publicPath = path.join(__dirname, '..', 'public');
-console.log(`Servindo arquivos estáticos da pasta: ${publicPath}`);
-app.use('/', express.static(publicPath));
-
-// 4. QUARTO: Rota Catch-all para servir a página de login do admin se nenhuma rota anterior corresponder
-app.get('/admin/*', (req, res) => {
+// Serve SPA do admin (todas as rotas começando com /admin)
+app.get('/admin*', (req, res) => {
   res.sendFile(path.join(publicPath, 'admin', 'login.html'));
 });
 
-// Conexão com o Banco de Dados (SQLite)
-let db;
-try {
-  db = new sqlite3.Database('./sistemacipt.db', err => {
-    if (err) {
-      console.error('[ERRO DE BANCO DE DADOS] Não foi possível conectar ao SQLite:', err.message);
-      process.exit(1);
-    }
-    console.log('[INFO] Conectado ao banco de dados SQLite com sucesso.');
-  });
-} catch (error) {
-  console.error('[ERRO FATAL] Falha ao instanciar o banco de dados:', error.message);
-  process.exit(1);
-}
-
-// Inicia o servidor e o agendador de tarefas
+// --- Inicialização do servidor e Cron ---
+const PORT = process.env.PORT || 3000;
 const server = app.listen(PORT, () => {
-  console.log(`Servidor rodando na porta ${PORT}.`);
+  console.log(`[INFO] Servidor rodando na porta ${PORT}`);
   try {
-    require('../cron/gerarDarsMensais.js');
-    console.log('[INFO] Agendador de tarefas (cron) iniciado com sucesso.');
+    require(path.resolve(__dirname, '..', 'cron', 'gerarDarsMensais.js'));
+    console.log('[INFO] Agendador de tarefas iniciado');
   } catch (error) {
-    console.error('[ERRO DE CRON] Falha ao iniciar o agendador de tarefas:', error.message);
+    console.error('[ERRO DE CRON] Falha ao iniciar cron:', error.message);
   }
 });
 
-server.on('error', error => {
-  console.error('[ERRO DE SERVIDOR] Ocorreu um erro:', error);
+server.on('error', err => {
+  console.error('[ERRO DE SERVIDOR]', err);
 });
