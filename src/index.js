@@ -15,19 +15,13 @@ const adminAuthRoutes             = require('./api/adminAuthRoutes');
 const adminRoutes                 = require('./api/adminRoutes');
 const adminManagementRoutes       = require('./api/adminManagementRoutes');
 const adminDarsRoutes             = require('./api/adminDarsRoutes');
-
-// CORREÇÃO: Desestruturando os routers de eventos
 const {
   adminRoutes:  eventosClientesAdminRoutes,
   publicRoutes: eventosClientesPublicRoutes,
   clientRoutes: eventosClientesClientRoutes 
 } = require('./api/eventosClientesRoutes');
-
-const eventosRoutes               = require('./api/eventosRoutes');
+const adminEventosRoutes          = require('./api/adminEventosRoutes');
 // -----------------------------
-
-// NOVA LINHA: Importe o novo arquivo de rotas de eventos para admin
-const adminEventosRoutes = require('./api/adminEventosRoutes');
 
 const app  = express();
 app.use(cors({
@@ -36,15 +30,11 @@ app.use(cors({
 }));
 const PORT = process.env.PORT || 3000;
 
+// 1. PRIMEIRO: Middlewares para processar o corpo da requisição
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// Servir arquivos estáticos da pasta 'public'
-const publicPath = path.join(__dirname, '..', 'public');
-console.log(`Servindo arquivos estáticos da pasta: ${publicPath}`);
-app.use('/', express.static(publicPath));
-
-// --- Uso das Rotas da API ---
+// 2. SEGUNDO: Registro de TODAS as rotas da API
 // Autenticação e usuário (Permissionários)
 app.use('/api/auth',              authRoutes);
 app.use('/api/user',              userRoutes);
@@ -58,29 +48,21 @@ app.use('/api/admin/dars',        adminDarsRoutes);
 app.use('/api/admins',            adminManagementRoutes);
 app.use('/api/admin',             adminRoutes); // Rota para permissionários no painel admin
 
-// --- CORREÇÃO APLICADA AQUI ---
-// Cada router de eventos agora tem um prefixo de URL único.
+// Rotas de Clientes de Eventos
+app.use('/api/eventos/clientes',      eventosClientesPublicRoutes); // Públicas (login, etc)
+app.use('/api/portal/eventos',        eventosClientesClientRoutes); // Portal do Cliente logado
+app.use('/api/admin/eventos-clientes', eventosClientesAdminRoutes); // Admin para Clientes
 
-// 1. Rotas PÚBLICAS para clientes de eventos (login, definir senha)
-app.use('/api/eventos/clientes', eventosClientesPublicRoutes);
+// Rotas de Eventos (gerenciadas pelo Admin)
+app.use('/api/admin/eventos',     adminEventosRoutes);
 
-// 2. Rotas do PORTAL DO CLIENTE de eventos (para o cliente quando ele está logado)
-app.use('/api/portal/eventos', eventosClientesClientRoutes);
+// 3. TERCEIRO: Servir arquivos estáticos da pasta 'public'
+const publicPath = path.join(__dirname, '..', 'public');
+console.log(`Servindo arquivos estáticos da pasta: ${publicPath}`);
+app.use('/', express.static(publicPath));
 
-// 3. Rotas de ADMINISTRAÇÃO de clientes de eventos (usadas no seu painel de gestão)
-app.use('/api/admin/eventos-clientes', eventosClientesAdminRoutes);
-
-// NOVA LINHA: Adicione esta linha para registrar as novas rotas de eventos para admin
-app.use('/api/admin/eventos', adminEventosRoutes);
-// ------------------------------------
-
-// Eventos (gerenciamento geral de eventos)
-app.use('/api/eventos',           eventosRoutes);
-
-
-
-// Catch-all para servir a página de login do admin quando uma rota /admin/... não for encontrada
-app.use('/admin', (req, res) => {
+// 4. QUARTO: Rota Catch-all para servir a página de login do admin se nenhuma rota anterior corresponder
+app.get('/admin/*', (req, res) => {
   res.sendFile(path.join(publicPath, 'admin', 'login.html'));
 });
 

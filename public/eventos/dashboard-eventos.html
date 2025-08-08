@@ -124,7 +124,7 @@
     });
 
     try {
-      const res = await fetch('/api/eventos/clientes/me', { headers });
+      const res = await fetch('/api/portal/eventos/me', { headers });
 
       if (!res.ok) {
         throw new Error(`Erro na resposta do servidor: ${res.status}`);
