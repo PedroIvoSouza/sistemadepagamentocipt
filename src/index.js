@@ -6,13 +6,15 @@ const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 
 // --- Importação das Rotas ---
-const authRoutes    = require('./api/authRoutes');
-const userRoutes    = require('./api/userRoutes');
-const darsRoutes    = require('./api/darsRoutes');
+const authRoutes         = require('./api/authRoutes');
+const userRoutes         = require('./api/userRoutes');
+const darsRoutes         = require('./api/darsRoutes');
 const adminAuthRoutes    = require('./api/adminAuthRoutes');
 const adminRoutes        = require('./api/adminRoutes');
 const adminManagementRoutes = require('./api/adminManagementRoutes');
 const adminDarsRoutes    = require('./api/adminDarsRoutes');
+const eventosRoutes      = require('./api/eventosRoutes');
+const adminEventosRoutes = require('./api/adminEventosRoutes');
 
 const {
   adminRoutes:  eventosClientesAdminRoutes,
@@ -20,14 +22,11 @@ const {
   clientRoutes: eventosClientesClientRoutes
 } = require('./api/eventosClientesRoutes');
 
-const eventosRoutes      = require('./api/eventosRoutes');
-const adminEventosRoutes = require('./api/adminEventosRoutes');
-
 const app = express();
 
-// CORS
+// --- CORS ---
 app.use(cors({
-  origin: '*', // ⚠️ em produção, restrinja ao domínio da sua aplicação
+  origin: '*', // ⚠️ Em produção, restrinja ao domínio da aplicação
   credentials: true
 }));
 
@@ -43,7 +42,6 @@ const db = new sqlite3.Database(dbPath, err => {
   }
   console.log('[INFO] Conectado ao SQLite em', dbPath);
 });
-// Torna o db disponível em req.app.locals.db
 app.locals.db = db;
 
 // --- Arquivos estáticos ---
@@ -51,7 +49,8 @@ const publicPath = path.resolve(__dirname, '..', 'public');
 console.log('[INFO] Servindo estáticos em', publicPath);
 app.use(express.static(publicPath));
 
-// --- Rotas da API ---
+// --- ROTAS DA API ---
+
 // Permissionários
 app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
@@ -64,21 +63,22 @@ app.use('/api/admin/admins', adminManagementRoutes);
 app.use('/api/admin', adminRoutes);
 
 // Eventos — clientes e portal
-app.use('/api/eventos/clientes', eventosClientesPublicRoutes);
-app.use('/api/portal/eventos',   eventosClientesClientRoutes);
-app.use('/api/admin/eventos-clientes', eventosClientesAdminRoutes);
+app.use('/api/eventos/clientes', eventosClientesPublicRoutes);     // login, definir senha
+app.use('/api/portal/eventos', eventosClientesClientRoutes);       // cliente autenticado
+app.use('/api/admin/eventos-clientes', eventosClientesAdminRoutes); // admin gerencia clientes de evento
+app.use('/api/eventos', eventosRoutes);
 app.use('/api/admin/eventos', adminEventosRoutes);
-app.use('/api/eventos',       eventosRoutes);
 
-// Serve SPA do admin (todas as rotas começando com /admin)
+// --- SPA: Redirecionamento para login.html do admin ---
 app.get('/admin*', (req, res) => {
   res.sendFile(path.join(publicPath, 'admin', 'login.html'));
 });
 
-// --- Inicialização do servidor e Cron ---
+// --- Inicialização do Servidor e Cron ---
 const PORT = process.env.PORT || 3000;
 const server = app.listen(PORT, () => {
   console.log(`[INFO] Servidor rodando na porta ${PORT}`);
+
   try {
     require(path.resolve(__dirname, '..', 'cron', 'gerarDarsMensais.js'));
     console.log('[INFO] Agendador de tarefas iniciado');
