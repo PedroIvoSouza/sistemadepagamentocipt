@@ -131,34 +131,52 @@
     </div>
 
     <script>
-        document.getElementById('adminLoginForm').addEventListener('submit', async (event) => {
-            event.preventDefault();
-            const form = event.target;
-            const formData = new FormData(form);
-            const data = Object.fromEntries(formData.entries());
-            const messageDiv = document.getElementById('message');
-            messageDiv.style.display = 'none';
+  document.addEventListener('DOMContentLoaded', () => {
+    // se você usa máscara IMask no CNPJ:
+    const cnpjInput = document.getElementById('cnpj');
+    IMask(cnpjInput, { mask: '00.000.000/0000-00' });
 
-            try {
-                const response = await fetch('/api/admin/auth/login', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(data)
-                });
+    const form      = document.getElementById('loginForm');
+    const messageEl = document.getElementById('message');
+    const LOGIN_URL = '/api/auth/login'; // ajuste se a sua rota for outra
 
-                const result = await response.json();
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      messageEl.style.display = 'none';
 
-                if (response.ok) {
-                    localStorage.setItem('adminAuthToken', result.token);
-                    window.location.href = '/admin/dashboard.html';
-                } else {
-                    throw new Error(result.error);
-                }
-            } catch (error) {
-                messageDiv.innerText = error.message;
-                messageDiv.style.display = 'block';
-            }
+      // limpa formatação e captura valores
+      const rawCnpj = cnpjInput.value.replace(/\D/g,'');
+      const senha   = document.getElementById('senha').value;
+
+      console.log('Tentando login permissionário →', LOGIN_URL, { cnpj: rawCnpj, senha });
+
+      try {
+        const res = await fetch(LOGIN_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cnpj: rawCnpj, senha })
         });
-    </script>
+
+        console.log('Status de resposta:', res.status);
+        const payload = await res.json();
+        console.log('Body da resposta:', payload);
+
+        if (res.ok && payload.token) {
+          localStorage.setItem('authToken', payload.token);
+          return window.location.href = '/dashboard.html';
+        }
+
+        // exibe mensagem de erro vinda do backend
+        messageEl.innerText = payload.error || payload.message || 'Credenciais inválidas.';
+        messageEl.style.display = 'block';
+
+      } catch (err) {
+        console.error('Erro na requisição de login:', err);
+        messageEl.innerText = 'Não foi possível conectar ao servidor.';
+        messageEl.style.display = 'block';
+      }
+    });
+  });
+</script>
 </body>
 </html>

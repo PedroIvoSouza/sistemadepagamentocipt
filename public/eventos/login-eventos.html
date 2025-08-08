@@ -104,12 +104,12 @@
   <script>
   function setupPasswordToggle(inputId, buttonId) {
     const toggleButton = document.getElementById(buttonId);
-    const passwordInput  = document.getElementById(inputId);
+    const passwordInput = document.getElementById(inputId);
     if (!toggleButton || !passwordInput) return;
     const icon = toggleButton.querySelector('i');
     toggleButton.addEventListener('click', () => {
-      const type = passwordInput.type === 'password' ? 'text' : 'password';
-      passwordInput.type = type;
+      const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
+      passwordInput.setAttribute('type', type);
       icon.classList.toggle('bi-eye-fill');
       icon.classList.toggle('bi-eye-slash-fill');
     });
@@ -120,33 +120,38 @@
 
     document.getElementById('login-form').addEventListener('submit', async (e) => {
       e.preventDefault();
+      const login    = document.getElementById('login').value.trim();
+      const senha    = document.getElementById('senha').value;
+      const message  = document.getElementById('message');
+      // **Aqui definimos o path correto da rota de login de eventos:**
+      const LOGIN_URL = '/api/eventos/clientes/login';
 
-      const login = document.getElementById('login').value.trim();
-      const senha = document.getElementById('senha').value;
-      const messageDiv = document.getElementById('message');
-      messageDiv.style.display = 'none';
+      console.log('Tentando POST em', LOGIN_URL, { login, senha });
 
       try {
-        const res = await fetch('/api/public/eventos/login', {
-          method: 'POST',
+        const res = await fetch(LOGIN_URL, {
+          method:  'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ login, senha })
+          body:    JSON.stringify({ login, senha })
         });
 
-        // se o status não for 2xx, lança erro
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.error || `Status ${res.status}`);
+        console.log('Status da resposta:', res.status);
+        const result = await res.json();
+
+        if (res.ok && result.token) {
+          localStorage.setItem('token_evento', result.token);
+          return window.location.href = '/eventos/dashboard-eventos.html';
         }
 
-        const { token } = await res.json();
-        localStorage.setItem('token_evento', token);
-        window.location.href = '/eventos/dashboard-eventos.html';
+        // se chegou aqui, deu erro de credenciais
+        const msg = result.error || 'Login inválido. Verifique usuário e senha.';
+        message.innerText = msg;
+        message.style.display = 'block';
 
       } catch (err) {
-        console.error('Erro no login de eventos:', err);
-        messageDiv.innerText = err.message;
-        messageDiv.style.display = 'block';
+        console.error('Erro na tentativa de login:', err);
+        message.innerText = 'Erro ao se conectar ao servidor.';
+        message.style.display = 'block';
       }
     });
   });
