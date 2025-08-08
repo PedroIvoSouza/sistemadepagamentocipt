@@ -104,7 +104,13 @@ router.post('/', async (req, res) => {
                 };
                 
                 // 3. Chama a API da SEFAZ
-                const respostaSefaz = await emitirGuiaSefaz({ cnpj: cliente.documento, nome_empresa: cliente.nome_razao_social }, dadosDar);
+                const respostaSefaz = await emitirGuiaSefaz(
+                    { 
+                        documento: cliente.documento, 
+                        nome_empresa: cliente.nome_razao_social 
+                    },
+                    dadosDar
+                    );
                 
                 // 4. Salva a DAR no nosso banco de dados
                 const darSql = `INSERT INTO dars (id_permissionario, tipo_permissionario, valor, mes_referencia, ano_referencia, data_vencimento, status, numero_documento, linha_digitavel, codigo_barras, pdf_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;

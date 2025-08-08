@@ -1,84 +1,125 @@
-// Em: src/services/sefazService.js
+// src/services/sefazService.js
+
 const https = require('https');
-const fs = require('fs');
+const fs    = require('fs');
 const axios = require('axios');
 
-// --- Variáveis de depuração ---
+// Caminho padrão do certificado SEFAZ (homologação)
 const CERT_PATH = '/etc/ssl/certs/sefaz_homolog_ca.crt';
 
-async function emitirGuiaSefaz(dadosPermissionario, dadosDar) {
-    const apiUrl = `${process.env.SEFAZ_API_URL_HOM}/api/public/guia/emitir`;
-    const appToken = process.env.SEFAZ_APP_TOKEN;
+/**
+ * Emite guia de DAR na SEFAZ.
+ *
+ * @param {Object} dadosContribuinte
+ *   Deve conter ao menos:
+ *     - documento: CPF ou CNPJ (string, com ou sem formatação)
+ *     - nome_empresa: nome do emitente
+ * @param {Object} dadosDar
+ *   Deve conter:
+ *     - mes_referencia  (number)
+ *     - ano_referencia  (number)
+ *     - data_vencimento (string no formato 'YYYY-MM-DD')
+ *     - valor           (number)
+ * @param {Object} opts
+ *   @property {string} [campoDocumento='documento']
+ *   @property {string} [campoValor='valor']
+ *   @property {number} [codigoReceita=20165]
+ *   @property {string} [observacaoTemplate]
+ *
+ * @returns {Promise<Object>} resposta da API SEFAZ
+ */
+async function emitirGuiaSefaz(dadosContribuinte, dadosDar, opts = {}) {
+  const {
+    campoDocumento     = 'documento',
+    campoValor         = 'valor',
+    codigoReceita      = 20165,
+    observacaoTemplate = 'Pagamento referente ao aluguel de {nome}'
+  } = opts;
 
-    const payload = {
-        versao: "1.0",
-        contribuinteEmitente: {
-            codigoTipoInscricao: 4,
-            numeroInscricao: dadosPermissionario.cnpj.replace(/\D/g, ''),
-            nome: dadosPermissionario.nome_empresa,
-            codigoIbgeMunicipio: 2704302,
+  // Limpa apenas dígitos
+  const rawDoc = (dadosContribuinte[campoDocumento] || '')
+    .toString()
+    .replace(/\D/g, '');
+  if (![11, 14].includes(rawDoc.length)) {
+    throw new Error(
+      `Documento inválido em dadosContribuinte['${campoDocumento}']: ${dadosContribuinte[campoDocumento]}`
+    );
+  }
+
+  // Define tipo de inscrição
+  const codigoTipoInscricao = rawDoc.length === 11 ? 1 /* CPF */ : 4 /* CNPJ */;
+
+  // Valor principal
+  const valorPrincipal = Number(dadosDar[campoValor]);
+  if (isNaN(valorPrincipal) || valorPrincipal <= 0) {
+    throw new Error(
+      `Valor inválido em dadosDar['${campoValor}']: ${dadosDar[campoValor]}`
+    );
+  }
+
+  // Monta payload
+  const payload = {
+    versao: "1.0",
+    contribuinteEmitente: {
+      codigoTipoInscricao,
+      numeroInscricao: rawDoc,
+      nome: dadosContribuinte.nome_empresa,
+      codigoIbgeMunicipio: 2704302
+    },
+    receitas: [
+      {
+        codigo: codigoReceita,
+        competencia: {
+          mes: dadosDar.mes_referencia,
+          ano: dadosDar.ano_referencia
         },
-        receitas: [
-            {
-                codigo: 20165,
-                competencia: {
-                    mes: dadosDar.mes_referencia,
-                    ano: dadosDar.ano_referencia
-                },
-                valorPrincipal: dadosDar.valor,
-                dataVencimento: dadosDar.data_vencimento
-            }
-        ],
-        dataLimitePagamento: dadosDar.data_vencimento,
-        observacao: `Pagamento referente ao aluguel do permissionário ${dadosPermissionario.nome_empresa}`
-    };
+        valorPrincipal,
+        dataVencimento: dadosDar.data_vencimento
+      }
+    ],
+    dataLimitePagamento: dadosDar.data_vencimento,
+    observacao: observacaoTemplate.replace('{nome}', dadosContribuinte.nome_empresa)
+  };
 
-    try {
-        // --- Bloco de Depuração do Certificado ---
-        console.log('[DEBUG] Verificando o arquivo de certificado...');
-        if (fs.existsSync(CERT_PATH)) {
-            console.log(`[DEBUG] Arquivo de certificado encontrado em: ${CERT_PATH}`);
-        } else {
-            // Se o arquivo não existir, o erro será claro.
-            console.error(`[ERRO FATAL] O arquivo de certificado não foi encontrado em: ${CERT_PATH}`);
-            throw new Error(`Arquivo de certificado não encontrado: ${CERT_PATH}`);
-        }
-        // -----------------------------------------
+  const apiUrl   = `${process.env.SEFAZ_API_URL_HOM}/api/public/guia/emitir`;
+  const appToken = process.env.SEFAZ_APP_TOKEN;
 
-        // Cria o agente HTTPS que confia no certificado da SEFAZ
-        const httpsAgent = new https.Agent({
-            ca: fs.readFileSync(CERT_PATH),
-            rejectUnauthorized: false // <--- ADICIONE APENAS ESTA LINHA
-        });
-        
-        console.log('[DEBUG] Agente HTTPS com certificado customizado foi criado.');
-
-        console.log("Enviando para SEFAZ (Homologação):", JSON.stringify(payload, null, 2));
-
-        const response = await axios.post(apiUrl, payload, {
-            headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json',
-                'appToken': appToken
-            },
-            httpsAgent // Usando o agente customizado
-        });
-        
-        console.log('[SUCESSO] Resposta recebida da SEFAZ.');
-        return response.data;
-        
-    } catch (error) {
-        // Log completo do erro para depuração máxima
-        console.error("----------------- ERRO DETALHADO -----------------");
-        console.error("Mensagem de Erro:", error.message);
-        if (error.response) {
-            console.error("Status da Resposta:", error.response.status);
-            console.error("Dados da Resposta:", JSON.stringify(error.response.data, null, 2));
-        }
-        console.error("----------------------------------------------------");
-        
-        throw new Error('Falha na comunicação com a SEFAZ. Verifique os logs de erro para detalhes.');
+  try {
+    console.log('[DEBUG] Verificando arquivo de certificado em', CERT_PATH);
+    if (!fs.existsSync(CERT_PATH)) {
+      console.error('[ERRO FATAL] Certificado não encontrado:', CERT_PATH);
+      throw new Error(`Certificado não encontrado em ${CERT_PATH}`);
     }
+    console.log('[DEBUG] Certificado encontrado.');
+
+    const httpsAgent = new https.Agent({
+      ca: fs.readFileSync(CERT_PATH),
+      rejectUnauthorized: false
+    });
+    console.log('[DEBUG] Agente HTTPS customizado criado.');
+
+    console.log('[DEBUG] Payload SEFAZ →', JSON.stringify(payload, null, 2));
+    const response = await axios.post(apiUrl, payload, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept':       'application/json',
+        appToken
+      },
+      httpsAgent
+    });
+
+    console.log('[SUCESSO] Guia emitida pela SEFAZ.');
+    return response.data;
+  } catch (err) {
+    console.error('----------------- ERRO DETALHADO -----------------');
+    console.error('Mensagem:', err.message);
+    if (err.response) {
+      console.error('Status:', err.response.status);
+      console.error('Body:', JSON.stringify(err.response.data, null, 2));
+    }
+    console.error('----------------------------------------------------');
+    throw new Error('Falha na comunicação com a SEFAZ. Veja os logs para detalhes.');
+  }
 }
 
 module.exports = { emitirGuiaSefaz };
