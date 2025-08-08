@@ -102,52 +102,54 @@
   </div>
 
   <script>
-    function setupPasswordToggle(inputId, buttonId) {
-        const toggleButton = document.getElementById(buttonId);
-        const passwordInput = document.getElementById(inputId);
-        if (!toggleButton || !passwordInput) return;
-        const icon = toggleButton.querySelector('i');
-
-        toggleButton.addEventListener('click', () => {
-            const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
-            passwordInput.setAttribute('type', type);
-            icon.classList.toggle('bi-eye-fill');
-            icon.classList.toggle('bi-eye-slash-fill');
-        });
-    }
-
-    document.addEventListener('DOMContentLoaded', () => {
-        setupPasswordToggle('senha', 'toggleSenha');
-
-        document.getElementById('login-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const login = document.getElementById('login').value.trim();
-            const senha = document.getElementById('senha').value;
-            const messageDiv = document.getElementById('message');
-
-            try {
-                const res = await fetch('/api/eventos/clientes/login', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ login, senha })
-                });
-
-                const result = await res.json();
-                if (res.ok && result.token) {
-                    localStorage.setItem('token_evento', result.token);
-                    window.location.href = '/eventos/dashboard-eventos.html';
-                } else {
-                    const msg = result.error || 'Login inválido. Verifique usuário e senha.';
-                    messageDiv.innerText = msg;
-                    messageDiv.style.display = 'block';
-                }
-            } catch (err) {
-                console.error('Erro na tentativa de login:', err);
-                messageDiv.innerText = 'Erro ao se conectar ao servidor.';
-                messageDiv.style.display = 'block';
-            }
-        });
+  function setupPasswordToggle(inputId, buttonId) {
+    const toggleButton = document.getElementById(buttonId);
+    const passwordInput  = document.getElementById(inputId);
+    if (!toggleButton || !passwordInput) return;
+    const icon = toggleButton.querySelector('i');
+    toggleButton.addEventListener('click', () => {
+      const type = passwordInput.type === 'password' ? 'text' : 'password';
+      passwordInput.type = type;
+      icon.classList.toggle('bi-eye-fill');
+      icon.classList.toggle('bi-eye-slash-fill');
     });
-  </script>
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    setupPasswordToggle('senha', 'toggleSenha');
+
+    document.getElementById('login-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const login = document.getElementById('login').value.trim();
+      const senha = document.getElementById('senha').value;
+      const messageDiv = document.getElementById('message');
+      messageDiv.style.display = 'none';
+
+      try {
+        const res = await fetch('/api/public/eventos/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ login, senha })
+        });
+
+        // se o status não for 2xx, lança erro
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || `Status ${res.status}`);
+        }
+
+        const { token } = await res.json();
+        localStorage.setItem('token_evento', token);
+        window.location.href = '/eventos/dashboard-eventos.html';
+
+      } catch (err) {
+        console.error('Erro no login de eventos:', err);
+        messageDiv.innerText = err.message;
+        messageDiv.style.display = 'block';
+      }
+    });
+  });
+</script>
 </body>
 </html>

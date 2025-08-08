@@ -155,38 +155,52 @@
   </div>
 
   <script src="https://unpkg.com/imask"></script>
-  <script>
-    document.addEventListener('DOMContentLoaded', () => {
-      const cnpjInput = document.getElementById('cnpj');
-      if (cnpjInput) {
-        IMask(cnpjInput, { mask: '00.000.000/0000-00' });
-      }
+  <script src="https://unpkg.com/imask"></script>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  // aplica máscara ao campo de CNPJ
+  const cnpjInput = IMask(
+    document.getElementById('cnpj'),
+    { mask: '00.000.000/0000-00' }
+  );
 
-      document.getElementById('loginForm').addEventListener('submit', async (event) => {
-        event.preventDefault();
-        const cnpj = document.getElementById('cnpj').value;
-        const senha = document.getElementById('senha').value;
-        const messageDiv = document.getElementById('message');
+  document.getElementById('loginForm').addEventListener('submit', async (event) => {
+    event.preventDefault();
 
-        try {
-          const response = await fetch('/api/auth/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ cnpj, senha })
-          });
-          const result = await response.json();
-          if (response.ok) {
-            localStorage.setItem('authToken', result.token);
-            window.location.href = '/dashboard.html';
-          } else {
-            throw new Error(result.error || 'Erro desconhecido');
-          }
-        } catch (error) {
-          messageDiv.innerText = `Erro: ${error.message}`;
-          messageDiv.style.display = 'block';
-        }
+    // pegamos o valor formatado (com pontos e barra)
+    const rawCnpj = document.getElementById('cnpj').value;
+    // e a senha
+    const senha = document.getElementById('senha').value;
+    const messageDiv = document.getElementById('message');
+    messageDiv.style.display = 'none';
+
+    try {
+      // aqui mudamos: em vez de { cnpj, senha } enviamos { login, senha }
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          login: rawCnpj,
+          senha: senha
+        })
       });
-    });
-  </script>
+
+      const result = await response.json();
+
+      if (response.ok) {
+        // sucesso — guarda o token e redireciona
+        localStorage.setItem('authToken', result.token);
+        window.location.href = '/dashboard.html';
+      } else {
+        // exibe o erro retornado pela API
+        throw new Error(result.error || 'Login ou senha inválidos');
+      }
+    } catch (err) {
+      messageDiv.innerText = err.message;
+      messageDiv.style.display = 'block';
+    }
+  });
+});
+</script>
 </body>
 </html>
