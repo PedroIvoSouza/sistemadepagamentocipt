@@ -100,61 +100,47 @@
       </div>
     </footer>
   </div>
-
   <script>
-  function setupPasswordToggle(inputId, buttonId) {
-    const toggleButton = document.getElementById(buttonId);
-    const passwordInput = document.getElementById(inputId);
-    if (!toggleButton || !passwordInput) return;
-    const icon = toggleButton.querySelector('i');
-    toggleButton.addEventListener('click', () => {
-      const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
-      passwordInput.setAttribute('type', type);
-      icon.classList.toggle('bi-eye-fill');
-      icon.classList.toggle('bi-eye-slash-fill');
-    });
-  }
+document.addEventListener('DOMContentLoaded', () => {
+  const form       = document.getElementById('login-form');
+  const messageDiv = document.getElementById('message');
 
-  document.addEventListener('DOMContentLoaded', () => {
-    setupPasswordToggle('senha', 'toggleSenha');
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    messageDiv.style.display = 'none';
 
-    document.getElementById('login-form').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const login    = document.getElementById('login').value.trim();
-      const senha    = document.getElementById('senha').value;
-      const message  = document.getElementById('message');
-      // **Aqui definimos o path correto da rota de login de eventos:**
-      const LOGIN_URL = '/api/eventos/clientes/login';
+    // pega valores da tela
+    const login = document.getElementById('login').value.trim();
+    const senha = document.getElementById('senha').value;
 
-      console.log('Tentando POST em', LOGIN_URL, { login, senha });
+    // dispara requisição
+    try {
+      const res = await fetch('/api/eventos/clientes/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ login, senha })
+      });
 
-      try {
-        const res = await fetch(LOGIN_URL, {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ login, senha })
-        });
+      // lê JSON de resposta
+      const payload = await res.json();
 
-        console.log('Status da resposta:', res.status);
-        const result = await res.json();
-
-        if (res.ok && result.token) {
-          localStorage.setItem('token_evento', result.token);
-          return window.location.href = '/eventos/dashboard-eventos.html';
-        }
-
-        // se chegou aqui, deu erro de credenciais
-        const msg = result.error || 'Login inválido. Verifique usuário e senha.';
-        message.innerText = msg;
-        message.style.display = 'block';
-
-      } catch (err) {
-        console.error('Erro na tentativa de login:', err);
-        message.innerText = 'Erro ao se conectar ao servidor.';
-        message.style.display = 'block';
+      if (res.ok && payload.token) {
+        // sucesso: salva e vai pro dashboard
+        localStorage.setItem('token_evento', payload.token);
+        return window.location.href = '/eventos/dashboard-eventos.html';
       }
-    });
+
+      // falhou – exibe mensagem que veio do servidor (ou genérica)
+      messageDiv.innerText = payload.error || payload.message || 'Login inválido.';
+      messageDiv.style.display = 'block';
+
+    } catch (err) {
+      console.error('Erro ao chamar /api/eventos/clientes/login:', err);
+      messageDiv.innerText = 'Não foi possível conectar ao servidor.';
+      messageDiv.style.display = 'block';
+    }
   });
+});
 </script>
 </body>
 </html>

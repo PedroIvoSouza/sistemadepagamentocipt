@@ -130,53 +130,50 @@
             </footer>
     </div>
 
-    <script>
-  document.addEventListener('DOMContentLoaded', () => {
-    // se você usa máscara IMask no CNPJ:
-    const cnpjInput = document.getElementById('cnpj');
-    IMask(cnpjInput, { mask: '00.000.000/0000-00' });
+    <script src="https://unpkg.com/imask"></script>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  // aplica máscara no campo CNPJ
+  const cnpjInput = IMask(
+    document.getElementById('cnpj'),
+    { mask: '00.000.000/0000-00' }
+  );
+  const form       = document.getElementById('loginForm');
+  const messageDiv = document.getElementById('message');
 
-    const form      = document.getElementById('loginForm');
-    const messageEl = document.getElementById('message');
-    const LOGIN_URL = '/api/auth/login'; // ajuste se a sua rota for outra
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    messageDiv.style.display = 'none';
 
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      messageEl.style.display = 'none';
+    // remove pontuação e pega senha
+    const rawCnpj = document.getElementById('cnpj').value.replace(/\D/g, '');
+    const senha   = document.getElementById('senha').value;
 
-      // limpa formatação e captura valores
-      const rawCnpj = cnpjInput.value.replace(/\D/g,'');
-      const senha   = document.getElementById('senha').value;
+    console.log('Login permissionário:', rawCnpj, senha);
 
-      console.log('Tentando login permissionário →', LOGIN_URL, { cnpj: rawCnpj, senha });
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cnpj: rawCnpj, senha })
+      });
+      const payload = await res.json();
 
-      try {
-        const res = await fetch(LOGIN_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ cnpj: rawCnpj, senha })
-        });
-
-        console.log('Status de resposta:', res.status);
-        const payload = await res.json();
-        console.log('Body da resposta:', payload);
-
-        if (res.ok && payload.token) {
-          localStorage.setItem('authToken', payload.token);
-          return window.location.href = '/dashboard.html';
-        }
-
-        // exibe mensagem de erro vinda do backend
-        messageEl.innerText = payload.error || payload.message || 'Credenciais inválidas.';
-        messageEl.style.display = 'block';
-
-      } catch (err) {
-        console.error('Erro na requisição de login:', err);
-        messageEl.innerText = 'Não foi possível conectar ao servidor.';
-        messageEl.style.display = 'block';
+      if (res.ok && payload.token) {
+        localStorage.setItem('authToken', payload.token);
+        return window.location.href = '/dashboard.html';
       }
-    });
+
+      throw new Error(payload.error || 'CNPJ ou senha inválidos.');
+
+    } catch (err) {
+      console.error('Erro /api/auth/login:', err);
+      messageDiv.innerText = `Erro: ${err.message}`;
+      messageDiv.style.display = 'block';
+    }
   });
+});
 </script>
+
 </body>
 </html>
