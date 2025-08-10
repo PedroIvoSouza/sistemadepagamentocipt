@@ -14,7 +14,7 @@ const dbGetAsync = (sql, params = []) =>
     db.get(sql, params, (err, row) => (err ? reject(err) : resolve(row)));
   });
 
-// Helpers (definir UMA vez)
+// Helpers
 const onlyDigits = (v = '') => String(v).replace(/\D/g, '');
 
 // -------------------- Listagem --------------------
@@ -73,32 +73,27 @@ router.post('/:id/emitir', authMiddleware, async (req, res) => {
     );
     if (!dar) return res.status(404).json({ error: 'DAR não encontrado.' });
 
-    // Busca permissionário (apenas campos existentes)
+    // Busca permissionário (usa CNPJ sempre)
     const userRow = await dbGetAsync(
       `SELECT id, nome_empresa, cnpj FROM permissionarios WHERE id = ?`,
       [userId]
     );
     if (!userRow) return res.status(404).json({ error: 'Permissionário não encontrado.' });
 
-    // CNPJ obrigatório para permissionário
-    const docRaw = userRow.cnpj || '';
-    const documento = onlyDigits(docRaw);
-
-    if (!documento || documento.length !== 14) {
+    const cnpj = onlyDigits(userRow.cnpj || '');
+    if (!cnpj || cnpj.length !== 14) {
       return res.status(400).json({
-        error: `CNPJ do permissionário ausente ou inválido (recebido: ${docRaw || 'undefined'})`
+        error: `CNPJ do permissionário ausente ou inválido (recebido: ${userRow.cnpj || 'undefined'})`
       });
     }
 
-    // Objeto esperado pelo serviço da SEFAZ
     const userForSefaz = {
-      ...userRow,
-      documento,               // usado pelo sefazService
-      tipoDocumento: 'CNPJ',   // sempre CNPJ para permissionários
+      documento: cnpj,
+      tipoDocumento: 'CNPJ',
       nomeRazaoSocial: userRow.nome_empresa || 'Contribuinte'
     };
 
-    // Atualiza valores se vencido
+    // Se vencido, recalcula
     let guiaSource = dar;
     if (dar.status === 'Vencido') {
       const calculo = await calcularEncargosAtraso(dar);
@@ -114,7 +109,12 @@ router.post('/:id/emitir', authMiddleware, async (req, res) => {
 
   } catch (error) {
     console.error('Erro na rota /emitir:', error);
-    return res.status(500).json({ error: error.message || 'Erro interno do servidor.' });
+    const isUnavailable =
+      /indispon[ií]vel|Load balancer|ECONNABORTED|ENOTFOUND|EAI_AGAIN|ECONNRESET|ETIMEDOUT/i.test(
+        error.message || ''
+      );
+    const status = isUnavailable ? 503 : 500;
+    return res.status(status).json({ error: error.message || 'Erro interno do servidor.' });
   }
 });
 
