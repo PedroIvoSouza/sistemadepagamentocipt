@@ -7,57 +7,56 @@ const shouldRetry = (status, code) => {
   return status >= 500 || status === 429;
 };
 
+function resolveBaseUrl() {
+  const mode = (process.env.SEFAZ_MODE || 'hom').toLowerCase();
+  const hom = (process.env.SEFAZ_API_URL_HOM || '').replace(/\/+$/, '');
+  const prod = (process.env.SEFAZ_API_URL_PROD || '').replace(/\/+$/, '');
+  return mode === 'prod' ? prod : hom;
+}
+
 /**
- * Monta e emite a guia na SEFAZ/AL conforme manual v2.1.0 (Jun/2025).
- * Necessário header 'appToken' em todas as requisições.
- *
- * Campos obrigatórios de emissão (resumo):
- * - versao
- * - contribuinteEmitente: codigoTipoInscricao, numeroInscricao, nome, codigoIbgeMunicipio
- * - receitas[]: codigo, competencia.{mes, ano}, valorPrincipal, dataVencimento
- * - dataLimitePagamento
- * - retorno: numeroGuia, pdfBase64
+ * Emite guia na SEFAZ/AL conforme manual v2.1.0.
+ * Requer header 'appToken'.
  */
 async function emitirGuiaSefaz(userForSefaz, dar) {
-  const baseURL = (process.env.SEFAZ_URL || '').replace(/\/+$/, '');
+  const baseURL = resolveBaseUrl();
   const endpoint = process.env.SEFAZ_EMISSAO_PATH || '/api/public/guia/emitir';
   const url = baseURL + endpoint;
 
   const maxRetries = Number(process.env.SEFAZ_MAX_RETRIES || 3);
   const baseDelay = Number(process.env.SEFAZ_RETRY_BASE_MS || 1000);
 
-  // Normaliza competência e datas
+  // Normalização de dados
   const mes = Number(dar.mes_referencia);
   const ano = Number(dar.ano_referencia);
   const valorPrincipal = Number(dar.valor);
-  const dataVenc = String(dar.data_vencimento || '').slice(0, 10);
+  const dataVRaw = String(dar.data_vencimento || '').slice(0, 10);
 
-  // Quando vencido (ou data inválida), empurra vencimento para hoje+2
+  // Ajuste de data vencida -> hoje+2 (evita 400)
   const hoje = new Date(); hoje.setHours(0,0,0,0);
-  let dataVencimento = dataVenc;
-  const parsed = new Date(dataVenc);
-  if (!dataVenc || isNaN(parsed.getTime()) || parsed < hoje) {
+  let dataVencimento = dataVRaw;
+  const parsed = new Date(dataVRaw);
+  if (!dataVRaw || isNaN(parsed.getTime()) || parsed < hoje) {
     const d = new Date(); d.setDate(d.getDate() + 2);
     dataVencimento = d.toISOString().slice(0, 10);
   }
 
-  // codigoTipoInscricao: 4 = CNPJ (manual)  :contentReference[oaicite:11]{index=11}
+  // 4 = CNPJ (manual)
   const payload = {
     versao: '1.0',
     contribuinteEmitente: {
-      codigoTipoInscricao: 4, // CNPJ
+      codigoTipoInscricao: 4,
       numeroInscricao: userForSefaz.documento, // 14 dígitos
       nome: userForSefaz.nomeRazaoSocial,
-      codigoIbgeMunicipio: Number(process.env.COD_IBGE_MUNICIPIO || 2704302),
-      // numeroCep e descricaoEndereco são opcionais segundo revisão 2025
+      codigoIbgeMunicipio: Number(process.env.COD_IBGE_MUNICIPIO || 2704302)
     },
     receitas: [
       {
         codigo: Number(dar.codigo_receita || process.env.CODIGO_RECEITA_PADRAO || 20165),
-        competencia: { mes, ano }, // inteiros
+        competencia: { mes, ano },
         valorPrincipal,
-        dataVencimento: dataVencimento,
-        // Se a receita exigir documento de origem, preencha abaixo (ver /receita/consultar)
+        dataVencimento: dataVencimento
+        // Se a receita exigir documento de origem, incluir:
         // codigoTipoDocumentoOrigem: ...,
         // numeroDocumentoOrigem: ...,
       }
@@ -66,7 +65,6 @@ async function emitirGuiaSefaz(userForSefaz, dar) {
     observacao: `Pagamento referente ao aluguel de ${userForSefaz.nomeRazaoSocial}`
   };
 
-  // Logs úteis para debug
   console.debug('[DEBUG] Payload SEFAZ →', JSON.stringify(payload, null, 2));
 
   let lastErr;
@@ -86,11 +84,11 @@ async function emitirGuiaSefaz(userForSefaz, dar) {
       console.log('[SEFAZ] status:', resp.status, 'tempo(ms):', Date.now() - t0);
 
       if (resp.status >= 200 && resp.status < 300) {
-        // Esperado: { numeroGuia, pdfBase64 }  :contentReference[oaicite:12]{index=12}
+        // Esperado: { numeroGuia, pdfBase64 }
         return resp.data;
       }
 
-      // Erro de backend da SEFAZ (ex.: Load balancer sem instâncias)
+      // Log detalhado quando não é 2xx
       console.error('----------------- ERRO DETALHADO -----------------');
       console.error('Mensagem:', `Request failed with status code ${resp.status}`);
       console.error('Status:', resp.status);
