@@ -9,13 +9,13 @@ const { emitirGuiaSefaz } = require('../services/sefazService');
 const router = express.Router();
 const db = new sqlite3.Database('./sistemacipt.db');
 
-const dbGetAsync = (sql, params = []) => new Promise((resolve, reject) => {
-  db.get(sql, params, (err, row) => (err ? reject(err) : resolve(row)));
-});
+const dbGetAsync = (sql, params = []) =>
+  new Promise((resolve, reject) => {
+    db.get(sql, params, (err, row) => (err ? reject(err) : resolve(row)));
+  });
 
-// === Helpers (definir UMA vez no arquivo) ===
+// Helpers (definir UMA vez)
 const onlyDigits = (v = '') => String(v).replace(/\D/g, '');
-const docType = (d) => (d.length === 14 ? 'CNPJ' : d.length === 11 ? 'CPF' : null);
 
 // -------------------- Listagem --------------------
 router.get('/', authMiddleware, (req, res) => {
@@ -73,14 +73,14 @@ router.post('/:id/emitir', authMiddleware, async (req, res) => {
     );
     if (!dar) return res.status(404).json({ error: 'DAR não encontrado.' });
 
-    // Busca somente os campos existentes (sem CPF)
+    // Busca permissionário (apenas campos existentes)
     const userRow = await dbGetAsync(
       `SELECT id, nome_empresa, cnpj FROM permissionarios WHERE id = ?`,
       [userId]
     );
     if (!userRow) return res.status(404).json({ error: 'Permissionário não encontrado.' });
 
-    // Normaliza o CNPJ
+    // CNPJ obrigatório para permissionário
     const docRaw = userRow.cnpj || '';
     const documento = onlyDigits(docRaw);
 
@@ -90,10 +90,11 @@ router.post('/:id/emitir', authMiddleware, async (req, res) => {
       });
     }
 
+    // Objeto esperado pelo serviço da SEFAZ
     const userForSefaz = {
       ...userRow,
-      documento,                 // <- usado pelo sefazService
-      tipoDocumento: docType(),  // sempre 'CNPJ'
+      documento,               // usado pelo sefazService
+      tipoDocumento: 'CNPJ',   // sempre CNPJ para permissionários
       nomeRazaoSocial: userRow.nome_empresa || 'Contribuinte'
     };
 
