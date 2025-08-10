@@ -154,33 +154,59 @@
     </footer>
   </div>
 
-  <script src="https://unpkg.com/imask"></script>
+<script src="https://unpkg.com/imask"></script>
 <script>
-async function handleLogin(e) {
-  e.preventDefault();
-  const rawCnpj = document.getElementById('cnpj').value || '';
-  const senha   = document.getElementById('senha').value || '';
+  // (opcional) máscara de CNPJ para o input
+  (function applyCnpjMask() {
+    const input = document.getElementById('cnpj');
+    if (!input) return;
+    try {
+      IMask(input, { mask: '00.000.000/0000-00' });
+    } catch (_) {}
+  })();
 
-  const cnpj = rawCnpj.replace(/\D/g, ''); // mantém só números
+  async function handleLogin(e) {
+    e.preventDefault();
 
-  try {
-    const response = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cnpj, senha }) // << aqui troca "login" por "cnpj"
-    });
+    const rawCnpj = document.getElementById('cnpj').value || '';
+    const senha   = document.getElementById('senha').value || '';
+    const box     = document.getElementById('message'); // <-- usa o mesmo ID do HTML
 
-    const data = await response.json();
-    if (!response.ok) throw new Error(data?.erro || data?.message || 'Falha no login');
+    // limpa aviso anterior
+    if (box) { box.style.display = 'none'; box.textContent = ''; }
 
-    // sucesso
-    window.location.href = '/index.html';
-  } catch (err) {
-    const el = document.getElementById('formError');
-    el.textContent = err.message;
-    el.style.display = 'block';
+    const cnpj = String(rawCnpj).replace(/\D/g, ''); // só dígitos
+
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cnpj, senha })
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        const msg = data?.error || data?.erro || data?.message || 'Falha no login';
+        throw new Error(msg);
+      }
+
+      // se quiser guardar o token para as próximas chamadas:
+      localStorage.setItem('authToken', data.token);
+
+      window.location.href = '/index.html';
+    } catch (err) {
+      if (box) {
+        box.textContent = err.message || 'Não foi possível entrar. Tente novamente.';
+        box.style.display = 'block';
+      } else {
+        alert(err.message || 'Não foi possível entrar. Tente novamente.');
+      }
+    }
   }
-}
+
+  // conecta o submit do formulário à função
+  document.getElementById('loginForm')?.addEventListener('submit', handleLogin);
 </script>
 </body>
 </html>
