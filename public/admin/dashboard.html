@@ -109,114 +109,118 @@
     </div>
 
     <script>
-    window.onload = async () => {
-        const token = localStorage.getItem('adminAuthToken');
-        if (!token) {
-            window.location.href = '/admin/login.html';
-            return;
-        }
+window.onload = async () => {
+  // 1) Pegue o token (aceita chaves antigas e normaliza)
+  let token = localStorage.getItem('adminToken') || localStorage.getItem('adminAuthToken');
+  if (!token) {
+    window.location.href = '/admin/login.html';
+    return;
+  }
+  // Sempre manter padronizado em 'adminToken'
+  localStorage.setItem('adminToken', token);
+  localStorage.removeItem('adminAuthToken'); // limpa a antiga, se existir
 
-        // --- LÓGICA DO MENU ---
-        const path = window.location.pathname; 
-        const navLinks = document.querySelectorAll('.sidebar-nav .nav-link');
-        navLinks.forEach(link => {
-            const href = link.getAttribute('href');
-            if (path.endsWith(href)) {
-                link.classList.add('active'); 
-                const parentDropdown = link.closest('.menu-dropdown');
-                if (parentDropdown) {
-                    parentDropdown.querySelector('.submenu').style.display = 'block';
-                }
-            }
-        });
+  // --- LÓGICA DO MENU (igual) ---
+  const path = window.location.pathname; 
+  const navLinks = document.querySelectorAll('.sidebar-nav .nav-link');
+  navLinks.forEach(link => {
+    const href = link.getAttribute('href');
+    if (path.endsWith(href)) {
+      link.classList.add('active'); 
+      const parentDropdown = link.closest('.menu-dropdown');
+      if (parentDropdown) {
+        parentDropdown.querySelector('.submenu').style.display = 'block';
+      }
+    }
+  });
+  const dropdownToggles = document.querySelectorAll('.menu-dropdown > a');
+  dropdownToggles.forEach(toggle => {
+    toggle.addEventListener('click', (e) => {
+      e.preventDefault();
+      const submenu = toggle.nextElementSibling;
+      submenu.style.display = submenu.style.display === 'block' ? 'none' : 'block';
+    });
+  });
 
-        const dropdownToggles = document.querySelectorAll('.menu-dropdown > a');
-        dropdownToggles.forEach(toggle => {
-            toggle.addEventListener('click', (e) => {
-                e.preventDefault();
-                const submenu = toggle.nextElementSibling;
-                submenu.style.display = submenu.style.display === 'block' ? 'none' : 'block';
-            });
-        });
+  // Logout: limpe a chave padronizada
+  document.getElementById('logoutButton').addEventListener('click', (e) => {
+    e.preventDefault();
+    localStorage.removeItem('adminToken');
+    window.location.href = '/admin/login.html';
+  });
 
-        document.getElementById('logoutButton').addEventListener('click', (e) => {
-            e.preventDefault();
-            localStorage.removeItem('adminAuthToken');
-            window.location.href = '/admin/login.html';
-        });
-        // --- FIM DA LÓGICA DO MENU ---
+  // 2) Mostrar nome do admin a partir do JWT de forma segura (base64url)
+  try {
+    const base64url = token.split('.')[1] || '';
+    const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(base64url.length / 4) * 4, '=');
+    const payload = JSON.parse(atob(base64));
+    document.getElementById('adminName').innerText = payload?.nome || 'Administrador';
+  } catch (e) {
+    console.error("Erro ao decodificar token:", e);
+  }
 
-        try {
-            const payload = JSON.parse(atob(token.split('.')[1]));
-            document.getElementById('adminName').innerText = payload.nome;
-        } catch (e) {
-            console.error("Erro ao decodificar token:", e);
-        }
+  // 3) Buscar estatísticas
+  try {
+    console.log("Iniciando busca de dados do dashboard com o token:", token);
+    const url = `/api/admin/dashboard-stats?t=${Date.now()}`;
+    const response = await fetch(url, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
 
-        // --- LÓGICA DE BUSCA DE DADOS COM DEPURAÇÃO MELHORADA ---
-        try {
-            console.log("Iniciando busca de dados do dashboard com o token:", token);
-            const url = `/api/admin/dashboard-stats?t=${new Date().getTime()}`;
-            const response = await fetch(url, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
+    if (response.status === 401 || response.status === 403) {
+      // token inválido/expirado → limpa e volta ao login
+      localStorage.removeItem('adminToken');
+      return window.location.replace('/admin/login.html');
+    }
 
-            if (!response.ok) {
-                console.error("A resposta da API para /dashboard-stats não foi OK.");
-                console.error("Status da Resposta:", response.status, response.statusText);
-                const errorText = await response.text();
-                console.error("Corpo da Resposta de Erro:", errorText);
-                throw new Error(`Falha ao buscar estatísticas (Status: ${response.status})`);
-            }
-            
-            const stats = await response.json();
-            
-            document.getElementById('stat-permissionarios').innerText = stats.totalPermissionarios;
-            document.getElementById('stat-pendentes').innerText = stats.darsPendentes;
-            document.getElementById('stat-vencidos').innerText = stats.darsVencidos;
-            // --- CORREÇÃO APLICADA AQUI ---
-            // Converte o valor para número antes de formatar
-            document.getElementById('stat-receita').innerText = `R$ ${Number(stats.receitaPendente).toFixed(2).replace('.',',')}`;
+    if (!response.ok) {
+      console.error("A resposta da API para /dashboard-stats não foi OK.", response.status, response.statusText);
+      const errorText = await response.text();
+      console.error("Corpo da Resposta de Erro:", errorText);
+      throw new Error(`Falha ao buscar estatísticas (Status: ${response.status})`);
+    }
+    
+    const stats = await response.json();
 
-            const resumoBody = document.getElementById('resumo-mensal-body');
-            if (stats.resumoMensal && stats.resumoMensal.length > 0) {
-                let resumoHtml = '';
-                const meses = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
-                stats.resumoMensal.forEach(item => {
-                    resumoHtml += `<tr>
-                        <td><strong>${meses[item.mes_referencia - 1]}/${item.ano_referencia}</strong></td>
-                        <td>${item.emitidas}</td>
-                        <td>${item.pagas}</td>
-                        <td><span class="text-danger fw-bold">${item.vencidas}</span></td>
-                    </tr>`;
-                });
-                resumoBody.innerHTML = resumoHtml;
-            } else {
-                resumoBody.innerHTML = '<tr><td colspan="4" class="text-muted text-center">Nenhum dado mensal para exibir.</td></tr>';
-            }
+    document.getElementById('stat-permissionarios').innerText = stats.totalPermissionarios ?? '0';
+    document.getElementById('stat-pendentes').innerText      = stats.darsPendentes ?? '0';
+    document.getElementById('stat-vencidos').innerText       = stats.darsVencidos ?? '0';
+    document.getElementById('stat-receita').innerText        = `R$ ${Number(stats.receitaPendente || 0).toFixed(2).replace('.',',')}`;
 
-            const devedoresList = document.getElementById('maiores-devedores-list');
-            if (stats.maioresDevedores && stats.maioresDevedores.length > 0) {
-                let devedoresHtml = '';
-                stats.maioresDevedores.forEach(item => {
-                    devedoresHtml += `<li class="list-group-item d-flex justify-content-between align-items-center">
-                        <small>${item.nome_empresa}</small>
-                        <span class="badge bg-danger rounded-pill">R$ ${Number(item.total_devido).toFixed(2).replace('.',',')}</span>
-                    </li>`;
-                });
-                devedoresList.innerHTML = devedoresHtml;
-            } else {
-                devedoresList.innerHTML = '<li class="list-group-item text-muted text-center">Nenhum devedor encontrado.</li>';
-            }
+    const resumoBody = document.getElementById('resumo-mensal-body');
+    if (stats.resumoMensal && stats.resumoMensal.length > 0) {
+      const meses = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+      resumoBody.innerHTML = stats.resumoMensal.map(item => `
+        <tr>
+          <td><strong>${meses[(item.mes_referencia||1)-1]}/${item.ano_referencia}</strong></td>
+          <td>${item.emitidas ?? 0}</td>
+          <td>${item.pagas ?? 0}</td>
+          <td><span class="text-danger fw-bold">${item.vencidas ?? 0}</span></td>
+        </tr>
+      `).join('');
+    } else {
+      resumoBody.innerHTML = '<tr><td colspan="4" class="text-muted text-center">Nenhum dado mensal para exibir.</td></tr>';
+    }
 
-        } catch (error) {
-            console.error('--- ERRO DETALHADO AO CARREGAR DASHBOARD ---');
-            console.error('O objeto de erro completo é:', error);
-            console.error('-------------------------------------------');
-            alert('Ocorreu um erro CRÍTICO ao carregar os dados. Por favor, abra o console (F12) e envie uma captura de tela do erro detalhado.');
-        }
-    };
-    </script>
+    const devedoresList = document.getElementById('maiores-devedores-list');
+    if (stats.maioresDevedores && stats.maioresDevedores.length > 0) {
+      devedoresList.innerHTML = stats.maioresDevedores.map(item => `
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+          <small>${item.nome_empresa}</small>
+          <span class="badge bg-danger rounded-pill">R$ ${Number(item.total_devido || 0).toFixed(2).replace('.',',')}</span>
+        </li>
+      `).join('');
+    } else {
+      devedoresList.innerHTML = '<li class="list-group-item text-muted text-center">Nenhum devedor encontrado.</li>';
+    }
+
+  } catch (error) {
+    console.error('--- ERRO DETALHADO AO CARREGAR DASHBOARD ---');
+    console.error(error);
+    alert('Ocorreu um erro ao carregar os dados do dashboard.');
+  }
+};
+</script>
 
 </body>
 </html>
