@@ -23,30 +23,70 @@ function buildHttpsAgent() {
     return new https.Agent({ rejectUnauthorized: false });
   }
 
-  const caPath = process.env.SEFAZ_CA_PATH;
-  if (!caPath) {
-    console.warn('[SEFAZ][TLS] SEFAZ_CA_PATH não definido. Usando store padrão do sistema.');
+  // Bundle raiz do sistema (Debian/Ubuntu)
+  const systemCABundle = '/etc/ssl/certs/ca-certificates.crt';
+  const customCAPath = process.env.SEFAZ_CA_PATH;
+
+  const caList = [];
+
+  // 1) Adiciona CA do sistema
+  try {
+    const sys = fs.readFileSync(systemCABundle);
+    caList.push(sys);
+    console.log('[SEFAZ][TLS] CA do sistema incluída:', systemCABundle);
+  } catch {
+    console.warn('[SEFAZ][TLS] CA do sistema não encontrada em', systemCABundle);
+  }
+
+  // 2) Adiciona sua CA custom (cadeia sem o LEAF)
+  if (customCAPath) {
+    try {
+      const custom = fs.readFileSync(customCAPath);
+      caList.push(custom);
+      console.log('[SEFAZ][TLS] CA custom incluída:', customCAPath);
+    } catch (e) {
+      console.error('[SEFAZ][TLS] Falha lendo CA custom em', customCAPath, '-', e.message);
+    }
+  } else {
+    console.warn('[SEFAZ][TLS] SEFAZ_CA_PATH não definido; confiando apenas na CA do sistema.');
+  }
+
+  // Se nenhuma CA foi lida, usa CAs padrão do Node
+  if (caList.length === 0) {
+    console.warn('[SEFAZ][TLS] Nenhuma CA carregada; usando CAs padrão do Node.');
     return new https.Agent({ rejectUnauthorized: true });
   }
 
+  // Sugestão extra para alguns LB/SNI: calcule o servername a partir da URL
+  let servername;
   try {
-    const ca = fs.readFileSync(caPath);
-    console.log('[SEFAZ][TLS] Usando CA em', caPath);
-    return new https.Agent({ ca, rejectUnauthorized: true });
-  } catch (e) {
-    console.error('[SEFAZ][TLS] Falha lendo CA em', caPath, '-', e.message);
-    return new https.Agent({ rejectUnauthorized: true });
-  }
+    const base = resolveBaseUrl();
+    servername = new URL(base).hostname;
+  } catch (_) {}
+
+  return new https.Agent({
+    ca: caList,
+    rejectUnauthorized: true,
+    servername
+  });
 }
 
 /**
  * Emite guia na SEFAZ/AL (manual v2.1.0).
  * Requer header 'appToken'.
+ *
+ * userForSefaz: { documento: 'CNPJ_14', nomeRazaoSocial: '...' }
+ * dar: { mes_referencia, ano_referencia, valor, data_vencimento, codigo_receita? }
  */
 async function emitirGuiaSefaz(userForSefaz, dar) {
   const baseURL = resolveBaseUrl();
   const endpoint = process.env.SEFAZ_EMISSAO_PATH || '/api/public/guia/emitir';
   const url = baseURL + endpoint;
+
+  // (opcional) também injeta a CA no ambiente do Node
+  if (process.env.SEFAZ_CA_PATH && !process.env.NODE_EXTRA_CA_CERTS) {
+    process.env.NODE_EXTRA_CA_CERTS = process.env.SEFAZ_CA_PATH;
+  }
 
   const httpsAgent = buildHttpsAgent();
 
@@ -83,7 +123,9 @@ async function emitirGuiaSefaz(userForSefaz, dar) {
         competencia: { mes, ano },
         valorPrincipal,
         dataVencimento: dataVencimento
-        // Se a receita exigir documento de origem, incluir aqui.
+        // Se a receita exigir documento de origem, inclua:
+        // codigoTipoDocumentoOrigem: ...,
+        // numeroDocumentoOrigem: ...,
       }
     ],
     dataLimitePagamento: dataVencimento,
@@ -97,8 +139,9 @@ async function emitirGuiaSefaz(userForSefaz, dar) {
     const t0 = Date.now();
     try {
       const resp = await axios.post(url, payload, {
-        httpsAgent, // <- AGENTE TLS AQUI
-        timeout: Number(process.env.SEFAZ_TIMEOUT_MS || 15000),
+        httpsAgent,
+        timeout: Number(process.env.SEFAZ_TIMEOUT_MS || 30000), // 30s
+        family: 4, // força IPv4
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -110,9 +153,11 @@ async function emitirGuiaSefaz(userForSefaz, dar) {
       console.log('[SEFAZ] status:', resp.status, 'tempo(ms):', Date.now() - t0);
 
       if (resp.status >= 200 && resp.status < 300) {
-        return resp.data; // { numeroGuia, pdfBase64 }
+        // Esperado: { numeroGuia, pdfBase64 }
+        return resp.data;
       }
 
+      // Log detalhado quando não é 2xx
       console.error('----------------- ERRO DETALHADO -----------------');
       console.error('Mensagem:', `Request failed with status code ${resp.status}`);
       console.error('Status:', resp.status);
