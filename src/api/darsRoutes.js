@@ -73,31 +73,31 @@ router.post('/:id/emitir', authMiddleware, async (req, res) => {
     );
     if (!dar) return res.status(404).json({ error: 'DAR não encontrado.' });
 
-    // Busca permissionário
+    // Busca somente os campos existentes (sem CPF)
     const userRow = await dbGetAsync(
-      `SELECT id, nome_empresa, cnpj, cpf FROM permissionarios WHERE id = ?`,
+      `SELECT id, nome_empresa, cnpj FROM permissionarios WHERE id = ?`,
       [userId]
     );
     if (!userRow) return res.status(404).json({ error: 'Permissionário não encontrado.' });
 
-    // Normaliza doc (CNPJ preferencialmente; senão CPF)
-    const docRaw = userRow.cnpj || userRow.cpf || '';
+    // Normaliza o CNPJ
+    const docRaw = userRow.cnpj || '';
     const documento = onlyDigits(docRaw);
-    const tipoDocumento = docType(documento);
 
-    if (!documento || !tipoDocumento) {
+    if (!documento || documento.length !== 14) {
       return res.status(400).json({
-        error: `Documento do contribuinte ausente ou inválido (recebido: ${docRaw || 'undefined'})`
+        error: `CNPJ do permissionário ausente ou inválido (recebido: ${docRaw || 'undefined'})`
       });
     }
 
     const userForSefaz = {
       ...userRow,
-      documento,
-      tipoDocumento, // 'CNPJ' | 'CPF'
-      nomeRazaoSocial: userRow.nome_empresa || userRow.razao_social || 'Contribuinte'
+      documento,                 // <- usado pelo sefazService
+      tipoDocumento: docType(),  // sempre 'CNPJ'
+      nomeRazaoSocial: userRow.nome_empresa || 'Contribuinte'
     };
 
+    // Atualiza valores se vencido
     let guiaSource = dar;
     if (dar.status === 'Vencido') {
       const calculo = await calcularEncargosAtraso(dar);
