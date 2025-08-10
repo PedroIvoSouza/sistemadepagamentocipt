@@ -154,7 +154,7 @@
   <script>
     async function handleAdminLogin(e) {
       e.preventDefault();
-      const usuario = (document.getElementById('usuario')?.value || '').trim();
+      const usuario = (document.getElementById('usuario')?.value || '').trim(); // usuário OU e-mail
       const senha   = (document.getElementById('senha')?.value || '').trim();
       const box     = document.getElementById('message');
 
@@ -165,11 +165,14 @@
         return;
       }
 
+      // BACKEND espera { email, senha } → mapeia usuario -> email
+      const email = usuario;
+
       try {
-        const res = await fetch('/api/admin/login', {
+        const res = await fetch('/api/admin/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ usuario, senha })  // aceita usuário OU e-mail no backend
+          body: JSON.stringify({ email, senha })
         });
 
         const data = await res.json().catch(() => ({}));
@@ -178,8 +181,8 @@
           throw new Error(msg);
         }
 
-        // Se o backend retornar token, dá pra guardar:
-        // localStorage.setItem('adminToken', data.token);
+        // Se o backend retornar token, você pode guardar:
+        localStorage.setItem('adminToken', data.token);
 
         // Redireciona para o dashboard/admin
         window.location.href = '/admin/index.html';
