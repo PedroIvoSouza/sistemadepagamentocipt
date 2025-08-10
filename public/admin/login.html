@@ -185,7 +185,7 @@
         localStorage.setItem('adminToken', data.token);
 
         // Redireciona para o dashboard/admin
-        window.location.href = '/admin/index.html';
+        window.location.href = '/admin/dashboard.html';
       } catch (err) {
         if (box) {
           box.textContent = err.message || 'Não foi possível entrar. Tente novamente.';
