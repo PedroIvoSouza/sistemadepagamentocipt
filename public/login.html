@@ -155,52 +155,32 @@
   </div>
 
   <script src="https://unpkg.com/imask"></script>
-  <script src="https://unpkg.com/imask"></script>
 <script>
-document.addEventListener('DOMContentLoaded', () => {
-  // aplica máscara ao campo de CNPJ
-  const cnpjInput = IMask(
-    document.getElementById('cnpj'),
-    { mask: '00.000.000/0000-00' }
-  );
+async function handleLogin(e) {
+  e.preventDefault();
+  const rawCnpj = document.getElementById('cnpj').value || '';
+  const senha   = document.getElementById('senha').value || '';
 
-  document.getElementById('loginForm').addEventListener('submit', async (event) => {
-    event.preventDefault();
+  const cnpj = rawCnpj.replace(/\D/g, ''); // mantém só números
 
-    // pegamos o valor formatado (com pontos e barra)
-    const rawCnpj = document.getElementById('cnpj').value;
-    // e a senha
-    const senha = document.getElementById('senha').value;
-    const messageDiv = document.getElementById('message');
-    messageDiv.style.display = 'none';
+  try {
+    const response = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cnpj, senha }) // << aqui troca "login" por "cnpj"
+    });
 
-    try {
-      // aqui mudamos: em vez de { cnpj, senha } enviamos { login, senha }
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          login: rawCnpj,
-          senha: senha
-        })
-      });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data?.erro || data?.message || 'Falha no login');
 
-      const result = await response.json();
-
-      if (response.ok) {
-        // sucesso — guarda o token e redireciona
-        localStorage.setItem('authToken', result.token);
-        window.location.href = '/dashboard.html';
-      } else {
-        // exibe o erro retornado pela API
-        throw new Error(result.error || 'Login ou senha inválidos');
-      }
-    } catch (err) {
-      messageDiv.innerText = err.message;
-      messageDiv.style.display = 'block';
-    }
-  });
-});
+    // sucesso
+    window.location.href = '/index.html';
+  } catch (err) {
+    const el = document.getElementById('formError');
+    el.textContent = err.message;
+    el.style.display = 'block';
+  }
+}
 </script>
 </body>
 </html>
