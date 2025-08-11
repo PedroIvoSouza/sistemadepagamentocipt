@@ -338,6 +338,7 @@
       opt.value = c.id;
       opt.textContent = `${c.nome_razao_social} (${c.documento})`;
       opt.dataset.tipo = c.tipo_cliente;
+      opt.dataset.documento = c.documento; // <<< ADIÇÃO: guarda o documento no dataset
       clienteSelect.appendChild(opt);
     });
   } catch (e) {
@@ -588,8 +589,11 @@
         return { valor: valorNumerico, vencimento: `${a}-${m}-${d}` };
       });
 
+      const clienteSelecionado = clienteSelect.selectedOptions[0]; // <<< ADIÇÃO: obter option selecionada
+
       const body = {
-        idCliente: clienteSelect.value,
+        idCliente: clienteSelecionado.value,
+        documento: clienteSelecionado.dataset.documento, // <<< ADIÇÃO: enviar documento
         nomeEvento: document.getElementById('nome-evento').value,
         datasEvento: fp.selectedDates.map(d=>d.toISOString().split('T')[0]),
         tipoDescontoAuto: tipoDescontoAutoDisplay.value,
