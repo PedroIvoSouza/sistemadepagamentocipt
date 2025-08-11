@@ -125,68 +125,59 @@
   </div>
 
   <script>
-    async function handleAdminLogin(e) {
-      try {
-        e.preventDefault();
-      } catch(_) {}
+  async function handleAdminLogin(e) {
+    try { e.preventDefault(); } catch(_) {}
 
-      const usuario = (document.getElementById('usuario')?.value || '').trim();
-      const senha   = (document.getElementById('senha')?.value || '').trim();
-      const box     = document.getElementById('message');
-      const btn     = document.getElementById('btnEntrar');
+    const usuario = (document.getElementById('usuario')?.value || '').trim();
+    const senha   = (document.getElementById('senha')?.value || '').trim();
+    const box     = document.getElementById('message');
+    const btn     = document.getElementById('btnEntrar');
 
-      if (box) { box.style.display = 'none'; box.textContent = ''; }
-      if (!usuario || !senha) {
-        if (box) { box.textContent = 'Usuário/e-mail e senha são obrigatórios.'; box.style.display = 'block'; }
-        return false;
-      }
-
-      const email = usuario; // backend espera { email, senha }
-
-      try {
-        btn && (btn.disabled = true);
-        console.log('[LOGIN] Enviando /api/admin/auth/login', { emailMasked: email.replace(/(.).+(@?)/,'$1***$2') });
-
-        const res = await fetch('/api/admin/auth/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, senha })
-        });
-
-        const text = await res.text();
-        let data = {};
-        try { data = JSON.parse(text); } catch { /* se não for JSON, segue vazio */ }
-
-        console.log('[LOGIN] Status:', res.status, 'Body:', text);
-
-        if (!res.ok) {
-          const msg = data?.error || data?.erro || data?.message || `Falha no login (HTTP ${res.status})`;
-          throw new Error(msg);
-        }
-
-        if (!data?.token) {
-          throw new Error('Resposta sem token. Confira o backend.');
-        }
-
-        localStorage.setItem('adminToken', data.token);
-        window.location.href = '/admin/dashboard.html';
-        return false;
-      } catch (err) {
-        console.error('[LOGIN] Erro:', err);
-        if (box) {
-          box.textContent = err.message || 'Não foi possível entrar. Tente novamente.';
-          box.style.display = 'block';
-        } else {
-          alert(err.message || 'Não foi possível entrar. Tente novamente.');
-        }
-        return false;
-      } finally {
-        btn && (btn.disabled = false);
-      }
+    if (box) { box.style.display = 'none'; box.textContent = ''; }
+    if (!usuario || !senha) {
+      if (box) { box.textContent = 'Usuário/e-mail e senha são obrigatórios.'; box.style.display = 'block'; }
+      return false;
     }
 
-    // fallback: também prende o submit via JS
-    document.getElementById('adminLoginForm')?.addEventListener('submit', handleAdminLogin);
-  </script>
+    const email = usuario; // backend espera { email, senha }
+
+    try {
+      btn && (btn.disabled = true);
+
+      const res = await fetch('/api/admin/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, senha })
+      });
+
+      const text = await res.text();
+      let data = {};
+      try { data = JSON.parse(text); } catch {}
+
+      if (!res.ok) {
+        const msg = data?.error || data?.erro || data?.message || `Falha no login (HTTP ${res.status})`;
+        throw new Error(msg);
+      }
+      if (!data?.token) throw new Error('Resposta sem token. Confira o backend.');
+
+      // Salva nas DUAS chaves (compatibilidade com páginas antigas)
+      localStorage.setItem('adminToken', data.token);
+      localStorage.setItem('adminAuthToken', data.token);
+
+      // Vai pro dashboard
+      window.location.href = '/admin/dashboard.html';
+      return false;
+    } catch (err) {
+      if (box) { box.textContent = err.message || 'Não foi possível entrar. Tente novamente.'; box.style.display = 'block'; }
+      else { alert(err.message || 'Não foi possível entrar. Tente novamente.'); }
+      return false;
+    } finally {
+      btn && (btn.disabled = false);
+    }
+  }
+
+  // prende o submit
+  document.getElementById('adminLoginForm')?.addEventListener('submit', handleAdminLogin);
+</script>
 </body>
 </html>
