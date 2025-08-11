@@ -347,7 +347,7 @@
 }
     async function carregarEventos() {
       try {
-        const res = await fetch('/api/eventos',{ headers:{ Authorization:`Bearer ${token}` } });
+        const res = await fetch('/api/admin/eventos',{ headers:{ Authorization:`Bearer ${token}` } });
         const evs = await res.json();
         eventosTableBody.innerHTML = '';
         evs.forEach(ev=>{
@@ -600,7 +600,7 @@
       btn.disabled = true;
       btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Gerando...`;
       try {
-        const res = await fetch('/api/eventos',{
+        const res = await fetch('/api/admin/eventos',{
           method:'POST',
           headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${token}` },
           body: JSON.stringify(body)
