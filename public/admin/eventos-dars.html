@@ -603,65 +603,87 @@
     }
 
     // --- Lógica do Botão de Salvar (Submit) ---
-    form.addEventListener('submit', async e=>{
-      e.preventDefault();
-      
-      if(!validarFormularioCompleto()) {
-          alert('Corrija os erros indicados no formulário antes de salvar.');
-          return;
-      }
-      
-      const parcelas = parcelasMasks.map(({ valorMask, picker })=>{
-        const [d,m,a] = picker.input.value.split('/');
+    form.addEventListener('submit', async e => {
+    e.preventDefault();
+
+    if (!validarFormularioCompleto()) {
+        alert('Corrija os erros indicados no formulário antes de salvar.');
+        return;
+    }
+
+    // LÓGICA CORRIGIDA E MAIS ROBUSTA PARA OBTER OS DADOS DAS PARCELAS
+    const parcelas = parcelasMasks.map(({ valorMask, picker }) => {
+        const [d, m, a] = picker.input.value.split('/');
+        const vencimentoFormatado = (a && m && d) ? `${a}-${m}-${d}` : null;
+
+        // Tenta pegar o número diretamente. IMask retorna o número (ex: 1234.56)
         let valorNumerico = valorMask.number;
-        if (valorNumerico === 0 && valorMask.unmaskedValue) {
-            const valorParseado = parseFloat(valorMask.unmaskedValue.replace(/\./g, '').replace(',', '.'));
-            if (!isNaN(valorParseado)) valorNumerico = valorParseado;
+
+        // Se .number for 0 ou NaN, mas o campo não estiver vazio, tenta uma segunda vez
+        // usando o valor sem máscara (que no nosso caso é uma string com ponto, ex: "1234.56")
+        if ((!valorNumerico || isNaN(valorNumerico)) && valorMask.unmaskedValue) {
+            const valorParseado = parseFloat(valorMask.unmaskedValue);
+            if (!isNaN(valorParseado)) {
+                valorNumerico = valorParseado;
+            }
         }
-        return { valor: valorNumerico, vencimento: `${a}-${m}-${d}` };
-      });
 
-      // >>> RE-CÁLCULO para enviar ao backend <<<
-      const n  = fp.selectedDates.length;
-      const vb = calcularValorBruto(n);
-      const tipo = clienteSelect.selectedOptions[0]?.dataset.tipo || 'Geral';
-      const dm = parseFloat(descontoManualInput.value) || 0;
-      const vf = calcularValorFinal(vb, tipo, dm);
+        // Garante que o valor seja um número, ou 0 se tudo falhar.
+        return {
+            valor: valorNumerico || 0,
+            vencimento: vencimentoFormatado
+        };
+    });
 
-      const body = {
+    // O restante da lógica para montar o corpo da requisição e enviar
+    const n = fp.selectedDates.length;
+    const vb = calcularValorBruto(n);
+    const tipo = clienteSelect.selectedOptions[0]?.dataset.tipo || 'Geral';
+    const dm = parseFloat(descontoManualInput.value) || 0;
+    const vf = calcularValorFinal(vb, tipo, dm);
+
+    const body = {
         idCliente: clienteSelect.value,
         nomeEvento: document.getElementById('nome-evento').value,
-        datasEvento: fp.selectedDates.map(d=>d.toISOString().split('T')[0]),
+        datasEvento: fp.selectedDates.map(d => d.toISOString().split('T')[0]),
         tipoDescontoAuto: tipoDescontoAutoDisplay.value,
         descontoManualPercent: dm,
         totalDiarias: n,
         valorBruto: vb,
         valorFinal: vf,
-        parcelas
-      };
-      const btn = form.querySelector('button[type="submit"]');
-      btn.disabled = true;
-      btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Gerando...`;
-      try {
-        const res = await fetch('/api/admin/eventos',{
-          method:'POST',
-          headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${token}` },
-          body: JSON.stringify(body)
+        parcelas // <<< agora com a propriedade 'valor' incluída
+    };
+
+    const btn = form.querySelector('button[type="submit"]');
+    btn.disabled = true;
+    btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Gerando...`;
+
+    try {
+        const res = await fetch('/api/admin/eventos', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify(body)
         });
+
         const result = await res.json();
-        if(!res.ok) throw new Error(result.error);
+        if (!res.ok) {
+            // A mensagem de erro agora virá do backend (ex: soma não bate)
+            throw new Error(result.error || `Erro ${res.status}`);
+        }
+
         alert('Evento e DARs criados com sucesso!');
-        modal.style.display='none';
+        modal.style.display = 'none';
         carregarEventos();
-      } catch(err){
+
+    } catch (err) {
         formError.textContent = err.message;
         formError.classList.remove('d-none');
         formError.style.display = 'block';
-      } finally {
+    } finally {
         btn.disabled = false;
         btn.textContent = 'Salvar Evento e Gerar DARs';
-      }
-    });
+    }
+});
 
     // Modal de DARs: abrir/carregar/emitir
     async function abrirModalDARs(eventoId) {
