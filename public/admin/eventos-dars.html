@@ -362,21 +362,28 @@ window.onload = () => {
             evs.forEach(ev => {
                 const statusBg = ev.status === 'Pago' ? 'bg-success' : ev.status === 'Pendente' || ev.status === 'Emitido' ? 'bg-warning' : 'bg-danger';
                 const tr = document.createElement('tr');
-                tr.innerHTML = `
-                  <td>${ev.id}</td>
-                  <td>${ev.nome_evento}</td>
-                  <td>${ev.nome_cliente}</td>
-                  <td class="text-end">R$ ${parseFloat(ev.valor_final).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
-                  <td class="text-center"><span class="badge ${statusBg}">${ev.status}</span></td>
-                  <td class="text-center">
-                    <button class="btn btn-sm btn-outline-primary btn-dars" title="Ver DARs" data-evento-id="${ev.id}">
-                      <i class="bi bi-file-earmark-arrow-down"></i>
-                    </button>
-                    <button class="btn btn-sm btn-outline-danger btn-apagar" title="Apagar Evento" data-evento-id="${ev.id}" data-evento-nome="${ev.nome_evento}">
-                      <i class="bi bi-trash"></i>
-                    </button>
-                  </td>
-                `;
+                  tr.innerHTML = `
+                    <td>${ev.id}</td>
+                    <td>${ev.nome_evento}</td>
+                    <td>${ev.nome_cliente}</td>
+                    <td class="text-end">R$ ${parseFloat(ev.valor_final).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                    <td class="text-center"><span class="badge ${statusBg}">${ev.status}</span></td>
+                    
+                    <td class="text-center">
+                      <button class="btn btn-sm btn-outline-primary btn-dars" title="Ver DARs" data-evento-id="${ev.id}">
+                        <i class="bi bi-file-earmark-arrow-down"></i>
+                      </button>
+                    </td>
+
+                    <td class="text-center">
+                      <button class="btn btn-sm btn-outline-secondary btn-editar" title="Editar Evento" data-evento-id="${ev.id}">
+                        <i class="bi bi-pencil"></i>
+                      </button>
+                      <button class="btn btn-sm btn-outline-danger btn-apagar" title="Apagar Evento" data-evento-id="${ev.id}" data-evento-nome="${ev.nome_evento}">
+                        <i class="bi bi-trash"></i>
+                      </button>
+                    </td>
+                  `;
                 eventosTableBody.appendChild(tr);
             });
             document.querySelectorAll('.btn-dars').forEach(btn => {
