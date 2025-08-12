@@ -17,7 +17,6 @@ const dbRun = (sql, p = []) => new Promise((resolve, reject) => db.run(sql, p, f
 router.use(adminAuthMiddleware);
 
 router.post('/', async (req, res) => {
-  // Log para depuração. Veremos exatamente o que o backend recebe.
   console.log('[DEBUG] Recebido no backend /api/admin/eventos:', JSON.stringify(req.body, null, 2));
 
   const {
@@ -25,16 +24,13 @@ router.post('/', async (req, res) => {
     tipoDescontoAuto, descontoManualPercent, valorFinal, parcelas
   } = req.body;
 
-  // Validações mais robustas antes de tocar no banco de dados.
   if (!idCliente || !nomeEvento || !Array.isArray(parcelas) || parcelas.length === 0) {
-    return res.status(400).json({ error: 'Campos obrigatórios (cliente, nome do evento, parcelas) estão faltando.' });
+    return res.status(400).json({ error: 'Campos obrigatórios estão faltando.' });
   }
 
   const somaParcelas = parcelas.reduce((acc, p) => acc + (Number(p.valor) || 0), 0);
-  // Usamos uma pequena tolerância para comparações de ponto flutuante
   if (Math.abs(somaParcelas - valorFinal) > 0.01) {
       const errorMsg = `A soma das parcelas (R$ ${somaParcelas.toFixed(2)}) não corresponde ao Valor Final (R$ ${valorFinal.toFixed(2)}).`;
-      console.error(`[VALIDAÇÃO FALHOU] ${errorMsg}`);
       return res.status(400).json({ error: errorMsg });
   }
 
@@ -52,7 +48,6 @@ router.post('/', async (req, res) => {
         const valorParcela = Number(p.valor) || 0;
         const vencimentoISO = p.vencimento;
 
-        // Mensagens de erro mais específicas
         if (!vencimentoISO || !(new Date(vencimentoISO).getTime() > 0)) {
             throw new Error(`A data de vencimento da parcela ${i + 1} é inválida.`);
         }
@@ -65,7 +60,8 @@ router.post('/', async (req, res) => {
 
         await dbRun(`INSERT INTO DARs_Eventos (id_dar, id_evento, numero_parcela, valor_parcela, data_vencimento) VALUES (?, ?, ?, ?, ?)`, [darId, eventoId, i + 1, valorParcela, vencimentoISO]);
 
-        const cliente = await dbGet(`SELECT nome_razao_social, documento, endereco, cep, codigo_ibge_municipio FROM Clientes_Eventos WHERE id = ?`, [idCliente]);
+        // =================== CORREÇÃO 1: REMOVIDA A COLUNA INEXISTENTE DA CONSULTA ===================
+        const cliente = await dbGet(`SELECT nome_razao_social, documento, endereco, cep FROM Clientes_Eventos WHERE id = ?`, [idCliente]);
         if (!cliente) throw new Error(`Cliente com ID ${idCliente} não foi encontrado no banco.`);
 
         const documentoLimpo = onlyDigits(cliente.documento);
@@ -78,7 +74,8 @@ router.post('/', async (req, res) => {
                 codigoTipoInscricao: tipoInscricao,
                 numeroInscricao: documentoLimpo,
                 nome: cliente.nome_razao_social,
-                codigoIbgeMunicipio: Number(cliente.codigo_ibge_municipio),
+                // =================== CORREÇÃO 2: USANDO A NOVA VARIÁVEL DO .ENV ===================
+                codigoIbgeMunicipio: Number(process.env.COD_IBGE_MUNICIPIO),
                 descricaoEndereco: cliente.endereco,
                 numeroCep: onlyDigits(cliente.cep)
             },
@@ -108,7 +105,6 @@ router.post('/', async (req, res) => {
   }
 });
 
-// As outras rotas (GET, etc.) permanecem as mesmas.
 router.get('/', async (req, res) => {
   try {
     const sql = `SELECT e.id, e.nome_evento, e.valor_final, e.status, c.nome_razao_social AS nome_cliente FROM Eventos e JOIN Clientes_Eventos c ON e.id_cliente = c.id ORDER BY e.id DESC`;
