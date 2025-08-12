@@ -283,57 +283,78 @@ adminRouter.post('/', async (req, res) => {
 // ATUALIZAR (normaliza e valida CPF/CNPJ)
 adminRouter.put('/:id', (req, res) => {
   const { id } = req.params;
-  let {
-    nome_razao_social, tipo_pessoa, documento, email, telefone,
-    nome_responsavel, tipo_cliente, documento_responsavel,
-    cep, logradouro, numero, complemento, bairro, cidade, uf
-  } = req.body;
 
-  if (!nome_razao_social || !tipo_pessoa || !documento || !email || !tipo_cliente) {
+  // 1) Normalização + defaults seguros
+  const body = req.body || {};
+  const safe = {
+    nome_razao_social   : (body.nome_razao_social ?? body.nome ?? '').trim(),
+    tipo_pessoa         : String(body.tipo_pessoa ?? '').trim().toUpperCase(), // espera FISICA/JURIDICA
+    documento           : onlyDigits(body.documento ?? ''),
+    email               : (body.email ?? '').trim(),
+    telefone            : onlyDigits(body.telefone ?? ''),
+    nome_responsavel    : (body.nome_responsavel ?? '').trim(),
+    tipo_cliente        : (body.tipo_cliente ?? 'Geral').trim(),               // fallback p/ 'Geral'
+    documento_responsavel: onlyDigits(body.documento_responsavel ?? ''),
+    cep                 : onlyDigits(body.cep ?? ''),
+    logradouro          : (body.logradouro ?? '').trim(),
+    numero              : (body.numero ?? '').toString().trim(),
+    complemento         : (body.complemento ?? '').trim(),
+    bairro              : (body.bairro ?? '').trim(),
+    cidade              : (body.cidade ?? '').trim(),
+    uf                  : (body.uf ?? '').toString().trim().toUpperCase().slice(0,2),
+    // se vier endereço pronto, usamos; senão montamos
+    endereco            : (body.endereco ?? '').trim()
+  };
+
+  if (!safe.endereco) {
+    safe.endereco =
+      `${safe.logradouro || ''}, ${safe.numero || ''} ${safe.complemento || ''} - ` +
+      `${safe.bairro || ''}, ${safe.cidade || ''} - ${safe.uf || ''}, ${safe.cep || ''}`.replace(/\s+/g, ' ').trim();
+  }
+
+  // 2) Validação dos obrigatórios
+  if (!safe.nome_razao_social || !safe.tipo_pessoa || !safe.documento || !safe.email || !safe.tipo_cliente) {
     return res.status(400).json({ error: 'Campos obrigatórios estão faltando.' });
   }
 
-  const tipoNormalizado = mapTipoPessoa(tipo_pessoa);
-
-  documento = onlyDigits(documento);
+  // 3) Validação do documento de acordo com o tipo
   const docOk =
-    (tipoNormalizado === 'FISICA' && isCpf(documento)) ||
-    (tipoNormalizado === 'JURIDICA' && isCnpj(documento));
+    (safe.tipo_pessoa === 'FISICA'   && isCpf(safe.documento)) ||
+    (safe.tipo_pessoa === 'JURIDICA' && isCnpj(safe.documento));
 
   if (!docOk) {
     return res.status(400).json({ error: 'Documento do contribuinte ausente ou inválido (CPF/CNPJ).' });
   }
 
-  const documentoRespDigits = (tipoNormalizado === 'JURIDICA')
-    ? onlyDigits(documento_responsavel || '')
-    : null;
-
-  const enderecoCompleto =
-    `${logradouro || ''}, ${numero || ''} ${complemento || ''} - ${bairro || ''}, ${cidade || ''} - ${uf || ''}, ${cep || ''}`;
-
-  const sql = `UPDATE Clientes_Eventos SET 
-      nome_razao_social = ?, tipo_pessoa = ?, documento = ?, email = ?, 
+  // 4) Monta SQL/params (ordem EXATA das colunas)
+  const sql = `
+    UPDATE Clientes_Eventos SET
+      nome_razao_social = ?, tipo_pessoa = ?, documento = ?, email = ?,
       telefone = ?, nome_responsavel = ?, tipo_cliente = ?, documento_responsavel = ?,
       cep = ?, logradouro = ?, numero = ?, complemento = ?, bairro = ?, cidade = ?, uf = ?, endereco = ?
-    WHERE id = ?`;
+    WHERE id = ?
+  `;
 
   const params = [
-    nome_razao_social, tipoNormalizado, documento, email,
-    telefone || null, nome_responsavel || null, tipo_cliente, documentoRespDigits,
-    cep || null, logradouro || null, numero || null, complemento || null,
-    bairro || null, cidade || null, uf || null, enderecoCompleto || null, id
+    safe.nome_razao_social, safe.tipo_pessoa, safe.documento, safe.email,
+    safe.telefone, safe.nome_responsavel, safe.tipo_cliente, safe.documento_responsavel,
+    safe.cep, safe.logradouro, safe.numero, safe.complemento, safe.bairro, safe.cidade, safe.uf, safe.endereco,
+    id
   ];
 
+  // 5) Executa e LOGA o erro real do SQLite
   db.run(sql, params, function (err) {
     if (err) {
-      console.error('[ADMIN EVENTOS CLIENTES][PUT] SQL erro:', err.message, '| params:', params);
+      console.error('[EVENTOS-CLIENTES][UPDATE] ERRO SQLite:', err.message);
       if (err.message.includes('UNIQUE constraint failed')) {
         return res.status(409).json({ error: 'Já existe um cliente com este CPF/CNPJ ou E-mail.' });
       }
       return res.status(500).json({ error: 'Erro ao atualizar o cliente no banco de dados.' });
     }
-    if (this.changes === 0) return res.status(404).json({ error: 'Cliente de evento não encontrado.' });
-    res.json({ message: 'Cliente atualizado com sucesso.', id });
+    if (this.changes === 0) {
+      return res.status(404).json({ error: 'Cliente de evento não encontrado.' });
+    }
+    return res.json({ message: 'Cliente atualizado com sucesso.', id });
   });
 });
 
