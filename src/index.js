@@ -93,12 +93,40 @@ try {
       process.exit(1);
     }
     console.log('[INFO] Conectado ao banco de dados SQLite com sucesso.');
+
+    // 🔹 Após conectar, garante que as colunas existem
+    ensureClientesEventosColumns(db);
   });
 } catch (error) {
   console.error('[ERRO FATAL] Falha ao instanciar o banco de dados:', error.message);
   process.exit(1);
 }
 
+// Função para garantir colunas que seu update precisa
+function ensureClientesEventosColumns(db){
+  db.all(`PRAGMA table_info(Clientes_Eventos)`, [], (err, cols)=>{
+    if (err) { console.error('[DB] PRAGMA table_info falhou:', err.message); return; }
+    const names = new Set((cols||[]).map(c=> c.name.toLowerCase()));
+
+    const adds = [];
+    if (!names.has('cep'))         adds.push(`ALTER TABLE Clientes_Eventos ADD COLUMN cep TEXT`);
+    if (!names.has('logradouro'))  adds.push(`ALTER TABLE Clientes_Eventos ADD COLUMN logradouro TEXT`);
+    if (!names.has('numero'))      adds.push(`ALTER TABLE Clientes_Eventos ADD COLUMN numero TEXT`);
+    if (!names.has('complemento')) adds.push(`ALTER TABLE Clientes_Eventos ADD COLUMN complemento TEXT`);
+    if (!names.has('bairro'))      adds.push(`ALTER TABLE Clientes_Eventos ADD COLUMN bairro TEXT`);
+    if (!names.has('cidade'))      adds.push(`ALTER TABLE Clientes_Eventos ADD COLUMN cidade TEXT`);
+    if (!names.has('uf'))          adds.push(`ALTER TABLE Clientes_Eventos ADD COLUMN uf TEXT`);
+    if (!names.has('endereco'))    adds.push(`ALTER TABLE Clientes_Eventos ADD COLUMN endereco TEXT`);
+
+    (function runNext(i=0){
+      if (i>=adds.length) { console.log('[DB] Clientes_Eventos OK.'); return; }
+      db.run(adds[i], [], (e)=>{
+        if (e) console.warn('[DB] Migração ignorada/erro:', adds[i], '-', e.message);
+        runNext(i+1);
+      });
+    })();
+  });
+}
 // Inicia o servidor e o agendador de tarefas
 const server = app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}.`);
