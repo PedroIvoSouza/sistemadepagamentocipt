@@ -519,21 +519,25 @@ window.onload = () => {
   // =======================
   // APIs: clientes / eventos
   // =======================
-  async function carregarClientes(){
-    try{
-      const r = await fetch(API_CLIENTES_URL, { headers: AUTH_HEADERS });
-      const j = await r.json();
-      clientes = Array.isArray(j) ? j : [];
-      clienteSelect.innerHTML = '<option value="">Selecione um cliente...</option>';
-      clientes.forEach(c=>{
-        const opt = document.createElement('option');
-        opt.value = c.id;
-        opt.textContent = `${c.nome_razao_social} (${c.documento})`;
-        opt.dataset.tipo = c.tipo_cliente || 'Geral';
-        clienteSelect.appendChild(opt);
-      });
-    }catch(e){ console.error('Erro clientes', e); }
+ let clientesPromise = null;
+async function carregarClientes() {
+  try {
+    const res = await fetch(API_CLIENTES_URL, { headers: { Authorization: `Bearer ${token}` } });
+    const clientesData = await res.json();
+    clientes = Array.isArray(clientesData) ? clientesData : [];
+    clienteSelect.innerHTML = '<option value="">Selecione um cliente...</option>';
+    clientes.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.id;
+      opt.textContent = `${c.nome_razao_social} (${c.documento})`;
+      opt.dataset.tipo = c.tipo_cliente;
+      clienteSelect.appendChild(opt);
+    });
+  } catch (e) {
+    console.error('Erro ao carregar clientes:', e);
+    clienteSelect.innerHTML = '<option value="">(Falha ao carregar clientes)</option>';
   }
+}
 
   async function carregarEventos(){
     try{
@@ -626,50 +630,57 @@ window.onload = () => {
     return { id_cliente, nome_evento, tipo_desconto_auto, desconto_manual_percent, datas_evento, parcelas };
   }
 
-  async function editarEvento(eventoId){
-    if (!eventoId){ alert('ID inválido.'); return; }
-    try{
-      const raw = await fetchEventoById(eventoId);
-      const ev = normalizarEvento(raw);
+  async function editarEvento(eventoId) {
+  if (!eventoId) { alert('ID do evento inválido.'); return; }
+  try {
+    // garante que o select de clientes já está pronto
+    if (clientesPromise) await clientesPromise;
 
-      // reset UI/máscaras
-      form.reset(); fp.clear(); parcelasContainer.innerHTML='';
-      parcelasMasks.forEach(({valorMask,picker})=>{ try{valorMask.destroy()}catch{} try{picker.destroy()}catch{} });
-      parcelasMasks = [];
+    const raw = await fetchEventoById(eventoId);
+    const ev = normalizarEvento(raw);
 
-      // preencher
-      clienteSelect.value = ev.id_cliente || '';
-      document.getElementById('nome-evento').value = ev.nome_evento || '';
-      if (ev.datas_evento.length) fp.setDate(ev.datas_evento, true);
-      tipoDescontoAutoDisplay.value = ev.tipo_desconto_auto || (clienteSelect.selectedOptions[0]?.dataset.tipo || 'Geral');
-      descontoManualInput.value = ev.desconto_manual_percent || 0;
+    // reset UI/máscaras
+    form.reset(); fp.clear(); parcelasContainer.innerHTML = '';
+    parcelasMasks.forEach(({ valorMask, picker }) => { try{valorMask.destroy()}catch{} try{picker.destroy()}catch{} });
+    parcelasMasks = [];
 
-      if (ev.parcelas.length){
-        ev.parcelas.forEach((p,i)=>{
-          adicionarParcela();
-          const m = parcelasMasks[i];
-          const valNum = typeof p.valor==='number'
-            ? p.valor
-            : parseFloat(String(p.valor ?? p.parcela_valor ?? p.dar_valor ?? '0').replace(/\./g,'').replace(',','.'))||0;
-          m.valorMask.unmaskedValue = (valNum.toFixed(2)).replace('.',',');
+    // preenche
+    clienteSelect.value = ev.id_cliente || '';
+    document.getElementById('nome-evento').value = ev.nome_evento || '';
+    if (ev.datas_evento.length) fp.setDate(ev.datas_evento, true);
+    tipoDescontoAutoDisplay.value = ev.tipo_desconto_auto || (clienteSelect.selectedOptions[0]?.dataset.tipo || '');
+    descontoManualInput.value = ev.desconto_manual_percent || 0;
 
-          const venc = p.vencimento ?? p.data_vencimento ?? p.dar_venc ?? null;
-          if (venc) m.picker.setDate(venc, true);
-        });
-      } else {
+    if (ev.parcelas.length) {
+      ev.parcelas.forEach((p, i) => {
         adicionarParcela();
-      }
-
-      atualizarCalculos();
-      modoEdicao = true; editEventoId = eventoId;
-      form.querySelector('button[type="submit"]').textContent = 'Atualizar Evento';
-      modal.style.display='block';
-    }catch(err){
-      console.error('[editarEvento]', err);
-      alert(`Erro ao carregar evento: ${err.message}`);
+        const m = parcelasMasks[i];
+        const valNum = typeof p.valor === 'number'
+          ? p.valor
+          : parseFloat(String(p.valor ?? p.parcela_valor ?? p.dar_valor ?? '0').replace(/\./g,'').replace(',','.')) || 0;
+        m.valorMask.unmaskedValue = (valNum.toFixed(2)).replace('.', ',');
+        const venc = p.vencimento ?? p.data_vencimento ?? p.dar_venc ?? null;
+        if (venc) m.picker.setDate(venc, true);
+      });
+    } else {
+      adicionarParcela();
     }
-  }
 
+    atualizarCalculos();
+
+    // >>> marca modo edição e ajusta UI
+    modoEdicao = true;
+    editEventoId = eventoId;
+    document.getElementById('modal-title').textContent = `Editar Evento #${eventoId}`;
+    form.querySelector('button[type="submit"]').textContent = 'Atualizar Evento';
+
+    // abre modal
+    modal.style.display = 'block';
+  } catch (err) {
+    console.error('[editarEvento] Erro', err);
+    alert(`Erro ao carregar evento: ${err.message}`);
+  }
+}
   // =======================
   // DARs: listar / reemitir / baixar
   // =======================
@@ -927,19 +938,29 @@ window.onload = () => {
   // =======================
   // Abertura modal criação
   // =======================
-  addEventoBtn?.addEventListener('click', ()=>{
-    form.reset(); fp.clear(); parcelasContainer.innerHTML='';
-    parcelasMasks.forEach(({valorMask,picker})=>{ try{valorMask.destroy()}catch{} try{picker.destroy()}catch{} });
-    parcelasMasks=[];
-    adicionarParcela();
-    atualizarCalculos();
-    modoEdicao=false; editEventoId=null;
-    form.querySelector('button[type="submit"]').textContent='Salvar Evento e Gerar DARs';
-    modal.style.display='block';
-  });
+  addEventoBtn.addEventListener('click', () => {
+  form.reset();
+  fp.clear();
+  parcelasContainer.innerHTML = '';
+  if (parcelasMasks.length) {
+    parcelasMasks.forEach(({ valorMask, picker }) => { valorMask.destroy(); picker.destroy(); });
+  }
+  parcelasMasks = [];
+  adicionarParcela();
+  atualizarCalculos();
+
+  // garante modo criação
+  modoEdicao = false;
+  editEventoId = null;
+  document.getElementById('modal-title').textContent = 'Criar Novo Evento e Gerar DARs';
+  form.querySelector('button[type="submit"]').textContent = 'Salvar Evento e Gerar DARs';
+  modal.style.display = 'block';
+});
 
   clienteSelect.addEventListener('change', atualizarCalculos);
   descontoManualInput.addEventListener('input', atualizarCalculos);
+  clientesPromise = carregarClientes();
+
 
   // =======================
   // Boot

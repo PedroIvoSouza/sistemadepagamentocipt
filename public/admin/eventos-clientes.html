@@ -386,9 +386,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // alternar PF/PJ
   tipoPessoaSelect.addEventListener('change', ()=>{
-    limparDocumentoENome(); limparPessoaJuridica(); aplicarMascaras();
-  });
-
+  // não limpar documento automaticamente; só ajusta máscara e mostra/esconde responsavel
+  aplicarMascaras();
+  // se virou PF, limpa/reseta responsável
+  if (tipoPessoaSelect.value === 'PF') limparPessoaJuridica();
+});
   // CNPJ → auto preencher
   documentoInput.addEventListener('blur', async ()=>{
     if (tipoPessoaSelect.value !== 'PJ') return;
@@ -421,40 +423,57 @@ document.addEventListener('DOMContentLoaded', () => {
   // helpers de validação (caso ainda não estejam no arquivo)
 function cpfValido(cpf){cpf=(cpf||'').replace(/\D/g,'');if(cpf.length!==11||/^(\d)\1+$/.test(cpf))return false;let s=0,r;for(let i=1;i<=9;i++)s+=parseInt(cpf.substring(i-1,i),10)*(11-i);r=(s*10)%11;if(r===10||r===11)r=0;if(r!==parseInt(cpf.substring(9,10),10))return false;s=0;for(let i=1;i<=10;i++)s+=parseInt(cpf.substring(i-1,i),10)*(12-i);r=(s*10)%11;if(r===10||r===11)r=0;return r===parseInt(cpf.substring(10,11),10)}
 function cnpjValido(cnpj){cnpj=(cnpj||'').replace(/\D/g,'');if(cnpj.length!==14||/^(\d)\1+$/.test(cnpj))return false;const calc=(b)=>{let len=b.length,nums=b.substring(0,len-2).split('').map(n=>+n);const d=b.substring(len-2).split('').map(n=>+n);let p=len-7,s=0;for(let i=len-12;i>=0;i--){s+=nums[i]*p--;if(p<2)p=9}let r=s%11;r=(r<2)?0:11-r;if(r!==d[0])return false;nums.push(r);s=0;p=len-7;for(let i=len-11;i>=0;i--){s+=nums[i]*p--;if(p<2)p=9}r=s%11;r=(r<2)?0:11-r;return r===d[1]};return calc(cnpj)}
+function soDigitos(v){ return (v||'').replace(/\D/g,''); }
+function ehCPF(v){ return soDigitos(v).length === 11; }
+function ehCNPJ(v){ return soDigitos(v).length === 14; }
+
+function validarCamposCliente(){
+  const tipo = tipoPessoaSelect.value;
+  const doc  = soDigitos(documentoInput.value);
+  if (tipo === 'PF' && !ehCPF(doc)) {
+    alert('CPF inválido. Informe 11 dígitos.'); documentoInput.focus(); return false;
+  }
+  if (tipo === 'PJ' && !ehCNPJ(doc)) {
+    alert('CNPJ inválido. Informe 14 dígitos.'); documentoInput.focus(); return false;
+  }
+  // responsável é opcional, mas se vier, valida
+  const docResp = soDigitos(docRespInput.value);
+  if (tipo === 'PJ' && docResp && !ehCPF(docResp)) {
+    alert('CPF do responsável inválido (11 dígitos).'); docRespInput.focus(); return false;
+  }
+  // email required já está com required no form; confere rápido:
+  if (!emailInput.value || !emailInput.checkValidity()){
+    alert('Informe um e-mail válido.'); emailInput.focus(); return false;
+  }
+  return true;
+}
 
 form.addEventListener('submit', async (e)=>{
   e.preventDefault();
   if (!form.checkValidity()){ form.classList.add('was-validated'); return; }
+    if (!validarCamposCliente()) return;
 
-  const tipo   = tipoPessoaSelect.value;          // 'PF' | 'PJ'
-  const docRaw = (documentoInput.value||'').replace(/\D/g,'');
-  const ok = tipo==='PF' ? (docRaw.length===11 && cpfValido(docRaw))
-                         : (docRaw.length===14 && cnpjValido(docRaw));
-  if (!ok){ alert('Documento do contribuinte ausente ou inválido (CPF/CNPJ).'); documentoInput.focus(); return; }
-
-  const id  = (document.getElementById('cliente-id')?.value||'').trim();
+const id = clienteIdField.value;
   const url = id ? `${API_URL}/${id}` : API_URL;
   const method = id ? 'PUT' : 'POST';
 
-  const payloadBase = {
-    // nomes que seu front usa
-    nome_razao_social: (nomeRazaoInput.value||'').trim(),
+  const tipo = tipoPessoaSelect.value;
+  const body = {
+    nome_razao_social: nomeRazaoInput.value,
     tipo_pessoa: tipo,
-    documento: docRaw,
-    email: (emailInput.value||'').trim(),
-    telefone: (telefoneInput.value||'').replace(/\D/g,'') || null,
-    nome_responsavel: (nomeRespInput.value||'').trim() || null,
-    documento_responsavel: tipo==='PJ' ? ((docRespInput.value||'').replace(/\D/g,'') || null) : null,
+    documento: soDigitos(documentoInput.value),
+    email: emailInput.value,
+    telefone: soDigitos(telefoneInput.value),
+    nome_responsavel: tipo === 'PJ' ? (nomeRespInput.value || null) : null,
+    documento_responsavel: tipo === 'PJ' ? (soDigitos(docRespInput.value)||null) : null,
     tipo_cliente: tipoClienteSel.value,
-
-    // endereço
-    cep: (cepInput.value||'').replace(/\D/g,'') || null,
-    logradouro: (logradouroInput.value||'').trim() || null,
-    bairro: (bairroInput.value||'').trim() || null,
-    cidade: (cidadeInput.value||'').trim() || null,
-    uf: (ufInput.value||'').trim().toUpperCase() || null,
-    numero: (numeroInput.value||'').trim() || null,
-    complemento: (complInput.value||'').trim() || null,
+    cep: soDigitos(cepInput.value) || null,
+    logradouro: logradouroInput.value || null,
+    bairro: bairroInput.value || null,
+    cidade: cidadeInput.value || null,
+    uf: (ufInput.value||'').toUpperCase() || null,
+    numero: numeroInput.value || null,
+    complemento: complInput.value || null
   };
 
   // aliases que muitos backends esperam (não atrapalha se forem ignorados)
@@ -468,7 +487,6 @@ form.addEventListener('submit', async (e)=>{
     tipoCliente: tipoClienteSel.value
   };
 
-  const body = { ...payloadBase, ...aliases };
 
   // spinner no botão
   const submitBtn = document.querySelector('#cliente-modal .modal-footer button[form="cliente-form"]');
