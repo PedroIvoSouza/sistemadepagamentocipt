@@ -48,7 +48,7 @@ router.get('/', async (_req, res) => {
   }
 });
 
-// CRIAR evento + DARs (somente registro local)
+// criar (EMITINDO AS DARs NA HORA)
 router.post('/', async (req, res) => {
   const {
     idCliente, nomeEvento, datasEvento,
@@ -64,42 +64,117 @@ router.post('/', async (req, res) => {
   try {
     await dbRun('BEGIN TRANSACTION');
 
-    const eventoStmt = await dbRun(`
-      INSERT INTO Eventos (id_cliente, nome_evento, datas_evento, total_diarias, valor_bruto, tipo_desconto, desconto_manual, valor_final, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
-      idCliente, nomeEvento, JSON.stringify(datasEvento),
-      totalDiarias || 0, valorBruto || 0, tipoDescontoAuto || null,
-      descontoManualPercent || 0, valorFinal || 0, 'Pendente'
-    ]);
-
+    // 1) Evento
+    const eventoStmt = await dbRun(
+      `INSERT INTO Eventos (id_cliente, nome_evento, datas_evento, total_diarias, valor_bruto, tipo_desconto, desconto_manual, valor_final, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        idCliente,
+        nomeEvento,
+        JSON.stringify(datasEvento),
+        totalDiarias || 0,
+        valorBruto || 0,
+        tipoDescontoAuto || null,
+        descontoManualPercent || 0,
+        valorFinal || 0,
+        'Pendente'
+      ]
+    );
     const eventoId = eventoStmt.lastID;
 
+    // 2) Para cada parcela: cria DAR, vincula e EMITE na SEFAZ
     for (let i = 0; i < parcelas.length; i++) {
-  const p = parcelas[i];
+      const p = parcelas[i];
+      const valorParcela = Number(p.valor) || 0;
+      const vencimentoISO = p.vencimento; // esperado: YYYY-MM-DD
 
-  // Cria a DAR
-  const darStmt = await dbRun(
-    `INSERT INTO dars (valor, data_vencimento, status) VALUES (?, ?, ?)`,
-    [Number(p.valor) || 0, p.vencimento, 'Pendente']
-  );
-  const darId = darStmt.lastID;
+      // 2.1) cria DAR
+      const darStmt = await dbRun(
+        `INSERT INTO dars (valor, data_vencimento, status) VALUES (?, ?, ?)`,
+        [valorParcela, vencimentoISO, 'Pendente']
+      );
+      const darId = darStmt.lastID;
 
-  // Relaciona a DAR com o evento e registra a data de vencimento também
-  await dbRun(
-    `INSERT INTO DARs_Eventos (id_dar, id_evento, numero_parcela, valor_parcela, data_vencimento) VALUES (?, ?, ?, ?, ?)`,
-    [darId, eventoId, i + 1, Number(p.valor) || 0, p.vencimento]
-  );
-}
+      // 2.2) vincula DAR ao evento (com data_vencimento também na tabela de vínculo)
+      await dbRun(
+        `INSERT INTO DARs_Eventos (id_dar, id_evento, numero_parcela, valor_parcela, data_vencimento)
+         VALUES (?, ?, ?, ?, ?)`,
+        [darId, eventoId, i + 1, valorParcela, vencimentoISO]
+      );
+
+      // 2.3) busca os dados completos para emissão (join)
+      const row = await dbGet(
+        `
+        SELECT
+          d.id            AS dar_id,
+          d.valor         AS dar_valor,
+          d.data_vencimento AS dar_venc,
+          d.status        AS dar_status,
+
+          de.valor_parcela AS parcela_valor,
+          de.numero_parcela AS parcela_num,
+
+          e.id            AS evento_id,
+          e.nome_evento   AS evento_nome,
+          e.id_cliente    AS id_cliente,
+
+          c.id            AS cliente_id,
+          c.nome_razao_social AS nome_cliente,
+          c.tipo_pessoa,
+          c.documento,
+          c.endereco      AS cliente_endereco,
+          c.cep           AS cliente_cep,
+          c.codigo_ibge_municipio AS cliente_codigo_ibge
+        FROM dars d
+        JOIN DARs_Eventos de ON de.id_dar = d.id
+        JOIN Eventos e       ON e.id = de.id_evento
+        JOIN Clientes_Eventos c ON c.id = e.id_cliente
+        WHERE d.id = ? AND e.id = ?
+        `,
+        [darId, eventoId]
+      );
+
+      // 2.4) EMITE NA SEFAZ (pode lançar erro → rollback)
+      const retorno = await emitirDarByRow(row);
+
+      // 2.5) Atualiza DAR com dados retornados pela SEFAZ
+      // (ajuste os nomes conforme o que seu emitirGuiaSefaz retorna)
+      const {
+        numeroDocumento,
+        linhaDigitavel,
+        codigoBarras,
+        urlPdf,
+        status: statusRetorno
+      } = retorno || {};
+
+      await dbRun(
+        `UPDATE dars
+           SET numero_documento = COALESCE(?, numero_documento),
+               linha_digitavel  = COALESCE(?, linha_digitavel),
+               codigo_barras    = COALESCE(?, codigo_barras),
+               pdf_url          = COALESCE(?, pdf_url),
+               status           = COALESCE(?, status)
+         WHERE id = ?`,
+        [
+          numeroDocumento || null,
+          linhaDigitavel  || null,
+          codigoBarras    || null,
+          urlPdf          || null,
+          statusRetorno   || 'Pendente', // mantém 'Pendente' se serviço não retornar outro
+          darId
+        ]
+      );
+    }
 
     await dbRun('COMMIT');
-    res.status(201).json({ message: 'Evento e DARs criados com sucesso!', id: eventoId });
+    res.status(201).json({ message: 'Evento e DARs criados e emitidos com sucesso!', id: eventoId });
   } catch (err) {
-    console.error('[admin/eventos] criar erro:', err.message);
+    console.error('[admin/eventos] criar+emitir erro:', err.message);
     try { await dbRun('ROLLBACK'); } catch (_) {}
-    res.status(500).json({ error: 'Não foi possível criar o evento.' });
+    res.status(500).json({ error: 'Não foi possível criar/emitir as DARs do evento.' });
   }
 });
+
 
 // Helper: emitir uma DAR (monta payload SEFAZ e chama o serviço externo)
 async function emitirDarByRow(row) {
