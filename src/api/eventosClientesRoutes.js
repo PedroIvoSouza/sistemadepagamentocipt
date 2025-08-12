@@ -95,13 +95,16 @@ clientRouter.put('/me', (req, res) => {
   const params = [telefone, nomeResponsavel, cep, logradouro, numero, bairro, cidade, uf, enderecoCompleto, clienteId];
 
   db.run(sql, params, function (err) {
-    if (err) {
-      console.error('[ERRO] Ao atualizar perfil do cliente de evento:', err.message);
-      return res.status(500).json({ error: 'Erro ao atualizar os dados no banco de dados.' });
+  if (err) {
+    console.error('[EVENTOS-CLIENTES][UPDATE] ERRO SQLite:', err.message); // <— adicione isso
+    if (err.message.includes('UNIQUE constraint failed')) {
+      return res.status(409).json({ error: 'Já existe um cliente com este CPF/CNPJ ou E-mail.' });
     }
-    if (this.changes === 0) return res.status(404).json({ error: 'Usuário não encontrado.' });
-    res.json({ message: 'Perfil atualizado com sucesso!' });
-  });
+    return res.status(500).json({ error: 'Erro ao atualizar o cliente no banco de dados.' });
+  }
+  if (this.changes === 0) return res.status(404).json({ error: 'Cliente de evento não encontrado.' });
+  res.json({ message: 'Cliente atualizado com sucesso.', id });
+});
 });
 
 clientRouter.post('/change-password', (req, res) => {
