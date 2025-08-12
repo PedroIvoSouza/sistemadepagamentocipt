@@ -520,23 +520,24 @@ window.onload = () => {
   // APIs: clientes / eventos
   // =======================
  let clientesPromise = null;
-async function carregarClientes() {
-  try {
-    const res = await fetch(API_CLIENTES_URL, { headers: { Authorization: `Bearer ${token}` } });
-    const clientesData = await res.json();
-    clientes = Array.isArray(clientesData) ? clientesData : [];
+let clientesCarregados = false;
+async function carregarClientes(){
+  clientesCarregados = false;
+  try{
+    const res = await fetch(API_CLIENTES_URL, { headers:{ Authorization:`Bearer ${token}` } });
+    const data = await res.json();
+    clientes = data || [];
     clienteSelect.innerHTML = '<option value="">Selecione um cliente...</option>';
-    clientes.forEach(c => {
+    clientes.forEach(c=>{
       const opt = document.createElement('option');
       opt.value = c.id;
       opt.textContent = `${c.nome_razao_social} (${c.documento})`;
       opt.dataset.tipo = c.tipo_cliente;
       clienteSelect.appendChild(opt);
     });
-  } catch (e) {
-    console.error('Erro ao carregar clientes:', e);
-    clienteSelect.innerHTML = '<option value="">(Falha ao carregar clientes)</option>';
-  }
+    clientesCarregados = true;
+  }catch(e){ console.error(e); }
+  return clientesCarregados;
 }
 
   async function carregarEventos(){
@@ -630,54 +631,48 @@ async function carregarClientes() {
     return { id_cliente, nome_evento, tipo_desconto_auto, desconto_manual_percent, datas_evento, parcelas };
   }
 
-  async function editarEvento(eventoId) {
-  if (!eventoId) { alert('ID do evento inválido.'); return; }
-  try {
-    // garante que o select de clientes já está pronto
-    if (clientesPromise) await clientesPromise;
+  async function editarEvento(eventoId){
+  if (!eventoId){ alert('ID inválido'); return; }
+  // garante clientes
+  if (!clientesCarregados) await carregarClientes();
 
+  try{
     const raw = await fetchEventoById(eventoId);
-    const ev = normalizarEvento(raw);
+    const ev  = normalizarEvento(raw);
 
-    // reset UI/máscaras
-    form.reset(); fp.clear(); parcelasContainer.innerHTML = '';
-    parcelasMasks.forEach(({ valorMask, picker }) => { try{valorMask.destroy()}catch{} try{picker.destroy()}catch{} });
+    // reset UI
+    form.reset(); fp.clear(); parcelasContainer.innerHTML='';
+    parcelasMasks.forEach(({valorMask,picker})=>{ try{valorMask.destroy()}catch{} try{picker.destroy()}catch{} });
     parcelasMasks = [];
 
-    // preenche
+    // preencher
     clienteSelect.value = ev.id_cliente || '';
     document.getElementById('nome-evento').value = ev.nome_evento || '';
-    if (ev.datas_evento.length) fp.setDate(ev.datas_evento, true);
+    if (Array.isArray(ev.datas_evento) && ev.datas_evento.length) fp.setDate(ev.datas_evento, true);
     tipoDescontoAutoDisplay.value = ev.tipo_desconto_auto || (clienteSelect.selectedOptions[0]?.dataset.tipo || '');
     descontoManualInput.value = ev.desconto_manual_percent || 0;
 
-    if (ev.parcelas.length) {
-      ev.parcelas.forEach((p, i) => {
+    if (ev.parcelas && ev.parcelas.length){
+      ev.parcelas.forEach((p,i)=>{
         adicionarParcela();
         const m = parcelasMasks[i];
-        const valNum = typeof p.valor === 'number'
-          ? p.valor
-          : parseFloat(String(p.valor ?? p.parcela_valor ?? p.dar_valor ?? '0').replace(/\./g,'').replace(',','.')) || 0;
-        m.valorMask.unmaskedValue = (valNum.toFixed(2)).replace('.', ',');
+        const val = typeof p.valor==='number' ? p.valor : parseFloat(String(p.valor ?? p.parcela_valor ?? p.dar_valor ?? '0').replace(/\./g,'').replace(',','.'))||0;
+        m.valorMask.unmaskedValue = val.toFixed(2).replace('.',',');
         const venc = p.vencimento ?? p.data_vencimento ?? p.dar_venc ?? null;
         if (venc) m.picker.setDate(venc, true);
       });
-    } else {
+    }else{
       adicionarParcela();
     }
 
     atualizarCalculos();
-
-    // >>> marca modo edição e ajusta UI
     modoEdicao = true;
     editEventoId = eventoId;
-    document.getElementById('modal-title').textContent = `Editar Evento #${eventoId}`;
+    document.getElementById('modal-title').textContent = 'Editar Evento e DARs';
     form.querySelector('button[type="submit"]').textContent = 'Atualizar Evento';
-
-    // abre modal
     modal.style.display = 'block';
-  } catch (err) {
-    console.error('[editarEvento] Erro', err);
+  }catch(err){
+    console.error(err);
     alert(`Erro ao carregar evento: ${err.message}`);
   }
 }

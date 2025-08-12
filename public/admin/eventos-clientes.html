@@ -221,6 +221,9 @@
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://unpkg.com/imask"></script>
   <script>
+const toApiTipo = (v) => v === 'PF' ? 'FISICA' : v === 'PJ' ? 'JURIDICA' : (String(v||'').toUpperCase());
+const fromApiTipo = (v) => (String(v||'').toUpperCase() === 'FISICA' ? 'PF' : 'PJ');
+const soDig = s => (s||'').replace(/\D/g,'');
 document.addEventListener('DOMContentLoaded', () => {
   const token = localStorage.getItem('adminAuthToken');
   if (!token) { window.location.href = '/admin/login.html'; return; }
@@ -351,45 +354,45 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function setupModal(cliente=null){
-    form.reset();
-    form.classList.remove('was-validated');
+  form.reset();
+  form.classList.remove('was-validated');
 
-    if (cliente){
-      modalTitle.textContent = 'Editar Cliente';
-      clienteIdField.value = cliente.id;
-      tipoPessoaSelect.value = cliente.tipo_pessoa || 'PJ';
-      documentoInput.value   = cliente.documento || '';
-      nomeRazaoInput.value   = cliente.nome_razao_social || '';
-      emailInput.value       = cliente.email || '';
-      telefoneInput.value    = cliente.telefone || '';
-      tipoClienteSel.value   = cliente.tipo_cliente || 'Geral';
+  if (cliente){
+    modalTitle.textContent = 'Editar Cliente';
+    clienteIdField.value = cliente.id;
+    // converte 'FISICA'/'JURIDICA' -> 'PF'/'PJ'
+    const tipoFront = fromApiTipo(cliente.tipo_pessoa || cliente.tipo || 'JURIDICA');
+    tipoPessoaSelect.value = tipoFront;
 
-      nomeRespInput.value    = cliente.nome_responsavel || '';
-      docRespInput.value     = cliente.documento_responsavel || '';
+    documentoInput.value   = cliente.documento || '';
+    nomeRazaoInput.value   = cliente.nome_razao_social || '';
+    emailInput.value       = cliente.email || '';
+    telefoneInput.value    = cliente.telefone || '';
+    tipoClienteSel.value   = cliente.tipo_cliente || 'Geral';
 
-      cepInput.value         = cliente.cep || '';
-      logradouroInput.value  = cliente.logradouro || '';
-      numeroInput.value      = cliente.numero || '';
-      complInput.value       = cliente.complemento || '';
-      bairroInput.value      = cliente.bairro || '';
-      cidadeInput.value      = cliente.cidade || '';
-      ufInput.value          = cliente.uf || '';
-    } else {
-      modalTitle.textContent = 'Adicionar Novo Cliente';
-      clienteIdField.value = '';
-      limparEndereco(); limparPessoaJuridica();
-    }
-    aplicarMascaras();
+    nomeRespInput.value    = cliente.nome_responsavel || '';
+    docRespInput.value     = cliente.documento_responsavel || '';
+
+    cepInput.value         = cliente.cep || '';
+    logradouroInput.value  = cliente.logradouro || '';
+    numeroInput.value      = cliente.numero || '';
+    complInput.value       = cliente.complemento || '';
+    bairroInput.value      = cliente.bairro || '';
+    cidadeInput.value      = cliente.cidade || '';
+    ufInput.value          = cliente.uf || '';
+  } else {
+    modalTitle.textContent = 'Adicionar Novo Cliente';
+    clienteIdField.value = '';
   }
+  aplicarMascaras();
+}
 
   document.getElementById('add-cliente-btn')?.addEventListener('click', ()=> setupModal(null));
 
   // alternar PF/PJ
   tipoPessoaSelect.addEventListener('change', ()=>{
-  // não limpar documento automaticamente; só ajusta máscara e mostra/esconde responsavel
+  // só atualiza máscaras e campos exclusivos de PJ; não zere documento/nome!
   aplicarMascaras();
-  // se virou PF, limpa/reseta responsável
-  if (tipoPessoaSelect.value === 'PF') limparPessoaJuridica();
 });
   // CNPJ → auto preencher
   documentoInput.addEventListener('blur', async ()=>{
@@ -451,37 +454,16 @@ function validarCamposCliente(){
 form.addEventListener('submit', async (e)=>{
   e.preventDefault();
 
-  // helpers locais
-  const soDigitos = v => (v||'').replace(/\D/g,'');
-  const ehCPF  = v => soDigitos(v).length === 11;
-  const ehCNPJ = v => soDigitos(v).length === 14;
+  const tipoFront = tipoPessoaSelect.value; // 'PF' ou 'PJ'
+  const tipoApi   = toApiTipo(tipoFront);   // 'FISICA' ou 'JURIDICA'
+  const docNum    = soDig(documentoInput.value);
+  const docResp   = soDig(docRespInput.value);
 
-  // pega os valores crus do formulário
-  const tipo   = tipoPessoaSelect.value;
-  const docRaw = documentoInput.value;         // <-- FALTAVA ISSO
-  const docNum = soDigitos(docRaw);
-
-  // validações
-  if (tipo === 'PF' && !ehCPF(docNum)){
-    alert('CPF inválido. Informe 11 dígitos.');
-    documentoInput.focus();
-    return;
-  }
-  if (tipo === 'PJ' && !ehCNPJ(docNum)){
-    alert('CNPJ inválido. Informe 14 dígitos.');
-    documentoInput.focus();
-    return;
-  }
-  const docRespNum = soDigitos(docRespInput.value);
-  if (tipo === 'PJ' && docRespInput.value && docRespNum.length && !ehCPF(docRespNum)){
-    alert('CPF do responsável inválido (11 dígitos).');
-    docRespInput.focus();
-    return;
-  }
-  if (!form.checkValidity()){
-    form.classList.add('was-validated');
-    return;
-  }
+  // validações simples
+  if (tipoApi === 'FISICA'  && docNum.length !== 11){ alert('CPF inválido (11 dígitos).'); return; }
+  if (tipoApi === 'JURIDICA'&& docNum.length !== 14){ alert('CNPJ inválido (14 dígitos).'); return; }
+  if (tipoApi === 'JURIDICA' && docResp && docResp.length !== 11){ alert('CPF do responsável inválido.'); return; }
+  if (!form.checkValidity()){ form.classList.add('was-validated'); return; }
 
   const id     = clienteIdField.value;
   const url    = id ? `${API_URL}/${id}` : API_URL;
@@ -489,41 +471,24 @@ form.addEventListener('submit', async (e)=>{
 
   const body = {
     nome_razao_social: nomeRazaoInput.value,
-    tipo_pessoa: tipo,
-    documento: docNum,                                   // usa docNum normalizado
+    tipo_pessoa: tipoApi,                // <- BACKEND ESPERA ASSIM
+    documento: docNum,                   // <- só dígitos
     email: emailInput.value,
-    telefone: soDigitos(telefoneInput.value),
-    nome_responsavel: tipo === 'PJ' ? (nomeRespInput.value || null) : null,
-    documento_responsavel: tipo === 'PJ' ? (docRespNum || null) : null,
+    telefone: soDig(telefoneInput.value),
+    nome_responsavel: tipoApi==='JURIDICA' ? (nomeRespInput.value || null) : null,
     tipo_cliente: tipoClienteSel.value,
-    cep: soDigitos(cepInput.value) || null,
+    documento_responsavel: tipoApi==='JURIDICA' ? (docResp || null) : null,
+    cep: soDig(cepInput.value) || null,
     logradouro: logradouroInput.value || null,
+    numero: numeroInput.value || null,
+    complemento: complInput.value || null,
     bairro: bairroInput.value || null,
     cidade: cidadeInput.value || null,
-    uf: (ufInput.value||'').toUpperCase() || null,
-    numero: numeroInput.value || null,
-    complemento: complInput.value || null
+    uf: (ufInput.value||'').toUpperCase() || null
   };
 
-  // aliases que muitos backends esperam (não atrapalha se forem ignorados)
-  const aliases = {
-    cpf_cnpj: docRaw,
-    contribuinte_documento: docRaw,
-    documento_contribuinte: docRaw,
-    cpf:  tipo==='PF' ? docRaw : undefined,
-    cnpj: tipo==='PJ' ? docRaw : undefined,
-    tipoPessoa: tipo,            // camelCase
-    tipoCliente: tipoClienteSel.value
-  };
-
-
-  // spinner no botão
-  const submitBtn = document.querySelector('#cliente-modal .modal-footer button[form="cliente-form"]');
-  if (submitBtn){
-    submitBtn.disabled = true;
-    submitBtn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Salvando...`;
-  }
-
+  // salva
+  submitBtn.disabled = true; submitBtn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Salvando...`;
   try{
     const r = await fetch(url, {
       method,
@@ -540,7 +505,7 @@ form.addEventListener('submit', async (e)=>{
   }catch(err){
     alert(`Erro ao salvar: ${err.message}`);
   }finally{
-    if (submitBtn){ submitBtn.disabled=false; submitBtn.textContent='Salvar'; }
+    submitBtn.disabled=false; submitBtn.textContent='Salvar';
   }
 });
 
