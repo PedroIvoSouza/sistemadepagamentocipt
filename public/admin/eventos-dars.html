@@ -54,9 +54,9 @@
         <li class="nav-item"><a class="nav-link" href="/admin/dars.html"><i class="bi bi-file-earmark-text-fill"></i>DARs</a></li>
         <li class="nav-item menu-dropdown">
           <a class="nav-link" href="#"><i class="bi bi-calendar-event-fill"></i>Eventos</a>
-          <ul class="submenu" style="list-style: none; padding-left: 20px; display: none;">
+          <ul class="submenu" style="list-style: none; padding-left: 20px; display: block;">
             <li><a class="nav-link" href="/admin/eventos-clientes.html">Clientes de Eventos</a></li>
-            <li><a class="nav-link" href="/admin/eventos-dars.html">DARs de Eventos</a></li>
+            <li><a class="nav-link active" href="/admin/eventos-dars.html">DARs de Eventos</a></li>
           </ul>
         </li>
         <li class="nav-item"><a class="nav-link" href="/admin/admin-management.html"><i class="bi bi-person-badge-fill"></i>Administradores</a></li>
@@ -89,7 +89,7 @@
                     <th>Cliente</th>
                     <th class="text-end">Valor Final</th>
                     <th class="text-center">Status</th>
-                    <th class="text-center">DAR</th>
+                    <th class="text-center">DARs</th>
                     <th class="text-center">Ações</th>
                   </tr>
                 </thead>
@@ -103,127 +103,64 @@
   </div>
 
   <div id="evento-modal" class="modal">
-    <div class="modal-content">
-      <header class="d-flex justify-content-between align-items-center mb-3">
-        <h5 id="modal-title">Criar Novo Evento e Gerar DARs</h5>
-        <button id="close-modal-btn" class="btn-close"></button>
-      </header>
-      <form id="evento-form">
-        <fieldset>
-          <legend>1. Dados do Evento</legend>
-          <div class="mb-3">
-            <label for="cliente-select" class="form-label">Cliente *</label>
-            <select id="cliente-select" class="form-select" required></select>
-          </div>
-          <div class="mb-3">
-            <label for="nome-evento" class="form-label">Nome do Evento *</label>
-            <input type="text" class="form-control" id="nome-evento" required>
-          </div>
-        </fieldset>
-
-        <fieldset>
-          <legend>2. Datas e Valores</legend>
-          <div class="mb-3">
-            <label for="datas-evento" class="form-label">Datas do Evento *</label>
-            <div class="input-group">
-              <input type="text" class="form-control" id="datas-evento" placeholder="Clique para selecionar as datas..." required>
-              <button class="btn btn-outline-secondary" type="button" id="datas-helper-btn"><i class="bi bi-magic"></i> Gerador de Datas</button>
+      <div class="modal-content">
+        <header class="d-flex justify-content-between align-items-center mb-3">
+          <h5 id="modal-title">Criar Novo Evento e Gerar DARs</h5>
+          <button id="close-modal-btn" class="btn-close"></button>
+        </header>
+        <form id="evento-form">
+          <fieldset>
+            <legend>1. Dados do Evento</legend>
+            <div class="mb-3">
+              <label for="cliente-select" class="form-label">Cliente *</label>
+              <select id="cliente-select" class="form-select" required></select>
             </div>
-          </div>
-          <div class="summary-row">
-            <span>Total de Diárias:</span> <strong id="total-diarias">0</strong>
-          </div>
-          <div class="summary-row">
-            <span>Valor Bruto (sem descontos):</span> <strong id="valor-bruto">R$ 0,00</strong>
-          </div>
-        </fieldset>
-
-        <fieldset>
-          <legend>3. Descontos</legend>
-          <div class="row">
-            <div class="col-md-6 mb-3">
-              <label class="form-label">Tipo de Desconto Automático</label>
-              <input type="text" id="tipo-desconto-auto" class="form-control" readonly>
+            <div class="mb-3">
+              <label for="nome-evento" class="form-label">Nome do Evento *</label>
+              <input type="text" class="form-control" id="nome-evento" required>
             </div>
-            <div class="col-md-6 mb-3">
-              <label for="desconto-manual" class="form-label">Desconto Manual (%)</label>
-              <input type="number" id="desconto-manual" class="form-control" min="0" max="100" step="0.01" value="0">
+          </fieldset>
+          <fieldset>
+            <legend>2. Datas e Valores</legend>
+            <div class="mb-3">
+              <label for="datas-evento" class="form-label">Datas do Evento *</label>
+              <div class="input-group">
+                <input type="text" class="form-control" id="datas-evento" placeholder="Clique para selecionar as datas..." required>
+                <button class="btn btn-outline-secondary" type="button" id="datas-helper-btn"><i class="bi bi-magic"></i> Gerador de Datas</button>
+              </div>
             </div>
+            <div class="summary-row"><span>Total de Diárias:</span> <strong id="total-diarias">0</strong></div>
+            <div class="summary-row"><span>Valor Bruto (sem descontos):</span> <strong id="valor-bruto">R$ 0,00</strong></div>
+          </fieldset>
+          <fieldset>
+            <legend>3. Descontos</legend>
+            <div class="row">
+              <div class="col-md-6 mb-3">
+                <label class="form-label">Tipo de Desconto Automático</label>
+                <input type="text" id="tipo-desconto-auto" class="form-control" readonly>
+              </div>
+              <div class="col-md-6 mb-3">
+                <label for="desconto-manual" class="form-label">Desconto Manual (%)</label>
+                <input type="number" id="desconto-manual" class="form-control" min="0" max="100" step="0.01" value="0">
+              </div>
+            </div>
+            <div class="summary-row final-value"><span>Valor Final a Pagar:</span> <strong id="valor-final">R$ 0,00</strong></div>
+          </fieldset>
+          <fieldset>
+            <legend>4. Parcelamento</legend>
+            <div id="parcelas-container" class="mb-3"></div>
+            <button type="button" id="add-parcela-btn" class="btn btn-sm btn-outline-secondary">Adicionar Parcela</button>
+            <div class="summary-row mt-3"><span>Total Parcelado:</span> <strong id="total-parcelado">R$ 0,00</strong></div>
+          </fieldset>
+          <div id="form-error" class="alert alert-danger d-none"></div>
+          <div class="text-end">
+            <button type="submit" class="btn btn-primary">Salvar Evento e Gerar DARs</button>
           </div>
-          <div class="summary-row final-value">
-            <span>Valor Final a Pagar:</span> <strong id="valor-final">R$ 0,00</strong>
-          </div>
-        </fieldset>
-
-        <fieldset>
-          <legend>4. Parcelamento</legend>
-          <div id="parcelas-container" class="mb-3"></div>
-          <button type="button" id="add-parcela-btn" class="btn btn-sm btn-outline-secondary">Adicionar Parcela</button>
-          <div class="summary-row mt-3">
-            <span>Total Parcelado:</span> <strong id="total-parcelado">R$ 0,00</strong>
-          </div>
-        </fieldset>
-        
-        <div id="form-error" class="alert alert-danger d-none"></div>
-
-        <div class="text-end">
-          <button type="submit" class="btn btn-primary">Salvar Evento e Gerar DARs</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <div id="datas-helper-modal" class="modal">
-    <div class="modal-content small">
-      <header class="d-flex justify-content-between align-items-center mb-3">
-        <h5>Assistente de Datas</h5>
-        <button id="close-helper-modal-btn" class="btn-close"></button>
-      </header>
-      <nav>
-        <div class="nav nav-tabs" id="nav-tab" role="tablist">
-          <button class="nav-link active" id="nav-dias-semana-tab" data-bs-toggle="tab" data-bs-target="#nav-dias-semana" type="button">Gerar por Dias da Semana</button>
-          <button class="nav-link" id="nav-colar-datas-tab" data-bs-toggle="tab" data-bs-target="#nav-colar-datas" type="button">Colar Datas</button>
-        </div>
-      </nav>
-      <div class="tab-content p-3 border border-top-0" id="nav-tabContent">
-        <div class="tab-pane fade show active" id="nav-dias-semana">
-          <p class="small text-muted">Selecione os dias da semana e o período para gerar as datas automaticamente.</p>
-          <div id="dias-semana-checkboxes" class="d-flex justify-content-around mb-3">
-            <div class="form-check"><input class="form-check-input" type="checkbox" value="1" id="dia-seg"><label class="form-check-label" for="dia-seg">Seg</label></div>
-            <div class="form-check"><input class="form-check-input" type="checkbox" value="2" id="dia-ter"><label class="form-check-label" for="dia-ter">Ter</label></div>
-            <div class="form-check"><input class="form-check-input" type="checkbox" value="3" id="dia-qua"><label class="form-check-label" for="dia-qua">Qua</label></div>
-            <div class="form-check"><input class="form-check-input" type="checkbox" value="4" id="dia-qui"><label class="form-check-label" for="dia-qui">Qui</label></div>
-            <div class="form-check"><input class="form-check-input" type="checkbox" value="5" id="dia-sex"><label class="form-check-label" for="dia-sex">Sex</label></div>
-            <div class="form-check"><input class="form-check-input" type="checkbox" value="6" id="dia-sab"><label class="form-check-label" for="dia-sab">Sáb</label></div>
-            <div class="form-check"><input class="form-check-input" type="checkbox" value="0" id="dia-dom"><label class="form-check-label" for="dia-dom">Dom</label></div>
-          </div>
-          <div class="row">
-            <div class="col"><input type="date" id="periodo-inicio" class="form-control"></div>
-            <div class="col"><input type="date" id="periodo-fim" class="form-control"></div>
-          </div>
-          <button id="gerar-datas-btn" class="btn btn-primary w-100 mt-3">Gerar</button>
-        </div>
-        <div class="tab-pane fade" id="nav-colar-datas">
-          <p class="small text-muted">Cole uma lista de datas (ex: 25/12/2025, 01/01/2026), separadas por vírgula, espaço ou linha.</p>
-          <textarea id="datas-textarea" class="form-control" rows="5"></textarea>
-          <button id="processar-datas-btn" class="btn btn-primary w-100 mt-3">Processar</button>
-        </div>
+        </form>
       </div>
-      <div class="text-end mt-3">
-        <button id="confirmar-datas-btn" class="btn btn-success">Confirmar Datas</button>
-      </div>
-    </div>
   </div>
-
-  <div id="dars-modal" class="modal">
-    <div class="modal-content small">
-      <header class="d-flex justify-content-between align-items-center mb-3">
-        <h5>DARs do Evento</h5>
-        <button id="close-dars-modal-btn" class="btn-close"></button>
-      </header>
-      <div id="dars-list"></div>
-    </div>
-  </div>
+  <div id="datas-helper-modal" class="modal"></div>
+  <div id="dars-modal" class="modal"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -232,26 +169,18 @@
   <script src="/js/admin-guard.js"></script>
   <script>
 window.onload = () => {
-    // ==================================================================
-    // FUNÇÃO AUXILIAR DEFINITIVA - A CHAVE DA SOLUÇÃO
-    // ==================================================================
+    // FUNÇÃO AUXILIAR DEFINITIVA
     function parseCurrency(valorString) {
-      if (!valorString || typeof valorString !== 'string') {
-        return 0;
-      }
-      const valorLimpo = valorString
-        .replace('R$', '')
-        .trim()
-        .replace(/\./g, '')
-        .replace(',', '.');
-      const valorNumerico = parseFloat(valorLimpo);
-      return isNaN(valorNumerico) ? 0 : valorNumerico;
+        if (!valorString || typeof valorString !== 'string') { return 0; }
+        const valorLimpo = valorString.replace('R$', '').trim().replace(/\./g, '').replace(',', '.');
+        const valorNumerico = parseFloat(valorLimpo);
+        return isNaN(valorNumerico) ? 0 : valorNumerico;
     }
 
     const token = localStorage.getItem('adminAuthToken');
     if (!token) { window.location.href = '/admin/login.html'; return; }
 
-    // --- LÓGICA DE MENU ---
+    // LÓGICA DE MENU
     const path = window.location.pathname;
     document.querySelectorAll('.sidebar-nav .nav-link').forEach(link => {
         const href = link.getAttribute('href');
@@ -278,7 +207,7 @@ window.onload = () => {
         document.getElementById('adminName').innerText = payload.nome;
     } catch {}
 
-    // --- SELEÇÃO DE ELEMENTOS ---
+    // SELEÇÃO DE ELEMENTOS DO DOM
     const addEventoBtn = document.getElementById('add-evento-btn');
     const modal = document.getElementById('evento-modal');
     const closeModalBtn = document.getElementById('close-modal-btn');
@@ -304,46 +233,25 @@ window.onload = () => {
     const darsModal = document.getElementById('dars-modal');
     const closeDarsModalBtn = document.getElementById('close-dars-modal-btn');
     const darsList = document.getElementById('dars-list');
-    closeDarsModalBtn.addEventListener('click', () => darsModal.style.display = 'none');
+    
     const API_CLIENTES_URL = '/api/admin/eventos-clientes';
     let generatedDates = [];
     let clientes = [];
     let parcelasMasks = [];
 
-    // --- FUNÇÕES UTILITÁRIAS ---
-    const feriadosFixos = ['01/01', '21/04', '01/05', '24/06', '07/09', '16/09', '12/10', '02/11', '15/11', '25/12'];
-    function isFeriado(d) {
-        const dd = String(d.getDate()).padStart(2, '0');
-        const mm = String(d.getMonth() + 1).padStart(2, '0');
-        return feriadosFixos.includes(`${dd}/${mm}`);
-    }
-    function isDiaUtil(d) {
-        return d.getDay() !== 0 && d.getDay() !== 6 && !isFeriado(d);
-    }
-    const precosPorDia = [2495.00, 1996.00, 1596.80, 1277.44, 1277.44];
-    function calcularValorBruto(n) {
-        if (n <= 0) return 0;
-        let v = 0;
-        if (n >= 1) v += precosPorDia[0];
-        if (n >= 2) v += precosPorDia[1];
-        if (n >= 3) v += precosPorDia[2];
-        if (n >= 4) v += (n - 3) * precosPorDia[3];
-        return +v.toFixed(2);
-    }
-    function calcularValorFinal(vb, tipo, dm = 0) {
-        let v = vb;
-        if (tipo === 'Governo') v *= 0.8;
-        else if (tipo === 'Permissionario') v *= 0.4;
-        if (dm > 0) v *= (1 - dm / 100);
-        return +v.toFixed(2);
-    }
+    // FUNÇÕES UTILITÁRIAS E DE NEGÓCIO
+    const feriadosFixos = ['01/01','21/04','01/05','24/06','07/09','16/09','12/10','02/11','15/11','25/12'];
+    function isFeriado(d) { const dd=String(d.getDate()).padStart(2,'0'); const mm=String(d.getMonth()+1).padStart(2,'0'); return feriadosFixos.includes(`${dd}/${mm}`); }
+    function isDiaUtil(d) { return d.getDay()!==0 && d.getDay()!==6 && !isFeriado(d); }
+    const precosPorDia = [2495.00,1996.00,1596.80,1277.44,1277.44];
+    function calcularValorBruto(n) { if(n<=0)return 0; let v=0; if(n>=1)v+=precosPorDia[0]; if(n>=2)v+=precosPorDia[1]; if(n>=3)v+=precosPorDia[2]; if(n>=4)v+=(n-3)*precosPorDia[3]; return +v.toFixed(2); }
+    function calcularValorFinal(vb,tipo,dm=0) { let v=vb; if(tipo==='Governo')v*=0.8; else if(tipo==='Permissionario')v*=0.4; if(dm>0)v*=(1-dm/100); return +v.toFixed(2); }
 
-    // --- CARREGAMENTO DE DADOS ---
+    // FUNÇÕES DE CARREGAMENTO DE DADOS
     async function carregarClientes() {
         try {
             const res = await fetch(API_CLIENTES_URL, { headers: { Authorization: `Bearer ${token}` } });
-            const clientesData = await res.json();
-            clientes = clientesData;
+            clientes = await res.json();
             clienteSelect.innerHTML = '<option value="">Selecione um cliente...</option>';
             clientes.forEach(c => {
                 const opt = document.createElement('option');
@@ -354,110 +262,57 @@ window.onload = () => {
             });
         } catch (e) { console.error('Erro ao carregar clientes:', e); }
     }
+    
     async function carregarEventos() {
         try {
-            const res = await fetch('/api/admin/eventos', { headers: { Authorization: `Bearer ${token}` } });
+            const res = await fetch('/api/admin/eventos',{ headers:{ Authorization:`Bearer ${token}` } });
             const evs = await res.json();
             eventosTableBody.innerHTML = '';
-            evs.forEach(ev => {
+            evs.forEach(ev=>{
                 const statusBg = ev.status === 'Pago' ? 'bg-success' : ev.status === 'Pendente' || ev.status === 'Emitido' ? 'bg-warning' : 'bg-danger';
                 const tr = document.createElement('tr');
-                  tr.innerHTML = `
+                tr.innerHTML = `
                     <td>${ev.id}</td>
                     <td>${ev.nome_evento}</td>
                     <td>${ev.nome_cliente}</td>
-                    <td class="text-end">R$ ${parseFloat(ev.valor_final).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                    <td class="text-end">R$ ${parseFloat(ev.valor_final).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
                     <td class="text-center"><span class="badge ${statusBg}">${ev.status}</span></td>
-                    
                     <td class="text-center">
-                      <button class="btn btn-sm btn-outline-primary btn-dars" title="Ver DARs" data-evento-id="${ev.id}">
-                        <i class="bi bi-file-earmark-arrow-down"></i>
-                      </button>
+                        <button class="btn btn-sm btn-outline-primary btn-dars" data-evento-id="${ev.id}">
+                            <i class="bi bi-file-earmark-arrow-down"></i> DARs
+                        </button>
                     </td>
-
                     <td class="text-center">
-                      <button class="btn btn-sm btn-outline-secondary btn-editar" title="Editar Evento" data-evento-id="${ev.id}">
-                        <i class="bi bi-pencil"></i>
-                      </button>
-                      <button class="btn btn-sm btn-outline-danger btn-apagar" title="Apagar Evento" data-evento-id="${ev.id}" data-evento-nome="${ev.nome_evento}">
-                        <i class="bi bi-trash"></i>
-                      </button>
+                        <button class="btn btn-sm btn-outline-secondary btn-editar" title="Editar Evento" data-evento-id="${ev.id}">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger btn-apagar" title="Apagar Evento" data-evento-id="${ev.id}" data-evento-nome="${ev.nome_evento}">
+                            <i class="bi bi-trash"></i>
+                        </button>
                     </td>
-                  `;
+                `;
                 eventosTableBody.appendChild(tr);
             });
-            document.querySelectorAll('.btn-dars').forEach(btn => {
-                btn.addEventListener('click', (e) => abrirModalDARs(e.currentTarget.dataset.eventoId));
-            });
-        } catch (e) { console.error(e); }
+        } catch(e){ console.error(e); }
     }
-    // AINDA DENTRO de carregarEventos(), adicione este bloco
-document.querySelectorAll('.btn-apagar').forEach(btn => {
-  btn.addEventListener('click', async (e) => {
-    const eventoId = e.currentTarget.dataset.eventoId;
-    const eventoNome = e.currentTarget.dataset.eventoNome;
-
-    if (confirm(`Tem certeza que deseja apagar o evento "${eventoNome}" (ID: ${eventoId})? Esta ação não pode ser desfeita.`)) {
-      try {
-        const res = await fetch(`/api/admin/eventos/${eventoId}`, {
-          method: 'DELETE',
-          headers: { Authorization: `Bearer ${token}` }
-        });
-
-        const result = await res.json();
-        if (!res.ok) throw new Error(result.error);
-
-        alert(result.message);
-        carregarEventos(); // Recarrega a lista para remover o item apagado
-
-      } catch (err) {
-        console.error('Falha ao apagar evento:', err);
-        alert(`Erro ao apagar o evento: ${err.message}`);
-      }
-    }
-  });
-});
-
-    // --- LÓGICA DE UI ---
+    
+    // FUNÇÕES DE UI E MANIPULAÇÃO DE DADOS
     function atualizarCalculos() {
         const n = fp.selectedDates.length;
         const vb = calcularValorBruto(n);
-        const tipoOpt = clienteSelect.selectedOptions[0];
-        const tipo = tipoOpt ? tipoOpt.dataset.tipo : 'Geral';
-        const dm = parseFloat(descontoManualInput.value) || 0;
-        const vf = calcularValorFinal(vb, tipo, dm);
+        const tipo = clienteSelect.selectedOptions[0]?.dataset.tipo||'Geral';
+        const dm = parseFloat(descontoManualInput.value)||0;
+        const vf = calcularValorFinal(vb,tipo,dm);
         totalDiariasDisplay.textContent = n;
-        valorBrutoDisplay.textContent = `R$ ${vb.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+        valorBrutoDisplay.textContent = `R$ ${vb.toLocaleString('pt-BR',{minimumFractionDigits:2})}`;
         tipoDescontoAutoDisplay.value = tipo;
-        valorFinalDisplay.textContent = `R$ ${vf.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+        valorFinalDisplay.textContent = `R$ ${vf.toLocaleString('pt-BR',{minimumFractionDigits:2})}`;
         gerenciarEstadoParcelamento();
         validarFormularioCompleto();
     }
-    const fp = flatpickr(datasEventoInput, { mode: 'multiple', dateFormat: 'Y-m-d', locale: 'pt', onChange: atualizarCalculos });
-    datasHelperBtn.addEventListener('click', () => datasHelperModal.style.display = 'block');
-    closeHelperModalBtn.addEventListener('click', () => datasHelperModal.style.display = 'none');
-    gerarDatasBtn.addEventListener('click', () => {
-        const dias = Array.from(document.querySelectorAll('#dias-semana-checkboxes input:checked')).map(cb => parseInt(cb.value));
-        const inicio = new Date(document.getElementById('periodo-inicio').value + 'T12:00:00');
-        const fim = new Date(document.getElementById('periodo-fim').value + 'T12:00:00');
-        if (dias.length === 0 || isNaN(inicio.getTime()) || isNaN(fim.getTime())) { return alert('Selecione dias e período válidos.'); }
-        generatedDates = [];
-        let diaAtual = new Date(inicio);
-        while (diaAtual <= fim) {
-            if (dias.includes(diaAtual.getDay())) generatedDates.push(new Date(diaAtual));
-            diaAtual.setDate(diaAtual.getDate() + 1);
-        }
-        alert(`${generatedDates.length} datas geradas.`);
-    });
-    processarDatasBtn.addEventListener('click', () => {
-        const texto = document.getElementById('datas-textarea').value;
-        const parts = texto.split(/[\s,;\n]+/).filter(Boolean);
-        generatedDates = parts.map(p => { const [dd, mm, aa] = p.split('/'); return new Date(`${aa}-${mm}-${dd}T12:00:00`); }).filter(d => !isNaN(d.getTime()));
-        alert(`${generatedDates.length} datas processadas.`);
-    });
-    confirmarDatasBtn.addEventListener('click', () => { fp.setDate(generatedDates, true); datasHelperModal.style.display = 'none'; });
     
-    // --- LÓGICA DE PARCELAMENTO ---
+    const fp = flatpickr(datasEventoInput,{ mode:'multiple', dateFormat:'Y-m-d', locale:'pt', onChange:atualizarCalculos });
+    
     function adicionarParcela() {
         const parcelaIndex = parcelasContainer.children.length;
         const div = document.createElement('div');
@@ -471,131 +326,34 @@ document.querySelectorAll('.btn-apagar').forEach(btn => {
         valorInput.addEventListener('input', validarFormularioCompleto);
         parcelasMasks.push({ valorMask, picker, element: div });
     }
-    addParcelaBtn.addEventListener('click', adicionarParcela);
-    parcelasContainer.addEventListener('click', e => {
-        if (e.target.classList.contains('btn-delete-parcela')) {
-            const item = e.target.closest('.parcela-item');
-            const i = parcelasMasks.findIndex(p => p.element === item);
-            if (i > -1) {
-                parcelasMasks[i].valorMask.destroy();
-                parcelasMasks[i].picker.destroy();
-                parcelasMasks.splice(i, 1);
-            }
-            item.remove();
-            parcelasContainer.querySelectorAll('.parcela-item').forEach((d, j) => {
-                d.querySelector('label').textContent = `Parcela ${j + 1}`;
-            });
-            validarFormularioCompleto();
-        }
-    });
+    
     function gerenciarEstadoParcelamento() {
         if (!fp.selectedDates.length) { addParcelaBtn.disabled = true; return; }
-        const hoje = new Date();
-        hoje.setHours(0, 0, 0, 0);
+        const hoje = new Date(); hoje.setHours(0,0,0,0);
         const primeiraDataEvento = fp.selectedDates.slice().sort((a,b)=>a-b)[0];
         const diffDias = Math.ceil((primeiraDataEvento.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24));
         if (diffDias <= 30) {
             addParcelaBtn.disabled = true;
-            while (parcelasMasks.length > 1) {
-                const last = parcelasMasks.pop();
-                last.valorMask.destroy();
-                last.picker.destroy();
-                parcelasContainer.removeChild(last.element);
-            }
-        } else {
-            addParcelaBtn.disabled = false;
-        }
+            while (parcelasMasks.length > 1) { const last = parcelasMasks.pop(); last.valorMask.destroy(); last.picker.destroy(); parcelasContainer.removeChild(last.element); }
+        } else { addParcelaBtn.disabled = false; }
     }
-
-    // --- VALIDAÇÃO DO FORMULÁRIO ---
+    
     function validarFormularioCompleto() {
         formError.textContent = '';
         formError.classList.add('d-none');
-        formError.style.display = 'none';
         const n = fp.selectedDates.length;
         const vb = calcularValorBruto(n);
         const tipo = clienteSelect.selectedOptions[0]?.dataset.tipo || 'Geral';
         const dm = parseFloat(descontoManualInput.value) || 0;
         const vf = calcularValorFinal(vb, tipo, dm);
-        
-        // CORREÇÃO A SER APLICADA
-        const total = Array.from(parcelasContainer.querySelectorAll('.parcela-valor'))
-            .reduce((sum, input) => sum + parseCurrency(input.value), 0);
-            
+        const total = Array.from(parcelasContainer.querySelectorAll('.parcela-valor')).reduce((sum, input) => sum + parseCurrency(input.value), 0);
         totalParceladoDisplay.textContent = `R$ ${total.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
         let erroMsg = '';
-        if (Math.abs(total - vf) > 0.01) {
-            erroMsg = `A soma das parcelas (R$ ${total.toFixed(2)}) não bate com o Valor Final (R$ ${vf.toFixed(2)}).`;
-        }
-        // ... (lógica de validação de datas, se houver) ...
-        if (erroMsg) {
-            formError.textContent = erroMsg;
-            formError.classList.remove('d-none');
-            formError.style.display = 'block';
-            return false;
-        }
+        if (Math.abs(total - vf) > 0.01) { erroMsg = `A soma das parcelas (R$ ${total.toFixed(2)}) não bate com o Valor Final (R$ ${vf.toFixed(2)}).`; }
+        if (erroMsg) { formError.textContent = erroMsg; formError.classList.remove('d-none'); return false; }
         return true;
     }
-
-    // --- SUBMISSÃO DO FORMULÁRIO ---
-    form.addEventListener('submit', async e => {
-        e.preventDefault();
-        if (!validarFormularioCompleto()) {
-            alert('Corrija os erros indicados no formulário antes de salvar.');
-            return;
-        }
-        
-        // CORREÇÃO A SER APLICADA
-        const parcelas = parcelasMasks.map(({ valorMask, picker }) => {
-            const [d, m, a] = picker.input.value.split('/');
-            const vencimentoFormatado = (a && m && d) ? `${a}-${m}-${d}` : null;
-            const valorNumerico = parseCurrency(valorMask.el.value);
-            return { valor: valorNumerico, vencimento: vencimentoFormatado };
-        });
-
-        const n = fp.selectedDates.length;
-        const vb = calcularValorBruto(n);
-        const tipo = clienteSelect.selectedOptions[0]?.dataset.tipo || 'Geral';
-        const dm = parseFloat(descontoManualInput.value) || 0;
-        const vf = calcularValorFinal(vb, tipo, dm);
-        const body = {
-            idCliente: clienteSelect.value,
-            nomeEvento: document.getElementById('nome-evento').value,
-            datasEvento: fp.selectedDates.map(d => d.toISOString().split('T')[0]),
-            tipoDescontoAuto: tipoDescontoAutoDisplay.value,
-            descontoManualPercent: dm,
-            totalDiarias: n,
-            valorBruto: vb,
-            valorFinal: vf,
-            parcelas
-        };
-        const btn = form.querySelector('button[type="submit"]');
-        btn.disabled = true;
-        btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Gerando...`;
-        try {
-            const res = await fetch('/api/admin/eventos', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                body: JSON.stringify(body)
-            });
-            const result = await res.json();
-            if (!res.ok) throw new Error(result.error || `Erro ${res.status}`);
-            alert('Evento e DARs criados com sucesso!');
-            modal.style.display = 'none';
-            form.reset();
-            fp.clear();
-            carregarEventos();
-        } catch (err) {
-            formError.textContent = err.message;
-            formError.classList.remove('d-none');
-            formError.style.display = 'block';
-        } finally {
-            btn.disabled = false;
-            btn.textContent = 'Salvar Evento e Gerar DARs';
-        }
-    });
-
-    // --- LÓGICA DE MODAIS E EVENTOS ---
+    
     async function abrirModalDARs(eventoId) {
         darsList.innerHTML = `<div class="text-center py-3">Carregando...</div>`;
         darsModal.style.display = 'block';
@@ -603,51 +361,18 @@ document.querySelectorAll('.btn-apagar').forEach(btn => {
             const res = await fetch(`/api/admin/eventos/${eventoId}/dars`, { headers: { Authorization: `Bearer ${token}` } });
             const data = await res.json();
             const dars = data?.dars || [];
-            if (!dars.length) {
-                darsList.innerHTML = `<div class="alert alert-info">Nenhuma DAR encontrada.</div>`;
-                return;
-            }
+            if (!dars.length) { darsList.innerHTML = `<div class="alert alert-info">Nenhuma DAR encontrada.</div>`; return; }
             darsList.innerHTML = `<div class="table-responsive"><table class="table table-sm align-middle"><thead><tr><th>#</th><th>Valor</th><th>Venc.</th><th>Status</th><th class="text-center">Ação</th></tr></thead><tbody>${dars.map(d => {
                 const valor = Number(d.parcela_valor ?? d.dar_valor ?? 0);
                 const venc = d.dar_venc ? new Date(d.dar_venc + 'T12:00:00').toLocaleDateString('pt-BR') : '-';
                 const status = d.dar_status || 'Pendente';
                 const isEmitido = d.dar_pdf && d.dar_pdf.startsWith('JVBER');
-                const btn = isEmitido ? `<button onclick="baixarPdfBase64('${d.dar_pdf}', 'DAR-Evento-${eventoId}-P${d.parcela_num}.pdf')" class="btn btn-sm btn-success"><i class="bi bi-download"></i> Baixar</button>`:`<button data-dar-id="${d.dar_id}" data-evento-id="${eventoId}" class="btn btn-sm btn-outline-primary btn-reemitir-dar"><i class="bi bi-printer"></i> Reemitir</button>`;
+                const btn = isEmitido ? `<button onclick="baixarPdfBase64('${d.dar_pdf}', 'DAR-Evento-${eventoId}-P${d.parcela_num}.pdf')" class="btn btn-sm btn-success"><i class="bi bi-download"></i> Baixar</button>` : `<button data-dar-id="${d.dar_id}" data-evento-id="${eventoId}" class="btn btn-sm btn-outline-primary btn-reemitir-dar"><i class="bi bi-printer"></i> Reemitir</button>`;
                 return `<tr><td>${d.parcela_num}</td><td class="text-end">R$ ${valor.toLocaleString('pt-BR',{minimumFractionDigits:2})}</td><td>${venc}</td><td><span class="badge ${status==='Pago'?'bg-success':status==='Pendente'?'bg-secondary':'bg-warning'}">${status}</span></td><td class="text-center">${btn}</td></tr>`;
             }).join('')}</tbody></table></div>`;
         } catch (e) { console.error(e); darsList.innerHTML = `<div class="alert alert-danger">Erro ao carregar as DARs.</div>`; }
     }
-    // Dentro da função abrirModalDARs(eventoId), após definir darsList.innerHTML
-// Adicione este bloco de código:
-
-darsList.querySelectorAll('.btn-reemitir-dar').forEach(btn => {
-    btn.addEventListener('click', async (e) => {
-        const darId = e.currentTarget.dataset.darId;
-        const eventoId = e.currentTarget.dataset.eventoId;
-        
-        btn.disabled = true;
-        btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Reemitindo...`;
-
-        try {
-            const res = await fetch(`/api/admin/eventos/${eventoId}/dars/${darId}/reemitir`, {
-                method: 'POST',
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            const result = await res.json();
-            if (!res.ok) throw new Error(result.error);
-            
-            alert('DAR reemitida com sucesso!');
-            // Recarrega o modal para mostrar o botão de baixar o novo PDF
-            abrirModalDARs(eventoId);
-
-              } catch (err) {
-                  console.error('Falha ao reemitir DAR:', err);
-                  alert(`Erro ao reemitir a DAR: ${err.message}`);
-                  btn.disabled = false;
-                  btn.innerHTML = `<i class="bi bi-printer"></i> Reemitir`;
-              }
-          });
-      });
+    
     window.baixarPdfBase64 = (base64, nomeArquivo) => {
         const linkSource = `data:application/pdf;base64,${base64}`;
         const downloadLink = document.createElement("a");
@@ -655,27 +380,130 @@ darsList.querySelectorAll('.btn-reemitir-dar').forEach(btn => {
         downloadLink.download = nomeArquivo;
         downloadLink.click();
     };
-    addEventoBtn.addEventListener('click', () => {
-        form.reset();
-        fp.clear();
-        parcelasContainer.innerHTML = '';
-        if (parcelasMasks) {
-            parcelasMasks.forEach(({ valorMask, picker }) => {
-                valorMask.destroy(); picker.destroy();
+
+    // FUNÇÃO CENTRAL DE CLIQUES (DELEGAÇÃO DE EVENTOS)
+    function inicializarEventListeners() {
+        eventosTableBody.addEventListener('click', async (event) => {
+            const target = event.target;
+            const darsButton = target.closest('.btn-dars');
+            const apagarButton = target.closest('.btn-apagar');
+            const editarButton = target.closest('.btn-editar');
+            if (darsButton) {
+                abrirModalDARs(darsButton.dataset.eventoId);
+            }
+            if (apagarButton) {
+                const eventoId = apagarButton.dataset.eventoId;
+                const eventoNome = apagarButton.dataset.eventoNome;
+                if (confirm(`Tem certeza que deseja apagar o evento "${eventoNome}" (ID: ${eventoId})?`)) {
+                    try {
+                        const res = await fetch(`/api/admin/eventos/${eventoId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+                        const result = await res.json();
+                        if (!res.ok) throw new Error(result.error);
+                        alert(result.message);
+                        carregarEventos();
+                    } catch (err) { alert(`Erro ao apagar o evento: ${err.message}`); }
+                }
+            }
+            if (editarButton) {
+                alert('Função de editar a ser implementada.');
+            }
+        });
+
+        darsList.addEventListener('click', async (event) => {
+            const reemitirButton = event.target.closest('.btn-reemitir-dar');
+            if (reemitirButton) {
+                const darId = reemitirButton.dataset.darId;
+                const eventoId = reemitirButton.dataset.eventoId;
+                reemitirButton.disabled = true;
+                reemitirButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Reemitindo...`;
+                try {
+                    const res = await fetch(`/api/admin/eventos/${eventoId}/dars/${darId}/reemitir`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+                    const result = await res.json();
+                    if (!res.ok) throw new Error(result.error);
+                    alert('DAR reemitida com sucesso!');
+                    abrirModalDARs(eventoId);
+                } catch (err) {
+                    alert(`Erro ao reemitir a DAR: ${err.message}`);
+                    reemitirButton.disabled = false;
+                    reemitirButton.innerHTML = `<i class="bi bi-printer"></i> Reemitir`;
+                }
+            }
+        });
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            if (!validarFormularioCompleto()) { alert('Corrija os erros indicados no formulário antes de salvar.'); return; }
+            const parcelas = parcelasMasks.map(({ valorMask, picker }) => {
+                const [d, m, a] = picker.input.value.split('/');
+                const vencimentoFormatado = (a && m && d) ? `${a}-${m}-${d}` : null;
+                const valorNumerico = parseCurrency(valorMask.el.value);
+                return { valor: valorNumerico, vencimento: vencimentoFormatado };
             });
-        }
-        parcelasMasks = [];
-        adicionarParcela();
-        atualizarCalculos();
-        modal.style.display = 'block';
-    });
-    closeModalBtn.addEventListener('click', () => modal.style.display = 'none');
-    clienteSelect.addEventListener('change', atualizarCalculos);
-    descontoManualInput.addEventListener('input', atualizarCalculos);
-    
-    // --- INICIA A APLICAÇÃO ---
+            const n = fp.selectedDates.length;
+            const vb = calcularValorBruto(n);
+            const tipo = clienteSelect.selectedOptions[0]?.dataset.tipo || 'Geral';
+            const dm = parseFloat(descontoManualInput.value) || 0;
+            const vf = calcularValorFinal(vb, tipo, dm);
+            const body = { idCliente: clienteSelect.value, nomeEvento: document.getElementById('nome-evento').value, datasEvento: fp.selectedDates.map(d => d.toISOString().split('T')[0]), tipoDescontoAuto: tipoDescontoAutoDisplay.value, descontoManualPercent: dm, totalDiarias: n, valorBruto: vb, valorFinal: vf, parcelas };
+            const btn = form.querySelector('button[type="submit"]');
+            btn.disabled = true;
+            btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Gerando...`;
+            try {
+                const res = await fetch('/api/admin/eventos', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(body) });
+                const result = await res.json();
+                if (!res.ok) throw new Error(result.error || `Erro ${res.status}`);
+                alert('Evento e DARs criados com sucesso!');
+                modal.style.display = 'none';
+                form.reset();
+                fp.clear();
+                carregarEventos();
+            } catch (err) {
+                formError.textContent = err.message;
+                formError.classList.remove('d-none');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Salvar Evento e Gerar DARs';
+            }
+        });
+
+        addEventoBtn.addEventListener('click', () => {
+            form.reset();
+            fp.clear();
+            parcelasContainer.innerHTML = '';
+            if (parcelasMasks) { parcelasMasks.forEach(({ valorMask, picker }) => { valorMask.destroy(); picker.destroy(); }); }
+            parcelasMasks = [];
+            adicionarParcela();
+            atualizarCalculos();
+            modal.style.display = 'block';
+        });
+
+        closeModalBtn.addEventListener('click', () => modal.style.display = 'none');
+        clienteSelect.addEventListener('change', atualizarCalculos);
+        descontoManualInput.addEventListener('input', atualizarCalculos);
+        datasHelperBtn.addEventListener('click', () => { datasHelperModal.style.display = 'block'; });
+        closeHelperModalBtn.addEventListener('click', () => { datasHelperModal.style.display = 'none'; });
+        confirmarDatasBtn.addEventListener('click', () => { fp.setDate(generatedDates,true); datasHelperModal.style.display = 'none'; });
+        processarDatasBtn.addEventListener('click', () => {
+             const texto = document.getElementById('datas-textarea').value;
+             const parts = texto.split(/[\s,;\n]+/).filter(Boolean);
+             generatedDates = parts.map(p=>{ const [dd,mm,aa]=p.split('/'); return new Date(`${aa}-${mm}-${dd}T12:00:00`); }).filter(d=>!isNaN(d.getTime()));
+             alert(`${generatedDates.length} datas processadas.`);
+        });
+        gerarDatasBtn.addEventListener('click', () => {
+             const dias = Array.from(document.querySelectorAll('#dias-semana-checkboxes input:checked')).map(cb=>parseInt(cb.value));
+             const inicio = new Date(document.getElementById('periodo-inicio').value+'T12:00:00');
+             const fim = new Date(document.getElementById('periodo-fim').value+'T12:00:00');
+             if(dias.length===0||isNaN(inicio.getTime())||isNaN(fim.getTime())){ return alert('Selecione dias e período válidos.'); }
+             generatedDates=[]; let diaAtual=new Date(inicio);
+             while(diaAtual<=fim){ if(dias.includes(diaAtual.getDay())) generatedDates.push(new Date(diaAtual)); diaAtual.setDate(diaAtual.getDate()+1); }
+             alert(`${generatedDates.length} datas geradas.`);
+        });
+    }
+
+    // --- INICIALIZAÇÃO DA PÁGINA ---
     carregarClientes();
     carregarEventos();
+    inicializarEventListeners();
 };
 </script>
 </body>
