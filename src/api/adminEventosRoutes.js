@@ -76,20 +76,21 @@ router.post('/', async (req, res) => {
     const eventoId = eventoStmt.lastID;
 
     for (let i = 0; i < parcelas.length; i++) {
-      const p = parcelas[i];
+  const p = parcelas[i];
 
-      const darStmt = await dbRun(
-        `INSERT INTO dars (valor, data_vencimento, status) VALUES (?, ?, ?)`,
-        [Number(p.valor) || 0, p.vencimento, 'Pendente']
-      );
+  // Cria a DAR
+  const darStmt = await dbRun(
+    `INSERT INTO dars (valor, data_vencimento, status) VALUES (?, ?, ?)`,
+    [Number(p.valor) || 0, p.vencimento, 'Pendente']
+  );
+  const darId = darStmt.lastID;
 
-      const darId = darStmt.lastID;
-
-      await dbRun(
-        `INSERT INTO DARs_Eventos (id_dar, id_evento, numero_parcela, valor_parcela) VALUES (?, ?, ?, ?)`,
-        [darId, eventoId, i + 1, Number(p.valor) || 0]
-      );
-    }
+  // Relaciona a DAR com o evento e registra a data de vencimento também
+  await dbRun(
+    `INSERT INTO DARs_Eventos (id_dar, id_evento, numero_parcela, valor_parcela, data_vencimento) VALUES (?, ?, ?, ?, ?)`,
+    [darId, eventoId, i + 1, Number(p.valor) || 0, p.vencimento]
+  );
+}
 
     await dbRun('COMMIT');
     res.status(201).json({ message: 'Evento e DARs criados com sucesso!', id: eventoId });
