@@ -221,29 +221,27 @@
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://unpkg.com/imask"></script>
   <script>
-function onlyDigits(v){ return (v||'').toString().replace(/\D/g,''); }
-function formatDocumento(v){
-  const d = onlyDigits(v);
-  if (d.length === 11) return d.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/,'$1.$2.$3-$4');   // CPF
-  if (d.length === 14) return d.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/,'$1.$2.$3/$4-$5'); // CNPJ
-  return v || '';
-}
 document.addEventListener('DOMContentLoaded', () => {
   const token = localStorage.getItem('adminAuthToken');
   if (!token) { window.location.href = '/admin/login.html'; return; }
 
-  // --- Menu / logout / nome admin
+  // --- Sidebar: abre/fecha submenu "Eventos"
+  document.querySelectorAll('.menu-dropdown > a.nav-link').forEach(a=>{
+    a.addEventListener('click',(e)=>{ e.preventDefault(); const sub=a.nextElementSibling; if(sub){ sub.style.display=sub.style.display==='block'?'none':'block'; }});
+  });
+
+  // --- Logout / Nome admin
   document.getElementById('logoutButton').addEventListener('click', (e)=>{
     e.preventDefault(); localStorage.removeItem('adminAuthToken'); window.location.href='/admin/login.html';
   });
-  try{ const p=JSON.parse(atob(token.split('.')[1])); document.getElementById('adminName').innerText = p?.nome || ''; }catch{}
+  try{ const p=JSON.parse(atob(token.split('.')[1])); document.getElementById('adminName').innerText=p?.nome||''; }catch{}
 
   // --- Refs UI
   const clienteModalEl = document.getElementById('cliente-modal');
   const clienteModal   = new bootstrap.Modal(clienteModalEl);
   const modalTitle     = document.getElementById('modal-title');
   const form           = document.getElementById('cliente-form');
-  const submitBtn      = clienteModalEl.querySelector('.modal-footer button[form="cliente-form"]');
+  const submitBtn      = clienteModalEl.querySelector('.modal-footer [form="cliente-form"]') || null;
   const tableBody      = document.getElementById('clientes-table-body');
 
   const clienteIdField   = document.getElementById('cliente-id');
@@ -253,18 +251,18 @@ document.addEventListener('DOMContentLoaded', () => {
   const emailInput       = document.getElementById('email');
   const telefoneInput    = document.getElementById('telefone');
   const tipoClienteSel   = document.getElementById('tipo_cliente');
-
   const responsavelGroup = document.getElementById('responsavel-group');
   const nomeRespInput    = document.getElementById('nome_responsavel');
   const docRespInput     = document.getElementById('documento_responsavel');
-
-  const cepInput        = document.getElementById('cep');
-  const logradouroInput = document.getElementById('logradouro');
-  const numeroInput     = document.getElementById('numero');
-  const complInput      = document.getElementById('complemento');
-  const bairroInput     = document.getElementById('bairro');
-  const cidadeInput     = document.getElementById('cidade');
-  const ufInput         = document.getElementById('uf');
+  const cepInput         = document.getElementById('cep');
+  const logradouroInput  = document.getElementById('logradouro');
+  const numeroInput      = document.getElementById('numero');
+  const complInput       = document.getElementById('complemento');
+  const bairroInput      = document.getElementById('bairro');
+  const cidadeInput      = document.getElementById('cidade');
+  const ufInput          = document.getElementById('uf');
+  const btnBuscarCnpj    = document.getElementById('btn-buscar-cnpj');
+  const btnBuscarCep     = document.getElementById('btn-buscar-cep');
 
   // --- Máscaras
   let documentoMask, responsavelCpfMask, telefoneMask, cepMask;
@@ -277,7 +275,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const tipo = tipoPessoaSelect.value;
     responsavelGroup.style.display = tipo === 'PJ' ? 'block' : 'none';
     documentoInput.placeholder = tipo === 'PJ' ? '00.000.000/0000-00' : '000.000.000-00';
-
     documentoMask = IMask(documentoInput, { mask: tipo === 'PJ' ? '00.000.000/0000-00' : '000.000.000-00' });
     if (tipo === 'PJ') responsavelCpfMask = IMask(docRespInput, { mask: '000.000.000-00' });
     telefoneMask = IMask(telefoneInput, { mask: [{ mask: '(00) 0000-0000' }, { mask: '(00) 0 0000-0000' }] });
@@ -286,40 +283,35 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // --- Helpers
   const API_URL = '/api/admin/eventos-clientes';
+  const onlyDigits = v => (v||'').toString().replace(/\D/g,'');
   function limparEndereco(){
     logradouroInput.value=''; numeroInput.value=''; complInput.value='';
     bairroInput.value=''; cidadeInput.value=''; ufInput.value='';
   }
-  function limparPessoaJuridica(){
-    nomeRespInput.value=''; docRespInput.value='';
-  }
-  function limparDocumentoENome(){
-    documentoInput.value=''; nomeRazaoInput.value='';
-  }
+  function limparPessoaJuridica(){ nomeRespInput.value=''; docRespInput.value=''; }
+  function limparDocumentoENome(){ documentoInput.value=''; nomeRazaoInput.value=''; }
 
   // --- ViaCEP (CEP → endereço)
   async function buscarCEP(cep){
-    const soNum = (cep||'').replace(/\D/g,'');
-    if (soNum.length !== 8) return null;
+    const so = onlyDigits(cep);
+    if (so.length!==8) return null;
     try{
-      const r = await fetch(`https://viacep.com.br/ws/${soNum}/json/`);
-      if (!r.ok) return null;
+      const r = await fetch(`https://viacep.com.br/ws/${so}/json/`);
+      if(!r.ok) return null;
       const j = await r.json();
       if (j.erro) return null;
-      return j; // {logradouro, bairro, localidade, uf, ...}
+      return j;
     }catch{ return null; }
   }
 
-  // --- BrasilAPI CNPJ (CNPJ → dados básicos)
+  // --- BrasilAPI CNPJ (CNPJ → dados)
   async function buscarCNPJ(cnpj){
-    const soNum = (cnpj||'').replace(/\D/g,'');
-    if (soNum.length !== 14) return null;
+    const so = onlyDigits(cnpj);
+    if (so.length!==14) return null;
     try{
-      const r = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${soNum}`);
-      if (!r.ok) return null;
-      const j = await r.json();
-      // Campos úteis: razao_social, nome_fantasia, cep, logradouro, numero, complemento, bairro, municipio, uf, telefone
-      return j;
+      const r = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${so}`);
+      if(!r.ok) return null;
+      return await r.json();
     }catch{ return null; }
   }
 
@@ -327,33 +319,29 @@ document.addEventListener('DOMContentLoaded', () => {
   async function carregarClientes(){
     tableBody.innerHTML = `<tr><td colspan="5" class="text-center">Carregando...</td></tr>`;
     try{
-      const r = await fetch(API_URL, { headers: { Authorization:`Bearer ${token}` }});
-      const j = await r.json().catch(()=> ([]));
-      if (!r.ok) throw new Error(j.error || `Erro ${r.status}`);
+      const r = await fetch(API_URL, { headers:{ Authorization:`Bearer ${token}` }});
+      const j = await r.json().catch(()=>[]);
+      if (!r.ok) throw new Error(j.error||`Erro ${r.status}`);
       if (!Array.isArray(j) || !j.length){
         tableBody.innerHTML = `<tr><td colspan="5" class="text-center text-muted py-3">Nenhum cliente cadastrado.</td></tr>`;
         return;
       }
       tableBody.innerHTML = j.map(c=>{
-        const resendButton = !c.senha_hash
+        const resend = !c.senha_hash
           ? `<button class="btn btn-sm btn-outline-info btn-resend" data-id="${c.id}" title="Reenviar senha"><i class="bi bi-envelope-arrow-up-fill"></i></button>`
           : `<button class="btn btn-sm btn-outline-success" disabled title="Senha já definida"><i class="bi bi-check-circle-fill"></i></button>`;
-        return `
-          <tr>
-            <td>${c.nome_razao_social || ''}</td>
-            <td>${formatDocumento(c.documento)}</td>
-            <td>${c.email || ''}</td>
-            <td><span class="badge bg-secondary">${c.tipo_cliente || ''}</span></td>
-            <td class="text-end">
-              <div class="btn-group">
-                ${resendButton}
-                <button class="btn btn-sm btn-outline-primary btn-edit" data-cliente-encoded='${encodeURIComponent(JSON.stringify(c))}'>
-                <i class="bi bi-pencil-fill"></i> Editar
-                </button>                
-                <button class="btn btn-sm btn-outline-danger btn-delete" data-id="${c.id}"><i class="bi bi-trash-fill"></i> Excluir</button>
-              </div>
-            </td>
-          </tr>`;
+        return `<tr>
+          <td>${c.nome_razao_social||''}</td>
+          <td>${c.documento||''}</td>
+          <td>${c.email||''}</td>
+          <td><span class="badge bg-secondary">${c.tipo_cliente||''}</span></td>
+          <td class="text-end">
+            <div class="btn-group">
+              ${resend}
+              <button class="btn btn-sm btn-outline-primary btn-edit" data-cliente='${JSON.stringify(c)}'><i class="bi bi-pencil-fill"></i> Editar</button>
+              <button class="btn btn-sm btn-outline-danger btn-delete" data-id="${c.id}"><i class="bi bi-trash-fill"></i> Excluir</button>
+            </div>
+          </td></tr>`;
       }).join('');
     }catch(err){
       tableBody.innerHTML = `<tr><td colspan="5" class="text-danger text-center">Erro: ${err.message}</td></tr>`;
@@ -364,20 +352,17 @@ document.addEventListener('DOMContentLoaded', () => {
   function setupModal(cliente=null){
     form.reset();
     form.classList.remove('was-validated');
-
     if (cliente){
       modalTitle.textContent = 'Editar Cliente';
-      clienteIdField.value = cliente.id;
+      clienteIdField.value   = cliente.id;
       tipoPessoaSelect.value = cliente.tipo_pessoa || 'PJ';
       documentoInput.value   = cliente.documento || '';
       nomeRazaoInput.value   = cliente.nome_razao_social || '';
       emailInput.value       = cliente.email || '';
       telefoneInput.value    = cliente.telefone || '';
       tipoClienteSel.value   = cliente.tipo_cliente || 'Geral';
-
       nomeRespInput.value    = cliente.nome_responsavel || '';
       docRespInput.value     = cliente.documento_responsavel || '';
-
       cepInput.value         = cliente.cep || '';
       logradouroInput.value  = cliente.logradouro || '';
       numeroInput.value      = cliente.numero || '';
@@ -387,44 +372,52 @@ document.addEventListener('DOMContentLoaded', () => {
       ufInput.value          = cliente.uf || '';
     } else {
       modalTitle.textContent = 'Adicionar Novo Cliente';
-      clienteIdField.value = '';
-      limparEndereco(); limparPessoaJuridica();
+      clienteIdField.value   = '';
+      limparEndereco(); limparPessoaJuridica(); limparDocumentoENome();
     }
     aplicarMascaras();
   }
-
   document.getElementById('add-cliente-btn').addEventListener('click', ()=> setupModal(null));
 
   // Alternar PF/PJ limpa campos-chave
   tipoPessoaSelect.addEventListener('change', ()=>{
-    limparDocumentoENome();
-    limparPessoaJuridica();
-    aplicarMascaras();
+    limparDocumentoENome(); limparPessoaJuridica(); aplicarMascaras();
   });
 
-  // CNPJ → auto preencher (quando PJ)
+  // Botão buscar CNPJ (ou blur do campo)
+  btnBuscarCnpj?.addEventListener('click', async ()=>{
+    if (tipoPessoaSelect.value!=='PJ') return;
+    const info = await buscarCNPJ(documentoInput.value);
+    if (!info) return alert('CNPJ não encontrado.');
+    if (!nomeRazaoInput.value) nomeRazaoInput.value = info.razao_social || info.nome_fantasia || '';
+    if (!telefoneInput.value && info.telefone) telefoneInput.value = info.telefone;
+    if (!cepInput.value && info.cep)           cepInput.value = info.cep.replace(/\D/g,'').replace(/(\d{5})(\d{3})/,'$1-$2');
+    if (!logradouroInput.value) logradouroInput.value = info.logradouro || '';
+    if (!numeroInput.value)     numeroInput.value     = info.numero || '';
+    if (!complInput.value)      complInput.value      = info.complemento || '';
+    if (!bairroInput.value)     bairroInput.value     = info.bairro || '';
+    if (!cidadeInput.value)     cidadeInput.value     = info.municipio || info.cidade || '';
+    if (!ufInput.value)         ufInput.value         = info.uf || '';
+  });
   documentoInput.addEventListener('blur', async ()=>{
-    if (tipoPessoaSelect.value !== 'PJ') return;
-    const cnpjInfo = await buscarCNPJ(documentoInput.value);
-    if (!cnpjInfo) return; // nada encontrado, mantém como está
-    // preenche nome/telefone/cep/endereço se estiverem vazios
-    if (!nomeRazaoInput.value) nomeRazaoInput.value = cnpjInfo.razao_social || cnpjInfo.nome_fantasia || '';
-    if (!telefoneInput.value && cnpjInfo.telefone) telefoneInput.value = cnpjInfo.telefone;
-    if (!cepInput.value && cnpjInfo.cep) cepInput.value = cnpjInfo.cep.replace(/\D/g,'').padStart(8,'0').replace(/(\d{5})(\d{3})/,'$1-$2');
-
-    if (!logradouroInput.value) logradouroInput.value = cnpjInfo.logradouro || '';
-    if (!numeroInput.value)     numeroInput.value     = cnpjInfo.numero || '';
-    if (!complInput.value)      complInput.value      = cnpjInfo.complemento || '';
-    if (!bairroInput.value)     bairroInput.value     = cnpjInfo.bairro || '';
-    if (!cidadeInput.value)     cidadeInput.value     = cnpjInfo.municipio || cnpjInfo.cidade || '';
-    if (!ufInput.value)         ufInput.value         = cnpjInfo.uf || '';
+    if (tipoPessoaSelect.value!=='PJ') return;
+    if (onlyDigits(documentoInput.value).length!==14) return;
+    const info = await buscarCNPJ(documentoInput.value);
+    if (!info) return;
+    if (!nomeRazaoInput.value) nomeRazaoInput.value = info.razao_social || info.nome_fantasia || '';
   });
 
-  // CEP → endereço via ViaCEP
+  // Botão buscar CEP (ou blur do campo)
+  btnBuscarCep?.addEventListener('click', async ()=>{
+    const data = await buscarCEP(cepInput.value);
+    if (!data) return alert('CEP não encontrado.');
+    logradouroInput.value = data.logradouro || logradouroInput.value;
+    bairroInput.value     = data.bairro     || bairroInput.value;
+    cidadeInput.value     = data.localidade || cidadeInput.value;
+    ufInput.value         = data.uf         || ufInput.value;
+  });
   cepInput.addEventListener('blur', async ()=>{
-    const cep = (cepInput.value||'').replace(/\D/g,'');
-    if (cep.length !== 8){ limparEndereco(); return; }
-    const data = await buscarCEP(cep);
+    const data = await buscarCEP(cepInput.value);
     if (!data) return;
     logradouroInput.value = data.logradouro || logradouroInput.value;
     bairroInput.value     = data.bairro     || bairroInput.value;
@@ -432,7 +425,7 @@ document.addEventListener('DOMContentLoaded', () => {
     ufInput.value         = data.uf         || ufInput.value;
   });
 
-  // Submit (create / update)
+  // Submit (create / update) – garante documento e tipo_pessoa
   form.addEventListener('submit', async (e)=>{
     e.preventDefault();
     if (!form.checkValidity()){ form.classList.add('was-validated'); return; }
@@ -441,16 +434,21 @@ document.addEventListener('DOMContentLoaded', () => {
     const url = id ? `${API_URL}/${id}` : API_URL;
     const method = id ? 'PUT' : 'POST';
 
+    const documento = onlyDigits(documentoInput.value);
+    if (!documento || !['11','14'].includes(String(documento.length))) {
+      alert('Documento do contribuinte ausente ou inválido (CPF/CNPJ).'); return;
+    }
+
     const body = {
       nome_razao_social: nomeRazaoInput.value,
-      tipo_pessoa: tipoPessoaSelect.value,
-      documento: documentoInput.value.replace(/\D/g,''),
+      tipo_pessoa: tipoPessoaSelect.value,                 // <-- envia sempre
+      documento,                                           // <-- envia sempre
       email: emailInput.value,
-      telefone: telefoneInput.value.replace(/\D/g,''),
+      telefone: onlyDigits(telefoneInput.value),
       nome_responsavel: nomeRespInput.value || null,
-      documento_responsavel: (docRespInput.value||'').replace(/\D/g,'') || null,
+      documento_responsavel: onlyDigits(docRespInput.value) || null,
       tipo_cliente: tipoClienteSel.value,
-      cep: cepInput.value.replace(/\D/g,'') || null,
+      cep: onlyDigits(cepInput.value) || null,
       logradouro: logradouroInput.value || null,
       bairro: bairroInput.value || null,
       cidade: cidadeInput.value || null,
@@ -481,17 +479,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Ações na tabela: editar/excluir/reenviar senha
+  // Ações na tabela
   tableBody.addEventListener('click', async (e)=>{
     const btn = e.target.closest('button'); if (!btn) return;
     const id  = btn.dataset.id;
 
     if (btn.classList.contains('btn-edit')){
-     const raw = btn.dataset.clienteEncoded || '';
-     const data = raw ? JSON.parse(decodeURIComponent(raw)) : null;
-        setupModal(data);
-        clienteModal.show();
-        return;
+      const data = JSON.parse(btn.dataset.cliente);
+      setupModal(data); clienteModal.show(); return;
     }
 
     if (btn.classList.contains('btn-delete')){
@@ -500,8 +495,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const r = await fetch(`${API_URL}/${id}`, { method:'DELETE', headers:{ Authorization:`Bearer ${token}` }});
         const j = await r.json().catch(()=> ({}));
         if (!r.ok) throw new Error(j.error || `Erro ${r.status}`);
-        alert('Cliente excluído.');
-        carregarClientes();
+        alert('Cliente excluído.'); carregarClientes();
       }catch(err){ alert(`Erro ao excluir: ${err.message}`); }
       return;
     }
@@ -516,7 +510,7 @@ document.addEventListener('DOMContentLoaded', () => {
         alert(j.message || 'E-mail enviado.');
         btn.outerHTML = `<button class="btn btn-sm btn-outline-success" disabled title="E-mail enviado"><i class="bi bi-check-circle-fill"></i></button>`;
       }catch(err){
-        alert(`Erro: ${err.message}`); btn.disabled=false; btn.innerHTML = original;
+        alert(`Erro: ${err.message}`); btn.disabled=false; btn.innerHTML=original;
       }
     }
   });

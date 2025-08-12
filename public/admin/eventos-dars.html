@@ -471,6 +471,7 @@ window.onload = () => {
           if (!res.ok) throw new Error(result.error);
           alert('DAR reemitida com sucesso!');
           abrirModalDARs(eventoId);
+          carregarEventos(); // força refetch da tabela principal
         } catch (err) {
           alert(`Erro ao reemitir a DAR: ${err.message}`);
           reemitirButton.disabled = false;
@@ -835,6 +836,22 @@ async function editarEvento(eventoId) {
       console.error(e);
       darsList.innerHTML = `<div class="alert alert-danger">Erro ao carregar as DARs.</div>`;
     }
+      // 🔄 Atualiza badge na linha da tabela principal conforme as DARs
+const statusEvento = (()=>{
+  const temPago = (dars||[]).some(d=> (d.dar_status||d.status)==='Pago');
+  const temEmitido = (dars||[]).some(d=> (d.dar_status||d.status)==='Emitido' || (d.dar_pdf && d.dar_pdf.length>30));
+  return temPago ? 'Pago' : (temEmitido ? 'Emitido' : 'Pendente');
+})();
+const tr = [...document.querySelectorAll('#eventos-table-body tr')].find(row => row.firstElementChild?.textContent == String(eventoId));
+if (tr){
+  const tdStatus = tr.querySelector('td:nth-child(5) .badge');
+  if (tdStatus){
+    tdStatus.textContent = statusEvento;
+    tdStatus.className = 'badge ' + (statusEvento==='Pago' ? 'bg-success'
+                                : statusEvento==='Emitido' ? 'bg-primary'
+                                : 'bg-warning text-dark');
+  }
+}
       const pdfStr = (d.dar_pdf || '').toString().replace(/\s/g,'');
       const hasB64 = !!pdfStr && (/^JVBER/.test(pdfStr) || /^data:application\/pdf;base64,/i.test(pdfStr));
       const btn = hasB64

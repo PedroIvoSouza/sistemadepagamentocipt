@@ -119,29 +119,21 @@
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
 function baixarPdfBase64(base64, nome){
-  // se já vier com cabeçalho data:, usa direto; senão prefixa
-  const href = base64.startsWith('data:') ? base64 : `data:application/pdf;base64,${base64}`;
+  const href = base64?.startsWith('data:') ? base64 : `data:application/pdf;base64,${base64||''}`;
   const a = document.createElement('a'); a.href = href; a.download = nome; a.click();
 }
-function normalizaStatus(status){
-  return (status || '').toString();
-}
+const normalizaStatus = s => (s||'').toString();
+
 async function fetchDARsCliente(headers, eventoId){
-  // tenta duas rotas
-  for (const u of [`/api/portal/eventos/${eventoId}/dars`, `/api/eventos/clientes/eventos/${eventoId}/dars`]){
+  for (const u of [
+    `/api/portal/eventos/${eventoId}/dars`,
+    `/api/eventos/clientes/eventos/${eventoId}/dars`
+  ]){
     try{ const r=await fetch(u,{headers}); if(r.ok){ const j=await r.json(); return j?.dars || j || []; } }catch{}
   }
   return [];
 }
-function formatarDataISO(iso){
-  const d = new Date((iso||'')+'T12:00:00');
-  return isNaN(d) ? '-' : d.toLocaleDateString('pt-BR');
-}
-function formatarDatasEvento(valor){
-  if (Array.isArray(valor) && valor.length) return valor.map(formatarDataISO).join(', ');
-  if (typeof valor === 'string' && /^\d{4}-\d{2}-\d{2}/.test(valor)) return formatarDataISO(valor);
-  return valor || '-';
-}
+
 document.addEventListener('DOMContentLoaded', async () => {
   const token = localStorage.getItem('token_evento');
   if (!token) return (window.location.href = '/eventos/login-eventos.html');
@@ -151,27 +143,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     e.preventDefault(); localStorage.removeItem('token_evento'); window.location.href='/eventos/login-eventos.html';
   });
 
-  // modal único para DARs
+  // Modal DARs
   let darsModal, darsContent, darsTitle;
   (function ensureModal(){
-    if (!document.getElementById('darsModal')){
-      const div = document.createElement('div');
-      div.innerHTML = `
-      <div class="modal fade" id="darsModal" tabindex="-1">
-        <div class="modal-dialog modal-lg modal-dialog-scrollable">
-          <div class="modal-content">
-            <div class="modal-header"><h5 id="darsModalLabel" class="modal-title">DARs</h5>
-              <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-            <div class="modal-body"><div id="darsContent" class="table-responsive"><div class="text-center py-4">Carregando...</div></div></div>
-            <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button></div>
-          </div>
-        </div>
-      </div>`;
-      document.body.appendChild(div.firstElementChild);
-    }
-    darsModal = new bootstrap.Modal(document.getElementById('darsModal'));
-    darsContent = document.getElementById('darsContent');
-    darsTitle = document.getElementById('darsModalLabel');
+    const el = document.getElementById('darsModal');
+    darsModal  = new bootstrap.Modal(el);
+    darsContent= document.getElementById('darsContent');
+    darsTitle  = document.getElementById('darsModalLabel');
   })();
 
   async function abrirDARsDoEvento(eventoId, nomeEvento){
@@ -184,17 +162,18 @@ document.addEventListener('DOMContentLoaded', async () => {
       darsContent.innerHTML = `<div class="alert alert-info">Nenhuma DAR encontrada.</div>`;
       return;
     }
+
     darsContent.innerHTML = `
       <table class="table table-sm align-middle">
         <thead><tr><th>#</th><th class="text-end">Valor</th><th>Venc.</th><th>Status</th><th class="text-center">Ação</th></tr></thead>
         <tbody>
           ${dars.map(d=>{
             const valor = Number(d.valor ?? d.parcela_valor ?? d.dar_valor ?? 0);
-            const venc = d.vencimento ?? d.dar_venc ?? null;
+            const venc  = d.vencimento ?? d.dar_venc ?? null;
             const vencFmt = venc ? new Date(venc+'T12:00:00').toLocaleDateString('pt-BR') : '-';
-            const status = normalizaStatus(d.status ?? d.dar_status ?? 'Pendente');
-            const isEmitido = !!(d.dar_pdf && d.dar_pdf.length > 30);
-            const btn = isEmitido
+            const status  = normalizaStatus(d.status ?? d.dar_status ?? 'Pendente');
+            const isEmit  = !!(d.dar_pdf && d.dar_pdf.length>30);
+            const btn = isEmit
               ? `<button class="btn btn-sm btn-success" data-dar-download="${d.dar_pdf}" data-evento="${eventoId}" data-parc="${d.parcela_num||''}"><i class="bi bi-download"></i> Baixar</button>`
               : `<button class="btn btn-sm btn-outline-primary" data-dar-reemitir="${d.id || d.dar_id}" data-evento="${eventoId}"><i class="bi bi-printer"></i> Emitir 2ª Via</button>`;
             const badge = status==='Pago' ? 'bg-success' : (status==='Emitido' ? 'bg-primary' : (status==='Vencido' ? 'bg-danger':'bg-warning text-dark'));
@@ -209,14 +188,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         </tbody>
       </table>`;
 
-    // ações
     darsContent.onclick = async (e)=>{
       const btn = e.target.closest('button'); if(!btn) return;
 
       if (btn.dataset.darDownload){
-        try{
-          baixarPdfBase64(btn.dataset.darDownload, `DAR-Evento-${btn.dataset.evento}-P${btn.dataset.parc||'U'}.pdf`);
-        }catch{ alert('Não foi possível baixar a DAR. PDF inválido.'); }
+        try{ baixarPdfBase64(btn.dataset.darDownload, `DAR-Evento-${btn.dataset.evento}-P${btn.dataset.parc||'U'}.pdf`); }
+        catch{ alert('Não foi possível baixar a DAR. PDF inválido.'); }
       }
 
       if (btn.dataset.darReemitir){
@@ -224,9 +201,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         const darId    = btn.dataset.darReemitir;
         const original = btn.innerHTML;
         btn.disabled = true; btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
-        // tenta duas rotas de reemissão
+
         let ok=false, payload=null;
-        for (const u of [`/api/portal/eventos/${eventoId}/dars/${darId}/reemitir`, `/api/eventos/clientes/eventos/${eventoId}/dars/${darId}/reemitir`]){
+        for (const u of [
+          `/api/portal/eventos/${eventoId}/dars/${darId}/reemitir`,
+          `/api/eventos/clientes/eventos/${eventoId}/dars/${darId}/reemitir`
+        ]){
           try{
             const r = await fetch(u, { method:'POST', headers });
             payload = await r.json().catch(()=> ({}));
@@ -237,60 +217,57 @@ document.addEventListener('DOMContentLoaded', async () => {
           alert(payload?.error || 'Não foi possível emitir a DAR.');
           btn.disabled=false; btn.innerHTML=original; return;
         }
-        // 1) se voltou com PDF, baixa
+
+        // Baixa se veio PDF; senão, tenta pegar a última emitida
         if (payload?.dar_pdf){
-          try{ baixarPdfBase64(payload.dar_pdf, `DAR-Evento-${eventoId}.pdf`); }
-          catch{ alert('Falha ao obter PDF retornado.'); }
+          try{ baixarPdfBase64(payload.dar_pdf, `DAR-Evento-${eventoId}.pdf`); }catch{}
         } else {
-          // 2) senão, refaz a lista e tenta baixar a mais recente com PDF
           const novos = await fetchDARsCliente(headers, eventoId);
           const comPdf = (novos||[]).find(x=> x.dar_pdf && x.dar_pdf.length>30);
           if (comPdf) baixarPdfBase64(comPdf.dar_pdf, `DAR-Evento-${eventoId}-P${comPdf.parcela_num||'U'}.pdf`);
           else alert('Não foi possível baixar a DAR. Falha ao obter PDF');
         }
-        // recarrega modal
-        abrirDARsDoEvento(eventoId, nomeEvento);
+
+        // Recarrega a lista do modal e o dashboard (status)
+        await montarDashboard();                   // <--- atualiza status
+        await abrirDARsDoEvento(eventoId, darsTitle.innerText.replace('DARs do Evento: ',''));
       }
     };
   }
 
-  // carregar dashboard
-  try{
-    const r = await fetch('/api/portal/eventos/me', { headers });
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    const { user, eventos, dars } = await r.json();
+  async function montarDashboard(){
+    try{
+      const r = await fetch('/api/portal/eventos/me', { headers });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const { user, eventos, dars } = await r.json();
 
-    // stats
-    document.getElementById('userName').innerText = user?.nome_razao_social || 'Cliente';
-    document.getElementById('welcomeMessage') && (document.getElementById('welcomeMessage').innerText =
-      `Bem-vindo(a), ${user?.nome_razao_social?.split(' ')[0] || 'cliente'}!`);
+      document.getElementById('userName').innerText = user?.nome_razao_social || 'Cliente';
+      document.getElementById('userCnpj').innerText = ''; // opcional
+      document.getElementById('welcomeMessage').innerText =
+        `Bem-vindo(a), ${user?.nome_razao_social?.split(' ')[0] || 'cliente'}!`;
 
-    const evs = Array.isArray(eventos)? eventos : [];
-    const ds  = Array.isArray(dars)? dars : [];
+      const evs = Array.isArray(eventos)? eventos : [];
+      const ds  = Array.isArray(dars)? dars : [];
 
-    // valor aberto
-    const aberto = ds.reduce((s,d)=> (['Pendente','Vencido'].includes(d.status)? s + (Number(d.valor||0)) : s), 0);
-    document.getElementById('stat-eventos') && (document.getElementById('stat-eventos').innerText = evs.length);
-    document.getElementById('stat-dars') && (document.getElementById('stat-dars').innerText = ds.length);
-    document.getElementById('stat-valor') && (document.getElementById('stat-valor').innerText = `R$ ${aberto.toLocaleString('pt-BR',{minimumFractionDigits:2})}`);
+      const aberto = ds.reduce((s,d)=> (['Pendente','Vencido'].includes(d.status||d.dar_status)? s + (Number(d.valor||d.dar_valor||0)) : s), 0);
+      document.getElementById('stat-eventos').innerText = evs.length;
+      document.getElementById('stat-dars').innerText    = ds.length;
+      document.getElementById('stat-valor').innerText   = `R$ ${aberto.toLocaleString('pt-BR',{minimumFractionDigits:2})}`;
 
-    // monta tabela + botão “Ver DARs”
-    const tabela = document.getElementById('tabela-eventos');
-    if (tabela){
+      const darsByEvento = ds.reduce((m,d)=>{ const k=d.evento_id||d.id_evento||d.eventoId; if(!k) return m; (m[k]=m[k]||[]).push(d); return m; }, {});
+      const tabela = document.getElementById('tabela-eventos');
       if (!evs.length){
         tabela.innerHTML = `<tr><td colspan="5" class="text-center text-muted">Nenhum evento encontrado.</td></tr>`;
       } else {
-        // mapeia status do evento pelo conjunto de DARs
-        const darsByEvento = ds.reduce((m,d)=>{ const k=d.evento_id || d.id_evento || d.eventoId; if(!k) return m; (m[k]=m[k]||[]).push(d); return m; }, {});
         tabela.innerHTML = evs.slice(0,5).map(ev=>{
           const lista = darsByEvento[ev.id] || [];
           const temPago    = lista.some(x=> normalizaStatus(x.status||x.dar_status)==='Pago');
           const temEmitido = lista.some(x=> normalizaStatus(x.status||x.dar_status)==='Emitido');
           const status = temPago ? 'Pago' : (temEmitido ? 'Emitido' : 'Pendente');
-          const badge = status==='Pago' ? 'success' : (status==='Emitido' ? 'primary' : 'warning text-dark');
+          const badge  = status==='Pago' ? 'success' : (status==='Emitido' ? 'primary' : 'warning text-dark');
           const valor = Number(typeof ev.valor_final==='number' ? ev.valor_final
-                        : parseFloat(String(ev.valor_final||'0').replace(/\./g,'').replace(',','.')) || 0);
-          const datas = formatarDatasEvento(ev.datas_evento ?? ev.data);
+                          : parseFloat(String(ev.valor_final||'0').replace(/\./g,'').replace(',','.')) || 0);
+          const datas = ev.datas_evento || (ev.data ? new Date(ev.data).toLocaleDateString('pt-BR') : '-');
           return `<tr>
             <td>${ev.nome_evento || 'Evento'}</td>
             <td>${datas}</td>
@@ -308,11 +285,13 @@ document.addEventListener('DOMContentLoaded', async () => {
           abrirDARsDoEvento(b.dataset.verDars, b.dataset.nome);
         };
       }
+    }catch(err){
+      console.warn(err);
     }
-  }catch(err){
-    console.warn(err);
-    // não limpa token aqui; deixa o usuário tentar recarregar
   }
+
+  // Boot
+  await montarDashboard();
 });
 </script>
 </body>
