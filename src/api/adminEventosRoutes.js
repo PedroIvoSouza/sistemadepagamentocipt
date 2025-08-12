@@ -21,8 +21,9 @@ router.use(adminAuthMiddleware);
 
 // ROTA PARA CRIAR UM NOVO EVENTO E EMITIR TODAS AS DARs
 router.post('/', async (req, res) => {
+  // CORREÇÃO 1: Adicionar 'totalDiarias' na desestruturação do corpo da requisição.
   const {
-    idCliente, nomeEvento, datasEvento, valorFinal, parcelas
+    idCliente, nomeEvento, datasEvento, totalDiarias, valorFinal, parcelas
   } = req.body;
 
   if (!idCliente || !nomeEvento || !Array.isArray(parcelas) || parcelas.length === 0) {
@@ -33,10 +34,10 @@ router.post('/', async (req, res) => {
     // Inicia a transação para garantir que tudo seja salvo ou nada
     await dbRun('BEGIN TRANSACTION');
 
-    // 1. Insere o Evento principal no banco de dados
+    // CORREÇÃO 2: Adicionar a coluna 'total_diarias' e seu valor no comando INSERT.
     const eventoStmt = await dbRun(
-      `INSERT INTO Eventos (id_cliente, nome_evento, datas_evento, valor_final, status) VALUES (?, ?, ?, ?, ?)`,
-      [idCliente, nomeEvento, JSON.stringify(datasEvento), valorFinal, 'Pendente']
+      `INSERT INTO Eventos (id_cliente, nome_evento, datas_evento, total_diarias, valor_final, status) VALUES (?, ?, ?, ?, ?, ?)`,
+      [idCliente, nomeEvento, JSON.stringify(datasEvento), totalDiarias, valorFinal, 'Pendente']
     );
     const eventoId = eventoStmt.lastID;
 
