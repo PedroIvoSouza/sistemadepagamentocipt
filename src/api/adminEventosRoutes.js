@@ -206,19 +206,19 @@ async function emitirDarByRow(row) {
   };
 
   // monta payload da SEFAZ conforme manual
-  const payload = buildSefazPayloadFromDarEvento({
+    const payload = buildSefazPayloadFromDarEvento({
     darRow: { id: row.dar_id, valor, data_vencimento: venc, status: row.dar_status },
     eventoRow: { id: row.evento_id, nome_evento: row.evento_nome },
     clienteRow: {
       id: row.cliente_id,
-      documento: row.cliente_documento,
-      nome_razao_social: row.cliente_nome,
+      documento: onlyDigits(row.documento || row.cliente_documento || ''),
+      nome_razao_social: row.nome_cliente,
       endereco: row.cliente_endereco,
       cep: row.cliente_cep,
-      codigo_ibge_municipio: row.cliente_codigo_ibge || null,
+      codigo_ibge_municipio: COD_IBGE_MUNICIPIO // <<< vem do .env
     },
     receitaCodigo: RECEITA_CODIGO_EVENTO,
-    dataLimite: venc, // regra simples: igual ao vencimento
+    dataLimite: venc,
   });
 
   // Encargos de atraso (se existir serviço e a DAR estiver vencida)
