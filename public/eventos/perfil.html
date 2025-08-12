@@ -104,7 +104,7 @@
   </div>
   <script>
   function formatarCNPJ(cnpj) {
-    const doc = cnpj ? cnpj.toString().replace(/\D/g, '') : '';
+    const doc = cnpj ? String(cnpj).replace(/\D/g, '') : '';
     if (doc.length === 14) return doc.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5");
     if (doc.length === 11) return doc.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
     return cnpj || '';
@@ -115,7 +115,10 @@
     if (!token) { window.location.href = '/eventos/login-eventos.html'; return; }
 
     const headers = { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' };
-    const editableFieldIds = ['profileTelefone','profileNomeResponsavel','profileCep','profileLogradouro','profileNumero','profileBairro','profileCidade','profileUf'];
+    const editableFieldIds = [
+      'profileTelefone','profileNomeResponsavel','profileCep','profileLogradouro',
+      'profileNumero','profileBairro','profileCidade','profileUf'
+    ];
     const editButton = document.getElementById('editButton');
     const formActions = document.getElementById('formActions');
     const cancelButton = document.getElementById('cancelButton');
@@ -123,7 +126,6 @@
     const profileMessageDiv = document.getElementById('profileMessage');
     const changePasswordForm = document.getElementById('changePasswordForm');
     const passwordMessageDiv = document.getElementById('passwordMessage');
-    var originalData = {};
 
     function toggleEditMode(isEditing) {
       editableFieldIds.forEach(function (id) {
@@ -137,43 +139,54 @@
     }
 
     async function loadUserData() {
-  try {
-    const response = await fetch('/api/eventos/clientes/me', { headers: { 'Authorization': `Bearer ${token}` } });
-    if (!response.ok) throw new Error('Sessão inválida.');
-    const data = await response.json();
-    const u = data.user || data || {};
+      try {
+        // Tenta as duas rotas que você usa no projeto
+        let response = await fetch('/api/eventos/clientes/me', { headers: { 'Authorization': `Bearer ${token}` } });
+        if (response.status === 404) response = await fetch('/api/portal/eventos/me', { headers: { 'Authorization': `Bearer ${token}` } });
+        if (!response.ok) {
+          if (response.status === 401 || response.status === 403) {
+            localStorage.removeItem('token_evento');
+            window.location.href = '/eventos/login-eventos.html';
+            return;
+          }
+          throw new Error('Sessão inválida.');
+        }
 
-    // Nome/documento/topbar
-    document.getElementById('userName').innerText = u.nome_razao_social || u.nome || 'Cliente';
-    document.getElementById('userCnpj').innerText = formatarCNPJ(u.documento || u.cnpj || u.cpf || '');
+        const data = await response.json();
+        const u = data.user || data || {};
 
-    // Campos simples
-    document.getElementById('profileNome').value = u.nome_razao_social || u.nome || '';
-    document.getElementById('profileDocumento').value = formatarCNPJ(u.documento || u.cnpj || u.cpf || '');
-    document.getElementById('profileEmail').value = u.email || u.login || '';
+        // Topbar
+        document.getElementById('userName').innerText = u.nome_razao_social || u.nome || 'Cliente';
+        document.getElementById('userCnpj').innerText = formatarCNPJ(u.documento || u.cnpj || u.cpf || '');
 
-    // Tenta achar endereço em diferentes formatos
-    const e = u.endereco || u.address || {};
-    const logradouro = u.logradouro ?? e.logradouro ?? u.endereco_logradouro ?? '';
-    const numero     = u.numero     ?? e.numero     ?? u.endereco_numero     ?? '';
-    const bairro     = u.bairro     ?? e.bairro     ?? u.endereco_bairro     ?? '';
-    const cidade     = u.cidade     ?? e.cidade     ?? u.endereco_cidade     ?? '';
-    const uf         = u.uf         ?? e.uf         ?? u.endereco_uf         ?? '';
-    const cep        = u.cep        ?? e.cep        ?? u.endereco_cep        ?? '';
+        // Dados fixos
+        document.getElementById('profileNome').value = u.nome_razao_social || u.nome || '';
+        document.getElementById('profileDocumento').value = formatarCNPJ(u.documento || u.cnpj || u.cpf || '');
+        document.getElementById('profileEmail').value = u.email || u.login || '';
 
-    document.getElementById('profileTelefone').value = u.telefone || u.fone || '';
-    document.getElementById('profileNomeResponsavel').value = u.nome_responsavel || u.responsavel || '';
-    document.getElementById('profileCep').value = cep || '';
-    document.getElementById('profileLogradouro').value = logradouro || '';
-    document.getElementById('profileNumero').value = numero || '';
-    document.getElementById('profileBairro').value = bairro || '';
-    document.getElementById('profileCidade').value = cidade || '';
-    document.getElementById('profileUf').value = uf || '';
-  } catch (error) {
-    localStorage.removeItem('token_evento');
-    window.location.href = '/eventos/login-eventos.html';
-  }
-}
+        // Endereço (vários formatos possíveis)
+        const e = u.endereco || u.address || {};
+        const logradouro = u.logradouro ?? e.logradouro ?? u.endereco_logradouro ?? '';
+        const numero     = u.numero     ?? e.numero     ?? u.endereco_numero     ?? '';
+        const bairro     = u.bairro     ?? e.bairro     ?? u.endereco_bairro     ?? '';
+        const cidade     = u.cidade     ?? e.cidade     ?? u.endereco_cidade     ?? '';
+        const uf         = u.uf         ?? e.uf         ?? u.endereco_uf         ?? '';
+        const cep        = u.cep        ?? e.cep        ?? u.endereco_cep        ?? '';
+
+        document.getElementById('profileTelefone').value = u.telefone || u.fone || '';
+        document.getElementById('profileNomeResponsavel').value = u.nome_responsavel || u.responsavel || '';
+        document.getElementById('profileCep').value = cep || '';
+        document.getElementById('profileLogradouro').value = logradouro || '';
+        document.getElementById('profileNumero').value = numero || '';
+        document.getElementById('profileBairro').value = bairro || '';
+        document.getElementById('profileCidade').value = cidade || '';
+        document.getElementById('profileUf').value = uf || '';
+      } catch (error) {
+        console.error(error);
+        // Evita limpar token à toa; só redireciona se 401/403 (acima)
+        alert('Não foi possível carregar seus dados agora.');
+      }
+    }
 
     editButton.addEventListener('click', function () { toggleEditMode(true); });
     cancelButton.addEventListener('click', function () {
@@ -186,14 +199,16 @@
       e.preventDefault();
       const dataToSave = {};
       editableFieldIds.forEach(function (id) {
-        // 'profile' tem 7 letras; extrai a chave após isso.
         const key = id.charAt(7).toLowerCase() + id.slice(8);
         dataToSave[key] = document.getElementById(id).value;
       });
 
       try {
-        const res = await fetch('/api/portal/eventos/me', { method: 'PUT', headers, body: JSON.stringify(dataToSave) });
-        const result = await res.json();
+        // Usa a rota de portal para update
+        const res = await fetch('/api/portal/eventos/me', {
+          method: 'PUT', headers, body: JSON.stringify(dataToSave)
+        });
+        const result = await res.json().catch(() => ({}));
         if (!res.ok) {
           if (res.status === 401) {
             localStorage.removeItem('token_evento');
@@ -230,8 +245,10 @@
       }
 
       try {
-        const res = await fetch('/api/portal/eventos/change-password', { method: 'POST', headers, body: JSON.stringify(data) });
-        const result = await res.json();
+        const res = await fetch('/api/portal/eventos/change-password', {
+          method: 'POST', headers, body: JSON.stringify(data)
+        });
+        const result = await res.json().catch(() => ({}));
         if (!res.ok) {
           if (res.status === 401) {
             localStorage.removeItem('token_evento');

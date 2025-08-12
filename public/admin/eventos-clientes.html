@@ -221,410 +221,310 @@
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://unpkg.com/imask"></script>
   <script>
-  document.addEventListener('DOMContentLoaded', () => {
-    // ======== Auth / Menu ========
-    const token = localStorage.getItem('adminAuthToken');
-    if (!token) { window.location.href = '/admin/login.html'; return; }
+function onlyDigits(v){ return (v||'').toString().replace(/\D/g,''); }
+function formatDocumento(v){
+  const d = onlyDigits(v);
+  if (d.length === 11) return d.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/,'$1.$2.$3-$4');   // CPF
+  if (d.length === 14) return d.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/,'$1.$2.$3/$4-$5'); // CNPJ
+  return v || '';
+}
+document.addEventListener('DOMContentLoaded', () => {
+  const token = localStorage.getItem('adminAuthToken');
+  if (!token) { window.location.href = '/admin/login.html'; return; }
 
-    const path = window.location.pathname;
-    document.querySelectorAll('.sidebar-nav .nav-link').forEach(link => {
-      const href = link.getAttribute('href');
-      if (href && path.endsWith(href)) {
-        link.classList.add('active');
-        const parent = link.closest('.menu-dropdown');
-        if (parent) parent.querySelector('.submenu').style.display = 'block';
-      }
-    });
-    document.querySelectorAll('.menu-dropdown > a').forEach(toggle => {
-      toggle.addEventListener('click', e => {
-        e.preventDefault();
-        const sub = toggle.nextElementSibling;
-        sub.style.display = sub.style.display === 'block' ? 'none' : 'block';
-      });
-    });
-    document.getElementById('logoutButton').addEventListener('click', e => {
-      e.preventDefault();
-      localStorage.removeItem('adminAuthToken');
-      window.location.href = '/admin/login.html';
-    });
-    try {
-      const payload = JSON.parse(atob(token.split('.')[1]));
-      if (payload?.nome) document.getElementById('adminName').innerText = payload.nome;
-    } catch {}
+  // --- Menu / logout / nome admin
+  document.getElementById('logoutButton').addEventListener('click', (e)=>{
+    e.preventDefault(); localStorage.removeItem('adminAuthToken'); window.location.href='/admin/login.html';
+  });
+  try{ const p=JSON.parse(atob(token.split('.')[1])); document.getElementById('adminName').innerText = p?.nome || ''; }catch{}
 
-    // ======== Constantes / refs ========
-    const API_URL = '/api/admin/eventos-clientes';
-    const tableBody = document.getElementById('clientes-table-body');
+  // --- Refs UI
+  const clienteModalEl = document.getElementById('cliente-modal');
+  const clienteModal   = new bootstrap.Modal(clienteModalEl);
+  const modalTitle     = document.getElementById('modal-title');
+  const form           = document.getElementById('cliente-form');
+  const submitBtn      = clienteModalEl.querySelector('.modal-footer button[form="cliente-form"]');
+  const tableBody      = document.getElementById('clientes-table-body');
 
-    const clienteModalEl = document.getElementById('cliente-modal');
-    const clienteModal = new bootstrap.Modal(clienteModalEl);
-    const modalTitle = document.getElementById('modal-title');
+  const clienteIdField   = document.getElementById('cliente-id');
+  const tipoPessoaSelect = document.getElementById('tipo_pessoa');
+  const documentoInput   = document.getElementById('documento');
+  const nomeRazaoInput   = document.getElementById('nome_razao_social');
+  const emailInput       = document.getElementById('email');
+  const telefoneInput    = document.getElementById('telefone');
+  const tipoClienteSel   = document.getElementById('tipo_cliente');
 
-    const form = document.getElementById('cliente-form');
-    const clienteIdField = document.getElementById('cliente-id');
-    const tipoPessoaSelect = document.getElementById('tipo_pessoa');
-    const responsavelGroup = document.getElementById('responsavel-group');
+  const responsavelGroup = document.getElementById('responsavel-group');
+  const nomeRespInput    = document.getElementById('nome_responsavel');
+  const docRespInput     = document.getElementById('documento_responsavel');
 
-    const inputDocumento = document.getElementById('documento');
-    const btnBuscarCNPJ = document.getElementById('btn-buscar-cnpj');
+  const cepInput        = document.getElementById('cep');
+  const logradouroInput = document.getElementById('logradouro');
+  const numeroInput     = document.getElementById('numero');
+  const complInput      = document.getElementById('complemento');
+  const bairroInput     = document.getElementById('bairro');
+  const cidadeInput     = document.getElementById('cidade');
+  const ufInput         = document.getElementById('uf');
 
-    const inputNome = document.getElementById('nome_razao_social');
-    const inputEmail = document.getElementById('email');
-    const inputTelefone = document.getElementById('telefone');
+  // --- Máscaras
+  let documentoMask, responsavelCpfMask, telefoneMask, cepMask;
+  function aplicarMascaras(){
+    documentoMask && documentoMask.destroy();
+    responsavelCpfMask && responsavelCpfMask.destroy();
+    telefoneMask && telefoneMask.destroy();
+    cepMask && cepMask.destroy();
 
-    const inputCEP = document.getElementById('cep');
-    const btnBuscarCEP = document.getElementById('btn-buscar-cep');
-    const inputLogradouro = document.getElementById('logradouro');
-    const inputNumero = document.getElementById('numero');
-    const inputCompl = document.getElementById('complemento');
-    const inputBairro = document.getElementById('bairro');
-    const inputCidade = document.getElementById('cidade');
-    const inputUF = document.getElementById('uf');
+    const tipo = tipoPessoaSelect.value;
+    responsavelGroup.style.display = tipo === 'PJ' ? 'block' : 'none';
+    documentoInput.placeholder = tipo === 'PJ' ? '00.000.000/0000-00' : '000.000.000-00';
 
-    const inputRespNome = document.getElementById('nome_responsavel');
-    const inputRespCPF = document.getElementById('documento_responsavel');
+    documentoMask = IMask(documentoInput, { mask: tipo === 'PJ' ? '00.000.000/0000-00' : '000.000.000-00' });
+    if (tipo === 'PJ') responsavelCpfMask = IMask(docRespInput, { mask: '000.000.000-00' });
+    telefoneMask = IMask(telefoneInput, { mask: [{ mask: '(00) 0000-0000' }, { mask: '(00) 0 0000-0000' }] });
+    cepMask = IMask(cepInput, { mask: '00000-000' });
+  }
 
-    // ======== Máscaras ========
-    let maskDocumento, maskRespCPF, maskTelefone, maskCEP;
-    const applyMasks = () => {
-      if (maskDocumento) maskDocumento.destroy();
-      if (maskRespCPF) maskRespCPF.destroy();
-      if (maskTelefone) maskTelefone.destroy();
-      if (maskCEP) maskCEP.destroy();
+  // --- Helpers
+  const API_URL = '/api/admin/eventos-clientes';
+  function limparEndereco(){
+    logradouroInput.value=''; numeroInput.value=''; complInput.value='';
+    bairroInput.value=''; cidadeInput.value=''; ufInput.value='';
+  }
+  function limparPessoaJuridica(){
+    nomeRespInput.value=''; docRespInput.value='';
+  }
+  function limparDocumentoENome(){
+    documentoInput.value=''; nomeRazaoInput.value='';
+  }
 
-      const tipo = tipoPessoaSelect.value;
-      responsavelGroup.style.display = (tipo === 'PJ') ? 'block' : 'none';
-      inputDocumento.placeholder = tipo === 'PJ' ? '00.000.000/0000-00' : '000.000.000-00';
-
-      maskDocumento = IMask(inputDocumento, { mask: tipo === 'PJ' ? '00.000.000/0000-00' : '000.000.000-00' });
-      maskTelefone = IMask(inputTelefone, { mask: [{ mask: '(00) 0000-0000' }, { mask: '(00) 0 0000-0000' }] });
-      maskCEP = IMask(inputCEP, { mask: '00000-000' });
-      if (tipo === 'PJ') {
-        maskRespCPF = IMask(inputRespCPF, { mask: '000.000.000-00' });
-      } else {
-        inputRespCPF.value = '';
-        inputRespNome.value = '';
-      }
-    };
-    applyMasks();
-
-    tipoPessoaSelect.addEventListener('change', () => {
-      // ao trocar PF/PJ, limpa campos específicos e aplica máscaras
-      inputDocumento.value = '';
-      inputRespCPF.value = '';
-      inputRespNome.value = '';
-      applyMasks();
-    });
-
-    inputUF.addEventListener('input', () => inputUF.value = (inputUF.value || '').toUpperCase());
-
-    // ======== Helpers público (sem backend) ========
-    const onlyDigits = s => String(s||'').replace(/\D/g,'');
-    function setBusy(el, busy=true){
-      if (!el) return;
-      el.dataset.oldcursor = el.style.cursor;
-      el.style.cursor = busy ? 'progress' : (el.dataset.oldcursor || '');
-      el.readOnly = !!busy;
-    }
-    function formatarCNPJ(cnpj){
-      const d = onlyDigits(cnpj);
-      return d.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/,'$1.$2.$3/$4-$5');
-    }
-    function formatarCPF(cpf){
-      const d = onlyDigits(cpf);
-      return d.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/,'$1.$2.$3-$4');
-    }
-
-    // Normalizadores
-    function normalizeCNPJFromBrasilAPI(data){
-      return {
-        razao_social : data.razao_social || data.nome_fantasia || data.nome || '',
-        nome_fantasia: data.nome_fantasia || '',
-        email        : data.email || '',
-        telefone     : (data.telefone || '').replace(/\D/g,''),
-        cep          : (data.cep || '').replace(/\D/g,''),
-        logradouro   : data.logradouro || '',
-        numero       : data.numero || '',
-        complemento  : data.complemento || '',
-        bairro       : data.bairro || '',
-        cidade       : data.municipio || data.localidade || data.cidade || '',
-        uf           : (data.uf || '').toUpperCase()
-      };
-    }
-    function normalizeCEPFromBrasilAPI(data){
-      return {
-        logradouro: data.street || data.logradouro || '',
-        bairro    : data.neighborhood || data.bairro || '',
-        cidade    : data.city || data.localidade || data.cidade || '',
-        uf        : (data.state || data.uf || '').toUpperCase()
-      };
-    }
-    function normalizeCEPFromViaCEP(data){
-      return {
-        logradouro: data.logradouro || '',
-        bairro    : data.bairro || '',
-        cidade    : data.localidade || '',
-        uf        : (data.uf || '').toUpperCase()
-      };
-    }
-
-    async function fetchCNPJPublic(cnpj){
-      const r = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`, { mode:'cors' });
-      if (!r.ok) {
-        const t = await r.text().catch(()=> '');
-        throw new Error(`CNPJ inválido ou não encontrado (HTTP ${r.status})${t?`: ${t}`:''}`);
-      }
+  // --- ViaCEP (CEP → endereço)
+  async function buscarCEP(cep){
+    const soNum = (cep||'').replace(/\D/g,'');
+    if (soNum.length !== 8) return null;
+    try{
+      const r = await fetch(`https://viacep.com.br/ws/${soNum}/json/`);
+      if (!r.ok) return null;
       const j = await r.json();
-      return normalizeCNPJFromBrasilAPI(j);
-    }
-    async function fetchCEPPublic(cep){
-      try {
-        const r = await fetch(`https://brasilapi.com.br/api/cep/v2/${cep}`, { mode:'cors' });
-        if (r.ok) return normalizeCEPFromBrasilAPI(await r.json());
-      } catch {}
-      const r2 = await fetch(`https://viacep.com.br/ws/${cep}/json/`, { mode:'cors' });
-      if (!r2.ok) throw new Error(`CEP inválido ou não encontrado (HTTP ${r2.status})`);
-      const j2 = await r2.json();
-      if (j2.erro) throw new Error('CEP não encontrado na ViaCEP.');
-      return normalizeCEPFromViaCEP(j2);
-    }
+      if (j.erro) return null;
+      return j; // {logradouro, bairro, localidade, uf, ...}
+    }catch{ return null; }
+  }
 
-    async function autoCNPJ(){
-      if (tipoPessoaSelect.value !== 'PJ') return;
-      const clean = onlyDigits(inputDocumento.value);
-      if (clean.length !== 14) return;
-      try{
-        setBusy(inputDocumento, true);
-        const j = await fetchCNPJPublic(clean);
-        if (!inputNome.value) inputNome.value = j.razao_social || j.nome_fantasia || '';
-        if (!inputEmail.value && j.email) inputEmail.value = j.email;
-        if (!inputTelefone.value && j.telefone) inputTelefone.value = j.telefone;
+  // --- BrasilAPI CNPJ (CNPJ → dados básicos)
+  async function buscarCNPJ(cnpj){
+    const soNum = (cnpj||'').replace(/\D/g,'');
+    if (soNum.length !== 14) return null;
+    try{
+      const r = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${soNum}`);
+      if (!r.ok) return null;
+      const j = await r.json();
+      // Campos úteis: razao_social, nome_fantasia, cep, logradouro, numero, complemento, bairro, municipio, uf, telefone
+      return j;
+    }catch{ return null; }
+  }
 
-        if (!inputCEP.value && j.cep) inputCEP.value = j.cep;
-        if (!inputLogradouro.value && j.logradouro) inputLogradouro.value = j.logradouro;
-        if (!inputNumero.value && j.numero) inputNumero.value = j.numero;
-        if (!inputCompl.value && j.complemento) inputCompl.value = j.complemento;
-        if (!inputBairro.value && j.bairro) inputBairro.value = j.bairro;
-        if (!inputCidade.value && j.cidade) inputCidade.value = j.cidade;
-        if (!inputUF.value && j.uf) inputUF.value = j.uf;
-      } catch(e){
-        alert(e.message || 'Não foi possível consultar o CNPJ.');
-      } finally {
-        setBusy(inputDocumento, false);
+  // --- Tabela
+  async function carregarClientes(){
+    tableBody.innerHTML = `<tr><td colspan="5" class="text-center">Carregando...</td></tr>`;
+    try{
+      const r = await fetch(API_URL, { headers: { Authorization:`Bearer ${token}` }});
+      const j = await r.json().catch(()=> ([]));
+      if (!r.ok) throw new Error(j.error || `Erro ${r.status}`);
+      if (!Array.isArray(j) || !j.length){
+        tableBody.innerHTML = `<tr><td colspan="5" class="text-center text-muted py-3">Nenhum cliente cadastrado.</td></tr>`;
+        return;
       }
-    }
-
-    async function autoCEP(){
-      const clean = onlyDigits(inputCEP.value);
-      if (clean.length !== 8) return;
-      try{
-        setBusy(inputCEP, true);
-        const j = await fetchCEPPublic(clean);
-        if (j.logradouro) inputLogradouro.value = j.logradouro;
-        if (j.bairro) inputBairro.value = j.bairro;
-        if (j.cidade) inputCidade.value = j.cidade;
-        if (j.uf) inputUF.value = j.uf;
-      } catch(e){
-        alert(e.message || 'Não foi possível consultar o CEP.');
-      } finally {
-        setBusy(inputCEP, false);
-      }
-    }
-
-    // listeners dos botões/blur
-    btnBuscarCNPJ.addEventListener('click', autoCNPJ);
-    inputDocumento.addEventListener('blur', autoCNPJ);
-    btnBuscarCEP.addEventListener('click', autoCEP);
-    inputCEP.addEventListener('blur', autoCEP);
-
-    // ======== CRUD ========
-    async function carregarClientes(){
-      tableBody.innerHTML = `<tr><td colspan="5" class="text-center text-muted py-3">Carregando...</td></tr>`;
-      try{
-        const r = await fetch(API_URL, { headers:{ Authorization:`Bearer ${token}` }});
-        if (!r.ok) {
-          const er = await r.json().catch(()=> ({}));
-          throw new Error(er.error || `Erro ${r.status}`);
-        }
-        const clientes = await r.json();
-
-        if (!Array.isArray(clientes) || !clientes.length) {
-          tableBody.innerHTML = `<tr><td colspan="5" class="text-center text-muted py-3">Nenhum cliente cadastrado.</td></tr>`;
-          return;
-        }
-        tableBody.innerHTML = '';
-        clientes.forEach(c => {
-          const docFmt = c.tipo_pessoa === 'PJ' ? formatarCNPJ(c.documento) : formatarCPF(c.documento);
-          const resendBtn = !c.senha_hash
-            ? `<button class="btn btn-sm btn-outline-info btn-resend" data-id="${c.id}" title="Reenviar e-mail de senha"><i class="bi bi-envelope-arrow-up-fill"></i></button>`
-            : `<button class="btn btn-sm btn-outline-success" disabled title="Senha já definida"><i class="bi bi-check-circle-fill"></i></button>`;
-          const tr = document.createElement('tr');
-          tr.innerHTML = `
+      tableBody.innerHTML = j.map(c=>{
+        const resendButton = !c.senha_hash
+          ? `<button class="btn btn-sm btn-outline-info btn-resend" data-id="${c.id}" title="Reenviar senha"><i class="bi bi-envelope-arrow-up-fill"></i></button>`
+          : `<button class="btn btn-sm btn-outline-success" disabled title="Senha já definida"><i class="bi bi-check-circle-fill"></i></button>`;
+        return `
+          <tr>
             <td>${c.nome_razao_social || ''}</td>
-            <td>${docFmt || ''}</td>
+            <td>${formatDocumento(c.documento)}</td>
             <td>${c.email || ''}</td>
             <td><span class="badge bg-secondary">${c.tipo_cliente || ''}</span></td>
             <td class="text-end">
-              <div class="btn-group" role="group">
-                ${resendBtn}
-                <button class="btn btn-sm btn-outline-primary btn-edit" data-cliente='${JSON.stringify(c)}'><i class="bi bi-pencil-fill"></i> Editar</button>
+              <div class="btn-group">
+                ${resendButton}
+                <button class="btn btn-sm btn-outline-primary btn-edit" data-cliente-encoded='${encodeURIComponent(JSON.stringify(c))}'>
+                <i class="bi bi-pencil-fill"></i> Editar
+                </button>                
                 <button class="btn btn-sm btn-outline-danger btn-delete" data-id="${c.id}"><i class="bi bi-trash-fill"></i> Excluir</button>
               </div>
             </td>
-          `;
-          tableBody.appendChild(tr);
-        });
-      }catch(e){
-        tableBody.innerHTML = `<tr><td colspan="5" class="text-center text-danger"><b>Erro:</b> ${e.message}</td></tr>`;
-      }
+          </tr>`;
+      }).join('');
+    }catch(err){
+      tableBody.innerHTML = `<tr><td colspan="5" class="text-danger text-center">Erro: ${err.message}</td></tr>`;
     }
+  }
 
-    function setupModal(cliente=null){
-      form.reset();
-      form.classList.remove('was-validated');
-      if (cliente){
-        modalTitle.textContent = 'Editar Cliente';
-        clienteIdField.value = cliente.id;
-        tipoPessoaSelect.value = cliente.tipo_pessoa || 'PJ';
-        applyMasks();
+  // --- Modal
+  function setupModal(cliente=null){
+    form.reset();
+    form.classList.remove('was-validated');
 
-        inputDocumento.value = cliente.documento || '';
-        inputNome.value = cliente.nome_razao_social || '';
-        inputEmail.value = cliente.email || '';
-        inputTelefone.value = cliente.telefone || '';
+    if (cliente){
+      modalTitle.textContent = 'Editar Cliente';
+      clienteIdField.value = cliente.id;
+      tipoPessoaSelect.value = cliente.tipo_pessoa || 'PJ';
+      documentoInput.value   = cliente.documento || '';
+      nomeRazaoInput.value   = cliente.nome_razao_social || '';
+      emailInput.value       = cliente.email || '';
+      telefoneInput.value    = cliente.telefone || '';
+      tipoClienteSel.value   = cliente.tipo_cliente || 'Geral';
 
-        inputCEP.value = cliente.cep || '';
-        inputLogradouro.value = cliente.logradouro || '';
-        inputNumero.value = cliente.numero || '';
-        inputCompl.value = cliente.complemento || '';
-        inputBairro.value = cliente.bairro || '';
-        inputCidade.value = cliente.cidade || '';
-        inputUF.value = cliente.uf || '';
+      nomeRespInput.value    = cliente.nome_responsavel || '';
+      docRespInput.value     = cliente.documento_responsavel || '';
 
-        inputRespNome.value = cliente.nome_responsavel || '';
-        inputRespCPF.value = cliente.documento_responsavel || '';
-        document.getElementById('tipo_cliente').value = cliente.tipo_cliente || 'Geral';
-      } else {
-        modalTitle.textContent = 'Adicionar Novo Cliente';
-        clienteIdField.value = '';
-        tipoPessoaSelect.value = 'PJ';
-        applyMasks();
-      }
+      cepInput.value         = cliente.cep || '';
+      logradouroInput.value  = cliente.logradouro || '';
+      numeroInput.value      = cliente.numero || '';
+      complInput.value       = cliente.complemento || '';
+      bairroInput.value      = cliente.bairro || '';
+      cidadeInput.value      = cliente.cidade || '';
+      ufInput.value          = cliente.uf || '';
+    } else {
+      modalTitle.textContent = 'Adicionar Novo Cliente';
+      clienteIdField.value = '';
+      limparEndereco(); limparPessoaJuridica();
     }
+    aplicarMascaras();
+  }
 
-    clienteModalEl.addEventListener('show.bs.modal', (ev) => {
-      const btn = ev.relatedTarget;
-      if (btn && btn.id === 'add-cliente-btn') setupModal(null);
-    });
+  document.getElementById('add-cliente-btn').addEventListener('click', ()=> setupModal(null));
 
-    // salvar
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      if (!form.checkValidity()){
-        e.stopPropagation();
-        form.classList.add('was-validated');
-        return;
-      }
-      const id = clienteIdField.value;
-      const url = id ? `${API_URL}/${id}` : API_URL;
-      const method = id ? 'PUT' : 'POST';
-
-      const body = {
-        nome_razao_social: inputNome.value,
-        tipo_pessoa: tipoPessoaSelect.value,
-        documento: (maskDocumento?.unmaskedValue ?? onlyDigits(inputDocumento.value)),
-        email: inputEmail.value,
-        telefone: (maskTelefone?.unmaskedValue ?? onlyDigits(inputTelefone.value)),
-        nome_responsavel: inputRespNome.value || null,
-        documento_responsavel: (maskRespCPF?.unmaskedValue ?? onlyDigits(inputRespCPF.value)) || null,
-        tipo_cliente: document.getElementById('tipo_cliente').value,
-        cep: (maskCEP?.unmaskedValue ?? onlyDigits(inputCEP.value)) || null,
-        logradouro: inputLogradouro.value || null,
-        bairro: inputBairro.value || null,
-        cidade: inputCidade.value || null,
-        uf: (inputUF.value || '').toUpperCase() || null,
-        numero: inputNumero.value || null,
-        complemento: inputCompl.value || null
-      };
-
-      try{
-        const btnSubmit = form.querySelector('button[type="submit"]');
-        btnSubmit.disabled = true;
-        btnSubmit.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Salvando...`;
-
-        const r = await fetch(url, {
-          method,
-          headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${token}` },
-          body: JSON.stringify(body)
-        });
-        const result = await r.json().catch(()=> ({}));
-        if (!r.ok) throw new Error(result.error || `Erro ${r.status}`);
-
-        alert(result.message || 'Salvo com sucesso!');
-        clienteModal.hide();
-        carregarClientes();
-      }catch(err){
-        alert(`Erro ao salvar: ${err.message}`);
-      }finally{
-        const btnSubmit = form.querySelector('button[type="submit"]');
-        btnSubmit.disabled = false;
-        btnSubmit.textContent = 'Salvar';
-      }
-    });
-
-    // ações na tabela
-    tableBody.addEventListener('click', async (ev) => {
-      const btn = ev.target.closest('button');
-      if (!btn) return;
-
-      // editar
-      if (btn.classList.contains('btn-edit')){
-        const cliente = JSON.parse(btn.dataset.cliente);
-        setupModal(cliente);
-        clienteModal.show();
-      }
-
-      // excluir
-      if (btn.classList.contains('btn-delete')){
-        const id = btn.dataset.id;
-        if (!confirm('Tem certeza que deseja excluir este cliente?')) return;
-        try{
-          btn.disabled = true;
-          const r = await fetch(`${API_URL}/${id}`, { method:'DELETE', headers:{ Authorization:`Bearer ${token}` }});
-          const result = await r.json().catch(()=> ({}));
-          if (!r.ok) throw new Error(result.error || `Erro ${r.status}`);
-          alert('Cliente excluído com sucesso!');
-          carregarClientes();
-        }catch(e){
-          alert(`Erro ao excluir: ${e.message}`);
-        }finally{
-          btn.disabled = false;
-        }
-      }
-
-      // reenviar senha
-      if (btn.classList.contains('btn-resend')){
-        const id = btn.dataset.id;
-        btn.disabled = true;
-        const original = btn.innerHTML;
-        btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
-        try{
-          const r = await fetch(`${API_URL}/${id}/reenviar-senha`, { method:'POST', headers:{ Authorization:`Bearer ${token}` }});
-          const result = await r.json().catch(()=> ({}));
-          if (!r.ok) throw new Error(result.error || `Erro ${r.status}`);
-          alert(result.message || 'E-mail reenviado!');
-          btn.outerHTML = `<button class="btn btn-sm btn-outline-success" disabled title="E-mail enviado"><i class="bi bi-check-circle-fill"></i></button>`;
-        }catch(e){
-          alert(`Erro ao reenviar e-mail: ${e.message}`);
-          btn.disabled = false;
-          btn.innerHTML = original;
-        }
-      }
-    });
-
-    // inicializa
-    carregarClientes();
+  // Alternar PF/PJ limpa campos-chave
+  tipoPessoaSelect.addEventListener('change', ()=>{
+    limparDocumentoENome();
+    limparPessoaJuridica();
+    aplicarMascaras();
   });
-  </script>
+
+  // CNPJ → auto preencher (quando PJ)
+  documentoInput.addEventListener('blur', async ()=>{
+    if (tipoPessoaSelect.value !== 'PJ') return;
+    const cnpjInfo = await buscarCNPJ(documentoInput.value);
+    if (!cnpjInfo) return; // nada encontrado, mantém como está
+    // preenche nome/telefone/cep/endereço se estiverem vazios
+    if (!nomeRazaoInput.value) nomeRazaoInput.value = cnpjInfo.razao_social || cnpjInfo.nome_fantasia || '';
+    if (!telefoneInput.value && cnpjInfo.telefone) telefoneInput.value = cnpjInfo.telefone;
+    if (!cepInput.value && cnpjInfo.cep) cepInput.value = cnpjInfo.cep.replace(/\D/g,'').padStart(8,'0').replace(/(\d{5})(\d{3})/,'$1-$2');
+
+    if (!logradouroInput.value) logradouroInput.value = cnpjInfo.logradouro || '';
+    if (!numeroInput.value)     numeroInput.value     = cnpjInfo.numero || '';
+    if (!complInput.value)      complInput.value      = cnpjInfo.complemento || '';
+    if (!bairroInput.value)     bairroInput.value     = cnpjInfo.bairro || '';
+    if (!cidadeInput.value)     cidadeInput.value     = cnpjInfo.municipio || cnpjInfo.cidade || '';
+    if (!ufInput.value)         ufInput.value         = cnpjInfo.uf || '';
+  });
+
+  // CEP → endereço via ViaCEP
+  cepInput.addEventListener('blur', async ()=>{
+    const cep = (cepInput.value||'').replace(/\D/g,'');
+    if (cep.length !== 8){ limparEndereco(); return; }
+    const data = await buscarCEP(cep);
+    if (!data) return;
+    logradouroInput.value = data.logradouro || logradouroInput.value;
+    bairroInput.value     = data.bairro     || bairroInput.value;
+    cidadeInput.value     = data.localidade || cidadeInput.value;
+    ufInput.value         = data.uf         || ufInput.value;
+  });
+
+  // Submit (create / update)
+  form.addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    if (!form.checkValidity()){ form.classList.add('was-validated'); return; }
+
+    const id = clienteIdField.value;
+    const url = id ? `${API_URL}/${id}` : API_URL;
+    const method = id ? 'PUT' : 'POST';
+
+    const body = {
+      nome_razao_social: nomeRazaoInput.value,
+      tipo_pessoa: tipoPessoaSelect.value,
+      documento: documentoInput.value.replace(/\D/g,''),
+      email: emailInput.value,
+      telefone: telefoneInput.value.replace(/\D/g,''),
+      nome_responsavel: nomeRespInput.value || null,
+      documento_responsavel: (docRespInput.value||'').replace(/\D/g,'') || null,
+      tipo_cliente: tipoClienteSel.value,
+      cep: cepInput.value.replace(/\D/g,'') || null,
+      logradouro: logradouroInput.value || null,
+      bairro: bairroInput.value || null,
+      cidade: cidadeInput.value || null,
+      uf: (ufInput.value||'').toUpperCase() || null,
+      numero: numeroInput.value || null,
+      complemento: complInput.value || null
+    };
+
+    if (submitBtn){ submitBtn.disabled = true; submitBtn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Salvando...`; }
+
+    try{
+      const r = await fetch(url, {
+        method,
+        headers: { 'Content-Type':'application/json', Authorization:`Bearer ${token}` },
+        body: JSON.stringify(body)
+      });
+      const j = await r.json().catch(()=> ({}));
+      if (!r.ok) throw new Error(j.error || `Erro ${r.status}`);
+
+      alert(j.message || 'Cliente salvo com sucesso!');
+      clienteModal.hide();
+      setupModal(null); // limpa
+      carregarClientes();
+    }catch(err){
+      alert(`Erro ao salvar: ${err.message}`);
+    }finally{
+      if (submitBtn){ submitBtn.disabled=false; submitBtn.textContent='Salvar'; }
+    }
+  });
+
+  // Ações na tabela: editar/excluir/reenviar senha
+  tableBody.addEventListener('click', async (e)=>{
+    const btn = e.target.closest('button'); if (!btn) return;
+    const id  = btn.dataset.id;
+
+    if (btn.classList.contains('btn-edit')){
+     const raw = btn.dataset.clienteEncoded || '';
+     const data = raw ? JSON.parse(decodeURIComponent(raw)) : null;
+        setupModal(data);
+        clienteModal.show();
+        return;
+    }
+
+    if (btn.classList.contains('btn-delete')){
+      if (!confirm('Excluir cliente?')) return;
+      try{
+        const r = await fetch(`${API_URL}/${id}`, { method:'DELETE', headers:{ Authorization:`Bearer ${token}` }});
+        const j = await r.json().catch(()=> ({}));
+        if (!r.ok) throw new Error(j.error || `Erro ${r.status}`);
+        alert('Cliente excluído.');
+        carregarClientes();
+      }catch(err){ alert(`Erro ao excluir: ${err.message}`); }
+      return;
+    }
+
+    if (btn.classList.contains('btn-resend')){
+      const original = btn.innerHTML;
+      btn.disabled = true; btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
+      try{
+        const r = await fetch(`${API_URL}/${id}/reenviar-senha`, { method:'POST', headers:{ Authorization:`Bearer ${token}` }});
+        const j = await r.json().catch(()=> ({}));
+        if (!r.ok) throw new Error(j.error || `Erro ${r.status}`);
+        alert(j.message || 'E-mail enviado.');
+        btn.outerHTML = `<button class="btn btn-sm btn-outline-success" disabled title="E-mail enviado"><i class="bi bi-check-circle-fill"></i></button>`;
+      }catch(err){
+        alert(`Erro: ${err.message}`); btn.disabled=false; btn.innerHTML = original;
+      }
+    }
+  });
+
+  // Boot
+  carregarClientes();
+  aplicarMascaras();
+});
+</script>
 </body>
 </html>

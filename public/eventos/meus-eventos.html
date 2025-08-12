@@ -77,195 +77,202 @@
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-  function formatarCNPJ(cnpj) {
-    const doc = cnpj ? cnpj.toString().replace(/\D/g, '') : '';
-    if (doc.length === 14) return doc.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5");
-    if (doc.length === 11) return doc.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
-    return cnpj || '';
+function baixarPdfBase64(base64, nome){
+  // se já vier com cabeçalho data:, usa direto; senão prefixa
+  const href = base64.startsWith('data:') ? base64 : `data:application/pdf;base64,${base64}`;
+  const a = document.createElement('a'); a.href = href; a.download = nome; a.click();
+}
+function normalizaStatus(status){
+  return (status || '').toString();
+}
+async function fetchDARsCliente(headers, eventoId){
+  // tenta duas rotas
+  for (const u of [`/api/portal/eventos/${eventoId}/dars`, `/api/eventos/clientes/eventos/${eventoId}/dars`]){
+    try{ const r=await fetch(u,{headers}); if(r.ok){ const j=await r.json(); return j?.dars || j || []; } }catch{}
   }
+  return [];
+}
+function formatarDataISO(iso){
+  const d = new Date((iso||'')+'T12:00:00');
+  return isNaN(d) ? '-' : d.toLocaleDateString('pt-BR');
+}
+function formatarDatasEvento(valor){
+  if (Array.isArray(valor) && valor.length) return valor.map(formatarDataISO).join(', ');
+  if (typeof valor === 'string' && /^\d{4}-\d{2}-\d{2}/.test(valor)) return formatarDataISO(valor);
+  return valor || '-';
+}
+document.addEventListener('DOMContentLoaded', async () => {
+  const token = localStorage.getItem('token_evento');
+  if (!token) return (window.location.href = '/eventos/login-eventos.html');
+  const headers = { Authorization: `Bearer ${token}` };
 
-  function getStatusBadge(status) {
-    const map = {
-      'Aguardando Pagamento': 'bg-warning text-dark',
-      'Confirmado': 'bg-success',
-      'Cancelado': 'bg-danger',
-      'Realizado': 'bg-info text-dark',
-      'Pendente': 'bg-secondary'
-    };
-    const cls = map[status] || 'bg-secondary';
-    return '<span class="badge ' + cls + '">' + (status || 'N/D') + '</span>';
-  }
-
-  function getDarStatusBadge(status) {
-    const map = { 'Pendente':'bg-warning text-dark','Pago':'bg-success','Vencido':'bg-danger','Cancelado':'bg-secondary' };
-    const cls = map[status] || 'bg-secondary';
-    return '<span class="badge ' + cls + '">' + (status || 'N/D') + '</span>';
-  }
-
-  document.addEventListener('DOMContentLoaded', async () => {
-    const token = localStorage.getItem('token_evento');
-    if (!token) { window.location.href = '/eventos/login-eventos.html'; return; }
-    const headers = { 'Authorization': 'Bearer ' + token };
-
-    // Logout
-    document.getElementById('logoutButton').addEventListener('click', function (e) {
-      e.preventDefault();
-      localStorage.removeItem('token_evento');
-      window.location.href = '/eventos/login-eventos.html';
-    });
-
-    try {
-      // Unificado com o Dashboard
-      const res = await fetch('/api/portal/eventos/me', { headers });
-      if (!res.ok) {
-        if (res.status === 401) {
-          localStorage.removeItem('token_evento');
-          window.location.href = '/eventos/login-eventos.html';
-          return;
-        }
-        throw new Error('Erro na resposta do servidor: ' + res.status);
-      }
-      const json = await res.json();
-      const user = json.user || {};
-      const eventos = Array.isArray(json.eventos) ? json.eventos : [];
-      const dars = Array.isArray(json.dars) ? json.dars : [];
-
-      // Topbar
-      document.getElementById('userName').innerText = user.nome_razao_social || 'Cliente';
-      document.getElementById('userCnpj').innerText = formatarCNPJ(user.documento || '');
-
-      const accordionContainer = document.getElementById('eventosAccordion');
-      const loadingState = document.getElementById('loadingState');
-
-      if (!eventos.length) {
-        loadingState.innerHTML = '<p class="text-center text-muted p-5">Nenhum evento encontrado para você.</p>';
-        return;
-      }
-
-      var accordionHTML = '';
-      eventos.forEach(function (evento, index) {
-        const darsDoEvento = dars.filter(function (dar) { return dar.id_evento === evento.id; });
-
-        var darsTableHTML = '<tr><td colspan="5" class="text-center text-muted">Nenhuma DAR associada a este evento.</td></tr>';
-        if (darsDoEvento.length > 0) {
-          darsTableHTML = darsDoEvento.map(function (dar) {
-            const valorNum = (typeof dar.valor === 'number')
-              ? dar.valor
-              : (parseFloat(String(dar.valor).replace(/\./g, '').replace(',', '.')) || 0);
-
-            return ''
-              + '<tr>'
-              +   '<td>' + (dar.numero_parcela ? ('Parcela ' + dar.numero_parcela) : 'Única') + '</td>'
-              +   '<td>' + (dar.data_vencimento ? new Date(dar.data_vencimento).toLocaleDateString('pt-BR') : '-') + '</td>'
-              +   '<td class="text-end">R$ ' + valorNum.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) + '</td>'
-              +   '<td class="text-center">' + getDarStatusBadge(dar.status) + '</td>'
-              +   '<td class="text-center">'
-              +     '<button class="btn btn-primary btn-sm" onclick="emitirDar(' + dar.id + ', \'' + (dar.status || '') + '\')" ' + (dar.status === 'Cancelado' ? 'disabled' : '') + '>'
-              +       '<i class="bi bi-file-earmark-arrow-down-fill"></i> ' + (dar.status === 'Vencido' ? 'Emitir 2ª Via' : 'Visualizar')
-              +     '</button>'
-              +   '</td>'
-              + '</tr>';
-          }).join('');
-        }
-
-        const valorFinalNum = (typeof evento.valor_final === 'number')
-          ? evento.valor_final
-          : (parseFloat(String(evento.valor_final).replace(/\./g, '').replace(',', '.')) || 0);
-
-        accordionHTML += ''
-          + '<div class="accordion-item">'
-          +   '<h2 class="accordion-header" id="heading-' + evento.id + '">'
-          +     '<button class="accordion-button ' + (index > 0 ? 'collapsed' : '') + '" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-' + evento.id + '" aria-expanded="' + (index === 0) + '" aria-controls="collapse-' + evento.id + '">'
-          +       '<div class="d-flex justify-content-between w-100 align-items-center pe-3">'
-          +         '<span class="fw-bold">' + (evento.nome_evento || 'Evento sem nome') + '</span>'
-          +         '<span>' + getStatusBadge(evento.status) + '</span>'
-          +       '</div>'
-          +     '</button>'
-          +   '</h2>'
-          +   '<div id="collapse-' + evento.id + '" class="accordion-collapse collapse ' + (index === 0 ? 'show' : '') + '" aria-labelledby="heading-' + evento.id + '" data-bs-parent="#eventosAccordion">'
-          +     '<div class="accordion-body">'
-          +       '<div class="row mb-3">'
-          +         '<div class="col-md-4"><strong>Data(s) do Evento:</strong> ' + (evento.datas_evento || '-') + '</div>'
-          +         '<div class="col-md-4"><strong>Total de Diárias:</strong> ' + (evento.total_diarias || 'N/A') + '</div>'
-          +         '<div class="col-md-4"><strong>Valor Final:</strong> R$ ' + valorFinalNum.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) + '</div>'
-          +       '</div>'
-          +       '<h6 class="mt-4">Documentos de Arrecadação (DARs)</h6>'
-          +       '<div class="table-responsive">'
-          +         '<table class="table table-sm table-hover align-middle">'
-          +           '<thead>'
-          +             '<tr>'
-          +               '<th>Referência</th>'
-          +               '<th>Vencimento</th>'
-          +               '<th class="text-end">Valor (R$)</th>'
-          +               '<th class="text-center">Status</th>'
-          +               '<th class="text-center">Ação</th>'
-          +             '</tr>'
-          +           '</thead>'
-          +           '<tbody>' + darsTableHTML + '</tbody>'
-          +         '</table>'
-          +       '</div>'
-          +     '</div>'
-          +   '</div>'
-          + '</div>';
-      });
-
-      loadingState.remove();
-      accordionContainer.innerHTML = accordionHTML;
-
-    } catch (e) {
-      console.warn('[ERRO] Falha ao carregar eventos:', e);
-      document.getElementById('eventosAccordion').innerHTML =
-        '<div class="alert alert-danger">Não foi possível carregar os dados. Tente novamente mais tarde.</div>';
-    }
+  document.getElementById('logoutButton')?.addEventListener('click', (e)=>{
+    e.preventDefault(); localStorage.removeItem('token_evento'); window.location.href='/eventos/login-eventos.html';
   });
 
-  // Placeholder para emissão de DAR
-  async function emitirDar(darId, status) {
-  const token = localStorage.getItem('token_evento');
-  const headers = { 'Authorization': `Bearer ${token}` };
+  // modal único para DARs
+  let darsModal, darsContent, darsTitle;
+  (function ensureModal(){
+    if (!document.getElementById('darsModal')){
+      const div = document.createElement('div');
+      div.innerHTML = `
+      <div class="modal fade" id="darsModal" tabindex="-1">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+          <div class="modal-content">
+            <div class="modal-header"><h5 id="darsModalLabel" class="modal-title">DARs</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body"><div id="darsContent" class="table-responsive"><div class="text-center py-4">Carregando...</div></div></div>
+            <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button></div>
+          </div>
+        </div>
+      </div>`;
+      document.body.appendChild(div.firstElementChild);
+    }
+    darsModal = new bootstrap.Modal(document.getElementById('darsModal'));
+    darsContent = document.getElementById('darsContent');
+    darsTitle = document.getElementById('darsModalLabel');
+  })();
 
-  async function baixarViaEndpoint(id) {
-    const r = await fetch(`/api/portal/eventos/dars/${id}/pdf`, { headers });
-    if (!r.ok) throw new Error('Falha ao baixar PDF.');
-    const blob = await r.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `DAR-${id}.pdf`;
-    document.body.appendChild(a); a.click(); a.remove();
-    URL.revokeObjectURL(url);
-  }
+  async function abrirDARsDoEvento(eventoId, nomeEvento){
+    darsTitle.innerText = `DARs do Evento: ${nomeEvento || '#' + eventoId}`;
+    darsContent.innerHTML = `<div class="text-center py-4">Carregando...</div>`;
+    darsModal.show();
 
-  try {
-    if (status === 'Vencido') {
-      const res = await fetch(`/api/portal/eventos/dars/${darId}/reemitir`, { method: 'POST', headers });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Falha ao emitir 2ª via.');
-      if (json?.pdf_base64 || json?.dar_pdf) {
-        baixarPdfBase64((json.pdf_base64 || json.dar_pdf), `DAR-${darId}-2via.pdf`);
-      } else {
-        await baixarViaEndpoint(darId);
-      }
-      alert('2ª via emitida com sucesso.');
+    let dars = await fetchDARsCliente(headers, eventoId);
+    if (!Array.isArray(dars) || !dars.length){
+      darsContent.innerHTML = `<div class="alert alert-info">Nenhuma DAR encontrada.</div>`;
       return;
     }
-    // não vencido: tenta baixar direto
-    await baixarViaEndpoint(darId);
-  } catch (e) {
-    alert(e.message || 'Erro ao processar a DAR.');
-  }
-}
+    darsContent.innerHTML = `
+      <table class="table table-sm align-middle">
+        <thead><tr><th>#</th><th class="text-end">Valor</th><th>Venc.</th><th>Status</th><th class="text-center">Ação</th></tr></thead>
+        <tbody>
+          ${dars.map(d=>{
+            const valor = Number(d.valor ?? d.parcela_valor ?? d.dar_valor ?? 0);
+            const venc = d.vencimento ?? d.dar_venc ?? null;
+            const vencFmt = venc ? new Date(venc+'T12:00:00').toLocaleDateString('pt-BR') : '-';
+            const status = normalizaStatus(d.status ?? d.dar_status ?? 'Pendente');
+            const isEmitido = !!(d.dar_pdf && d.dar_pdf.length > 30);
+            const btn = isEmitido
+              ? `<button class="btn btn-sm btn-success" data-dar-download="${d.dar_pdf}" data-evento="${eventoId}" data-parc="${d.parcela_num||''}"><i class="bi bi-download"></i> Baixar</button>`
+              : `<button class="btn btn-sm btn-outline-primary" data-dar-reemitir="${d.id || d.dar_id}" data-evento="${eventoId}"><i class="bi bi-printer"></i> Emitir 2ª Via</button>`;
+            const badge = status==='Pago' ? 'bg-success' : (status==='Emitido' ? 'bg-primary' : (status==='Vencido' ? 'bg-danger':'bg-warning text-dark'));
+            return `<tr>
+              <td>${d.parcela_num || d.referencia || '-'}</td>
+              <td class="text-end">R$ ${valor.toLocaleString('pt-BR',{minimumFractionDigits:2})}</td>
+              <td>${vencFmt}</td>
+              <td><span class="badge ${badge}">${status}</span></td>
+              <td class="text-center">${btn}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>`;
 
-// utilidade compartilhada
-function baixarPdfBase64(maybeBase64, nome='DAR.pdf') {
-  let b64 = String(maybeBase64||'').replace(/^data:application\/pdf;base64,/i,'').replace(/\s/g,'');
-  if (!b64) return alert('PDF inválido.');
-  const bin = atob(b64); const bytes = new Uint8Array(bin.length);
-  for (let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
-  const blob = new Blob([bytes], {type:'application/pdf'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href = url; a.download = nome;
-  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-}
+    // ações
+    darsContent.onclick = async (e)=>{
+      const btn = e.target.closest('button'); if(!btn) return;
+
+      if (btn.dataset.darDownload){
+        try{
+          baixarPdfBase64(btn.dataset.darDownload, `DAR-Evento-${btn.dataset.evento}-P${btn.dataset.parc||'U'}.pdf`);
+        }catch{ alert('Não foi possível baixar a DAR. PDF inválido.'); }
+      }
+
+      if (btn.dataset.darReemitir){
+        const eventoId = btn.dataset.evento;
+        const darId    = btn.dataset.darReemitir;
+        const original = btn.innerHTML;
+        btn.disabled = true; btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
+        // tenta duas rotas de reemissão
+        let ok=false, payload=null;
+        for (const u of [`/api/portal/eventos/${eventoId}/dars/${darId}/reemitir`, `/api/eventos/clientes/eventos/${eventoId}/dars/${darId}/reemitir`]){
+          try{
+            const r = await fetch(u, { method:'POST', headers });
+            payload = await r.json().catch(()=> ({}));
+            if (r.ok){ ok=true; break; }
+          }catch{}
+        }
+        if (!ok){
+          alert(payload?.error || 'Não foi possível emitir a DAR.');
+          btn.disabled=false; btn.innerHTML=original; return;
+        }
+        // 1) se voltou com PDF, baixa
+        if (payload?.dar_pdf){
+          try{ baixarPdfBase64(payload.dar_pdf, `DAR-Evento-${eventoId}.pdf`); }
+          catch{ alert('Falha ao obter PDF retornado.'); }
+        } else {
+          // 2) senão, refaz a lista e tenta baixar a mais recente com PDF
+          const novos = await fetchDARsCliente(headers, eventoId);
+          const comPdf = (novos||[]).find(x=> x.dar_pdf && x.dar_pdf.length>30);
+          if (comPdf) baixarPdfBase64(comPdf.dar_pdf, `DAR-Evento-${eventoId}-P${comPdf.parcela_num||'U'}.pdf`);
+          else alert('Não foi possível baixar a DAR. Falha ao obter PDF');
+        }
+        // recarrega modal
+        abrirDARsDoEvento(eventoId, nomeEvento);
+      }
+    };
+  }
+
+  // carregar dashboard
+  try{
+    const r = await fetch('/api/portal/eventos/me', { headers });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const { user, eventos, dars } = await r.json();
+
+    // stats
+    document.getElementById('userName').innerText = user?.nome_razao_social || 'Cliente';
+    document.getElementById('welcomeMessage') && (document.getElementById('welcomeMessage').innerText =
+      `Bem-vindo(a), ${user?.nome_razao_social?.split(' ')[0] || 'cliente'}!`);
+
+    const evs = Array.isArray(eventos)? eventos : [];
+    const ds  = Array.isArray(dars)? dars : [];
+
+    // valor aberto
+    const aberto = ds.reduce((s,d)=> (['Pendente','Vencido'].includes(d.status)? s + (Number(d.valor||0)) : s), 0);
+    document.getElementById('stat-eventos') && (document.getElementById('stat-eventos').innerText = evs.length);
+    document.getElementById('stat-dars') && (document.getElementById('stat-dars').innerText = ds.length);
+    document.getElementById('stat-valor') && (document.getElementById('stat-valor').innerText = `R$ ${aberto.toLocaleString('pt-BR',{minimumFractionDigits:2})}`);
+
+    // monta tabela + botão “Ver DARs”
+    const tabela = document.getElementById('tabela-eventos');
+    if (tabela){
+      if (!evs.length){
+        tabela.innerHTML = `<tr><td colspan="5" class="text-center text-muted">Nenhum evento encontrado.</td></tr>`;
+      } else {
+        // mapeia status do evento pelo conjunto de DARs
+        const darsByEvento = ds.reduce((m,d)=>{ const k=d.evento_id || d.id_evento || d.eventoId; if(!k) return m; (m[k]=m[k]||[]).push(d); return m; }, {});
+        tabela.innerHTML = evs.slice(0,5).map(ev=>{
+          const lista = darsByEvento[ev.id] || [];
+          const temPago    = lista.some(x=> normalizaStatus(x.status||x.dar_status)==='Pago');
+          const temEmitido = lista.some(x=> normalizaStatus(x.status||x.dar_status)==='Emitido');
+          const status = temPago ? 'Pago' : (temEmitido ? 'Emitido' : 'Pendente');
+          const badge = status==='Pago' ? 'success' : (status==='Emitido' ? 'primary' : 'warning text-dark');
+          const valor = Number(typeof ev.valor_final==='number' ? ev.valor_final
+                        : parseFloat(String(ev.valor_final||'0').replace(/\./g,'').replace(',','.')) || 0);
+          const datas = formatarDatasEvento(ev.datas_evento ?? ev.data);
+          return `<tr>
+            <td>${ev.nome_evento || 'Evento'}</td>
+            <td>${datas}</td>
+            <td class="text-end">R$ ${valor.toLocaleString('pt-BR',{minimumFractionDigits:2})}</td>
+            <td class="text-center"><span class="badge bg-${badge}">${status}</span></td>
+            <td class="text-center">
+              <button class="btn btn-sm btn-outline-primary" data-ver-dars="${ev.id}" data-nome="${ev.nome_evento||''}">
+                <i class="bi bi-file-earmark-arrow-down"></i> Ver DARs
+              </button>
+            </td>
+          </tr>`;
+        }).join('');
+        tabela.onclick = (e)=>{
+          const b = e.target.closest('button[data-ver-dars]'); if(!b) return;
+          abrirDARsDoEvento(b.dataset.verDars, b.dataset.nome);
+        };
+      }
+    }
+  }catch(err){
+    console.warn(err);
+    // não limpa token aqui; deixa o usuário tentar recarregar
+  }
+});
 </script>
 </body>
 </html>
