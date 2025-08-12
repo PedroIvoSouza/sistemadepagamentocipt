@@ -90,6 +90,7 @@
                     <th class="text-end">Valor Final</th>
                     <th class="text-center">Status</th>
                     <th class="text-center">DAR</th>
+                    <th class="text-center">Ações</th>
                   </tr>
                 </thead>
                 <tbody id="eventos-table-body"></tbody>
@@ -361,7 +362,21 @@ window.onload = () => {
             evs.forEach(ev => {
                 const statusBg = ev.status === 'Pago' ? 'bg-success' : ev.status === 'Pendente' || ev.status === 'Emitido' ? 'bg-warning' : 'bg-danger';
                 const tr = document.createElement('tr');
-                tr.innerHTML = `<td>${ev.id}</td><td>${ev.nome_evento}</td><td>${ev.nome_cliente}</td><td class="text-end">R$ ${parseFloat(ev.valor_final).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td><td class="text-center"><span class="badge ${statusBg}">${ev.status}</span></td><td class="text-center"><button class="btn btn-sm btn-outline-primary btn-dars" data-evento-id="${ev.id}"><i class="bi bi-file-earmark-arrow-down"></i> DARs</button></td>`;
+                tr.innerHTML = `
+                  <td>${ev.id}</td>
+                  <td>${ev.nome_evento}</td>
+                  <td>${ev.nome_cliente}</td>
+                  <td class="text-end">R$ ${parseFloat(ev.valor_final).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                  <td class="text-center"><span class="badge ${statusBg}">${ev.status}</span></td>
+                  <td class="text-center">
+                    <button class="btn btn-sm btn-outline-primary btn-dars" title="Ver DARs" data-evento-id="${ev.id}">
+                      <i class="bi bi-file-earmark-arrow-down"></i>
+                    </button>
+                    <button class="btn btn-sm btn-outline-danger btn-apagar" title="Apagar Evento" data-evento-id="${ev.id}" data-evento-nome="${ev.nome_evento}">
+                      <i class="bi bi-trash"></i>
+                    </button>
+                  </td>
+                `;
                 eventosTableBody.appendChild(tr);
             });
             document.querySelectorAll('.btn-dars').forEach(btn => {
@@ -369,6 +384,32 @@ window.onload = () => {
             });
         } catch (e) { console.error(e); }
     }
+    // AINDA DENTRO de carregarEventos(), adicione este bloco
+document.querySelectorAll('.btn-apagar').forEach(btn => {
+  btn.addEventListener('click', async (e) => {
+    const eventoId = e.currentTarget.dataset.eventoId;
+    const eventoNome = e.currentTarget.dataset.eventoNome;
+
+    if (confirm(`Tem certeza que deseja apagar o evento "${eventoNome}" (ID: ${eventoId})? Esta ação não pode ser desfeita.`)) {
+      try {
+        const res = await fetch(`/api/admin/eventos/${eventoId}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` }
+        });
+
+        const result = await res.json();
+        if (!res.ok) throw new Error(result.error);
+
+        alert(result.message);
+        carregarEventos(); // Recarrega a lista para remover o item apagado
+
+      } catch (err) {
+        console.error('Falha ao apagar evento:', err);
+        alert(`Erro ao apagar o evento: ${err.message}`);
+      }
+    }
+  });
+});
 
     // --- LÓGICA DE UI ---
     function atualizarCalculos() {
@@ -564,11 +605,42 @@ window.onload = () => {
                 const venc = d.dar_venc ? new Date(d.dar_venc + 'T12:00:00').toLocaleDateString('pt-BR') : '-';
                 const status = d.dar_status || 'Pendente';
                 const isEmitido = d.dar_pdf && d.dar_pdf.startsWith('JVBER');
-                const btn = isEmitido ? `<button onclick="baixarPdfBase64('${d.dar_pdf}', 'DAR-Evento-${eventoId}-P${d.parcela_num}.pdf')" class="btn btn-sm btn-success"><i class="bi bi-download"></i> Baixar</button>` : `<button data-dar-id="${d.dar_id}" data-evento-id="${eventoId}" class="btn btn-sm btn-outline-primary btn-reemitir-dar"><i class="bi bi-printer"></i> Reemitir</button>`;
+                const btn = isEmitido ? `<button onclick="baixarPdfBase64('${d.dar_pdf}', 'DAR-Evento-${eventoId}-P${d.parcela_num}.pdf')" class="btn btn-sm btn-success"><i class="bi bi-download"></i> Baixar</button>`:`<button data-dar-id="${d.dar_id}" data-evento-id="${eventoId}" class="btn btn-sm btn-outline-primary btn-reemitir-dar"><i class="bi bi-printer"></i> Reemitir</button>`;
                 return `<tr><td>${d.parcela_num}</td><td class="text-end">R$ ${valor.toLocaleString('pt-BR',{minimumFractionDigits:2})}</td><td>${venc}</td><td><span class="badge ${status==='Pago'?'bg-success':status==='Pendente'?'bg-secondary':'bg-warning'}">${status}</span></td><td class="text-center">${btn}</td></tr>`;
             }).join('')}</tbody></table></div>`;
         } catch (e) { console.error(e); darsList.innerHTML = `<div class="alert alert-danger">Erro ao carregar as DARs.</div>`; }
     }
+    // Dentro da função abrirModalDARs(eventoId), após definir darsList.innerHTML
+// Adicione este bloco de código:
+
+darsList.querySelectorAll('.btn-reemitir-dar').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+        const darId = e.currentTarget.dataset.darId;
+        const eventoId = e.currentTarget.dataset.eventoId;
+        
+        btn.disabled = true;
+        btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Reemitindo...`;
+
+        try {
+            const res = await fetch(`/api/admin/eventos/${eventoId}/dars/${darId}/reemitir`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            const result = await res.json();
+            if (!res.ok) throw new Error(result.error);
+            
+            alert('DAR reemitida com sucesso!');
+            // Recarrega o modal para mostrar o botão de baixar o novo PDF
+            abrirModalDARs(eventoId);
+
+              } catch (err) {
+                  console.error('Falha ao reemitir DAR:', err);
+                  alert(`Erro ao reemitir a DAR: ${err.message}`);
+                  btn.disabled = false;
+                  btn.innerHTML = `<i class="bi bi-printer"></i> Reemitir`;
+              }
+          });
+      });
     window.baixarPdfBase64 = (base64, nomeArquivo) => {
         const linkSource = `data:application/pdf;base64,${base64}`;
         const downloadLink = document.createElement("a");

@@ -59,8 +59,7 @@ router.post('/', async (req, res) => {
         const darId = darStmt.lastID;
 
         await dbRun(`INSERT INTO DARs_Eventos (id_dar, id_evento, numero_parcela, valor_parcela, data_vencimento) VALUES (?, ?, ?, ?, ?)`, [darId, eventoId, i + 1, valorParcela, vencimentoISO]);
-
-        // =================== CORREÇÃO 1: REMOVIDA A COLUNA INEXISTENTE DA CONSULTA ===================
+        
         const cliente = await dbGet(`SELECT nome_razao_social, documento, endereco, cep FROM Clientes_Eventos WHERE id = ?`, [idCliente]);
         if (!cliente) throw new Error(`Cliente com ID ${idCliente} não foi encontrado no banco.`);
 
@@ -74,7 +73,6 @@ router.post('/', async (req, res) => {
                 codigoTipoInscricao: tipoInscricao,
                 numeroInscricao: documentoLimpo,
                 nome: cliente.nome_razao_social,
-                // =================== CORREÇÃO 2: USANDO A NOVA VARIÁVEL DO .ENV ===================
                 codigoIbgeMunicipio: Number(process.env.COD_IBGE_MUNICIPIO),
                 descricaoEndereco: cliente.endereco,
                 numeroCep: onlyDigits(cliente.cep)
@@ -127,8 +125,118 @@ router.get('/:eventoId/dars', async (req, res) => {
   }
 });
 
+// ROTA PARA REEMITIR UMA ÚNICA DAR
 router.post('/:eventoId/dars/:darId/reemitir', async (req, res) => {
-  res.status(501).json({ error: 'Rota de re-emissão ainda não implementada.' });
+  const { eventoId, darId } = req.params;
+  console.log(`[ADMIN] Recebida requisição para REEMITIR DAR ID: ${darId} do Evento ID: ${eventoId}`);
+
+  try {
+    // 1. Busca todos os dados necessários com um JOIN
+    const row = await dbGet(`
+        SELECT
+            e.nome_evento,
+            de.numero_parcela,
+            (SELECT COUNT(*) FROM DARs_Eventos WHERE id_evento = e.id) as total_parcelas,
+            d.valor, d.data_vencimento,
+            c.nome_razao_social, c.documento, c.endereco, c.cep
+        FROM dars d
+        JOIN DARs_Eventos de ON d.id = de.id_dar
+        JOIN Eventos e ON de.id_evento = e.id
+        JOIN Clientes_Eventos c ON e.id_cliente = c.id
+        WHERE d.id = ? AND e.id = ?
+    `, [darId, eventoId]);
+
+    if (!row) {
+        return res.status(404).json({ error: 'DAR ou Evento não encontrado.' });
+    }
+
+    // 2. Monta o payload (lógica idêntica à da criação)
+    const documentoLimpo = onlyDigits(row.documento);
+    const tipoInscricao = documentoLimpo.length === 11 ? 3 : 4;
+    const [ano, mes] = row.data_vencimento.split('-');
+
+    const payloadSefaz = {
+        versao: "1.0",
+        contribuinteEmitente: {
+            codigoTipoInscricao: tipoInscricao,
+            numeroInscricao: documentoLimpo,
+            nome: row.nome_razao_social,
+            codigoIbgeMunicipio: Number(process.env.COD_IBGE_MUNICIPIO),
+            descricaoEndereco: row.endereco,
+            numeroCep: onlyDigits(row.cep)
+        },
+        receitas: [{
+            codigo: Number(process.env.RECEITA_CODIGO_EVENTO),
+            competencia: { mes: Number(mes), ano: Number(ano) },
+            valorPrincipal: row.valor,
+            valorDesconto: 0.00,
+            dataVencimento: row.data_vencimento
+        }],
+        dataLimitePagamento: row.data_vencimento,
+        observacao: `CIPT Evento: ${row.nome_evento} | Parcela ${row.numero_parcela}/${row.total_parcelas} (Reemissão)`
+    };
+
+    // 3. Chama o serviço da SEFAZ
+    const retornoSefaz = await emitirGuiaSefaz(payloadSefaz);
+
+    // 4. Atualiza a DAR no banco com os novos dados
+    await dbRun(
+        `UPDATE dars SET numero_documento = ?, pdf_url = ?, status = 'Reemitido' WHERE id = ?`,
+        [retornoSefaz.numeroGuia, retornoSefaz.pdfBase64, darId]
+    );
+    
+    console.log(`[ADMIN] DAR ID: ${darId} reemitida com sucesso. Novo número: ${retornoSefaz.numeroGuia}`);
+    res.status(200).json({ message: 'DAR reemitida com sucesso!', ...retornoSefaz });
+
+  } catch (err) {
+      console.error(`[ERRO] Ao reemitir DAR ID ${darId}:`, err.message);
+      res.status(500).json({ error: err.message || 'Falha ao reemitir a DAR.' });
+  }
+});
+
+// ROTA PARA APAGAR UM EVENTO E SUAS DARS ASSOCIADAS
+router.delete('/:eventoId', async (req, res) => {
+  const { eventoId } = req.params;
+
+  console.log(`[ADMIN] Recebida requisição para apagar evento ID: ${eventoId}`);
+
+  try {
+    // Usamos uma transação para garantir a integridade dos dados
+    await dbRun('BEGIN TRANSACTION');
+
+    // 1. Encontra todos os IDs das DARs associadas ao evento
+    const darsRows = await dbAll('SELECT id_dar FROM DARs_Eventos WHERE id_evento = ?', [eventoId]);
+    const darIds = darsRows.map(row => row.id_dar);
+
+    if (darIds.length > 0) {
+      // 2. Apaga os vínculos na tabela DARs_Eventos
+      await dbRun(`DELETE FROM DARs_Eventos WHERE id_evento = ?`, [eventoId]);
+
+      // 3. Apaga as DARs da tabela principal 'dars'
+      // O '?' será substituído por uma lista de IDs (ex: 1, 2, 3)
+      const placeholders = darIds.map(() => '?').join(',');
+      await dbRun(`DELETE FROM dars WHERE id IN (${placeholders})`, darIds);
+    }
+
+    // 4. Finalmente, apaga o evento da tabela 'Eventos'
+    const result = await dbRun('DELETE FROM Eventos WHERE id = ?', [eventoId]);
+
+    if (result.changes === 0) {
+      throw new Error('Nenhum evento encontrado com este ID.');
+    }
+
+    // Se tudo deu certo, confirma a transação
+    await dbRun('COMMIT');
+
+    console.log(`[ADMIN] Evento ID: ${eventoId} e suas ${darIds.length} DARs foram apagados com sucesso.`);
+    res.status(200).json({ message: 'Evento e DARs associadas apagados com sucesso!' });
+
+  } catch (err) {
+    // Em caso de qualquer erro, desfaz tudo
+    await dbRun('ROLLBACK');
+    console.error(`[ERRO] Ao apagar evento ID ${eventoId}:`, err.message);
+    res.status(500).json({ error: 'Falha ao apagar o evento.' });
+  }
 });
 
 module.exports = router;
