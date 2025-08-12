@@ -16,6 +16,8 @@ const dbRun = (sql, p = []) => new Promise((resolve, reject) => db.run(sql, p, f
 
 router.use(adminAuthMiddleware);
 
+// Substitua a rota inteira em src/api/adminEventosRoutes.js
+
 router.post('/', async (req, res) => {
   console.log('[DEBUG] Recebido no backend /api/admin/eventos:', JSON.stringify(req.body, null, 2));
 
@@ -43,6 +45,9 @@ router.post('/', async (req, res) => {
     );
     const eventoId = eventoStmt.lastID;
 
+    // =================== CORREÇÃO APLICADA AQUI ===================
+    let ano, mes; // Variáveis declaradas fora do laço
+
     for (let i = 0; i < parcelas.length; i++) {
         const p = parcelas[i];
         const valorParcela = Number(p.valor) || 0;
@@ -55,7 +60,13 @@ router.post('/', async (req, res) => {
             throw new Error(`O valor da parcela ${i + 1} deve ser maior que zero.`);
         }
 
-        const darStmt = await dbRun(`INSERT INTO dars (valor, data_vencimento, status) VALUES (?, ?, ?)`, [valorParcela, vencimentoISO, 'Pendente']);
+        // Apenas atribuição de valor dentro do laço, sem 'const'
+        [ano, mes] = vencimentoISO.split('-');
+
+        const darStmt = await dbRun(
+            `INSERT INTO dars (valor, data_vencimento, status, mes_referencia, ano_referencia) VALUES (?, ?, ?, ?, ?)`,
+            [valorParcela, vencimentoISO, 'Pendente', Number(mes), Number(ano)]
+        );
         const darId = darStmt.lastID;
 
         await dbRun(`INSERT INTO DARs_Eventos (id_dar, id_evento, numero_parcela, valor_parcela, data_vencimento) VALUES (?, ?, ?, ?, ?)`, [darId, eventoId, i + 1, valorParcela, vencimentoISO]);
@@ -65,7 +76,6 @@ router.post('/', async (req, res) => {
 
         const documentoLimpo = onlyDigits(cliente.documento);
         const tipoInscricao = documentoLimpo.length === 11 ? 3 : 4;
-        const [ano, mes] = vencimentoISO.split('-');
         
         const payloadSefaz = {
             versao: "1.0",

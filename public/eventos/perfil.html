@@ -102,142 +102,162 @@
       </main>
     </div>
   </div>
-  
   <script>
-    function formatarCNPJ(cnpj) {
-        const cnpjLimpo = cnpj?.toString().replace(/\D/g, '');
-        if (cnpjLimpo?.length === 14) return cnpjLimpo.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5");
-        if (cnpjLimpo?.length === 11) return cnpjLimpo.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
-        return cnpj || '';
+  function formatarCNPJ(cnpj) {
+    const doc = cnpj ? cnpj.toString().replace(/\D/g, '') : '';
+    if (doc.length === 14) return doc.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5");
+    if (doc.length === 11) return doc.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+    return cnpj || '';
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    const token = localStorage.getItem('token_evento');
+    if (!token) { window.location.href = '/eventos/login-eventos.html'; return; }
+
+    const headers = { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' };
+    const editableFieldIds = ['profileTelefone','profileNomeResponsavel','profileCep','profileLogradouro','profileNumero','profileBairro','profileCidade','profileUf'];
+    const editButton = document.getElementById('editButton');
+    const formActions = document.getElementById('formActions');
+    const cancelButton = document.getElementById('cancelButton');
+    const profileForm = document.getElementById('profileForm');
+    const profileMessageDiv = document.getElementById('profileMessage');
+    const changePasswordForm = document.getElementById('changePasswordForm');
+    const passwordMessageDiv = document.getElementById('passwordMessage');
+    var originalData = {};
+
+    function toggleEditMode(isEditing) {
+      editableFieldIds.forEach(function (id) {
+        const el = document.getElementById(id);
+        el.readOnly = !isEditing;
+        el.classList.toggle('form-control-plaintext', !isEditing);
+        el.classList.toggle('form-control', isEditing);
+      });
+      formActions.style.display = isEditing ? 'flex' : 'none';
+      editButton.style.display = isEditing ? 'none' : 'block';
     }
 
-    document.addEventListener('DOMContentLoaded', () => {
-        const token = localStorage.getItem('token_evento');
-        if (!token) { window.location.href = '/eventos/login-eventos.html'; return; }
-        const headers = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
-
-        const editableFieldIds = ['profileTelefone', 'profileNomeResponsavel', 'profileCep', 'profileLogradouro', 'profileNumero', 'profileBairro', 'profileCidade', 'profileUf'];
-        const editButton = document.getElementById('editButton');
-        const formActions = document.getElementById('formActions');
-        const cancelButton = document.getElementById('cancelButton');
-        const profileForm = document.getElementById('profileForm');
-        const profileMessageDiv = document.getElementById('profileMessage');
-        const changePasswordForm = document.getElementById('changePasswordForm');
-        const passwordMessageDiv = document.getElementById('passwordMessage');
-        let originalData = {};
-
-        function toggleEditMode(isEditing) {
-            editableFieldIds.forEach(id => {
-                const element = document.getElementById(id);
-                element.readOnly = !isEditing;
-                element.classList.toggle('form-control-plaintext', !isEditing);
-                element.classList.toggle('form-control', isEditing);
-            });
-            formActions.style.display = isEditing ? 'flex' : 'none';
-            editButton.style.display = isEditing ? 'none' : 'block';
-        }
-
-        async function loadUserData() {
-            try {
-                const response = await fetch('/api/eventos/clientes/me', { headers: { 'Authorization': `Bearer ${token}` } });
-                if (!response.ok) throw new Error('Sessão inválida.');
-                const data = await response.json();
-                originalData = data.user;
-                
-                document.getElementById('userName').innerText = originalData.nome_razao_social;
-                document.getElementById('userCnpj').innerText = formatarCNPJ(originalData.documento);
-                
-                document.getElementById('profileNome').value = originalData.nome_razao_social || '';
-                document.getElementById('profileDocumento').value = formatarCNPJ(originalData.documento || '');
-                document.getElementById('profileEmail').value = originalData.email || '';
-                
-                document.getElementById('profileTelefone').value = originalData.telefone || '';
-                document.getElementById('profileNomeResponsavel').value = originalData.nome_responsavel || '';
-                document.getElementById('profileCep').value = originalData.cep || '';
-                document.getElementById('profileLogradouro').value = originalData.logradouro || '';
-                document.getElementById('profileNumero').value = originalData.numero || '';
-                document.getElementById('profileBairro').value = originalData.bairro || '';
-                document.getElementById('profileCidade').value = originalData.cidade || '';
-                document.getElementById('profileUf').value = originalData.uf || '';
-
-            } catch (error) {
-                localStorage.removeItem('token_evento');
-                window.location.href = '/eventos/login-eventos.html';
-            }
-        }
-
-        editButton.addEventListener('click', () => toggleEditMode(true));
-        cancelButton.addEventListener('click', () => {
-            loadUserData(); 
-            toggleEditMode(false);
-            profileMessageDiv.style.display = 'none';
-        });
-
-        profileForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const dataToSave = {};
-            editableFieldIds.forEach(id => {
-                // 'profile' has 7 letters, so we extract the field name after it.
-                const key = id.charAt(7).toLowerCase() + id.slice(8);
-                dataToSave[key] = document.getElementById(id).value;
-            });
-            
-            try {
-                const res = await fetch('/api/eventos/clientes/me', { method: 'PUT', headers, body: JSON.stringify(dataToSave) });
-                const result = await res.json();
-                if (!res.ok) throw new Error(result.error || 'Erro desconhecido.');
-                
-                profileMessageDiv.className = 'alert alert-success';
-                profileMessageDiv.innerText = result.message;
-                await loadUserData(); // Recarrega os dados para garantir consistência
-            } catch (error) {
-                profileMessageDiv.className = 'alert alert-danger';
-                profileMessageDiv.innerText = `Erro ao salvar: ${error.message}`;
-            } finally {
-                profileMessageDiv.style.display = 'block';
-                toggleEditMode(false);
-            }
-        });
-        
-        changePasswordForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const data = {
-                senha_atual: document.getElementById('senha_atual').value,
-                nova_senha: document.getElementById('nova_senha').value,
-                confirmar_nova_senha: document.getElementById('confirmar_nova_senha').value
-            };
-            
-            if (data.nova_senha !== data.confirmar_nova_senha) {
-                passwordMessageDiv.className = 'alert alert-danger';
-                passwordMessageDiv.innerText = 'As novas senhas não coincidem.';
-                passwordMessageDiv.style.display = 'block';
-                return;
-            }
-
-            try {
-                const res = await fetch('/api/eventos/clientes/change-password', { method: 'POST', headers, body: JSON.stringify(data) });
-                const result = await res.json();
-                if (!res.ok) throw new Error(result.error);
-                
-                passwordMessageDiv.className = 'alert alert-success';
-                passwordMessageDiv.innerText = result.message;
-                e.target.reset();
-            } catch (error) {
-                passwordMessageDiv.className = 'alert alert-danger';
-                passwordMessageDiv.innerText = error.message;
-            } finally {
-                passwordMessageDiv.style.display = 'block';
-            }
-        });
-
-        document.getElementById('logoutButton').addEventListener('click', (e) => {
-            e.preventDefault();
+    async function loadUserData() {
+      try {
+        // Unificado com o Dashboard
+        const response = await fetch('/api/portal/eventos/me', { headers: { 'Authorization': 'Bearer ' + token } });
+        if (!response.ok) {
+          if (response.status === 401) {
             localStorage.removeItem('token_evento');
             window.location.href = '/eventos/login-eventos.html';
-        });
+            return;
+          }
+          throw new Error('Falha ao carregar perfil.');
+        }
+        const data = await response.json();
+        originalData = data.user || {};
 
-        loadUserData();
+        document.getElementById('userName').innerText = originalData.nome_razao_social || 'Cliente';
+        document.getElementById('userCnpj').innerText = formatarCNPJ(originalData.documento || '');
+
+        document.getElementById('profileNome').value = originalData.nome_razao_social || '';
+        document.getElementById('profileDocumento').value = formatarCNPJ(originalData.documento || '');
+        document.getElementById('profileEmail').value = originalData.email || '';
+
+        document.getElementById('profileTelefone').value = originalData.telefone || '';
+        document.getElementById('profileNomeResponsavel').value = originalData.nome_responsavel || '';
+        document.getElementById('profileCep').value = originalData.cep || '';
+        document.getElementById('profileLogradouro').value = originalData.logradouro || '';
+        document.getElementById('profileNumero').value = originalData.numero || '';
+        document.getElementById('profileBairro').value = originalData.bairro || '';
+        document.getElementById('profileCidade').value = originalData.cidade || '';
+        document.getElementById('profileUf').value = originalData.uf || '';
+
+      } catch (error) {
+        profileMessageDiv.className = 'alert alert-danger';
+        profileMessageDiv.innerText = error.message || 'Erro ao carregar dados.';
+        profileMessageDiv.style.display = 'block';
+      }
+    }
+
+    editButton.addEventListener('click', function () { toggleEditMode(true); });
+    cancelButton.addEventListener('click', function () {
+      loadUserData();
+      toggleEditMode(false);
+      profileMessageDiv.style.display = 'none';
     });
-  </script>
+
+    profileForm.addEventListener('submit', async function (e) {
+      e.preventDefault();
+      const dataToSave = {};
+      editableFieldIds.forEach(function (id) {
+        // 'profile' tem 7 letras; extrai a chave após isso.
+        const key = id.charAt(7).toLowerCase() + id.slice(8);
+        dataToSave[key] = document.getElementById(id).value;
+      });
+
+      try {
+        const res = await fetch('/api/portal/eventos/me', { method: 'PUT', headers, body: JSON.stringify(dataToSave) });
+        const result = await res.json();
+        if (!res.ok) {
+          if (res.status === 401) {
+            localStorage.removeItem('token_evento');
+            window.location.href = '/eventos/login-eventos.html';
+            return;
+          }
+          throw new Error(result.error || 'Erro desconhecido.');
+        }
+        profileMessageDiv.className = 'alert alert-success';
+        profileMessageDiv.innerText = result.message || 'Perfil atualizado com sucesso.';
+        await loadUserData();
+      } catch (error) {
+        profileMessageDiv.className = 'alert alert-danger';
+        profileMessageDiv.innerText = 'Erro ao salvar: ' + error.message;
+      } finally {
+        profileMessageDiv.style.display = 'block';
+        toggleEditMode(false);
+      }
+    });
+
+    changePasswordForm.addEventListener('submit', async function (e) {
+      e.preventDefault();
+      const data = {
+        senha_atual: document.getElementById('senha_atual').value,
+        nova_senha: document.getElementById('nova_senha').value,
+        confirmar_nova_senha: document.getElementById('confirmar_nova_senha').value
+      };
+
+      if (data.nova_senha !== data.confirmar_nova_senha) {
+        passwordMessageDiv.className = 'alert alert-danger';
+        passwordMessageDiv.innerText = 'As novas senhas não coincidem.';
+        passwordMessageDiv.style.display = 'block';
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/portal/eventos/change-password', { method: 'POST', headers, body: JSON.stringify(data) });
+        const result = await res.json();
+        if (!res.ok) {
+          if (res.status === 401) {
+            localStorage.removeItem('token_evento');
+            window.location.href = '/eventos/login-eventos.html';
+            return;
+          }
+          throw new Error(result.error || 'Erro ao alterar senha.');
+        }
+        passwordMessageDiv.className = 'alert alert-success';
+        passwordMessageDiv.innerText = result.message || 'Senha alterada com sucesso.';
+        e.target.reset();
+      } catch (error) {
+        passwordMessageDiv.className = 'alert alert-danger';
+        passwordMessageDiv.innerText = error.message;
+      } finally {
+        passwordMessageDiv.style.display = 'block';
+      }
+    });
+
+    document.getElementById('logoutButton').addEventListener('click', function (e) {
+      e.preventDefault();
+      localStorage.removeItem('token_evento');
+      window.location.href = '/eventos/login-eventos.html';
+    });
+
+    loadUserData();
+  });
+</script>
 </body>
 </html>
