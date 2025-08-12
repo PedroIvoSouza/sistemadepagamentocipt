@@ -225,23 +225,19 @@ document.addEventListener('DOMContentLoaded', () => {
   const token = localStorage.getItem('adminAuthToken');
   if (!token) { window.location.href = '/admin/login.html'; return; }
 
-  // --- Sidebar: abre/fecha submenu "Eventos"
-  document.querySelectorAll('.menu-dropdown > a.nav-link').forEach(a=>{
-    a.addEventListener('click',(e)=>{ e.preventDefault(); const sub=a.nextElementSibling; if(sub){ sub.style.display=sub.style.display==='block'?'none':'block'; }});
-  });
-
-  // --- Logout / Nome admin
-  document.getElementById('logoutButton').addEventListener('click', (e)=>{
+  // logout / header
+  document.getElementById('logoutButton')?.addEventListener('click', (e)=>{
     e.preventDefault(); localStorage.removeItem('adminAuthToken'); window.location.href='/admin/login.html';
   });
-  try{ const p=JSON.parse(atob(token.split('.')[1])); document.getElementById('adminName').innerText=p?.nome||''; }catch{}
+  try{ const p=JSON.parse(atob(token.split('.')[1])); document.getElementById('adminName').innerText = p?.nome || ''; }catch{}
 
-  // --- Refs UI
+  // refs
+  const API_URL = '/api/admin/eventos-clientes';
   const clienteModalEl = document.getElementById('cliente-modal');
   const clienteModal   = new bootstrap.Modal(clienteModalEl);
   const modalTitle     = document.getElementById('modal-title');
   const form           = document.getElementById('cliente-form');
-  const submitBtn      = clienteModalEl.querySelector('.modal-footer [form="cliente-form"]') || null;
+  const submitBtn      = clienteModalEl.querySelector('.modal-footer button[form="cliente-form"]');
   const tableBody      = document.getElementById('clientes-table-body');
 
   const clienteIdField   = document.getElementById('cliente-id');
@@ -251,9 +247,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const emailInput       = document.getElementById('email');
   const telefoneInput    = document.getElementById('telefone');
   const tipoClienteSel   = document.getElementById('tipo_cliente');
+
   const responsavelGroup = document.getElementById('responsavel-group');
   const nomeRespInput    = document.getElementById('nome_responsavel');
   const docRespInput     = document.getElementById('documento_responsavel');
+
   const cepInput         = document.getElementById('cep');
   const logradouroInput  = document.getElementById('logradouro');
   const numeroInput      = document.getElementById('numero');
@@ -261,47 +259,35 @@ document.addEventListener('DOMContentLoaded', () => {
   const bairroInput      = document.getElementById('bairro');
   const cidadeInput      = document.getElementById('cidade');
   const ufInput          = document.getElementById('uf');
-  const btnBuscarCnpj    = document.getElementById('btn-buscar-cnpj');
-  const btnBuscarCep     = document.getElementById('btn-buscar-cep');
 
-  // --- Máscaras
+  // máscaras
   let documentoMask, responsavelCpfMask, telefoneMask, cepMask;
-  // utilzinho
-const onlyDigits = v => (v||'').toString().replace(/\D/g,'');
+  const onlyDigits = v => (v||'').toString().replace(/\D/g,'');
 
-function aplicarMascaras(){
-  if (documentoMask) documentoMask.destroy();
-  if (responsavelCpfMask) responsavelCpfMask.destroy();
-  if (telefoneMask) telefoneMask.destroy();
-  if (cepMask) cepMask.destroy();
+  function aplicarMascaras(){
+    documentoMask && documentoMask.destroy();
+    responsavelCpfMask && responsavelCpfMask.destroy();
+    telefoneMask && telefoneMask.destroy();
+    cepMask && cepMask.destroy();
 
-  const tipo = tipoPessoaSelect.value;
-  responsavelGroup.style.display = tipo === 'PJ' ? 'block' : 'none';
-  documentoInput.placeholder = tipo === 'PJ' ? '00.000.000/0000-00' : '000.000.000-00';
+    const tipo = tipoPessoaSelect.value;
+    responsavelGroup.style.display = tipo === 'PJ' ? 'block' : 'none';
+    documentoInput.placeholder = tipo === 'PJ' ? '00.000.000/0000-00' : '000.000.000-00';
 
-  documentoMask = IMask(documentoInput, {
-    mask: tipo === 'PJ' ? '00.000.000/0000-00' : '000.000.000-00',
-    lazy: false
-  });
-  // se já veio um valor cru do backend, reformatar:
-  const raw = onlyDigits(documentoInput.value);
-  if (raw) {
-    documentoMask.unmaskedValue = raw; // força reformatar exibido
+    documentoMask = IMask(documentoInput, { mask: tipo === 'PJ' ? '00.000.000/0000-00' : '000.000.000-00', lazy:false });
+    if (documentoInput.value) documentoMask.unmaskedValue = onlyDigits(documentoInput.value);
+
+    if (tipo === 'PJ'){
+      responsavelCpfMask = IMask(docRespInput, { mask: '000.000.000-00', lazy:false });
+      if (docRespInput.value) responsavelCpfMask.unmaskedValue = onlyDigits(docRespInput.value);
+    }
+    telefoneMask = IMask(telefoneInput, { mask: [{ mask: '(00) 0000-0000' }, { mask: '(00) 0 0000-0000' }], lazy:false });
+    if (telefoneInput.value) telefoneMask.unmaskedValue = onlyDigits(telefoneInput.value);
+
+    cepMask = IMask(cepInput, { mask: '00000-000', lazy:false });
+    if (cepInput.value) cepMask.unmaskedValue = onlyDigits(cepInput.value);
   }
 
-  if (tipo === 'PJ') {
-    responsavelCpfMask = IMask(docRespInput, { mask: '000.000.000-00', lazy:false });
-    if (docRespInput.value) responsavelCpfMask.unmaskedValue = onlyDigits(docRespInput.value);
-  }
-  telefoneMask = IMask(telefoneInput, { mask: [{ mask: '(00) 0000-0000' }, { mask: '(00) 0 0000-0000' }], lazy:false });
-  if (telefoneInput.value) telefoneMask.unmaskedValue = onlyDigits(telefoneInput.value);
-
-  cepMask = IMask(cepInput, { mask: '00000-000', lazy:false });
-  if (cepInput.value) cepMask.unmaskedValue = onlyDigits(cepInput.value);
-}
-
-  // --- Helpers
-  const API_URL = '/api/admin/eventos-clientes';
   function limparEndereco(){
     logradouroInput.value=''; numeroInput.value=''; complInput.value='';
     bairroInput.value=''; cidadeInput.value=''; ufInput.value='';
@@ -309,78 +295,78 @@ function aplicarMascaras(){
   function limparPessoaJuridica(){ nomeRespInput.value=''; docRespInput.value=''; }
   function limparDocumentoENome(){ documentoInput.value=''; nomeRazaoInput.value=''; }
 
-  // --- ViaCEP (CEP → endereço)
+  // APIS auxiliares
   async function buscarCEP(cep){
-    const so = onlyDigits(cep);
-    if (so.length!==8) return null;
+    const soNum = onlyDigits(cep);
+    if (soNum.length !== 8) return null;
     try{
-      const r = await fetch(`https://viacep.com.br/ws/${so}/json/`);
-      if(!r.ok) return null;
-      const j = await r.json();
-      if (j.erro) return null;
-      return j;
+      const r = await fetch(`https://viacep.com.br/ws/${soNum}/json/`);
+      if (!r.ok) return null;
+      const j = await r.json(); if (j.erro) return null; return j;
     }catch{ return null; }
   }
-
-  // --- BrasilAPI CNPJ (CNPJ → dados)
   async function buscarCNPJ(cnpj){
-    const so = onlyDigits(cnpj);
-    if (so.length!==14) return null;
+    const soNum = onlyDigits(cnpj);
+    if (soNum.length !== 14) return null;
     try{
-      const r = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${so}`);
-      if(!r.ok) return null;
+      const r = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${soNum}`);
+      if (!r.ok) return null;
       return await r.json();
     }catch{ return null; }
   }
 
-  // --- Tabela
+  // tabela
   async function carregarClientes(){
     tableBody.innerHTML = `<tr><td colspan="5" class="text-center">Carregando...</td></tr>`;
     try{
       const r = await fetch(API_URL, { headers:{ Authorization:`Bearer ${token}` }});
-      const j = await r.json().catch(()=>[]);
-      if (!r.ok) throw new Error(j.error||`Erro ${r.status}`);
+      const j = await r.json().catch(()=>([]));
+      if (!r.ok) throw new Error(j.error || `Erro ${r.status}`);
       if (!Array.isArray(j) || !j.length){
         tableBody.innerHTML = `<tr><td colspan="5" class="text-center text-muted py-3">Nenhum cliente cadastrado.</td></tr>`;
         return;
       }
       tableBody.innerHTML = j.map(c=>{
-        const resend = !c.senha_hash
+        const resendButton = !c.senha_hash
           ? `<button class="btn btn-sm btn-outline-info btn-resend" data-id="${c.id}" title="Reenviar senha"><i class="bi bi-envelope-arrow-up-fill"></i></button>`
           : `<button class="btn btn-sm btn-outline-success" disabled title="Senha já definida"><i class="bi bi-check-circle-fill"></i></button>`;
-        return `<tr>
-          <td>${c.nome_razao_social||''}</td>
-          <td>${c.documento||''}</td>
-          <td>${c.email||''}</td>
-          <td><span class="badge bg-secondary">${c.tipo_cliente||''}</span></td>
-          <td class="text-end">
-            <div class="btn-group">
-              ${resend}
-              <button class="btn btn-sm btn-outline-primary btn-edit" data-cliente='${JSON.stringify(c)}'><i class="bi bi-pencil-fill"></i> Editar</button>
-              <button class="btn btn-sm btn-outline-danger btn-delete" data-id="${c.id}"><i class="bi bi-trash-fill"></i> Excluir</button>
-            </div>
-          </td></tr>`;
+        return `
+          <tr>
+            <td>${c.nome_razao_social || ''}</td>
+            <td>${c.documento || ''}</td>
+            <td>${c.email || ''}</td>
+            <td><span class="badge bg-secondary">${c.tipo_cliente || ''}</span></td>
+            <td class="text-end">
+              <div class="btn-group">
+                ${resendButton}
+                <button class="btn btn-sm btn-outline-primary btn-edit" data-cliente='${JSON.stringify(c)}'><i class="bi bi-pencil-fill"></i> Editar</button>
+                <button class="btn btn-sm btn-outline-danger btn-delete" data-id="${c.id}"><i class="bi bi-trash-fill"></i> Excluir</button>
+              </div>
+            </td>
+          </tr>`;
       }).join('');
     }catch(err){
       tableBody.innerHTML = `<tr><td colspan="5" class="text-danger text-center">Erro: ${err.message}</td></tr>`;
     }
   }
 
-  // --- Modal
   function setupModal(cliente=null){
     form.reset();
     form.classList.remove('was-validated');
+
     if (cliente){
       modalTitle.textContent = 'Editar Cliente';
-      clienteIdField.value   = cliente.id;
+      clienteIdField.value = cliente.id;
       tipoPessoaSelect.value = cliente.tipo_pessoa || 'PJ';
       documentoInput.value   = cliente.documento || '';
       nomeRazaoInput.value   = cliente.nome_razao_social || '';
       emailInput.value       = cliente.email || '';
       telefoneInput.value    = cliente.telefone || '';
       tipoClienteSel.value   = cliente.tipo_cliente || 'Geral';
+
       nomeRespInput.value    = cliente.nome_responsavel || '';
       docRespInput.value     = cliente.documento_responsavel || '';
+
       cepInput.value         = cliente.cep || '';
       logradouroInput.value  = cliente.logradouro || '';
       numeroInput.value      = cliente.numero || '';
@@ -390,50 +376,38 @@ function aplicarMascaras(){
       ufInput.value          = cliente.uf || '';
     } else {
       modalTitle.textContent = 'Adicionar Novo Cliente';
-      clienteIdField.value   = '';
-      limparEndereco(); limparPessoaJuridica(); limparDocumentoENome();
+      clienteIdField.value = '';
+      limparEndereco(); limparPessoaJuridica();
     }
     aplicarMascaras();
   }
-  document.getElementById('add-cliente-btn').addEventListener('click', ()=> setupModal(null));
 
-  // Alternar PF/PJ limpa campos-chave
+  document.getElementById('add-cliente-btn')?.addEventListener('click', ()=> setupModal(null));
+
+  // alternar PF/PJ
   tipoPessoaSelect.addEventListener('change', ()=>{
     limparDocumentoENome(); limparPessoaJuridica(); aplicarMascaras();
   });
 
-  // Botão buscar CNPJ (ou blur do campo)
-  btnBuscarCnpj?.addEventListener('click', async ()=>{
-    if (tipoPessoaSelect.value!=='PJ') return;
-    const info = await buscarCNPJ(documentoInput.value);
-    if (!info) return alert('CNPJ não encontrado.');
-    if (!nomeRazaoInput.value) nomeRazaoInput.value = info.razao_social || info.nome_fantasia || '';
-    if (!telefoneInput.value && info.telefone) telefoneInput.value = info.telefone;
-    if (!cepInput.value && info.cep)           cepInput.value = info.cep.replace(/\D/g,'').replace(/(\d{5})(\d{3})/,'$1-$2');
-    if (!logradouroInput.value) logradouroInput.value = info.logradouro || '';
-    if (!numeroInput.value)     numeroInput.value     = info.numero || '';
-    if (!complInput.value)      complInput.value      = info.complemento || '';
-    if (!bairroInput.value)     bairroInput.value     = info.bairro || '';
-    if (!cidadeInput.value)     cidadeInput.value     = info.municipio || info.cidade || '';
-    if (!ufInput.value)         ufInput.value         = info.uf || '';
-  });
+  // CNPJ → auto preencher
   documentoInput.addEventListener('blur', async ()=>{
-    if (tipoPessoaSelect.value!=='PJ') return;
-    if (onlyDigits(documentoInput.value).length!==14) return;
-    const info = await buscarCNPJ(documentoInput.value);
-    if (!info) return;
-    if (!nomeRazaoInput.value) nomeRazaoInput.value = info.razao_social || info.nome_fantasia || '';
+    if (tipoPessoaSelect.value !== 'PJ') return;
+    const cnpjInfo = await buscarCNPJ(documentoInput.value);
+    if (!cnpjInfo) return;
+    if (!nomeRazaoInput.value) nomeRazaoInput.value = cnpjInfo.razao_social || cnpjInfo.nome_fantasia || '';
+    if (!telefoneInput.value && cnpjInfo.telefone) telefoneInput.value = cnpjInfo.telefone;
+    if (!cepInput.value && cnpjInfo.cep) cepInput.value = cnpjInfo.cep;
+
+    if (!logradouroInput.value) logradouroInput.value = cnpjInfo.logradouro || '';
+    if (!numeroInput.value)     numeroInput.value     = cnpjInfo.numero || '';
+    if (!complInput.value)      complInput.value      = cnpjInfo.complemento || '';
+    if (!bairroInput.value)     bairroInput.value     = cnpjInfo.bairro || '';
+    if (!cidadeInput.value)     cidadeInput.value     = cnpjInfo.municipio || cnpjInfo.cidade || '';
+    if (!ufInput.value)         ufInput.value         = cnpjInfo.uf || '';
+    aplicarMascaras();
   });
 
-  // Botão buscar CEP (ou blur do campo)
-  btnBuscarCep?.addEventListener('click', async ()=>{
-    const data = await buscarCEP(cepInput.value);
-    if (!data) return alert('CEP não encontrado.');
-    logradouroInput.value = data.logradouro || logradouroInput.value;
-    bairroInput.value     = data.bairro     || bairroInput.value;
-    cidadeInput.value     = data.localidade || cidadeInput.value;
-    ufInput.value         = data.uf         || ufInput.value;
-  });
+  // CEP → endereço
   cepInput.addEventListener('blur', async ()=>{
     const data = await buscarCEP(cepInput.value);
     if (!data) return;
@@ -441,65 +415,60 @@ function aplicarMascaras(){
     bairroInput.value     = data.bairro     || bairroInput.value;
     cidadeInput.value     = data.localidade || cidadeInput.value;
     ufInput.value         = data.uf         || ufInput.value;
+    aplicarMascaras();
   });
 
-  // Submit (create / update) – garante documento e tipo_pessoa
+  // submit (create/update)
   form.addEventListener('submit', async (e)=>{
-  e.preventDefault();
-  if (!form.checkValidity()){ form.classList.add('was-validated'); return; }
+    e.preventDefault();
+    if (!form.checkValidity()){ form.classList.add('was-validated'); return; }
 
-  const docDigits = onlyDigits(documentoInput.value);
-  if (![11,14].includes(docDigits.length)) {
-    alert('Informe um CPF (11 dígitos) ou CNPJ (14 dígitos) válido.');
-    documentoInput.focus();
-    return;
-  }
+    // pega o doc SEM máscara a partir da máscara (evita pegar placeholder)
+    const docDigits = (documentoMask?.unmaskedValue || onlyDigits(documentoInput.value));
+    const isPJ = (tipoPessoaSelect.value === 'PJ');
+    if (isPJ && docDigits.length !== 14) { alert('CNPJ inválido.'); documentoInput.focus(); return; }
+    if (!isPJ && docDigits.length !== 11) { alert('CPF inválido.'); documentoInput.focus(); return; }
 
-  const id = clienteIdField.value;
-  const url = id ? `${API_URL}/${id}` : API_URL;
-  const method = id ? 'PUT' : 'POST';
+    const id = clienteIdField.value;
+    const url = id ? `${API_URL}/${id}` : API_URL;
+    const method = id ? 'PUT' : 'POST';
 
-  const body = {
-    nome_razao_social: nomeRazaoInput.value.trim(),
-    tipo_pessoa: tipoPessoaSelect.value,
-    documento: docDigits, // cru, SEM máscara
-    email: emailInput.value.trim(),
-    telefone: onlyDigits(telefoneInput.value),
-    nome_responsavel: (nomeRespInput.value||'').trim() || null,
-    documento_responsavel: onlyDigits(docRespInput.value) || null,
-    tipo_cliente: tipoClienteSel.value,
-    cep: onlyDigits(cepInput.value) || null,
-    logradouro: (logradouroInput.value||'').trim() || null,
-    bairro: (bairroInput.value||'').trim() || null,
-    cidade: (cidadeInput.value||'').trim() || null,
-    uf: (ufInput.value||'').trim().toUpperCase() || null,
-    numero: (numeroInput.value||'').trim() || null,
-    complemento: (complInput.value||'').trim() || null
-  };
+    const body = {
+      nome_razao_social: nomeRazaoInput.value.trim(),
+      tipo_pessoa: tipoPessoaSelect.value,
+      documento: docDigits, // cru
+      email: emailInput.value.trim(),
+      telefone: onlyDigits(telefoneInput.value),
+      nome_responsavel: (nomeRespInput.value||'').trim() || null,
+      documento_responsavel: onlyDigits(docRespInput.value) || null,
+      tipo_cliente: tipoClienteSel.value,
+      cep: onlyDigits(cepInput.value) || null,
+      logradouro: (logradouroInput.value||'').trim() || null,
+      bairro: (bairroInput.value||'').trim() || null,
+      cidade: (cidadeInput.value||'').trim() || null,
+      uf: (ufInput.value||'').trim().toUpperCase() || null,
+      numero: (numeroInput.value||'').trim() || null,
+      complemento: (complInput.value||'').trim() || null
+    };
 
-  if (submitBtn){ submitBtn.disabled = true; submitBtn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Salvando...`; }
+    if (submitBtn){ submitBtn.disabled = true; submitBtn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Salvando...`; }
 
-  try{
-    const r = await fetch(url, {
-      method,
-      headers: { 'Content-Type':'application/json', Authorization:`Bearer ${token}` },
-      body: JSON.stringify(body)
-    });
-    const j = await r.json().catch(()=> ({}));
-    if (!r.ok) throw new Error(j.error || `Erro ${r.status}`);
+    try{
+      const r = await fetch(url, { method, headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${token}` }, body: JSON.stringify(body) });
+      const j = await r.json().catch(()=> ({}));
+      if (!r.ok) throw new Error(j.error || `Erro ${r.status}`);
+      alert(j.message || 'Cliente salvo com sucesso!');
+      clienteModal.hide();
+      setupModal(null);
+      carregarClientes();
+    }catch(err){
+      alert(`Erro ao salvar: ${err.message}`);
+    }finally{
+      if (submitBtn){ submitBtn.disabled=false; submitBtn.textContent='Salvar'; }
+    }
+  });
 
-    alert(j.message || 'Cliente salvo com sucesso!');
-    clienteModal.hide();
-    setupModal(null);
-    carregarClientes();
-  }catch(err){
-    alert(`Erro ao salvar: ${err.message}`);
-  }finally{
-    if (submitBtn){ submitBtn.disabled=false; submitBtn.textContent='Salvar'; }
-  }
-});
-
-  // Ações na tabela
+  // ações tabela
   tableBody.addEventListener('click', async (e)=>{
     const btn = e.target.closest('button'); if (!btn) return;
     const id  = btn.dataset.id;
@@ -508,7 +477,6 @@ function aplicarMascaras(){
       const data = JSON.parse(btn.dataset.cliente);
       setupModal(data); clienteModal.show(); return;
     }
-
     if (btn.classList.contains('btn-delete')){
       if (!confirm('Excluir cliente?')) return;
       try{
@@ -519,23 +487,19 @@ function aplicarMascaras(){
       }catch(err){ alert(`Erro ao excluir: ${err.message}`); }
       return;
     }
-
     if (btn.classList.contains('btn-resend')){
-      const original = btn.innerHTML;
-      btn.disabled = true; btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
+      const original = btn.innerHTML; btn.disabled = true; btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
       try{
         const r = await fetch(`${API_URL}/${id}/reenviar-senha`, { method:'POST', headers:{ Authorization:`Bearer ${token}` }});
         const j = await r.json().catch(()=> ({}));
         if (!r.ok) throw new Error(j.error || `Erro ${r.status}`);
         alert(j.message || 'E-mail enviado.');
         btn.outerHTML = `<button class="btn btn-sm btn-outline-success" disabled title="E-mail enviado"><i class="bi bi-check-circle-fill"></i></button>`;
-      }catch(err){
-        alert(`Erro: ${err.message}`); btn.disabled=false; btn.innerHTML=original;
-      }
+      }catch(err){ alert(`Erro: ${err.message}`); btn.disabled=false; btn.innerHTML = original; }
     }
   });
 
-  // Boot
+  // boot
   carregarClientes();
   aplicarMascaras();
 });

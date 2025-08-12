@@ -233,52 +233,71 @@
   <script>
 window.onload = () => {
   // =======================
-  // Helpers
+  // Helpers / util
   // =======================
-  function parseCurrency(valorString) {
-    if (!valorString || typeof valorString !== 'string') return 0;
-    const valorLimpo = valorString.replace('R$', '').trim().replace(/\./g, '').replace(',', '.');
-    const valorNumerico = parseFloat(valorLimpo);
-    return isNaN(valorNumerico) ? 0 : valorNumerico;
-  }
-
   const token = localStorage.getItem('adminAuthToken');
   if (!token) { window.location.href = '/admin/login.html'; return; }
+  const AUTH_HEADERS = { Authorization: `Bearer ${token}` };
 
-  // --- Menu / topo ---
-  const path = window.location.pathname;
-  document.querySelectorAll('.sidebar-nav .nav-link').forEach(link => {
-    const href = link.getAttribute('href');
-    if (path.endsWith(href)) {
-      link.classList.add('active');
-      const parent = link.closest('.menu-dropdown');
-      if (parent) parent.querySelector('.submenu').style.display = 'block';
-    }
-  });
-  document.querySelectorAll('.menu-dropdown > a').forEach(toggle => {
-    toggle.addEventListener('click', e => {
-      e.preventDefault();
-      const sub = toggle.nextElementSibling;
-      sub.style.display = sub.style.display === 'block' ? 'none' : 'block';
-    });
-  });
-  document.getElementById('logoutButton').addEventListener('click', e => {
-    e.preventDefault();
-    localStorage.removeItem('adminAuthToken');
-    window.location.href = '/admin/login.html';
-  });
-  try {
-    const payload = JSON.parse(atob(token.split('.')[1]));
-    if (payload?.nome) document.getElementById('adminName').innerText = payload.nome;
-  } catch {}
+  const onlyDigits = v => (v||'').toString().replace(/\D/g,'');
+  const parseCurrency = (s) => {
+    if (!s) return 0;
+    if (typeof s === 'number') return s;
+    const v = String(s).replace('R$','').replace(/\./g,'').replace(',','.').trim();
+    const n = parseFloat(v);
+    return isNaN(n) ? 0 : n;
+  };
+  const fmtBRL = n => `R$ ${Number(n||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}`;
+  const evIdOf = ev => ev?.id || ev?.evento_id || ev?.id_evento || ev?.eventoId;
+
+  function baixarPdfBase64(base64, nome){
+    const href = base64?.startsWith('data:')
+      ? base64
+      : `data:application/pdf;base64,${base64||''}`;
+    const a = document.createElement('a');
+    a.href = href; a.download = nome || 'DAR.pdf'; a.click();
+  }
+  window.baixarPdfBase64 = baixarPdfBase64; // usado no onclick gerado
 
   // =======================
-  // Seletores
+  // Topo / menu
+  // =======================
+  (function bootMenu(){
+    const path = window.location.pathname;
+    document.querySelectorAll('.sidebar-nav .nav-link').forEach(link => {
+      const href = link.getAttribute('href');
+      if (href && path.endsWith(href)) {
+        link.classList.add('active');
+        const parent = link.closest('.menu-dropdown');
+        if (parent) parent.querySelector('.submenu').style.display = 'block';
+      }
+    });
+    document.querySelectorAll('.menu-dropdown > a').forEach(toggle => {
+      toggle.addEventListener('click', e => {
+        e.preventDefault();
+        const sub = toggle.nextElementSibling;
+        sub.style.display = sub.style.display === 'block' ? 'none' : 'block';
+      });
+    });
+    document.getElementById('logoutButton')?.addEventListener('click', e => {
+      e.preventDefault();
+      localStorage.removeItem('adminAuthToken');
+      window.location.href = '/admin/login.html';
+    });
+    try {
+      const p = JSON.parse(atob(token.split('.')[1]));
+      if (p?.nome) document.getElementById('adminName').innerText = p.nome;
+    } catch {}
+  })();
+
+  // =======================
+  // Elementos
   // =======================
   const addEventoBtn = document.getElementById('add-evento-btn');
   const modal = document.getElementById('evento-modal');
   const closeModalBtn = document.getElementById('close-modal-btn');
   const form = document.getElementById('evento-form');
+
   const clienteSelect = document.getElementById('cliente-select');
   const datasEventoInput = document.getElementById('datas-evento');
   const totalDiariasDisplay = document.getElementById('total-diarias');
@@ -286,334 +305,188 @@ window.onload = () => {
   const tipoDescontoAutoDisplay = document.getElementById('tipo-desconto-auto');
   const descontoManualInput = document.getElementById('desconto-manual');
   const valorFinalDisplay = document.getElementById('valor-final');
+
   const parcelasContainer = document.getElementById('parcelas-container');
   const addParcelaBtn = document.getElementById('add-parcela-btn');
   const totalParceladoDisplay = document.getElementById('total-parcelado');
   const formError = document.getElementById('form-error');
+
   const eventosTableBody = document.getElementById('eventos-table-body');
+
+  // Modal de assistente de datas
   const datasHelperBtn = document.getElementById('datas-helper-btn');
   const datasHelperModal = document.getElementById('datas-helper-modal');
   const closeHelperModalBtn = document.getElementById('close-helper-modal-btn');
   const gerarDatasBtn = document.getElementById('gerar-datas-btn');
   const processarDatasBtn = document.getElementById('processar-datas-btn');
   const confirmarDatasBtn = document.getElementById('confirmar-datas-btn');
+
+  // Modal DARs
   const darsModal = document.getElementById('dars-modal');
   const closeDarsModalBtn = document.getElementById('close-dars-modal-btn');
   const darsList = document.getElementById('dars-list');
-  closeDarsModalBtn.addEventListener('click', () => darsModal.style.display = 'none');
 
-  const API_CLIENTES_URL = '/api/admin/eventos-clientes';
+  closeModalBtn?.addEventListener('click', ()=> modal.style.display='none');
+  closeDarsModalBtn?.addEventListener('click', ()=> darsModal.style.display='none');
 
   // =======================
   // Estado
   // =======================
-  let generatedDates = [];
+  const API_CLIENTES_URL = '/api/admin/eventos-clientes';
   let clientes = [];
   let parcelasMasks = [];
+  let generatedDates = [];
   let modoEdicao = false;
   let editEventoId = null;
 
   // =======================
-  // Utilitários de cálculo
+  // Cálculos
   // =======================
-  const feriadosFixos = ['01/01', '21/04', '01/05', '24/06', '07/09', '16/09', '12/10', '02/11', '15/11', '25/12'];
-  function isFeriado(d) {
-    const dd = String(d.getDate()).padStart(2, '0');
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    return feriadosFixos.includes(`${dd}/${mm}`);
-  }
-  function isDiaUtil(d) { return d.getDay() !== 0 && d.getDay() !== 6 && !isFeriado(d); }
+  const feriadosFixos = ['01/01','21/04','01/05','24/06','07/09','16/09','12/10','02/11','15/11','25/12'];
+  const isFeriado = d => feriadosFixos.includes(`${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`);
+  const isDiaUtil = d => d.getDay()!==0 && d.getDay()!==6 && !isFeriado(d);
 
-  const precosPorDia = [2495.00, 1996.00, 1596.80, 1277.44, 1277.44];
-  function calcularValorBruto(n) {
-    if (n <= 0) return 0;
-    let v = 0;
-    if (n >= 1) v += precosPorDia[0];
-    if (n >= 2) v += precosPorDia[1];
-    if (n >= 3) v += precosPorDia[2];
-    if (n >= 4) v += (n - 3) * precosPorDia[3];
+  // Tabela de preços/dia
+  const precosPorDia = [2495.00,1996.00,1596.80,1277.44,1277.44];
+  function calcularValorBruto(n){
+    if (n<=0) return 0;
+    let v=0;
+    if (n>=1) v+=precosPorDia[0];
+    if (n>=2) v+=precosPorDia[1];
+    if (n>=3) v+=precosPorDia[2];
+    if (n>=4) v+=(n-3)*precosPorDia[3];
     return +v.toFixed(2);
   }
-  function calcularValorFinal(vb, tipo, dm = 0) {
+  function calcularValorFinal(vb, tipo, dm=0){
     let v = vb;
-    if (tipo === 'Governo') v *= 0.8;
-    else if (tipo === 'Permissionario') v *= 0.4;
-    if (dm > 0) v *= (1 - dm / 100);
+    if (tipo==='Governo') v*=0.8;
+    else if (tipo==='Permissionario') v*=0.4;
+    if (dm>0) v*=(1-dm/100);
     return +v.toFixed(2);
   }
 
   // =======================
-  // Carregamento
+  // Flatpickr / UI
   // =======================
-  async function carregarClientes() {
-    try {
-      const res = await fetch(API_CLIENTES_URL, { headers: { Authorization: `Bearer ${token}` } });
-      const clientesData = await res.json();
-      clientes = clientesData;
-      clienteSelect.innerHTML = '<option value="">Selecione um cliente...</option>';
-      clientes.forEach(c => {
-        const opt = document.createElement('option');
-        opt.value = c.id;
-        opt.textContent = `${c.nome_razao_social} (${c.documento})`;
-        opt.dataset.tipo = c.tipo_cliente;
-        clienteSelect.appendChild(opt);
-      });
-    } catch (e) { console.error('Erro ao carregar clientes:', e); }
-  }
-
-  async function carregarEventos() {
-    try {
-      const res = await fetch('/api/admin/eventos', { headers: { Authorization: `Bearer ${token}` } });
-      if (!res.ok) throw new Error('Falha ao buscar eventos');
-      const evs = await res.json();
-      eventosTableBody.innerHTML = '';
-      evs.forEach(ev => {
-        const statusBg = ev.status === 'Pago'
-          ? 'bg-success'
-          : (ev.status === 'Pendente' || ev.status === 'Emitido' ? 'bg-warning' : 'bg-danger');
-
-        const vfNum = typeof ev.valor_final === 'number'
-          ? ev.valor_final
-          : parseFloat(String(ev.valor_final).replace('.', '').replace(',', '.')) || 0;
-
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td>${ev.id}</td>
-          <td>${ev.nome_evento}</td>
-          <td>${ev.nome_cliente}</td>
-          <td class="text-end">R$ ${vfNum.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
-          <td class="text-center"><span class="badge ${statusBg}">${ev.status}</span></td>
-          <td class="text-center">
-            <button class="btn btn-sm btn-outline-primary btn-dars" title="Ver DARs" data-evento-id="${ev.id}">
-              <i class="bi bi-file-earmark-arrow-down"></i>
-            </button>
-          </td>
-          <td class="text-center">
-            <button class="btn btn-sm btn-outline-secondary btn-editar" title="Editar Evento" data-evento-id="${ev.id}">
-              <i class="bi bi-pencil"></i>
-            </button>
-            <button class="btn btn-sm btn-outline-danger btn-apagar" title="Apagar Evento" data-evento-id="${ev.id}" data-evento-nome="${ev.nome_evento}">
-              <i class="bi bi-trash"></i>
-            </button>
-          </td>`;
-        eventosTableBody.appendChild(tr);
-      });
-    } catch (e) {
-      console.error(e);
-      eventosTableBody.innerHTML = '<tr><td colspan="7" class="text-center text-danger">Erro ao carregar eventos.</td></tr>';
-    }
-  }
-
-  // =======================
-  // Delegação de eventos (tabela e DARs)
-  // =======================
-  function inicializarEventListeners() {
-    eventosTableBody.addEventListener('click', async (event) => {
-      const target = event.target;
-      const darsButton = target.closest('.btn-dars');
-      const apagarButton = target.closest('.btn-apagar');
-      const editarButton = target.closest('.btn-editar');
-
-      if (darsButton) {
-        const eventoId = darsButton.dataset.eventoId;
-        abrirModalDARs(eventoId);
-      }
-      if (apagarButton) {
-        const eventoId = apagarButton.dataset.eventoId;
-        const eventoNome = apagarButton.dataset.eventoNome;
-        if (confirm(`Tem certeza que deseja apagar o evento "${eventoNome}" (ID: ${eventoId})?`)) {
-          try {
-            const res = await fetch(`/api/admin/eventos/${eventoId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
-            const result = await res.json();
-            if (!res.ok) throw new Error(result.error);
-            alert(result.message);
-            carregarEventos();
-          } catch (err) { alert(`Erro ao apagar o evento: ${err.message}`); }
-        }
-      }
-      if (editarButton) {
-        const eventoId = editarButton.dataset.eventoId;
-        editarEvento(eventoId);
-      }
-    });
-    
-      darsList.querySelectorAll('.btn-baixar-endpoint').forEach(btn => {
-        btn.addEventListener('click', async () => {
-          const darId = btn.getAttribute('data-dar-id');
-          const old = btn.innerHTML;
-          btn.disabled = true;
-          btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Baixando...`;
-          try {
-            const r = await fetch(`/api/admin/dars/${darId}/pdf`, { headers: { Authorization: `Bearer ${token}` } });
-            if (!r.ok) throw new Error('Falha ao obter PDF');
-            const blob = await r.blob();
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a'); a.href = url; a.download = `DAR-${darId}.pdf`;
-            document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-          } catch (err) {
-            alert('Não foi possível baixar a DAR.');
-          } finally {
-            btn.disabled = false; btn.innerHTML = old;
-          }
-        });
-      });
-
-    darsList.addEventListener('click', async (event) => {
-      const reemitirButton = event.target.closest('.btn-reemitir-dar');
-      if (reemitirButton) {
-        const darId = reemitirButton.dataset.darId;
-        const eventoId = reemitirButton.dataset.eventoId;
-        reemitirButton.disabled = true;
-        reemitirButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Reemitindo...`;
-        try {
-          const res = await fetch(`/api/admin/eventos/${eventoId}/dars/${darId}/reemitir`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
-          const result = await res.json();
-          if (!res.ok) throw new Error(result.error);
-          alert('DAR reemitida com sucesso!');
-          abrirModalDARs(eventoId);
-          carregarEventos(); // força refetch da tabela principal
-        } catch (err) {
-          alert(`Erro ao reemitir a DAR: ${err.message}`);
-          reemitirButton.disabled = false;
-          reemitirButton.innerHTML = `<i class="bi bi-printer"></i> Reemitir`;
-        }
-        atualizarStatusNaTabelaEventos(eventoId, 'Emitido');
-      }
-    });
-  }
-// depois de reemitir no admin/eventos-dars, chame:
-function atualizarStatusNaTabelaEventos(eventoId, status){
-  const linha = document.querySelector(`#eventos-table-body tr td:first-child`)?.closest('tbody')
-    ?.querySelectorAll('tr');
-  if (!linha) return;
-  [...linha].forEach(tr=>{
-    const id = tr.children?.[0]?.textContent?.trim();
-    if (String(id) === String(eventoId)){
-      const badgeTd = tr.children?.[4]; // coluna "Status"
-      if (badgeTd){
-        const cls = status==='Pago' ? 'bg-success' : (status==='Emitido' ? 'bg-primary' : 'bg-warning');
-        badgeTd.innerHTML = `<span class="badge ${cls}">${status}</span>`;
-      }
-    }
+  const fp = flatpickr(datasEventoInput, {
+    mode: 'multiple',
+    dateFormat: 'Y-m-d',
+    locale: 'pt',
+    onChange: atualizarCalculos
   });
-}
-  // =======================
-  // UI / Flatpickr
-  // =======================
-  function atualizarCalculos() {
+
+  function atualizarCalculos(){
     const n = fp.selectedDates.length;
     const vb = calcularValorBruto(n);
-    const tipoOpt = clienteSelect.selectedOptions[0];
-    const tipo = tipoOpt ? tipoOpt.dataset.tipo : 'Geral';
-    const dm = parseFloat(descontoManualInput.value) || 0;
-    const vf = calcularValorFinal(vb, tipo, dm);
+    const tipo = clienteSelect.selectedOptions[0]?.dataset?.tipo || 'Geral';
+    const dm  = parseFloat(descontoManualInput.value) || 0;
+    const vf  = calcularValorFinal(vb, tipo, dm);
+
     totalDiariasDisplay.textContent = n;
-    valorBrutoDisplay.textContent = `R$ ${vb.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
-    tipoDescontoAutoDisplay.value = tipo;
-    valorFinalDisplay.textContent = `R$ ${vf.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+    valorBrutoDisplay.textContent   = fmtBRL(vb);
+    tipoDescontoAutoDisplay.value   = tipo;
+    valorFinalDisplay.textContent   = fmtBRL(vf);
+
     gerenciarEstadoParcelamento();
     validarFormularioCompleto();
   }
 
-  const fp = flatpickr(datasEventoInput, { mode: 'multiple', dateFormat: 'Y-m-d', locale: 'pt', onChange: atualizarCalculos });
+  datasHelperBtn?.addEventListener('click', ()=> datasHelperModal.style.display='block');
+  closeHelperModalBtn?.addEventListener('click', ()=> datasHelperModal.style.display='none');
 
-  datasHelperBtn.addEventListener('click', () => datasHelperModal.style.display = 'block');
-  closeHelperModalBtn.addEventListener('click', () => datasHelperModal.style.display = 'none');
-
-  gerarDatasBtn.addEventListener('click', () => {
-    const dias = Array.from(document.querySelectorAll('#dias-semana-checkboxes input:checked')).map(cb => parseInt(cb.value));
-    const inicio = new Date(document.getElementById('periodo-inicio').value + 'T12:00:00');
-    const fim = new Date(document.getElementById('periodo-fim').value + 'T12:00:00');
-    if (dias.length === 0 || isNaN(inicio.getTime()) || isNaN(fim.getTime())) { return alert('Selecione dias e período válidos.'); }
+  gerarDatasBtn?.addEventListener('click', ()=>{
+    const dias = Array.from(document.querySelectorAll('#dias-semana-checkboxes input:checked')).map(cb=>parseInt(cb.value));
+    const i = document.getElementById('periodo-inicio').value;
+    const f = document.getElementById('periodo-fim').value;
+    const inicio = i ? new Date(i+'T12:00:00') : null;
+    const fim    = f ? new Date(f+'T12:00:00') : null;
+    if (!dias.length || !inicio || !fim){ alert('Selecione dias e período válidos.'); return; }
     generatedDates = [];
-    let diaAtual = new Date(inicio);
-    while (diaAtual <= fim) {
-      if (dias.includes(diaAtual.getDay())) generatedDates.push(new Date(diaAtual));
-      diaAtual.setDate(diaAtual.getDate() + 1);
+    let d = new Date(inicio);
+    while (d <= fim) {
+      if (dias.includes(d.getDay())) generatedDates.push(new Date(d));
+      d.setDate(d.getDate()+1);
     }
     alert(`${generatedDates.length} datas geradas.`);
   });
 
-  processarDatasBtn.addEventListener('click', () => {
-    const texto = document.getElementById('datas-textarea').value;
+  processarDatasBtn?.addEventListener('click', ()=>{
+    const texto = document.getElementById('datas-textarea').value || '';
     const parts = texto.split(/[\s,;\n]+/).filter(Boolean);
-    generatedDates = parts.map(p => { const [dd, mm, aa] = p.split('/'); return new Date(`${aa}-${mm}-${dd}T12:00:00`); }).filter(d => !isNaN(d.getTime()));
+    generatedDates = parts.map(p=>{
+      const [dd,mm,aa] = p.split('/');
+      return (dd&&mm&&aa) ? new Date(`${aa}-${mm}-${dd}T12:00:00`) : null;
+    }).filter(d=> d && !isNaN(d.getTime()));
     alert(`${generatedDates.length} datas processadas.`);
   });
 
-  confirmarDatasBtn.addEventListener('click', () => { fp.setDate(generatedDates, true); datasHelperModal.style.display = 'none'; });
+  confirmarDatasBtn?.addEventListener('click', ()=>{
+    fp.setDate(generatedDates, true);
+    datasHelperModal.style.display='none';
+  });
 
   // =======================
-  // Parcelamento
+  // Parcelas
   // =======================
-  function adicionarParcela() {
-    const parcelaIndex = parcelasContainer.children.length;
-    const div = document.createElement('div');
-    div.className = 'row align-items-center mb-2 parcela-item';
-    div.innerHTML = `
-      <div class="col-auto"><label class="form-label mb-0">Parcela ${parcelaIndex + 1}</label></div>
+  function adicionarParcela(){
+    const idx = parcelasContainer.children.length;
+    const wrap = document.createElement('div');
+    wrap.className = 'row align-items-center mb-2 parcela-item';
+    wrap.innerHTML = `
+      <div class="col-auto"><label class="form-label mb-0">Parcela ${idx+1}</label></div>
       <div class="col"><input type="text" class="form-control parcela-valor" placeholder="Valor (R$)" required></div>
       <div class="col"><input type="text" class="form-control parcela-vencimento" placeholder="Vencimento" required></div>
-      <div class="col-auto"><button type="button" class="btn btn-sm btn-outline-danger btn-delete-parcela" aria-label="Remover parcela">&times;</button></div>`;
-    parcelasContainer.appendChild(div);
+      <div class="col-auto"><button type="button" class="btn btn-sm btn-outline-danger btn-delete-parcela">&times;</button></div>`;
+    parcelasContainer.appendChild(wrap);
 
-    const valorInput = div.querySelector('.parcela-valor');
-    const vencInput = div.querySelector('.parcela-vencimento');
+    const valorInput = wrap.querySelector('.parcela-valor');
+    const vencInput  = wrap.querySelector('.parcela-vencimento');
 
     const valorMask = IMask(valorInput, {
-      mask: Number,
-      scale: 2,
-      thousandsSeparator: '.',
-      padFractionalZeros: true,
-      radix: ',',
-      mapToRadix: ['.'],
-      prefix: 'R$ '
+      mask: Number, scale:2, thousandsSeparator:'.', padFractionalZeros:true,
+      radix:',', mapToRadix:['.'], prefix:'R$ '
     });
 
     const picker = flatpickr(vencInput, {
-      dateFormat: 'd/m/Y',
-      locale: 'pt',
+      dateFormat: 'd/m/Y', locale:'pt',
       disable: [d => !isDiaUtil(d)],
       onChange: validarFormularioCompleto
     });
 
     valorInput.addEventListener('input', validarFormularioCompleto);
-    parcelasMasks.push({ valorMask, picker, element: div });
+    parcelasMasks.push({ valorMask, picker, element: wrap });
   }
 
-  addParcelaBtn.addEventListener('click', adicionarParcela);
+  addParcelaBtn?.addEventListener('click', adicionarParcela);
 
-  parcelasContainer.addEventListener('click', e => {
-    if (e.target.classList.contains('btn-delete-parcela')) {
-      const item = e.target.closest('.parcela-item');
-      const i = parcelasMasks.findIndex(p => p.element === item);
-      if (i > -1) {
-        parcelasMasks[i].valorMask.destroy();
-        parcelasMasks[i].picker.destroy();
-        parcelasMasks.splice(i, 1);
-      }
-      item.remove();
-      parcelasContainer.querySelectorAll('.parcela-item').forEach((d, j) => {
-        d.querySelector('label').textContent = `Parcela ${j + 1}`;
-      });
-      validarFormularioCompleto();
+  parcelasContainer.addEventListener('click', (e)=>{
+    if (!e.target.classList.contains('btn-delete-parcela')) return;
+    const item = e.target.closest('.parcela-item');
+    const i = parcelasMasks.findIndex(p => p.element === item);
+    if (i>-1){
+      try{ parcelasMasks[i].valorMask.destroy(); }catch{}
+      try{ parcelasMasks[i].picker.destroy(); }catch{}
+      parcelasMasks.splice(i,1);
     }
+    item.remove();
+    [...parcelasContainer.querySelectorAll('.parcela-item label')].forEach((lab,ix)=> lab.textContent = `Parcela ${ix+1}`);
+    validarFormularioCompleto();
   });
 
-  function gerenciarEstadoParcelamento() {
-    if (!fp.selectedDates.length) { addParcelaBtn.disabled = true; return; }
-    const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
-    const primeiraDataEvento = fp.selectedDates.slice().sort((a,b)=>a-b)[0];
-    const diffDias = Math.ceil((primeiraDataEvento.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24));
-    if (diffDias <= 30) {
+  function gerenciarEstadoParcelamento(){
+    if (!fp.selectedDates.length){ addParcelaBtn.disabled = true; return; }
+    const hoje = new Date(); hoje.setHours(0,0,0,0);
+    const primeira = fp.selectedDates.slice().sort((a,b)=>a-b)[0];
+    const diff = Math.ceil((primeira-hoje)/(1000*60*60*24));
+    if (diff <= 30){
       addParcelaBtn.disabled = true;
-      while (parcelasMasks.length > 1) {
+      while (parcelasMasks.length > 1){
         const last = parcelasMasks.pop();
-        last.valorMask.destroy();
-        last.picker.destroy();
-        parcelasContainer.removeChild(last.element);
+        try{ last.valorMask.destroy(); }catch{}
+        try{ last.picker.destroy(); }catch{}
+        last.element.remove();
       }
-      if (parcelasMasks.length === 0) adicionarParcela();
+      if (!parcelasMasks.length) adicionarParcela();
     } else {
       addParcelaBtn.disabled = false;
     }
@@ -622,63 +495,395 @@ function atualizarStatusNaTabelaEventos(eventoId, status){
   // =======================
   // Validação
   // =======================
-  function validarFormularioCompleto() {
-    formError.textContent = '';
-    formError.classList.add('d-none');
-    formError.style.display = 'none';
-
+  function validarFormularioCompleto(){
+    formError.classList.add('d-none'); formError.style.display='none';
     const n = fp.selectedDates.length;
     const vb = calcularValorBruto(n);
-    const tipo = clienteSelect.selectedOptions[0]?.dataset.tipo || 'Geral';
-    const dm = parseFloat(descontoManualInput.value) || 0;
+    const tipo = clienteSelect.selectedOptions[0]?.dataset?.tipo || 'Geral';
+    const dm = parseFloat(descontoManualInput.value)||0;
     const vf = calcularValorFinal(vb, tipo, dm);
 
-    const total = Array.from(parcelasContainer.querySelectorAll('.parcela-valor'))
-      .reduce((sum, input) => sum + parseCurrency(input.value), 0);
+    const totalParcelas = [...parcelasContainer.querySelectorAll('.parcela-valor')]
+      .reduce((s,inp)=> s + parseCurrency(inp.value), 0);
 
-    totalParceladoDisplay.textContent = `R$ ${total.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    totalParceladoDisplay.textContent = fmtBRL(totalParcelas);
 
-    let erroMsg = '';
-    if (Math.abs(total - vf) > 0.01) {
-      erroMsg = `A soma das parcelas (R$ ${total.toFixed(2)}) não bate com o Valor Final (R$ ${vf.toFixed(2)}).`;
-    }
-
-    if (erroMsg) {
-      formError.textContent = erroMsg;
-      formError.classList.remove('d-none');
-      formError.style.display = 'block';
+    if (Math.abs(totalParcelas - vf) > 0.01){
+      formError.textContent = `A soma das parcelas (${fmtBRL(totalParcelas)}) não bate com o Valor Final (${fmtBRL(vf)}).`;
+      formError.classList.remove('d-none'); formError.style.display='block';
       return false;
     }
     return true;
   }
 
   // =======================
-  // Submit (único: cria/edita)
+  // APIs: clientes / eventos
   // =======================
-  form.addEventListener('submit', async e => {
-    e.preventDefault();
-    if (!validarFormularioCompleto()) {
-      alert('Corrija os erros indicados no formulário antes de salvar.');
-      return;
-    }
+  async function carregarClientes(){
+    try{
+      const r = await fetch(API_CLIENTES_URL, { headers: AUTH_HEADERS });
+      const j = await r.json();
+      clientes = Array.isArray(j) ? j : [];
+      clienteSelect.innerHTML = '<option value="">Selecione um cliente...</option>';
+      clientes.forEach(c=>{
+        const opt = document.createElement('option');
+        opt.value = c.id;
+        opt.textContent = `${c.nome_razao_social} (${c.documento})`;
+        opt.dataset.tipo = c.tipo_cliente || 'Geral';
+        clienteSelect.appendChild(opt);
+      });
+    }catch(e){ console.error('Erro clientes', e); }
+  }
 
-    const parcelas = parcelasMasks.map(({ valorMask, picker }) => {
-      const [d, m, a] = (picker.input.value || '').split('/');
-      const vencimentoFormatado = (a && m && d) ? `${a}-${m}-${d}` : null;
-      const valorNumerico = parseCurrency(valorMask.el.value);
-      return { valor: valorNumerico, vencimento: vencimentoFormatado };
+  async function carregarEventos(){
+    try{
+      const r = await fetch('/api/admin/eventos', { headers: AUTH_HEADERS });
+      if (!r.ok) throw new Error('Falha ao buscar eventos');
+      const evs = await r.json();
+      eventosTableBody.innerHTML = '';
+      (evs||[]).forEach(ev=>{
+        const id = evIdOf(ev);
+        const status = ev.status || 'Pendente';
+        const badge = status==='Pago' ? 'bg-success'
+                    : status==='Emitido' ? 'bg-primary'
+                    : 'bg-warning text-dark';
+        const vfNum = typeof ev.valor_final==='number'
+          ? ev.valor_final
+          : parseFloat(String(ev.valor_final||'0').replace(/\./g,'').replace(',','.'))||0;
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${id}</td>
+          <td>${ev.nome_evento || ''}</td>
+          <td>${ev.nome_cliente || ''}</td>
+          <td class="text-end">${fmtBRL(vfNum)}</td>
+          <td class="text-center"><span class="badge ${badge}">${status}</span></td>
+          <td class="text-center">
+            <button class="btn btn-sm btn-outline-primary btn-dars" title="Ver DARs"
+                    data-evento-id="${id}" data-evento-nome="${ev.nome_evento || ''}">
+              <i class="bi bi-file-earmark-arrow-down"></i>
+            </button>
+          </td>
+          <td class="text-center">
+            <button class="btn btn-sm btn-outline-secondary btn-editar" title="Editar"
+                    data-evento-id="${id}">
+              <i class="bi bi-pencil"></i>
+            </button>
+            <button class="btn btn-sm btn-outline-danger btn-apagar" title="Apagar"
+                    data-evento-id="${id}" data-evento-nome="${ev.nome_evento || ''}">
+              <i class="bi bi-trash"></i>
+            </button>
+          </td>`;
+        eventosTableBody.appendChild(tr);
+      });
+    }catch(e){
+      console.error(e);
+      eventosTableBody.innerHTML = '<tr><td colspan="7" class="text-center text-danger">Erro ao carregar eventos.</td></tr>';
+    }
+  }
+
+  function atualizarStatusNaTabelaEventos(eventoId, status){
+    const trs = eventosTableBody.querySelectorAll('tr');
+    trs.forEach(tr=>{
+      const id = tr.children?.[0]?.textContent?.trim();
+      if (String(id)===String(eventoId)){
+        const badge = tr.querySelector('td:nth-child(5) .badge');
+        if (badge){
+          badge.textContent = status;
+          badge.className = 'badge ' + (status==='Pago' ? 'bg-success' : status==='Emitido' ? 'bg-primary' : 'bg-warning text-dark');
+        }
+      }
+    });
+  }
+
+  // =======================
+  // Editar evento (fetch/normalização)
+  // =======================
+  async function fetchEventoById(id){
+    const tries = [
+      `/api/admin/eventos/${id}`,
+      `/api/admin/eventos/${id}/detalhes`,
+      `/api/admin/eventos?id=${encodeURIComponent(id)}`
+    ];
+    for (const u of tries){
+      const r = await fetch(u, { headers: AUTH_HEADERS });
+      if (r.ok) return r.json();
+      if (r.status===404) continue;
+    }
+    throw new Error('Falha ao buscar dados do evento.');
+  }
+  function normalizarEvento(payload){
+    const ev = payload?.evento || payload?.data || payload || {};
+    const id_cliente = ev.id_cliente ?? ev.cliente_id ?? ev.idCliente ?? '';
+    const nome_evento = ev.nome_evento ?? ev.nome ?? ev.titulo ?? '';
+    const tipo_desconto_auto = ev.tipo_desconto_auto ?? ev.tipoDescontoAuto ?? ev.tipo_cliente ?? 'Geral';
+    const desconto_manual_percent = ev.desconto_manual_percent ?? ev.descontoManualPercent ?? ev.desconto ?? 0;
+    let datas_evento = ev.datas_evento ?? ev.datas ?? ev.datasEvento ?? [];
+    if (typeof datas_evento === 'string') datas_evento = datas_evento.split(',').map(s=>s.trim()).filter(Boolean);
+    if (!Array.isArray(datas_evento)) datas_evento = [];
+    const parcelas = Array.isArray(ev.parcelas) ? ev.parcelas
+                  : Array.isArray(ev.DARs) ? ev.DARs
+                  : [];
+    return { id_cliente, nome_evento, tipo_desconto_auto, desconto_manual_percent, datas_evento, parcelas };
+  }
+
+  async function editarEvento(eventoId){
+    if (!eventoId){ alert('ID inválido.'); return; }
+    try{
+      const raw = await fetchEventoById(eventoId);
+      const ev = normalizarEvento(raw);
+
+      // reset UI/máscaras
+      form.reset(); fp.clear(); parcelasContainer.innerHTML='';
+      parcelasMasks.forEach(({valorMask,picker})=>{ try{valorMask.destroy()}catch{} try{picker.destroy()}catch{} });
+      parcelasMasks = [];
+
+      // preencher
+      clienteSelect.value = ev.id_cliente || '';
+      document.getElementById('nome-evento').value = ev.nome_evento || '';
+      if (ev.datas_evento.length) fp.setDate(ev.datas_evento, true);
+      tipoDescontoAutoDisplay.value = ev.tipo_desconto_auto || (clienteSelect.selectedOptions[0]?.dataset.tipo || 'Geral');
+      descontoManualInput.value = ev.desconto_manual_percent || 0;
+
+      if (ev.parcelas.length){
+        ev.parcelas.forEach((p,i)=>{
+          adicionarParcela();
+          const m = parcelasMasks[i];
+          const valNum = typeof p.valor==='number'
+            ? p.valor
+            : parseFloat(String(p.valor ?? p.parcela_valor ?? p.dar_valor ?? '0').replace(/\./g,'').replace(',','.'))||0;
+          m.valorMask.unmaskedValue = (valNum.toFixed(2)).replace('.',',');
+
+          const venc = p.vencimento ?? p.data_vencimento ?? p.dar_venc ?? null;
+          if (venc) m.picker.setDate(venc, true);
+        });
+      } else {
+        adicionarParcela();
+      }
+
+      atualizarCalculos();
+      modoEdicao = true; editEventoId = eventoId;
+      form.querySelector('button[type="submit"]').textContent = 'Atualizar Evento';
+      modal.style.display='block';
+    }catch(err){
+      console.error('[editarEvento]', err);
+      alert(`Erro ao carregar evento: ${err.message}`);
+    }
+  }
+
+  // =======================
+  // DARs: listar / reemitir / baixar
+  // =======================
+  async function listarDARs(eventoId){
+    const tries = [
+      `/api/admin/eventos/${eventoId}/dars`,
+      `/api/admin/eventos/${eventoId}/DARs`
+    ];
+    for (const u of tries){
+      try{
+        const r = await fetch(u, { headers: AUTH_HEADERS });
+        if (!r.ok) continue;
+        const j = await r.json();
+        const arr = j?.dars || j?.DARs || j || [];
+        if (Array.isArray(arr)) return arr;
+      }catch{}
+    }
+    return [];
+  }
+
+  function isPdfBase64(s){
+    if (!s) return false;
+    const v = String(s).trim();
+    return v.startsWith('JVBER') || /^data:application\/pdf;base64,/i.test(v);
+  }
+
+  async function abrirModalDARs(eventoId, eventoNome){
+    darsList.innerHTML = `<div class="text-center py-3">Carregando...</div>`;
+    darsModal.style.display='block';
+    const nome = eventoNome || `#${eventoId}`;
+    try{
+      const dars = await listarDARs(eventoId);
+      if (!dars.length){
+        darsList.innerHTML = `<div class="alert alert-info">Nenhuma DAR encontrada para ${nome}.</div>`;
+        atualizarStatusNaTabelaEventos(eventoId, 'Pendente');
+        return;
+      }
+      darsList.innerHTML = `
+        <div class="table-responsive">
+          <table class="table table-sm align-middle">
+            <thead><tr><th>#</th><th class="text-end">Valor</th><th>Venc.</th><th>Status</th><th class="text-center">Ação</th></tr></thead>
+            <tbody>
+              ${dars.map(d=>{
+                const valor = Number(d.valor ?? d.parcela_valor ?? d.dar_valor ?? 0);
+                const venc  = d.vencimento ?? d.dar_venc ?? null;
+                const vencFmt = venc ? new Date(venc+'T12:00:00').toLocaleDateString('pt-BR') : '-';
+                const status = d.status ?? d.dar_status ?? 'Pendente';
+                const pdfStr = (d.dar_pdf || '').toString().replace(/\s/g,'');
+                const hasB64 = isPdfBase64(pdfStr);
+                const darId = d.id || d.dar_id || d.parcela_id || d.referencia || d.parcela_num || '';
+                const btn = hasB64
+                  ? `<button class="btn btn-sm btn-success" data-dar-b64="${pdfStr}" data-evento="${eventoId}" data-parc="${d.parcela_num||''}">
+                      <i class="bi bi-download"></i> Baixar
+                     </button>`
+                  : `<div class="btn-group">
+                       <button class="btn btn-sm btn-outline-primary btn-reemitir-dar" data-dar-id="${darId}" data-evento-id="${eventoId}">
+                         <i class="bi bi-printer"></i> Reemitir
+                       </button>
+                       <button class="btn btn-sm btn-outline-secondary btn-baixar-endpoint" data-dar-id="${darId}" data-evento-id="${eventoId}">
+                         <i class="bi bi-file-earmark-arrow-down"></i> Baixar
+                       </button>
+                     </div>`;
+                const badge = status==='Pago' ? 'bg-success'
+                             : status==='Emitido' ? 'bg-primary'
+                             : status==='Vencido' ? 'bg-danger'
+                             : 'bg-warning text-dark';
+                return `<tr>
+                  <td>${d.parcela_num || d.referencia || '-'}</td>
+                  <td class="text-end">${fmtBRL(valor)}</td>
+                  <td>${vencFmt}</td>
+                  <td><span class="badge ${badge}">${status}</span></td>
+                  <td class="text-center">${btn}</td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>`;
+
+      // Atualiza o status consolidado do evento na tabela principal
+      const temPago    = dars.some(x => (x.status||x.dar_status)==='Pago');
+      const temEmitido = dars.some(x => (x.status||x.dar_status)==='Emitido' || (x.dar_pdf && isPdfBase64(x.dar_pdf)));
+      atualizarStatusNaTabelaEventos(eventoId, temPago ? 'Pago' : (temEmitido ? 'Emitido' : 'Pendente'));
+    }catch(e){
+      console.error(e);
+      darsList.innerHTML = `<div class="alert alert-danger">Erro ao carregar as DARs.</div>`;
+    }
+  }
+
+  async function reemitirDAR(eventoId, darId, extra={}){
+    const tentativas = [
+      { url: `/api/admin/eventos/${eventoId}/dars/${darId}/reemitir`, opt:{ method:'POST', headers: AUTH_HEADERS } },
+      { url: `/api/admin/eventos/${eventoId}/dars/reemitir`,        opt:{ method:'POST', headers:{...AUTH_HEADERS,'Content-Type':'application/json'}, body: JSON.stringify({ dar_id:darId, ...extra }) } },
+      { url: `/api/admin/dars/${darId}/reemitir`,                   opt:{ method:'POST', headers:{...AUTH_HEADERS,'Content-Type':'application/json'}, body: JSON.stringify({ evento_id:eventoId, ...extra }) } }
+    ];
+    for (const t of tentativas){
+      try{
+        const r = await fetch(t.url, t.opt);
+        const j = await r.json().catch(()=> ({}));
+        if (r.ok) return j;
+      }catch{}
+    }
+    throw new Error('Não foi possível reemitir a DAR.');
+  }
+
+  // Delegação de eventos da TABELA e do MODAL de DARs
+  function inicializarEventListeners(){
+    // Tabela principal
+    eventosTableBody.addEventListener('click', async (e)=>{
+      const btnDars   = e.target.closest('.btn-dars');
+      const btnApagar = e.target.closest('.btn-apagar');
+      const btnEditar = e.target.closest('.btn-editar');
+
+      if (btnDars){
+        const eventoId = btnDars.dataset.eventoId;
+        const eventoNome = btnDars.dataset.eventoNome || `#${eventoId}`;
+        abrirModalDARs(eventoId, eventoNome);
+      }
+      if (btnApagar){
+        const eventoId = btnApagar.dataset.eventoId;
+        const nome = btnApagar.dataset.eventoNome || `#${eventoId}`;
+        if (!confirm(`Apagar o evento "${nome}" (ID: ${eventoId})?`)) return;
+        try{
+          const r = await fetch(`/api/admin/eventos/${eventoId}`, { method:'DELETE', headers: AUTH_HEADERS });
+          const j = await r.json().catch(()=> ({}));
+          if (!r.ok) throw new Error(j.error || `Erro ${r.status}`);
+          alert(j.message || 'Evento apagado.');
+          carregarEventos();
+        }catch(err){ alert(`Erro ao apagar: ${err.message}`); }
+      }
+      if (btnEditar){
+        const eventoId = btnEditar.dataset.eventoId;
+        editarEvento(eventoId);
+      }
     });
 
-    const n = fp.selectedDates.length;
+    // Ações dentro do modal de DARs (delegadas)
+    darsList.addEventListener('click', async (e)=>{
+      const btnB64  = e.target.closest('button[data-dar-b64]');
+      const btnReem = e.target.closest('.btn-reemitir-dar');
+      const btnDown = e.target.closest('.btn-baixar-endpoint');
+
+      if (btnB64){
+        try{
+          const base = btnB64.dataset.darB64;
+          const evento = btnB64.dataset.evento;
+          const parc   = btnB64.dataset.parc || 'U';
+          baixarPdfBase64(base, `DAR-Evento-${evento}-P${parc}.pdf`);
+        }catch{ alert('PDF inválido.'); }
+        return;
+      }
+
+      if (btnReem){
+        const eventoId = btnReem.dataset.eventoId;
+        const darId    = btnReem.dataset.darId;
+        const original = btnReem.innerHTML;
+        btnReem.disabled = true; btnReem.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Reemitindo...`;
+        try{
+          const payload = await reemitirDAR(eventoId, darId);
+          if (payload?.dar_pdf) baixarPdfBase64(payload.dar_pdf, `DAR-Evento-${eventoId}.pdf`);
+          await abrirModalDARs(eventoId); // recarrega lista
+          await carregarEventos();        // atualiza status geral
+        }catch(err){
+          alert(err.message || 'Não foi possível reemitir.');
+        }finally{
+          btnReem.disabled = false; btnReem.innerHTML = original;
+        }
+        return;
+      }
+
+      if (btnDown){
+        const darId    = btnDown.dataset.darId;
+        const original = btnDown.innerHTML;
+        btnDown.disabled = true; btnDown.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Baixando...`;
+        try{
+          const r = await fetch(`/api/admin/dars/${darId}/pdf`, { headers: AUTH_HEADERS });
+          if (!r.ok) throw new Error('Falha ao obter PDF');
+          const blob = await r.blob();
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a'); a.href = url; a.download = `DAR-${darId}.pdf`;
+          document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+        }catch{ alert('Não foi possível baixar a DAR.'); }
+        finally{ btnDown.disabled = false; btnDown.innerHTML = original; }
+        return;
+      }
+    });
+  }
+
+  // =======================
+  // Submit (criar/editar)
+  // =======================
+  form.addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    if (!validarFormularioCompleto()){
+      alert('Corrija os erros antes de salvar.'); return;
+    }
+
+    const parcelas = parcelasMasks.map(({valorMask,picker})=>{
+      const [d,m,a] = (picker.input.value||'').split('/');
+      return {
+        valor: parseCurrency(valorMask.el.value),
+        vencimento: (a&&m&&d) ? `${a}-${m}-${d}` : null
+      };
+    });
+
+    const n  = fp.selectedDates.length;
     const vb = calcularValorBruto(n);
-    const tipo = clienteSelect.selectedOptions[0]?.dataset.tipo || 'Geral';
-    const dm = parseFloat(descontoManualInput.value) || 0;
+    const tipo = clienteSelect.selectedOptions[0]?.dataset?.tipo || 'Geral';
+    const dm = parseFloat(descontoManualInput.value)||0;
     const vf = calcularValorFinal(vb, tipo, dm);
 
     const body = {
       idCliente: clienteSelect.value,
       nomeEvento: document.getElementById('nome-evento').value,
-      datasEvento: fp.selectedDates.map(d => d.toISOString().split('T')[0]),
+      datasEvento: fp.selectedDates.map(d=> d.toISOString().split('T')[0]),
       tipoDescontoAuto: tipoDescontoAutoDisplay.value,
       descontoManualPercent: dm,
       totalDiarias: n,
@@ -691,226 +896,48 @@ function atualizarStatusNaTabelaEventos(eventoId, status){
     btn.disabled = true;
     btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> ${modoEdicao ? 'Atualizando...' : 'Gerando...'}`;
 
-    try {
+    try{
       const url = modoEdicao ? `/api/admin/eventos/${editEventoId}` : '/api/admin/eventos';
       const method = modoEdicao ? 'PUT' : 'POST';
-
-      const res = await fetch(url, {
+      const r = await fetch(url, {
         method,
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers: { ...AUTH_HEADERS, 'Content-Type':'application/json' },
         body: JSON.stringify(body)
       });
-      const result = await res.json();
-      if (!res.ok) throw new Error(result.error || `Erro ${res.status}`);
+      const j = await r.json().catch(()=> ({}));
+      if (!r.ok) throw new Error(j.error || `Erro ${r.status}`);
 
       alert(modoEdicao ? 'Evento atualizado com sucesso!' : 'Evento e DARs criados com sucesso!');
-      modal.style.display = 'none';
-      form.reset();
-      fp.clear();
-      parcelasContainer.innerHTML = '';
-      parcelasMasks.forEach(({ valorMask, picker }) => { valorMask.destroy(); picker.destroy(); });
-      parcelasMasks = [];
-      modoEdicao = false;
-      editEventoId = null;
+      modal.style.display='none';
+      // reset
+      form.reset(); fp.clear(); parcelasContainer.innerHTML='';
+      parcelasMasks.forEach(({valorMask,picker})=>{ try{valorMask.destroy()}catch{} try{picker.destroy()}catch{} });
+      parcelasMasks=[]; modoEdicao=false; editEventoId=null;
       btn.textContent = 'Salvar Evento e Gerar DARs';
       carregarEventos();
-    } catch (err) {
+    }catch(err){
       formError.textContent = err.message;
-      formError.classList.remove('d-none');
-      formError.style.display = 'block';
-    } finally {
-      btn.disabled = false;
-      if (!modoEdicao) btn.textContent = 'Salvar Evento e Gerar DARs';
+      formError.classList.remove('d-none'); formError.style.display='block';
+    }finally{
+      btn.disabled=false;
+      if (!modoEdicao) btn.textContent='Salvar Evento e Gerar DARs';
     }
   });
 
   // =======================
-  // Editar evento
+  // Abertura modal criação
   // =======================
-  async function fetchEventoById(id) {
-  const headers = { Authorization: `Bearer ${token}` };
-  const tentativas = [
-    `/api/admin/eventos/${id}`,
-    `/api/admin/eventos/${id}/detalhes`,
-    `/api/admin/eventos?id=${encodeURIComponent(id)}`
-  ];
-  for (const url of tentativas) {
-    const res = await fetch(url, { headers });
-    if (res.ok) return res.json();
-    // loga pro DevTools
-    console.warn('[fetchEventoById] tentativa falhou', url, res.status);
-    if (res.status === 404) continue;
-  }
-  throw new Error('Falha ao buscar dados do evento.');
-}
-
-function normalizarEvento(payload) {
-  const ev = payload?.evento || payload?.data || payload || {};
-  const id_cliente = ev.id_cliente ?? ev.cliente_id ?? ev.idCliente ?? '';
-  const nome_evento = ev.nome_evento ?? ev.nome ?? ev.titulo ?? '';
-  const tipo_desconto_auto = ev.tipo_desconto_auto ?? ev.tipoDescontoAuto ?? ev.tipo_cliente ?? '';
-  const desconto_manual_percent = ev.desconto_manual_percent ?? ev.descontoManualPercent ?? ev.desconto ?? 0;
-  let datas_evento = ev.datas_evento ?? ev.datas ?? ev.datasEvento ?? [];
-  if (typeof datas_evento === 'string') datas_evento = datas_evento.split(',').map(s => s.trim()).filter(Boolean);
-  if (!Array.isArray(datas_evento)) datas_evento = [];
-  const parcelas = Array.isArray(ev.parcelas) ? ev.parcelas
-                : Array.isArray(ev.DARs) ? ev.DARs
-                : [];
-  return { id_cliente, nome_evento, tipo_desconto_auto, desconto_manual_percent, datas_evento, parcelas };
-}
-
-async function editarEvento(eventoId) {
-  if (!eventoId) { alert('ID do evento inválido.'); return; }
-  try {
-    const raw = await fetchEventoById(eventoId);
-    const ev = normalizarEvento(raw);
-
-    // reset UI/máscaras
-    form.reset(); fp.clear(); parcelasContainer.innerHTML = '';
-    parcelasMasks.forEach(({ valorMask, picker }) => { try{valorMask.destroy()}catch{} try{picker.destroy()}catch{} });
-    parcelasMasks = [];
-
-    // preenche
-    clienteSelect.value = ev.id_cliente || '';
-    document.getElementById('nome-evento').value = ev.nome_evento || '';
-    if (ev.datas_evento.length) fp.setDate(ev.datas_evento, true);
-    tipoDescontoAutoDisplay.value = ev.tipo_desconto_auto || (clienteSelect.selectedOptions[0]?.dataset.tipo || '');
-    descontoManualInput.value = ev.desconto_manual_percent || 0;
-
-    if (ev.parcelas.length) {
-      ev.parcelas.forEach((p, i) => {
-        adicionarParcela();
-        const m = parcelasMasks[i];
-        const valNum = typeof p.valor === 'number'
-          ? p.valor
-          : parseFloat(String(p.valor ?? p.parcela_valor ?? p.dar_valor ?? '0').replace(/\./g,'').replace(',','.')) || 0;
-        m.valorMask.unmaskedValue = (valNum.toFixed(2)).replace('.', ',');
-        const venc = p.vencimento ?? p.data_vencimento ?? p.dar_venc ?? null;
-        if (venc) m.picker.setDate(venc, true);
-      });
-    } else {
-      adicionarParcela();
-    }
-
-    atualizarCalculos();
-    modoEdicao = true;
-    editEventoId = eventoId;
-    form.querySelector('button[type="submit"]').textContent = 'Atualizar Evento';
-    modal.style.display = 'block';
-  } catch (err) {
-    console.error('[editarEvento] Erro', err);
-    alert(`Erro ao carregar evento: ${err.message}`);
-  }
-}
-
-  // =======================
-  // DARs modal
-  // =======================
-  async function abrirModalDARs(eventoId) {
-    darsList.innerHTML = `<div class="text-center py-3">Carregando...</div>`;
-    darsModal.style.display = 'block';
-    try {
-      const res = await fetch(`/api/admin/eventos/${eventoId}/dars`, { headers: { Authorization: `Bearer ${token}` } });
-      const data = await res.json();
-      const dars = data?.dars || [];
-      if (!dars.length) {
-        darsList.innerHTML = `<div class="alert alert-info">Nenhuma DAR encontrada.</div>`;
-        return;
-      }
-      darsList.innerHTML = `
-        <div class="table-responsive">
-          <table class="table table-sm align-middle">
-            <thead>
-              <tr><th>#</th><th>Valor</th><th>Venc.</th><th>Status</th><th class="text-center">Ação</th></tr>
-            </thead>
-            <tbody>
-              ${dars.map(d => {
-                const valor = Number(d.parcela_valor ?? d.dar_valor ?? 0);
-                const venc = d.dar_venc ? new Date(d.dar_venc + 'T12:00:00').toLocaleDateString('pt-BR') : '-';
-                const status = d.dar_status || 'Pendente';
-                const isEmitido = d.dar_pdf && String(d.dar_pdf).startsWith('JVBER');
-                const btn = isEmitido
-                  ? `<button onclick="baixarPdfBase64('${d.dar_pdf}', 'DAR-Evento-${eventoId}-P${d.parcela_num}.pdf')" class="btn btn-sm btn-success"><i class="bi bi-download"></i> Baixar</button>`
-                  : `<button data-dar-id="${d.dar_id}" data-evento-id="${eventoId}" class="btn btn-sm btn-outline-primary btn-reemitir-dar"><i class="bi bi-printer"></i> Reemitir</button>`;
-                const badgeCls =
-                  status === 'Pago'     ? 'bg-success' :
-                  status === 'Emitido'  ? 'bg-info text-dark' :
-                  status === 'Vencido'  ? 'bg-danger' :
-                  status === 'Pendente' ? 'bg-secondary' : 'bg-warning';
-                return `<tr>
-                          <td>${d.parcela_num}</td>
-                          <td class="text-end">R$ ${valor.toLocaleString('pt-BR',{minimumFractionDigits:2})}</td>
-                          <td>${venc}</td>
-                          <td><span class="badge ${badgeCls}">${status}</span></td>
-                          <td class="text-center">${btn}</td>
-                        </tr>`;
-              }).join('')}
-            </tbody>
-          </table>
-        </div>`;
-    } catch (e) {
-      console.error(e);
-      darsList.innerHTML = `<div class="alert alert-danger">Erro ao carregar as DARs.</div>`;
-    }
-      // 🔄 Atualiza badge na linha da tabela principal conforme as DARs
-const statusEvento = (()=>{
-  const temPago = (dars||[]).some(d=> (d.dar_status||d.status)==='Pago');
-  const temEmitido = (dars||[]).some(d=> (d.dar_status||d.status)==='Emitido' || (d.dar_pdf && d.dar_pdf.length>30));
-  return temPago ? 'Pago' : (temEmitido ? 'Emitido' : 'Pendente');
-})();
-const tr = [...document.querySelectorAll('#eventos-table-body tr')].find(row => row.firstElementChild?.textContent == String(eventoId));
-if (tr){
-  const tdStatus = tr.querySelector('td:nth-child(5) .badge');
-  if (tdStatus){
-    tdStatus.textContent = statusEvento;
-    tdStatus.className = 'badge ' + (statusEvento==='Pago' ? 'bg-success'
-                                : statusEvento==='Emitido' ? 'bg-primary'
-                                : 'bg-warning text-dark');
-  }
-}
-      const pdfStr = (d.dar_pdf || '').toString().replace(/\s/g,'');
-      const hasB64 = !!pdfStr && (/^JVBER/.test(pdfStr) || /^data:application\/pdf;base64,/i.test(pdfStr));
-      const btn = hasB64
-  ? `<button onclick="baixarPdfBase64('${pdfStr}','DAR-Evento-${eventoId}-P${d.parcela_num}.pdf')" class="btn btn-sm btn-success">
-       <i class="bi bi-download"></i> Baixar
-     </button>`
-  : `<button data-dar-id="${d.dar_id}" class="btn btn-sm btn-outline-primary btn-baixar-endpoint">
-       <i class="bi bi-file-earmark-arrow-down"></i> Baixar
-     </button>`;
-  }
-
-  // =======================
-  // Download PDF base64
-  // =======================
-  window.baixarPdfBase64 = (base64, nomeArquivo) => {
-    const linkSource = `data:application/pdf;base64,${base64}`;
-    const downloadLink = document.createElement("a");
-    downloadLink.href = linkSource;
-    downloadLink.download = nomeArquivo;
-    downloadLink.click();
-  };
-
-  // =======================
-  // Abertura/fechamento modal criação
-  // =======================
-  addEventoBtn.addEventListener('click', () => {
-    form.reset();
-    fp.clear();
-    parcelasContainer.innerHTML = '';
-    if (parcelasMasks.length) {
-      parcelasMasks.forEach(({ valorMask, picker }) => { valorMask.destroy(); picker.destroy(); });
-    }
-    parcelasMasks = [];
+  addEventoBtn?.addEventListener('click', ()=>{
+    form.reset(); fp.clear(); parcelasContainer.innerHTML='';
+    parcelasMasks.forEach(({valorMask,picker})=>{ try{valorMask.destroy()}catch{} try{picker.destroy()}catch{} });
+    parcelasMasks=[];
     adicionarParcela();
     atualizarCalculos();
-    // garante modo criação
-    modoEdicao = false;
-    editEventoId = null;
-    form.querySelector('button[type="submit"]').textContent = 'Salvar Evento e Gerar DARs';
-    modal.style.display = 'block';
+    modoEdicao=false; editEventoId=null;
+    form.querySelector('button[type="submit"]').textContent='Salvar Evento e Gerar DARs';
+    modal.style.display='block';
   });
 
-  closeModalBtn.addEventListener('click', () => modal.style.display = 'none');
   clienteSelect.addEventListener('change', atualizarCalculos);
   descontoManualInput.addEventListener('input', atualizarCalculos);
 
