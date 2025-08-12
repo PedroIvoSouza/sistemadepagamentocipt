@@ -89,6 +89,7 @@
                     <th>Cliente</th>
                     <th class="text-end">Valor Final</th>
                     <th class="text-center">Status</th>
+                    <th class="text-center">DAR</th>
                   </tr>
                 </thead>
                 <tbody id="eventos-table-body"></tbody>
@@ -215,6 +216,17 @@
     </div>
   </div>
 
+  <!-- Modal: DARs do Evento -->
+  <div id="dars-modal" class="modal">
+    <div class="modal-content small">
+      <header class="d-flex justify-content-between align-items-center mb-3">
+        <h5>DARs do Evento</h5>
+        <button id="close-dars-modal-btn" class="btn-close"></button>
+      </header>
+      <div id="dars-list"></div>
+    </div>
+  </div>
+
   <!-- Scripts -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -279,6 +291,12 @@
     const processarDatasBtn = document.getElementById('processar-datas-btn');
     const confirmarDatasBtn = document.getElementById('confirmar-datas-btn');
 
+    // Elementos do modal de DARs
+    const darsModal = document.getElementById('dars-modal');
+    const closeDarsModalBtn = document.getElementById('close-dars-modal-btn');
+    const darsList = document.getElementById('dars-list');
+    closeDarsModalBtn.addEventListener('click', ()=> darsModal.style.display='none');
+
     const API_CLIENTES_URL = '/api/admin/eventos-clientes'; // ajuste aqui se for outro path
 
     let generatedDates = [];
@@ -338,7 +356,7 @@
       opt.value = c.id;
       opt.textContent = `${c.nome_razao_social} (${c.documento})`;
       opt.dataset.tipo = c.tipo_cliente;
-      opt.dataset.documento = c.documento; // <<< ADIÇÃO: guarda o documento no dataset
+      opt.dataset.documento = c.documento; // <<< guarda o documento no dataset
       clienteSelect.appendChild(opt);
     });
   } catch (e) {
@@ -347,24 +365,38 @@
   }
 }
     async function carregarEventos() {
-      try {
-        const res = await fetch('/api/admin/eventos',{ headers:{ Authorization:`Bearer ${token}` } });
-        const evs = await res.json();
-        eventosTableBody.innerHTML = '';
-        evs.forEach(ev=>{
-          const statusBg = ev.status === 'Pago' ? 'bg-success' : ev.status === 'Pendente' ? 'bg-warning' : 'bg-danger';
-          const tr = document.createElement('tr');
-          tr.innerHTML = `
-            <td>${ev.id}</td>
-            <td>${ev.nome_evento}</td>
-            <td>${ev.nome_cliente}</td>
-            <td class="text-end">R$ ${parseFloat(ev.valor_final).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
-            <td class="text-center"><span class="badge ${statusBg}">${ev.status}</span></td>
-          `;
-          eventosTableBody.appendChild(tr);
-        });
-      } catch(e){ console.error(e); }
-    }
+  try {
+    const res = await fetch('/api/admin/eventos',{ headers:{ Authorization:`Bearer ${token}` } });
+    const evs = await res.json();
+    eventosTableBody.innerHTML = '';
+    evs.forEach(ev=>{
+      const statusBg = ev.status === 'Pago' ? 'bg-success' : ev.status === 'Pendente' ? 'bg-warning' : 'bg-danger';
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${ev.id}</td>
+        <td>${ev.nome_evento}</td>
+        <td>${ev.nome_cliente}</td>
+        <td class="text-end">R$ ${parseFloat(ev.valor_final).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
+        <td class="text-center"><span class="badge ${statusBg}">${ev.status}</span></td>
+        <td class="text-center">
+          <button class="btn btn-sm btn-outline-primary btn-dars" data-evento="${ev.id}">
+            <i class="bi bi-file-earmark-arrow-down"></i> DARs
+          </button>
+        </td>
+      `;
+      eventosTableBody.appendChild(tr);
+    });
+
+    // click em "DARs"
+    document.querySelectorAll('.btn-dars').forEach(btn=>{
+      btn.addEventListener('click', async ()=>{
+        const eventoId = btn.getAttribute('data-evento');
+        await abrirModalDARs(eventoId);
+      });
+    });
+
+  } catch(e){ console.error(e); }
+}
     
     // Atualiza totais gerais
     function atualizarCalculos() {
@@ -583,21 +615,28 @@
         const [d,m,a] = picker.input.value.split('/');
         let valorNumerico = valorMask.number;
         if (valorNumerico === 0 && valorMask.unmaskedValue) {
-             const valorParseado = parseFloat(valorMask.unmaskedValue.replace(/\./g, '').replace(',', '.'));
-             if (!isNaN(valorParseado)) valorNumerico = valorParseado;
+            const valorParseado = parseFloat(valorMask.unmaskedValue.replace(/\./g, '').replace(',', '.'));
+            if (!isNaN(valorParseado)) valorNumerico = valorParseado;
         }
         return { valor: valorNumerico, vencimento: `${a}-${m}-${d}` };
       });
 
-      const clienteSelecionado = clienteSelect.selectedOptions[0]; // <<< ADIÇÃO: obter option selecionada
+      // >>> RE-CÁLCULO para enviar ao backend <<<
+      const n  = fp.selectedDates.length;
+      const vb = calcularValorBruto(n);
+      const tipo = clienteSelect.selectedOptions[0]?.dataset.tipo || 'Geral';
+      const dm = parseFloat(descontoManualInput.value) || 0;
+      const vf = calcularValorFinal(vb, tipo, dm);
 
       const body = {
-        idCliente: clienteSelecionado.value,
-        documento: clienteSelecionado.dataset.documento, // <<< ADIÇÃO: enviar documento
+        idCliente: clienteSelect.value,
         nomeEvento: document.getElementById('nome-evento').value,
         datasEvento: fp.selectedDates.map(d=>d.toISOString().split('T')[0]),
         tipoDescontoAuto: tipoDescontoAutoDisplay.value,
-        descontoManualPercent: parseFloat(descontoManualInput.value)||0,
+        descontoManualPercent: dm,
+        totalDiarias: n,
+        valorBruto: vb,
+        valorFinal: vf,
         parcelas
       };
       const btn = form.querySelector('button[type="submit"]');
@@ -623,6 +662,95 @@
         btn.textContent = 'Salvar Evento e Gerar DARs';
       }
     });
+
+    // Modal de DARs: abrir/carregar/emitir
+    async function abrirModalDARs(eventoId) {
+      darsList.innerHTML = `<div class="text-center py-3">Carregando...</div>`;
+      darsModal.style.display = 'block';
+
+      try {
+        const res = await fetch(`/api/admin/eventos/${eventoId}/dars`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const data = await res.json();
+        const dars = data?.dars || [];
+
+        if (!dars.length) {
+          darsList.innerHTML = `<div class="alert alert-info">Nenhuma DAR encontrada para este evento.</div>`;
+          return;
+        }
+
+        const html = `
+          <div class="table-responsive">
+            <table class="table table-sm align-middle">
+              <thead>
+                <tr>
+                  <th># Parcela</th>
+                  <th class="text-end">Valor</th>
+                  <th>Vencimento</th>
+                  <th>Status</th>
+                  <th class="text-center">Ação</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${dars.map(d => {
+                  const valor = Number(d.parcela_valor ?? d.dar_valor ?? 0);
+                  const venc  = d.dar_venc ? new Date(d.dar_venc).toLocaleDateString('pt-BR') : '-';
+                  const status = d.dar_status || 'Pendente';
+                  const canDownload = !!d.dar_pdf;
+                  const btn =
+                    canDownload
+                      ? `<a href="${d.dar_pdf}" target="_blank" class="btn btn-sm btn-success">
+                           <i class="bi bi-download"></i> Baixar
+                         </a>`
+                      : `<button data-dar="${d.dar_id}" data-evento="${eventoId}" class="btn btn-sm btn-outline-primary btn-emitir-dar">
+                           <i class="bi bi-printer"></i> Emitir
+                         </button>`;
+                  return `
+                    <tr>
+                      <td>${d.parcela_num}</td>
+                      <td class="text-end">R$ ${valor.toLocaleString('pt-BR',{minimumFractionDigits:2})}</td>
+                      <td>${venc}</td>
+                      <td><span class="badge ${status==='Pago'?'bg-success':status==='Pendente'?'bg-warning':'bg-secondary'}">${status}</span></td>
+                      <td class="text-center">${btn}</td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        `;
+        darsList.innerHTML = html;
+
+        // ação de emitir
+        darsList.querySelectorAll('.btn-emitir-dar').forEach(btn=>{
+          btn.addEventListener('click', async ()=>{
+            const darId = btn.getAttribute('data-dar');
+            const eventoId = btn.getAttribute('data-evento');
+            btn.disabled = true;
+            btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Emitindo...`;
+            try {
+              const r = await fetch(`/api/admin/eventos/${eventoId}/dars/${darId}/emitir`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}` }
+              });
+              const out = await r.json();
+              if (!r.ok) throw new Error(out?.error || 'Falha ao emitir.');
+              // depois de emitir, recarrega a lista para aparecer o link
+              await abrirModalDARs(eventoId);
+            } catch (e) {
+              alert(e.message);
+              btn.disabled = false;
+              btn.textContent = 'Emitir';
+            }
+          });
+        });
+
+      } catch (e) {
+        console.error(e);
+        darsList.innerHTML = `<div class="alert alert-danger">Erro ao carregar as DARs.</div>`;
+      }
+    }
 
     // --- Ações Iniciais e Event Listeners ---
     addEventoBtn.addEventListener('click', () => {

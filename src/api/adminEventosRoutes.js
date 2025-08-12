@@ -254,4 +254,33 @@ router.post('/dars/:darId/emitir', async (req, res) => {
   }
 });
 
+// LISTAR DARs de um evento (para o modal do front)
+router.get('/:eventoId/dars', async (req, res) => {
+  const { eventoId } = req.params;
+  try {
+    const rows = await dbAll(
+      `
+      SELECT
+        d.id            AS dar_id,
+        d.valor         AS dar_valor,
+        d.data_vencimento AS dar_venc,
+        d.status        AS dar_status,
+        d.pdf_url       AS dar_pdf,
+        de.numero_parcela AS parcela_num,
+        de.valor_parcela  AS parcela_valor
+      FROM dars d
+      JOIN DARs_Eventos de ON de.id_dar = d.id
+      WHERE de.id_evento = ?
+      ORDER BY de.numero_parcela ASC
+      `,
+      [eventoId]
+    );
+    res.json({ dars: rows || [] });
+  } catch (err) {
+    console.error('[admin/eventos] listar dars erro:', err.message);
+    res.status(500).json({ error: 'Erro ao listar DARs do evento.' });
+  }
+});
+
+
 module.exports = router;
