@@ -125,12 +125,22 @@ function baixarPdfBase64(base64, nome){
 const normalizaStatus = s => (s||'').toString();
 
 async function fetchDARsCliente(headers, eventoId){
+  // 1) tenta rotas por-evento
   for (const u of [
     `/api/portal/eventos/${eventoId}/dars`,
     `/api/eventos/clientes/eventos/${eventoId}/dars`
   ]){
-    try{ const r=await fetch(u,{headers}); if(r.ok){ const j=await r.json(); return j?.dars || j || []; } }catch{}
+    try{ const r=await fetch(u,{headers}); if(r.ok){ const j=await r.json(); const arr=(j?.dars||j||[]); if (Array.isArray(arr) && arr.length) return arr; } }catch{}
   }
+  // 2) fallback: pega tudo e filtra
+  try{
+    const r = await fetch('/api/portal/eventos/me', { headers });
+    if (r.ok){
+      const { dars } = await r.json();
+      const ds = Array.isArray(dars)? dars : [];
+      return ds.filter(d => String(d.evento_id||d.id_evento||d.eventoId) === String(eventoId));
+    }
+  }catch{}
   return [];
 }
 

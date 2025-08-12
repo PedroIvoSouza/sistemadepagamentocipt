@@ -477,10 +477,26 @@ window.onload = () => {
           reemitirButton.disabled = false;
           reemitirButton.innerHTML = `<i class="bi bi-printer"></i> Reemitir`;
         }
+        atualizarStatusNaTabelaEventos(eventoId, 'Emitido');
       }
     });
   }
-
+// depois de reemitir no admin/eventos-dars, chame:
+function atualizarStatusNaTabelaEventos(eventoId, status){
+  const linha = document.querySelector(`#eventos-table-body tr td:first-child`)?.closest('tbody')
+    ?.querySelectorAll('tr');
+  if (!linha) return;
+  [...linha].forEach(tr=>{
+    const id = tr.children?.[0]?.textContent?.trim();
+    if (String(id) === String(eventoId)){
+      const badgeTd = tr.children?.[4]; // coluna "Status"
+      if (badgeTd){
+        const cls = status==='Pago' ? 'bg-success' : (status==='Emitido' ? 'bg-primary' : 'bg-warning');
+        badgeTd.innerHTML = `<span class="badge ${cls}">${status}</span>`;
+      }
+    }
+  });
+}
   // =======================
   // UI / Flatpickr
   // =======================

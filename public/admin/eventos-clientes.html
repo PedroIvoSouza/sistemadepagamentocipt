@@ -266,24 +266,42 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // --- Máscaras
   let documentoMask, responsavelCpfMask, telefoneMask, cepMask;
-  function aplicarMascaras(){
-    documentoMask && documentoMask.destroy();
-    responsavelCpfMask && responsavelCpfMask.destroy();
-    telefoneMask && telefoneMask.destroy();
-    cepMask && cepMask.destroy();
+  // utilzinho
+const onlyDigits = v => (v||'').toString().replace(/\D/g,'');
 
-    const tipo = tipoPessoaSelect.value;
-    responsavelGroup.style.display = tipo === 'PJ' ? 'block' : 'none';
-    documentoInput.placeholder = tipo === 'PJ' ? '00.000.000/0000-00' : '000.000.000-00';
-    documentoMask = IMask(documentoInput, { mask: tipo === 'PJ' ? '00.000.000/0000-00' : '000.000.000-00' });
-    if (tipo === 'PJ') responsavelCpfMask = IMask(docRespInput, { mask: '000.000.000-00' });
-    telefoneMask = IMask(telefoneInput, { mask: [{ mask: '(00) 0000-0000' }, { mask: '(00) 0 0000-0000' }] });
-    cepMask = IMask(cepInput, { mask: '00000-000' });
+function aplicarMascaras(){
+  if (documentoMask) documentoMask.destroy();
+  if (responsavelCpfMask) responsavelCpfMask.destroy();
+  if (telefoneMask) telefoneMask.destroy();
+  if (cepMask) cepMask.destroy();
+
+  const tipo = tipoPessoaSelect.value;
+  responsavelGroup.style.display = tipo === 'PJ' ? 'block' : 'none';
+  documentoInput.placeholder = tipo === 'PJ' ? '00.000.000/0000-00' : '000.000.000-00';
+
+  documentoMask = IMask(documentoInput, {
+    mask: tipo === 'PJ' ? '00.000.000/0000-00' : '000.000.000-00',
+    lazy: false
+  });
+  // se já veio um valor cru do backend, reformatar:
+  const raw = onlyDigits(documentoInput.value);
+  if (raw) {
+    documentoMask.unmaskedValue = raw; // força reformatar exibido
   }
+
+  if (tipo === 'PJ') {
+    responsavelCpfMask = IMask(docRespInput, { mask: '000.000.000-00', lazy:false });
+    if (docRespInput.value) responsavelCpfMask.unmaskedValue = onlyDigits(docRespInput.value);
+  }
+  telefoneMask = IMask(telefoneInput, { mask: [{ mask: '(00) 0000-0000' }, { mask: '(00) 0 0000-0000' }], lazy:false });
+  if (telefoneInput.value) telefoneMask.unmaskedValue = onlyDigits(telefoneInput.value);
+
+  cepMask = IMask(cepInput, { mask: '00000-000', lazy:false });
+  if (cepInput.value) cepMask.unmaskedValue = onlyDigits(cepInput.value);
+}
 
   // --- Helpers
   const API_URL = '/api/admin/eventos-clientes';
-  const onlyDigits = v => (v||'').toString().replace(/\D/g,'');
   function limparEndereco(){
     logradouroInput.value=''; numeroInput.value=''; complInput.value='';
     bairroInput.value=''; cidadeInput.value=''; ufInput.value='';
@@ -427,57 +445,59 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Submit (create / update) – garante documento e tipo_pessoa
   form.addEventListener('submit', async (e)=>{
-    e.preventDefault();
-    if (!form.checkValidity()){ form.classList.add('was-validated'); return; }
+  e.preventDefault();
+  if (!form.checkValidity()){ form.classList.add('was-validated'); return; }
 
-    const id = clienteIdField.value;
-    const url = id ? `${API_URL}/${id}` : API_URL;
-    const method = id ? 'PUT' : 'POST';
+  const docDigits = onlyDigits(documentoInput.value);
+  if (![11,14].includes(docDigits.length)) {
+    alert('Informe um CPF (11 dígitos) ou CNPJ (14 dígitos) válido.');
+    documentoInput.focus();
+    return;
+  }
 
-    const documento = onlyDigits(documentoInput.value);
-    if (!documento || !['11','14'].includes(String(documento.length))) {
-      alert('Documento do contribuinte ausente ou inválido (CPF/CNPJ).'); return;
-    }
+  const id = clienteIdField.value;
+  const url = id ? `${API_URL}/${id}` : API_URL;
+  const method = id ? 'PUT' : 'POST';
 
-    const body = {
-      nome_razao_social: nomeRazaoInput.value,
-      tipo_pessoa: tipoPessoaSelect.value,                 // <-- envia sempre
-      documento,                                           // <-- envia sempre
-      email: emailInput.value,
-      telefone: onlyDigits(telefoneInput.value),
-      nome_responsavel: nomeRespInput.value || null,
-      documento_responsavel: onlyDigits(docRespInput.value) || null,
-      tipo_cliente: tipoClienteSel.value,
-      cep: onlyDigits(cepInput.value) || null,
-      logradouro: logradouroInput.value || null,
-      bairro: bairroInput.value || null,
-      cidade: cidadeInput.value || null,
-      uf: (ufInput.value||'').toUpperCase() || null,
-      numero: numeroInput.value || null,
-      complemento: complInput.value || null
-    };
+  const body = {
+    nome_razao_social: nomeRazaoInput.value.trim(),
+    tipo_pessoa: tipoPessoaSelect.value,
+    documento: docDigits, // cru, SEM máscara
+    email: emailInput.value.trim(),
+    telefone: onlyDigits(telefoneInput.value),
+    nome_responsavel: (nomeRespInput.value||'').trim() || null,
+    documento_responsavel: onlyDigits(docRespInput.value) || null,
+    tipo_cliente: tipoClienteSel.value,
+    cep: onlyDigits(cepInput.value) || null,
+    logradouro: (logradouroInput.value||'').trim() || null,
+    bairro: (bairroInput.value||'').trim() || null,
+    cidade: (cidadeInput.value||'').trim() || null,
+    uf: (ufInput.value||'').trim().toUpperCase() || null,
+    numero: (numeroInput.value||'').trim() || null,
+    complemento: (complInput.value||'').trim() || null
+  };
 
-    if (submitBtn){ submitBtn.disabled = true; submitBtn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Salvando...`; }
+  if (submitBtn){ submitBtn.disabled = true; submitBtn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Salvando...`; }
 
-    try{
-      const r = await fetch(url, {
-        method,
-        headers: { 'Content-Type':'application/json', Authorization:`Bearer ${token}` },
-        body: JSON.stringify(body)
-      });
-      const j = await r.json().catch(()=> ({}));
-      if (!r.ok) throw new Error(j.error || `Erro ${r.status}`);
+  try{
+    const r = await fetch(url, {
+      method,
+      headers: { 'Content-Type':'application/json', Authorization:`Bearer ${token}` },
+      body: JSON.stringify(body)
+    });
+    const j = await r.json().catch(()=> ({}));
+    if (!r.ok) throw new Error(j.error || `Erro ${r.status}`);
 
-      alert(j.message || 'Cliente salvo com sucesso!');
-      clienteModal.hide();
-      setupModal(null); // limpa
-      carregarClientes();
-    }catch(err){
-      alert(`Erro ao salvar: ${err.message}`);
-    }finally{
-      if (submitBtn){ submitBtn.disabled=false; submitBtn.textContent='Salvar'; }
-    }
-  });
+    alert(j.message || 'Cliente salvo com sucesso!');
+    clienteModal.hide();
+    setupModal(null);
+    carregarClientes();
+  }catch(err){
+    alert(`Erro ao salvar: ${err.message}`);
+  }finally{
+    if (submitBtn){ submitBtn.disabled=false; submitBtn.textContent='Salvar'; }
+  }
+});
 
   // Ações na tabela
   tableBody.addEventListener('click', async (e)=>{

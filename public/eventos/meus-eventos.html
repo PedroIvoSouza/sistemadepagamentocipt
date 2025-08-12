@@ -61,7 +61,26 @@
 
       <main class="content">
         <h1 class="h2 mb-4">Meus Eventos e Pagamentos</h1>
-        
+        <div class="row" id="statsRow" style="display:none;">
+  <div class="col-md-4">
+    <div class="card stat-card"><div class="card-body d-flex justify-content-between align-items-center">
+      <div><h6 class="card-title text-secondary">Eventos Atribuídos</h6><h2 id="stat-eventos" class="stat-number">0</h2></div>
+      <i class="bi bi-calendar-event stat-icon"></i>
+    </div></div>
+  </div>
+  <div class="col-md-4">
+    <div class="card stat-card"><div class="card-body d-flex justify-content-between align-items-center">
+      <div><h6 class="card-title text-secondary">DARs Gerados</h6><h2 id="stat-dars" class="stat-number">0</h2></div>
+      <i class="bi bi-file-earmark-text stat-icon"></i>
+    </div></div>
+  </div>
+  <div class="col-md-4">
+    <div class="card stat-card"><div class="card-body d-flex justify-content-between align-items-center">
+      <div><h6 class="card-title text-secondary">Valor Total em Aberto</h6><h2 id="stat-valor" class="stat-number">R$ 0,00</h2></div>
+      <i class="bi bi-cash-coin stat-icon"></i>
+    </div></div>
+  </div>
+</div>
         <div class="accordion" id="eventosAccordion">
           <div id="loadingState" class="text-center p-5">
             <div class="spinner-border text-primary" role="status">
@@ -77,6 +96,38 @@
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
+  async function fetchDARsCliente(headers, eventoId){
+  // 1) tenta rotas por-evento
+  for (const u of [
+    `/api/portal/eventos/${eventoId}/dars`,
+    `/api/eventos/clientes/eventos/${eventoId}/dars`
+  ]){
+    try{ const r=await fetch(u,{headers}); if(r.ok){ const j=await r.json(); const arr=(j?.dars||j||[]); if (Array.isArray(arr) && arr.length) return arr; } }catch{}
+  }
+  // 2) fallback: pega tudo e filtra
+  try{
+    const r = await fetch('/api/portal/eventos/me', { headers });
+    if (r.ok){
+      const { dars } = await r.json();
+      const ds = Array.isArray(dars)? dars : [];
+      return ds.filter(d => String(d.evento_id||d.id_evento||d.eventoId) === String(eventoId));
+    }
+  }catch{}
+  return [];
+}
+
+(function preencherStats(user, eventos, dars){
+  try{
+    const evs = Array.isArray(eventos)? eventos : [];
+    const ds  = Array.isArray(dars)? dars : [];
+    const aberto = ds.reduce((s,d)=> (['Pendente','Vencido'].includes((d.status||'').toString()) ? s + (Number(d.valor||d.dar_valor||d.parcela_valor||0)) : s), 0);
+
+    document.getElementById('stat-eventos').innerText = evs.length;
+    document.getElementById('stat-dars').innerText = ds.length;
+    document.getElementById('stat-valor').innerText = `R$ ${aberto.toLocaleString('pt-BR',{minimumFractionDigits:2})}`;
+    document.getElementById('statsRow').style.display = 'flex';
+  }catch{}
+})(state.user, state.eventos, state.dars);
 /* ========= Helpers ========= */
 const onlyDigits = v => (v||'').toString().replace(/\D/g,'');
 function formatarDocumento(doc){
