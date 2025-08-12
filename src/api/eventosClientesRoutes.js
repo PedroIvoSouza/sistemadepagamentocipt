@@ -32,6 +32,14 @@ const isCnpj = d => d && d.length === 14;
 // ===================================================================
 clientRouter.use(authMiddleware, authorizeRole(['CLIENTE_EVENTO']));
 
+// topo do arquivo (perto dos utils)
+const mapTipoPessoa = (v='') => {
+  const t = String(v).trim().toUpperCase();
+  if (t === 'PF' || t === 'FISICA' || t === 'PESSOA FISICA' || t === 'PESSOA FÍSICA') return 'FISICA';
+  if (t === 'PJ' || t === 'JURIDICA' || t === 'PESSOA JURIDICA' || t === 'PESSOA JURÍDICA') return 'JURIDICA';
+  return t; // fallback, mas não deve cair aqui
+};
+
 clientRouter.get('/me', async (req, res) => {
   const clienteId = req.user.id;
   try {
@@ -198,7 +206,6 @@ adminRouter.get('/', (req, res) => {
   });
 });
 
-// CRIAR (normaliza e valida CPF/CNPJ)
 adminRouter.post('/', async (req, res) => {
   let {
     nome_razao_social, tipo_pessoa, documento, email, telefone,
@@ -210,14 +217,22 @@ adminRouter.post('/', async (req, res) => {
     return res.status(400).json({ error: 'Campos obrigatórios estão faltando.' });
   }
 
+  // 🔹 normaliza o tipo vindo do front (PF/PJ → FISICA/JURIDICA)
+  const tipoNormalizado = mapTipoPessoa(tipo_pessoa);
+
   documento = onlyDigits(documento);
   const docOk =
-    (String(tipo_pessoa).toUpperCase() === 'FISICA' && isCpf(documento)) ||
-    (String(tipo_pessoa).toUpperCase() === 'JURIDICA' && isCnpj(documento));
+    (tipoNormalizado === 'FISICA' && isCpf(documento)) ||
+    (tipoNormalizado === 'JURIDICA' && isCnpj(documento));
 
   if (!docOk) {
     return res.status(400).json({ error: 'Documento do contribuinte ausente ou inválido (CPF/CNPJ).' });
   }
+
+  // Se PF, zera documento_responsavel
+  const documentoRespDigits = (tipoNormalizado === 'JURIDICA')
+    ? onlyDigits(documento_responsavel || '')
+    : null;
 
   const enderecoCompleto =
     `${logradouro || ''}, ${numero || ''} ${complemento || ''} - ${bairro || ''}, ${cidade || ''} - ${uf || ''}, ${cep || ''}`;
@@ -232,17 +247,18 @@ adminRouter.post('/', async (req, res) => {
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
     const params = [
-      nome_razao_social, String(tipo_pessoa).toUpperCase(), documento, email, telefone,
-      nome_responsavel, tipo_cliente, token, onlyDigits(documento_responsavel || ''),
-      cep, logradouro, numero, complemento, bairro, cidade, uf, enderecoCompleto
+      nome_razao_social, tipoNormalizado, documento, email, telefone || null,
+      nome_responsavel || null, tipo_cliente, token, documentoRespDigits,
+      cep || null, logradouro || null, numero || null, complemento || null,
+      bairro || null, cidade || null, uf || null, enderecoCompleto || null
     ];
 
     db.run(sql, params, async function (err) {
       if (err) {
+        console.error('[ADMIN EVENTOS CLIENTES][POST] SQL erro:', err.message, '| params:', params);
         if (err.message.includes('UNIQUE constraint failed')) {
           return res.status(409).json({ error: 'Já existe um cliente com este CPF/CNPJ ou E-mail.' });
         }
-        console.error('Erro ao criar cliente de evento:', err.message);
         return res.status(500).json({ error: 'Erro ao salvar o cliente no banco de dados.' });
       }
 
@@ -250,15 +266,16 @@ adminRouter.post('/', async (req, res) => {
         await enviarEmailDefinirSenha(email, nome_razao_social, token);
         res.status(201).json({ id: this.lastID, message: 'Cliente criado com sucesso. E-mail para definição de senha enviado.' });
       } catch (emailError) {
-        console.error('Cliente criado, mas o e-mail de senha falhou:', emailError);
+        console.error('[ADMIN EVENTOS CLIENTES][POST] E-mail falhou:', emailError?.message);
         res.status(201).json({ id: this.lastID, message: 'Cliente criado, mas houve falha ao enviar o e-mail de definição de senha.' });
       }
     });
   } catch (error) {
-    console.error('Erro no processo de criação de cliente:', error);
+    console.error('[ADMIN EVENTOS CLIENTES][POST] Erro:', error?.message);
     res.status(500).json({ error: 'Erro interno no servidor.' });
   }
 });
+
 
 // ATUALIZAR (normaliza e valida CPF/CNPJ)
 adminRouter.put('/:id', (req, res) => {
@@ -273,14 +290,20 @@ adminRouter.put('/:id', (req, res) => {
     return res.status(400).json({ error: 'Campos obrigatórios estão faltando.' });
   }
 
+  const tipoNormalizado = mapTipoPessoa(tipo_pessoa);
+
   documento = onlyDigits(documento);
   const docOk =
-    (String(tipo_pessoa).toUpperCase() === 'FISICA' && isCpf(documento)) ||
-    (String(tipo_pessoa).toUpperCase() === 'JURIDICA' && isCnpj(documento));
+    (tipoNormalizado === 'FISICA' && isCpf(documento)) ||
+    (tipoNormalizado === 'JURIDICA' && isCnpj(documento));
 
   if (!docOk) {
     return res.status(400).json({ error: 'Documento do contribuinte ausente ou inválido (CPF/CNPJ).' });
   }
+
+  const documentoRespDigits = (tipoNormalizado === 'JURIDICA')
+    ? onlyDigits(documento_responsavel || '')
+    : null;
 
   const enderecoCompleto =
     `${logradouro || ''}, ${numero || ''} ${complemento || ''} - ${bairro || ''}, ${cidade || ''} - ${uf || ''}, ${cep || ''}`;
@@ -292,17 +315,18 @@ adminRouter.put('/:id', (req, res) => {
     WHERE id = ?`;
 
   const params = [
-    nome_razao_social, String(tipo_pessoa).toUpperCase(), documento, email, telefone,
-    nome_responsavel, tipo_cliente, onlyDigits(documento_responsavel || ''),
-    cep, logradouro, numero, complemento, bairro, cidade, uf, enderecoCompleto, id
+    nome_razao_social, tipoNormalizado, documento, email,
+    telefone || null, nome_responsavel || null, tipo_cliente, documentoRespDigits,
+    cep || null, logradouro || null, numero || null, complemento || null,
+    bairro || null, cidade || null, uf || null, enderecoCompleto || null, id
   ];
 
   db.run(sql, params, function (err) {
     if (err) {
+      console.error('[ADMIN EVENTOS CLIENTES][PUT] SQL erro:', err.message, '| params:', params);
       if (err.message.includes('UNIQUE constraint failed')) {
         return res.status(409).json({ error: 'Já existe um cliente com este CPF/CNPJ ou E-mail.' });
       }
-      console.error('Erro ao atualizar cliente de evento:', err.message);
       return res.status(500).json({ error: 'Erro ao atualizar o cliente no banco de dados.' });
     }
     if (this.changes === 0) return res.status(404).json({ error: 'Cliente de evento não encontrado.' });
@@ -310,36 +334,6 @@ adminRouter.put('/:id', (req, res) => {
   });
 });
 
-adminRouter.post('/:id/reenviar-senha', async (req, res) => {
-  const { id } = req.params;
-  try {
-    const cliente = await new Promise((resolve, reject) => {
-      db.get(`SELECT * FROM Clientes_Eventos WHERE id = ?`, [id], (err, row) => {
-        if (err) reject(new Error('Erro ao buscar cliente no banco de dados.'));
-        else if (!row) reject(new Error('Cliente não encontrado.'));
-        else resolve(row);
-      });
-    });
-
-    const novoToken = crypto.randomBytes(32).toString('hex');
-    await new Promise((resolve, reject) => {
-      db.run(
-        `UPDATE Clientes_Eventos SET token_definir_senha = ? WHERE id = ?`,
-        [novoToken, id],
-        function (err) {
-          if (err) reject(new Error('Erro ao atualizar o token do cliente.'));
-          else resolve();
-        }
-      );
-    });
-
-    await enviarEmailDefinirSenha(cliente.email, cliente.nome_razao_social, novoToken);
-    res.json({ message: 'E-mail de definição de senha reenviado com sucesso!' });
-  } catch (error) {
-    console.error('Erro ao reenviar e-mail de senha:', error.message);
-    res.status(500).json({ error: `Falha ao reenviar e-mail: ${error.message}` });
-  }
-});
 
 module.exports = {
   adminRoutes: adminRouter,

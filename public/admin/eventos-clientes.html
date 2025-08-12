@@ -468,24 +468,27 @@ form.addEventListener('submit', async (e)=>{
   const id     = clienteIdField.value;
   const url    = id ? `${API_URL}/${id}` : API_URL;
   const method = id ? 'PUT' : 'POST';
+  // no submit do form, antes de montar body:
+  const tp = (tipoPessoaSelect.value || '').toUpperCase();
+  const tipoParaApi = tp === 'PF' ? 'FISICA' : (tp === 'PJ' ? 'JURIDICA' : tp);
 
-  const body = {
-    nome_razao_social: nomeRazaoInput.value,
-    tipo_pessoa: tipoApi,                // <- BACKEND ESPERA ASSIM
-    documento: docNum,                   // <- só dígitos
-    email: emailInput.value,
-    telefone: soDig(telefoneInput.value),
-    nome_responsavel: tipoApi==='JURIDICA' ? (nomeRespInput.value || null) : null,
-    tipo_cliente: tipoClienteSel.value,
-    documento_responsavel: tipoApi==='JURIDICA' ? (docResp || null) : null,
-    cep: soDig(cepInput.value) || null,
-    logradouro: logradouroInput.value || null,
-    numero: numeroInput.value || null,
-    complemento: complInput.value || null,
-    bairro: bairroInput.value || null,
-    cidade: cidadeInput.value || null,
-    uf: (ufInput.value||'').toUpperCase() || null
-  };
+const body = {
+  nome_razao_social: nomeRazaoInput.value,
+  tipo_pessoa: tipoParaApi,                 // <--- usa mapeado
+  documento: documentoInput.value.replace(/\D/g,''),
+  email: emailInput.value,
+  telefone: (telefoneInput.value || '').replace(/\D/g,'') || null,
+  nome_responsavel: nomeRespInput.value || null,
+  documento_responsavel: (docRespInput.value||'').replace(/\D/g,'') || null,
+  tipo_cliente: tipoClienteSel.value,
+  cep: (cepInput.value||'').replace(/\D/g,'') || null,
+  logradouro: logradouroInput.value || null,
+  bairro: bairroInput.value || null,
+  cidade: cidadeInput.value || null,
+  uf: (ufInput.value||'').toUpperCase() || null,
+  numero: numeroInput.value || null,
+  complemento: complInput.value || null
+};
 
   // salva
   submitBtn.disabled = true; submitBtn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Salvando...`;

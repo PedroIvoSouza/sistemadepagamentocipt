@@ -93,7 +93,7 @@ try {
       process.exit(1);
     }
     console.log('[INFO] Conectado ao banco de dados SQLite com sucesso.');
-
+    
     // 🔹 Após conectar, garante que as colunas existem
     ensureClientesEventosColumns(db);
   });
