@@ -221,8 +221,51 @@
 
   // Placeholder para emissão de DAR
   async function emitirDar(darId, status) {
-    alert('Funcionalidade de emissão para a DAR de ID ' + darId + ' com status "' + status + '" ainda não implementada.');
+  const token = localStorage.getItem('token_evento');
+  const headers = { 'Authorization': `Bearer ${token}` };
+
+  async function baixarViaEndpoint(id) {
+    const r = await fetch(`/api/portal/eventos/dars/${id}/pdf`, { headers });
+    if (!r.ok) throw new Error('Falha ao baixar PDF.');
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `DAR-${id}.pdf`;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
   }
+
+  try {
+    if (status === 'Vencido') {
+      const res = await fetch(`/api/portal/eventos/dars/${darId}/reemitir`, { method: 'POST', headers });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Falha ao emitir 2ª via.');
+      if (json?.pdf_base64 || json?.dar_pdf) {
+        baixarPdfBase64((json.pdf_base64 || json.dar_pdf), `DAR-${darId}-2via.pdf`);
+      } else {
+        await baixarViaEndpoint(darId);
+      }
+      alert('2ª via emitida com sucesso.');
+      return;
+    }
+    // não vencido: tenta baixar direto
+    await baixarViaEndpoint(darId);
+  } catch (e) {
+    alert(e.message || 'Erro ao processar a DAR.');
+  }
+}
+
+// utilidade compartilhada
+function baixarPdfBase64(maybeBase64, nome='DAR.pdf') {
+  let b64 = String(maybeBase64||'').replace(/^data:application\/pdf;base64,/i,'').replace(/\s/g,'');
+  if (!b64) return alert('PDF inválido.');
+  const bin = atob(b64); const bytes = new Uint8Array(bin.length);
+  for (let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+  const blob = new Blob([bytes], {type:'application/pdf'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = nome;
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+}
 </script>
 </body>
 </html>

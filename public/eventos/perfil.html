@@ -137,42 +137,43 @@
     }
 
     async function loadUserData() {
-      try {
-        // Unificado com o Dashboard
-        const response = await fetch('/api/portal/eventos/me', { headers: { 'Authorization': 'Bearer ' + token } });
-        if (!response.ok) {
-          if (response.status === 401) {
-            localStorage.removeItem('token_evento');
-            window.location.href = '/eventos/login-eventos.html';
-            return;
-          }
-          throw new Error('Falha ao carregar perfil.');
-        }
-        const data = await response.json();
-        originalData = data.user || {};
+  try {
+    const response = await fetch('/api/eventos/clientes/me', { headers: { 'Authorization': `Bearer ${token}` } });
+    if (!response.ok) throw new Error('Sessão inválida.');
+    const data = await response.json();
+    const u = data.user || data || {};
 
-        document.getElementById('userName').innerText = originalData.nome_razao_social || 'Cliente';
-        document.getElementById('userCnpj').innerText = formatarCNPJ(originalData.documento || '');
+    // Nome/documento/topbar
+    document.getElementById('userName').innerText = u.nome_razao_social || u.nome || 'Cliente';
+    document.getElementById('userCnpj').innerText = formatarCNPJ(u.documento || u.cnpj || u.cpf || '');
 
-        document.getElementById('profileNome').value = originalData.nome_razao_social || '';
-        document.getElementById('profileDocumento').value = formatarCNPJ(originalData.documento || '');
-        document.getElementById('profileEmail').value = originalData.email || '';
+    // Campos simples
+    document.getElementById('profileNome').value = u.nome_razao_social || u.nome || '';
+    document.getElementById('profileDocumento').value = formatarCNPJ(u.documento || u.cnpj || u.cpf || '');
+    document.getElementById('profileEmail').value = u.email || u.login || '';
 
-        document.getElementById('profileTelefone').value = originalData.telefone || '';
-        document.getElementById('profileNomeResponsavel').value = originalData.nome_responsavel || '';
-        document.getElementById('profileCep').value = originalData.cep || '';
-        document.getElementById('profileLogradouro').value = originalData.logradouro || '';
-        document.getElementById('profileNumero').value = originalData.numero || '';
-        document.getElementById('profileBairro').value = originalData.bairro || '';
-        document.getElementById('profileCidade').value = originalData.cidade || '';
-        document.getElementById('profileUf').value = originalData.uf || '';
+    // Tenta achar endereço em diferentes formatos
+    const e = u.endereco || u.address || {};
+    const logradouro = u.logradouro ?? e.logradouro ?? u.endereco_logradouro ?? '';
+    const numero     = u.numero     ?? e.numero     ?? u.endereco_numero     ?? '';
+    const bairro     = u.bairro     ?? e.bairro     ?? u.endereco_bairro     ?? '';
+    const cidade     = u.cidade     ?? e.cidade     ?? u.endereco_cidade     ?? '';
+    const uf         = u.uf         ?? e.uf         ?? u.endereco_uf         ?? '';
+    const cep        = u.cep        ?? e.cep        ?? u.endereco_cep        ?? '';
 
-      } catch (error) {
-        profileMessageDiv.className = 'alert alert-danger';
-        profileMessageDiv.innerText = error.message || 'Erro ao carregar dados.';
-        profileMessageDiv.style.display = 'block';
-      }
-    }
+    document.getElementById('profileTelefone').value = u.telefone || u.fone || '';
+    document.getElementById('profileNomeResponsavel').value = u.nome_responsavel || u.responsavel || '';
+    document.getElementById('profileCep').value = cep || '';
+    document.getElementById('profileLogradouro').value = logradouro || '';
+    document.getElementById('profileNumero').value = numero || '';
+    document.getElementById('profileBairro').value = bairro || '';
+    document.getElementById('profileCidade').value = cidade || '';
+    document.getElementById('profileUf').value = uf || '';
+  } catch (error) {
+    localStorage.removeItem('token_evento');
+    window.location.href = '/eventos/login-eventos.html';
+  }
+}
 
     editButton.addEventListener('click', function () { toggleEditMode(true); });
     cancelButton.addEventListener('click', function () {

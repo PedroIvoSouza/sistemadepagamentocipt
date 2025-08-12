@@ -436,6 +436,27 @@ window.onload = () => {
         editarEvento(eventoId);
       }
     });
+    
+      darsList.querySelectorAll('.btn-baixar-endpoint').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const darId = btn.getAttribute('data-dar-id');
+          const old = btn.innerHTML;
+          btn.disabled = true;
+          btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Baixando...`;
+          try {
+            const r = await fetch(`/api/admin/dars/${darId}/pdf`, { headers: { Authorization: `Bearer ${token}` } });
+            if (!r.ok) throw new Error('Falha ao obter PDF');
+            const blob = await r.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a'); a.href = url; a.download = `DAR-${darId}.pdf`;
+            document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+          } catch (err) {
+            alert('Não foi possível baixar a DAR.');
+          } finally {
+            btn.disabled = false; btn.innerHTML = old;
+          }
+        });
+      });
 
     darsList.addEventListener('click', async (event) => {
       const reemitirButton = event.target.closest('.btn-reemitir-dar');
@@ -689,58 +710,81 @@ window.onload = () => {
   // =======================
   // Editar evento
   // =======================
-  async function editarEvento(eventoId) {
-    try {
-      const res = await fetch(`/api/admin/eventos/${eventoId}`, { headers: { Authorization: `Bearer ${token}` } });
-      if (!res.ok) throw new Error('Falha ao buscar dados do evento.');
-      const ev = await res.json();
-
-      // Limpa e reseta UI
-      form.reset();
-      fp.clear();
-      parcelasContainer.innerHTML = '';
-      parcelasMasks.forEach(({ valorMask, picker }) => { valorMask.destroy(); picker.destroy(); });
-      parcelasMasks = [];
-
-      // Preenche cliente / nome
-      clienteSelect.value = ev.id_cliente;
-      document.getElementById('nome-evento').value = ev.nome_evento || '';
-
-      // Datas
-      if (Array.isArray(ev.datas_evento)) {
-        fp.setDate(ev.datas_evento, true);
-      } else if (typeof ev.datas_evento === 'string' && ev.datas_evento.trim()) {
-        fp.setDate(ev.datas_evento.split(','), true);
-      }
-
-      // Descontos
-      tipoDescontoAutoDisplay.value = ev.tipo_desconto_auto || (clienteSelect.selectedOptions[0]?.dataset.tipo || '');
-      descontoManualInput.value = ev.desconto_manual_percent || 0;
-
-      // Parcelas
-      if (Array.isArray(ev.parcelas) && ev.parcelas.length) {
-        ev.parcelas.forEach((p, i) => {
-          adicionarParcela();
-          const maskObj = parcelasMasks[i];
-          const valor = typeof p.valor === 'number' ? p.valor : parseFloat(String(p.valor).replace(/\./g, '').replace(',', '.')) || 0;
-          maskObj.valorMask.unmaskedValue = (valor.toFixed(2)).replace('.', ',');
-          if (p.vencimento) maskObj.picker.setDate(p.vencimento, true);
-        });
-      } else {
-        adicionarParcela();
-      }
-
-      atualizarCalculos();
-
-      // Seta modo edição e abre modal
-      modoEdicao = true;
-      editEventoId = eventoId;
-      form.querySelector('button[type="submit"]').textContent = 'Atualizar Evento';
-      modal.style.display = 'block';
-    } catch (err) {
-      alert(`Erro ao carregar evento: ${err.message}`);
-    }
+  async function fetchEventoById(id) {
+  const headers = { Authorization: `Bearer ${token}` };
+  const tentativas = [
+    `/api/admin/eventos/${id}`,
+    `/api/admin/eventos/${id}/detalhes`,
+    `/api/admin/eventos?id=${encodeURIComponent(id)}`
+  ];
+  for (const url of tentativas) {
+    const res = await fetch(url, { headers });
+    if (res.ok) return res.json();
+    // loga pro DevTools
+    console.warn('[fetchEventoById] tentativa falhou', url, res.status);
+    if (res.status === 404) continue;
   }
+  throw new Error('Falha ao buscar dados do evento.');
+}
+
+function normalizarEvento(payload) {
+  const ev = payload?.evento || payload?.data || payload || {};
+  const id_cliente = ev.id_cliente ?? ev.cliente_id ?? ev.idCliente ?? '';
+  const nome_evento = ev.nome_evento ?? ev.nome ?? ev.titulo ?? '';
+  const tipo_desconto_auto = ev.tipo_desconto_auto ?? ev.tipoDescontoAuto ?? ev.tipo_cliente ?? '';
+  const desconto_manual_percent = ev.desconto_manual_percent ?? ev.descontoManualPercent ?? ev.desconto ?? 0;
+  let datas_evento = ev.datas_evento ?? ev.datas ?? ev.datasEvento ?? [];
+  if (typeof datas_evento === 'string') datas_evento = datas_evento.split(',').map(s => s.trim()).filter(Boolean);
+  if (!Array.isArray(datas_evento)) datas_evento = [];
+  const parcelas = Array.isArray(ev.parcelas) ? ev.parcelas
+                : Array.isArray(ev.DARs) ? ev.DARs
+                : [];
+  return { id_cliente, nome_evento, tipo_desconto_auto, desconto_manual_percent, datas_evento, parcelas };
+}
+
+async function editarEvento(eventoId) {
+  if (!eventoId) { alert('ID do evento inválido.'); return; }
+  try {
+    const raw = await fetchEventoById(eventoId);
+    const ev = normalizarEvento(raw);
+
+    // reset UI/máscaras
+    form.reset(); fp.clear(); parcelasContainer.innerHTML = '';
+    parcelasMasks.forEach(({ valorMask, picker }) => { try{valorMask.destroy()}catch{} try{picker.destroy()}catch{} });
+    parcelasMasks = [];
+
+    // preenche
+    clienteSelect.value = ev.id_cliente || '';
+    document.getElementById('nome-evento').value = ev.nome_evento || '';
+    if (ev.datas_evento.length) fp.setDate(ev.datas_evento, true);
+    tipoDescontoAutoDisplay.value = ev.tipo_desconto_auto || (clienteSelect.selectedOptions[0]?.dataset.tipo || '');
+    descontoManualInput.value = ev.desconto_manual_percent || 0;
+
+    if (ev.parcelas.length) {
+      ev.parcelas.forEach((p, i) => {
+        adicionarParcela();
+        const m = parcelasMasks[i];
+        const valNum = typeof p.valor === 'number'
+          ? p.valor
+          : parseFloat(String(p.valor ?? p.parcela_valor ?? p.dar_valor ?? '0').replace(/\./g,'').replace(',','.')) || 0;
+        m.valorMask.unmaskedValue = (valNum.toFixed(2)).replace('.', ',');
+        const venc = p.vencimento ?? p.data_vencimento ?? p.dar_venc ?? null;
+        if (venc) m.picker.setDate(venc, true);
+      });
+    } else {
+      adicionarParcela();
+    }
+
+    atualizarCalculos();
+    modoEdicao = true;
+    editEventoId = eventoId;
+    form.querySelector('button[type="submit"]').textContent = 'Atualizar Evento';
+    modal.style.display = 'block';
+  } catch (err) {
+    console.error('[editarEvento] Erro', err);
+    alert(`Erro ao carregar evento: ${err.message}`);
+  }
+}
 
   // =======================
   // DARs modal
@@ -771,7 +815,11 @@ window.onload = () => {
                 const btn = isEmitido
                   ? `<button onclick="baixarPdfBase64('${d.dar_pdf}', 'DAR-Evento-${eventoId}-P${d.parcela_num}.pdf')" class="btn btn-sm btn-success"><i class="bi bi-download"></i> Baixar</button>`
                   : `<button data-dar-id="${d.dar_id}" data-evento-id="${eventoId}" class="btn btn-sm btn-outline-primary btn-reemitir-dar"><i class="bi bi-printer"></i> Reemitir</button>`;
-                const badgeCls = status==='Pago' ? 'bg-success' : (status==='Pendente' ? 'bg-secondary' : 'bg-warning');
+                const badgeCls =
+                  status === 'Pago'     ? 'bg-success' :
+                  status === 'Emitido'  ? 'bg-info text-dark' :
+                  status === 'Vencido'  ? 'bg-danger' :
+                  status === 'Pendente' ? 'bg-secondary' : 'bg-warning';
                 return `<tr>
                           <td>${d.parcela_num}</td>
                           <td class="text-end">R$ ${valor.toLocaleString('pt-BR',{minimumFractionDigits:2})}</td>
@@ -787,6 +835,15 @@ window.onload = () => {
       console.error(e);
       darsList.innerHTML = `<div class="alert alert-danger">Erro ao carregar as DARs.</div>`;
     }
+      const pdfStr = (d.dar_pdf || '').toString().replace(/\s/g,'');
+      const hasB64 = !!pdfStr && (/^JVBER/.test(pdfStr) || /^data:application\/pdf;base64,/i.test(pdfStr));
+      const btn = hasB64
+  ? `<button onclick="baixarPdfBase64('${pdfStr}','DAR-Evento-${eventoId}-P${d.parcela_num}.pdf')" class="btn btn-sm btn-success">
+       <i class="bi bi-download"></i> Baixar
+     </button>`
+  : `<button data-dar-id="${d.dar_id}" class="btn btn-sm btn-outline-primary btn-baixar-endpoint">
+       <i class="bi bi-file-earmark-arrow-down"></i> Baixar
+     </button>`;
   }
 
   // =======================

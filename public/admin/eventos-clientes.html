@@ -1,411 +1,630 @@
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Clientes de Eventos - Painel de Gestão</title>
-    
-    <link rel="icon" type="image/png" href="/images/logo-cipt.png">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;700&display=swap" rel="stylesheet">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Clientes de Eventos - Painel de Gestão</title>
 
-    <style>
-        :root {
-            --cor-primaria: #0056a0;
-            --cor-sidebar: #004480;
-            --raio-borda: 0.5rem;
-        }
-        body { font-family: 'Montserrat', sans-serif; background-color: #f4f7f6; }
-        .wrapper { display: flex; width: 100%; min-height: 100vh; }
-        .sidebar { width: 260px; background-color: var(--cor-sidebar); color: rgba(255, 255, 255, 0.8); display: flex; flex-direction: column; }
-        .sidebar-header { padding: 1.5rem; text-align: center; background-color: rgba(0,0,0,0.1); }
-        .sidebar-header img { max-width: 180px; height: auto; }
-        .sidebar-nav { padding: 1rem 0; flex-grow: 1; }
-        .sidebar-nav .nav-link { color: rgba(255, 255, 255, 0.8); padding: 0.8rem 1.5rem; display: flex; align-items: center; font-weight: 500; text-decoration: none; }
-        .sidebar-nav .nav-link .bi { margin-right: 1rem; font-size: 1.2rem; }
-        .sidebar-nav .nav-link:hover { color: #ffffff; background-color: rgba(255,255,255,0.05); }
-        .sidebar-nav .nav-link.active { color: white; background-color: var(--cor-primaria); }
-        .sidebar-footer { padding: 1.5rem; text-align: center; border-top: 1px solid rgba(255,255,255,0.1); }
-        .sidebar-footer img { max-height: 100px; width: auto; }
-        .main-content { flex-grow: 1; display: flex; flex-direction: column; }
-        .topbar { background-color: #ffffff; padding: 1rem 2rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); display: flex; justify-content: flex-end; align-items: center; }
-        .content { padding: 2rem; }
-        .card { border: none; border-radius: var(--raio-borda); box-shadow: 0 2px 5px rgba(0,0,0,0.05); margin-bottom: 2rem; }
-        /* Usando a modal do Bootstrap, que é mais robusta */
-    </style>
+  <link rel="icon" type="image/png" href="/images/logo-cipt.png">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root { --cor-primaria:#0056a0; --cor-sidebar:#004480; --raio-borda:.5rem; }
+    body{font-family:'Montserrat',sans-serif;background:#f4f7f6}
+    .wrapper{display:flex;min-height:100vh}
+    .sidebar{width:260px;background:var(--cor-sidebar);color:rgba(255,255,255,.8);display:flex;flex-direction:column}
+    .sidebar-header{padding:1.5rem;text-align:center;background:rgba(0,0,0,.1)}
+    .sidebar-header img{max-width:180px;height:auto}
+    .sidebar-nav{padding:1rem 0;flex-grow:1}
+    .sidebar-nav .nav-link{color:rgba(255,255,255,.8);padding:.8rem 1.5rem;display:flex;align-items:center;font-weight:500}
+    .sidebar-nav .nav-link .bi{margin-right:1rem;font-size:1.2rem}
+    .sidebar-nav .nav-link:hover{color:#fff;background:rgba(255,255,255,.05)}
+    .sidebar-nav .nav-link.active{color:#fff;background:var(--cor-primaria)}
+    .sidebar-footer{padding:1.5rem;text-align:center;border-top:1px solid rgba(255,255,255,.1)}
+    .sidebar-footer img{max-height:100px}
+    .main-content{flex:1;display:flex;flex-direction:column}
+    .topbar{background:#fff;padding:1rem 2rem;box-shadow:0 1px 3px rgba(0,0,0,.1);display:flex;justify-content:flex-end;align-items:center}
+    .content{padding:2rem}
+    .card{border:none;border-radius:var(--raio-borda);box-shadow:0 2px 5px rgba(0,0,0,.05);margin-bottom:2rem}
+    .modal .form-label{font-weight:600}
+    .badge{font-size:.8rem}
+    .btn-group .btn + .btn{margin-left:.25rem}
+  </style>
 </head>
 <body>
-    <div class="wrapper">
-        <aside class="sidebar">
-            <div class="sidebar-header">
-                <a href="/admin/dashboard.html"><img src="/images/painel-gestao.png" alt="Painel de Gestão"></a>
-            </div>
-            <ul class="nav flex-column sidebar-nav">
-                <li class="nav-item"><a class="nav-link" href="/admin/dashboard.html"><i class="bi bi-grid-1x2-fill"></i>Dashboard</a></li>
-                <li class="nav-item"><a class="nav-link" href="/admin/permissionarios.html"><i class="bi bi-people-fill"></i>Permissionários</a></li>
-                <li class="nav-item"><a class="nav-link" href="/admin/dars.html"><i class="bi bi-file-earmark-text-fill"></i>DARs</a></li>
-                <li class="nav-item menu-dropdown">
-                    <a class="nav-link" href="#"><i class="bi bi-calendar-event-fill"></i>Eventos</a>
-                    <ul class="submenu" style="list-style: none; padding-left: 20px; display: none;">
-                        <li><a class="nav-link" href="/admin/eventos-clientes.html"><i class="bi bi-person-lines-fill"></i>Clientes de Eventos</a></li>
-                        <li><a class="nav-link" href="/admin/eventos-dars.html"><i class="bi bi-receipt-cutoff"></i>DARs de Eventos</a></li>
-                    </ul>
-                </li>
-                <li class="nav-item"><a class="nav-link" href="/admin/admin-management.html"><i class="bi bi-person-badge-fill"></i>Administradores</a></li>
-                <li class="nav-item"><a id="logoutButton" class="nav-link" href="#" style="color:#ffc107;"><i class="bi bi-box-arrow-right"></i>Sair</a></li>
-            </ul>
-            <div class="sidebar-footer"><img src="/images/logo-secti-vertical.png" alt="Logo SECTI"></div>
-        </aside>
+  <div class="wrapper">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <a href="/admin/dashboard.html"><img src="/images/painel-gestao.png" alt="Painel de Gestão"></a>
+      </div>
+      <ul class="nav flex-column sidebar-nav">
+        <li class="nav-item"><a class="nav-link" href="/admin/dashboard.html"><i class="bi bi-grid-1x2-fill"></i>Dashboard</a></li>
+        <li class="nav-item"><a class="nav-link" href="/admin/permissionarios.html"><i class="bi bi-people-fill"></i>Permissionários</a></li>
+        <li class="nav-item"><a class="nav-link" href="/admin/dars.html"><i class="bi bi-file-earmark-text-fill"></i>DARs</a></li>
+        <li class="nav-item menu-dropdown">
+          <a class="nav-link" href="#"><i class="bi bi-calendar-event-fill"></i>Eventos</a>
+          <ul class="submenu" style="list-style:none;padding-left:20px;display:none;">
+            <li><a class="nav-link active" href="/admin/eventos-clientes.html"><i class="bi bi-person-lines-fill"></i>Clientes de Eventos</a></li>
+            <li><a class="nav-link" href="/admin/eventos-dars.html"><i class="bi bi-receipt-cutoff"></i>DARs de Eventos</a></li>
+          </ul>
+        </li>
+        <li class="nav-item"><a class="nav-link" href="/admin/admin-management.html"><i class="bi bi-person-badge-fill"></i>Administradores</a></li>
+        <li class="nav-item"><a id="logoutButton" class="nav-link" href="#" style="color:#ffc107;"><i class="bi bi-box-arrow-right"></i>Sair</a></li>
+      </ul>
+      <div class="sidebar-footer"><img src="/images/logo-secti-vertical.png" alt="Logo SECTI"></div>
+    </aside>
 
-        <div class="main-content">
-            <header class="topbar">
-                <div id="userInfo" class="text-end">
-                    <strong id="adminName">Carregando...</strong>
-                </div>
-            </header>
-
-            <main class="content">
-                <div class="d-flex justify-content-between align-items-center mb-4">
-                    <h1 class="h2">Clientes de Eventos</h1>
-                    <button id="add-cliente-btn" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#cliente-modal">
-                        <i class="bi bi-plus-circle-fill me-2"></i>Adicionar Novo Cliente
-                    </button>
-                </div>
-                
-                <div class="card">
-                    <div class="card-body p-4">
-                        <div class="table-responsive">
-                            <table class="table table-hover align-middle">
-                                <thead>
-                                    <tr>
-                                        <th>Nome / Razão Social</th>
-                                        <th>Documento (CPF/CNPJ)</th>
-                                        <th>Email</th>
-                                        <th>Tipo</th>
-                                        <th class="text-end">Ações</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="clientes-table-body">
-                                    </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            </main>
+    <div class="main-content">
+      <header class="topbar">
+        <div id="userInfo" class="text-end">
+          <strong id="adminName">Carregando...</strong>
         </div>
-    </div>
+      </header>
 
-    <div class="modal fade" id="cliente-modal" tabindex="-1" aria-labelledby="modal-title" aria-hidden="true">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="modal-title">Adicionar Novo Cliente</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <form id="cliente-form" novalidate>
-                        <input type="hidden" id="cliente-id">
-                        <div class="row mb-3">
-                            <div class="col-md-6"><label for="tipo_pessoa" class="form-label">Tipo *</label><select class="form-select" id="tipo_pessoa" required><option value="PJ">Pessoa Jurídica (PJ)</option><option value="PF">Pessoa Física (PF)</option></select></div>
-                            <div class="col-md-6"><label for="documento" class="form-label">CPF / CNPJ *</label><input type="text" class="form-control" id="documento" required></div>
-                        </div>
-                        <div class="mb-3"><label for="nome_razao_social" class="form-label">Nome / Razão Social *</label><input type="text" class="form-control" id="nome_razao_social" required></div>
-                        <div class="row mb-3">
-                            <div class="col-md-6"><label for="email" class="form-label">Email *</label><input type="email" class="form-control" id="email" required></div>
-                            <div class="col-md-6"><label for="telefone" class="form-label">Telefone</label><input type="tel" class="form-control" id="telefone"></div>
-                        </div>
-                        <hr>
-                        <h6>Endereço</h6>
-                        <div class="row"><div class="col-md-4 mb-3"><label for="cep" class="form-label">CEP</label><input type="text" class="form-control" id="cep"></div></div>
-                        <div class="row">
-                            <div class="col-md-9 mb-3"><label for="logradouro" class="form-label">Rua / Logradouro</label><input type="text" class="form-control" id="logradouro"></div>
-                            <div class="col-md-3 mb-3"><label for="numero" class="form-label">Número</label><input type="text" class="form-control" id="numero"></div>
-                        </div>
-                        <div class="row">
-                            <div class="col-md-6 mb-3"><label for="complemento" class="form-label">Complemento</label><input type="text" class="form-control" id="complemento"></div>
-                            <div class="col-md-6 mb-3"><label for="bairro" class="form-label">Bairro</label><input type="text" class="form-control" id="bairro"></div>
-                        </div>
-                        <div class="row">
-                            <div class="col-md-8 mb-3"><label for="cidade" class="form-label">Cidade</label><input type="text" class="form-control" id="cidade"></div>
-                            <div class="col-md-4 mb-3"><label for="uf" class="form-label">UF</label><input type="text" class="form-control" id="uf" maxlength="2"></div>
-                        </div>
-                        <hr>
-                        <div class="mb-3" id="responsavel-group">
-                            <div class="row">
-                                <div class="col-md-7"><label for="nome_responsavel" class="form-label">Nome do Responsável (para PJ)</label><input type="text" class="form-control" id="nome_responsavel"></div>
-                                <div class="col-md-5"><label for="documento_responsavel" class="form-label">CPF do Responsável</label><input type="text" class="form-control" id="documento_responsavel"></div>
-                            </div>
-                        </div>
-                        <div class="mb-3">
-                            <label for="tipo_cliente" class="form-label">Classificação (para descontos) *</label>
-                            <select class="form-select" id="tipo_cliente" required><option value="Geral">Geral</option><option value="Governo">Governo</option><option value="Permissionario">Permissionário</option></select>
-                        </div>
-                        <div class="alert alert-info small">O cliente receberá um e-mail para criar sua própria senha de acesso ao portal.</div>
-                    </form>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" form="cliente-form" class="btn btn-primary">Salvar</button>
-                </div>
-            </div>
+      <main class="content">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+          <h1 class="h2">Clientes de Eventos</h1>
+          <button id="add-cliente-btn" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#cliente-modal">
+            <i class="bi bi-plus-circle me-2"></i>Novo Cliente
+          </button>
         </div>
+
+        <div class="card">
+          <div class="card-body p-4">
+            <div class="table-responsive">
+              <table class="table table-hover align-middle">
+                <thead>
+                  <tr>
+                    <th>Nome / Razão Social</th>
+                    <th>Documento</th>
+                    <th>Email</th>
+                    <th>Tipo</th>
+                    <th class="text-end">Ações</th>
+                  </tr>
+                </thead>
+                <tbody id="clientes-table-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </main>
     </div>
+  </div>
 
-    <script src="/js/admin-guard.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://unpkg.com/imask"></script>
-    <script>
-    document.addEventListener('DOMContentLoaded', () => {
-        const token = localStorage.getItem('adminAuthToken');
-        if (!token) { window.location.href = '/admin/login.html'; return; }
-        
-        // --- LÓGICA DO MENU (semelhante à página de permissionários) ---
-        const path = window.location.pathname;
-        const allLinks = document.querySelectorAll('.sidebar-nav .nav-link');
-        allLinks.forEach(link => {
-            link.classList.remove('active');
-            const href = link.getAttribute('href');
-            if (path.includes(href) && href !== '#') {
-                link.classList.add('active');
-                const parentDropdown = link.closest('.menu-dropdown');
-                if (parentDropdown) {
-                    parentDropdown.querySelector('a.nav-link').classList.add('active');
-                    parentDropdown.querySelector('.submenu').style.display = 'block';
-                }
-            }
-        });
-        const dropdownToggles = document.querySelectorAll('.menu-dropdown > a');
-        dropdownToggles.forEach(toggle => {
-            toggle.addEventListener('click', (e) => {
-                e.preventDefault();
-                toggle.nextElementSibling.style.display = toggle.nextElementSibling.style.display === 'block' ? 'none' : 'block';
-            });
-        });
-        document.getElementById('logoutButton').addEventListener('click', (e) => {
-            e.preventDefault();
-            localStorage.removeItem('adminAuthToken');
-            window.location.href = '/admin/login.html';
-        });
-        try {
-            const payload = JSON.parse(atob(token.split('.')[1]));
-            document.getElementById('adminName').innerText = payload.nome;
-        } catch (e) { console.error("Erro ao decodificar token:", e); }
+  <!-- Modal -->
+  <div class="modal fade" id="cliente-modal" tabindex="-1" aria-labelledby="modal-title" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="modal-title">Adicionar Novo Cliente</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+        </div>
+        <div class="modal-body">
+          <form id="cliente-form" novalidate>
+            <input type="hidden" id="cliente-id">
 
-        // --- LÓGICA ESPECÍFICA DA PÁGINA ---
-        const clienteModalEl = document.getElementById('cliente-modal');
-        const clienteModal = new bootstrap.Modal(clienteModalEl);
-        const modalTitle = document.getElementById('modal-title');
-        const form = document.getElementById('cliente-form');
-        const clienteIdField = document.getElementById('cliente-id');
-        const tipoPessoaSelect = document.getElementById('tipo_pessoa');
-        const responsavelGroup = document.getElementById('responsavel-group');
-        const documentoInput = document.getElementById('documento');
-        const cepInput = document.getElementById('cep');
-        const logradouroInput = document.getElementById('logradouro');
-        const bairroInput = document.getElementById('bairro');
-        const cidadeInput = document.getElementById('cidade');
-        const ufInput = document.getElementById('uf');
-        let documentoMask, responsavelCpfMask, telefoneMask, cepMask;
+            <div class="row mb-3">
+              <div class="col-md-4">
+                <label for="tipo_pessoa" class="form-label">Tipo *</label>
+                <select id="tipo_pessoa" class="form-select" required>
+                  <option value="PJ">Pessoa Jurídica (PJ)</option>
+                  <option value="PF">Pessoa Física (PF)</option>
+                </select>
+              </div>
+              <div class="col-md-8">
+                <label for="documento" class="form-label">CPF / CNPJ *</label>
+                <div class="input-group">
+                  <input type="text" id="documento" class="form-control" placeholder="00.000.000/0000-00" required>
+                  <button type="button" id="btn-buscar-cnpj" class="btn btn-outline-secondary" title="Buscar dados do CNPJ"><i class="bi bi-building"></i></button>
+                </div>
+              </div>
+            </div>
 
-        const aplicarMascaras = () => {
-            if (documentoMask) documentoMask.destroy();
-            if (responsavelCpfMask) responsavelCpfMask.destroy();
-            if (telefoneMask) telefoneMask.destroy();
-            if (cepMask) cepMask.destroy();
+            <div class="mb-3">
+              <label for="nome_razao_social" class="form-label">Nome / Razão Social *</label>
+              <input type="text" id="nome_razao_social" class="form-control" required>
+            </div>
 
-            const tipo = tipoPessoaSelect.value;
-            responsavelGroup.style.display = tipo === 'PJ' ? 'block' : 'none';
-            documentoInput.placeholder = tipo === 'PJ' ? '00.000.000/0000-00' : '000.000.000-00';
-            
-            documentoMask = IMask(documentoInput, { mask: tipo === 'PJ' ? '00.000.000/0000-00' : '000.000.000-00' });
-            if (tipo === 'PJ') {
-                responsavelCpfMask = IMask(document.getElementById('documento_responsavel'), { mask: '000.000.000-00' });
-            }
-            telefoneMask = IMask(document.getElementById('telefone'), { mask: [{ mask: '(00) 0000-0000' }, { mask: '(00) 0 0000-0000' }] });
-            cepMask = IMask(cepInput, { mask: '00000-000' });
-        };
-        
-        // CORREÇÃO: A URL da API para admin deve usar o prefixo /api/admin/
-        const API_URL = '/api/admin/eventos-clientes';
+            <div class="row mb-3">
+              <div class="col-md-6">
+                <label for="email" class="form-label">Email *</label>
+                <input type="email" id="email" class="form-control" required>
+              </div>
+              <div class="col-md-6">
+                <label for="telefone" class="form-label">Telefone</label>
+                <input type="tel" id="telefone" class="form-control" placeholder="(00) 9 0000-0000">
+              </div>
+            </div>
 
-        async function carregarClientes() {
-            const tableBody = document.getElementById('clientes-table-body');
-            tableBody.innerHTML = `<tr><td colspan="5" class="text-center">Carregando...</td></tr>`;
-            try {
-                // A chamada fetch agora usa a constante API_URL
-                const resp = await fetch(API_URL, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                if (!resp.ok) {
-                    const errorData = await resp.json();
-                    throw new Error(errorData.error || `Erro ${resp.status}`);
-                }
-                const clientes = await resp.json();
-                
-                tableBody.innerHTML = '';
-                if (clientes.length === 0) {
-                     tableBody.innerHTML = `<tr><td colspan="5" class="text-center text-muted py-3">Nenhum cliente cadastrado.</td></tr>`;
-                } else {
-                    clientes.forEach(cliente => {
-                        const tr = document.createElement('tr');
-                        const resendButton = !cliente.senha_hash
-                            ? `<button class="btn btn-sm btn-outline-info btn-resend" data-id="${cliente.id}" title="Reenviar E-mail de Senha"><i class="bi bi-envelope-arrow-up-fill"></i></button>`
-                            : `<button class="btn btn-sm btn-outline-success" disabled title="Senha já definida"><i class="bi bi-check-circle-fill"></i></button>`;
+            <hr>
+            <h6 class="mb-3">Endereço</h6>
+            <div class="row mb-3">
+              <div class="col-md-4">
+                <label for="cep" class="form-label">CEP</label>
+                <div class="input-group">
+                  <input type="text" id="cep" class="form-control" placeholder="00000-000">
+                  <button type="button" id="btn-buscar-cep" class="btn btn-outline-secondary" title="Buscar CEP"><i class="bi bi-geo-alt"></i></button>
+                </div>
+              </div>
+              <div class="col-md-8">
+                <label for="logradouro" class="form-label">Rua / Logradouro</label>
+                <input type="text" id="logradouro" class="form-control">
+              </div>
+            </div>
 
-                        tr.innerHTML = `
-                            <td>${cliente.nome_razao_social || ''}</td>
-                            <td>${cliente.documento ? (cliente.tipo_pessoa === 'PJ' ? formatarCNPJ(cliente.documento) : cliente.documento) : ''}</td>
-                            <td>${cliente.email || ''}</td>
-                            <td><span class="badge bg-secondary">${cliente.tipo_cliente || ''}</span></td>
-                            <td class="text-end">
-                                <div class="btn-group" role="group">
-                                    ${resendButton}
-                                    <button class="btn btn-sm btn-outline-primary btn-edit" data-cliente='${JSON.stringify(cliente)}'><i class="bi bi-pencil-fill"></i> Editar</button>
-                                    <button class="btn btn-sm btn-outline-danger btn-delete" data-id="${cliente.id}"><i class="bi bi-trash-fill"></i> Excluir</button>
-                                </div>
-                            </td>`;
-                        tableBody.appendChild(tr);
-                    });
-                }
-            } catch (error) {
-                console.error('Erro ao carregar clientes:', error);
-                tableBody.innerHTML = `<tr><td colspan="5" class="text-center text-danger"><b>Erro ao carregar:</b> ${error.message}</td></tr>`;
-            }
-        }
-        
-        const setupModal = (cliente = null) => {
-            form.reset();
-            form.classList.remove('was-validated');
-            if (cliente) {
-                modalTitle.textContent = 'Editar Cliente';
-                clienteIdField.value = cliente.id;
-                document.getElementById('nome_razao_social').value = cliente.nome_razao_social;
-                tipoPessoaSelect.value = cliente.tipo_pessoa;
-                document.getElementById('documento').value = cliente.documento;
-                document.getElementById('email').value = cliente.email;
-                document.getElementById('telefone').value = cliente.telefone || '';
-                document.getElementById('nome_responsavel').value = cliente.nome_responsavel || '';
-                document.getElementById('documento_responsavel').value = cliente.documento_responsavel || '';
-                document.getElementById('tipo_cliente').value = cliente.tipo_cliente;
-                cepInput.value = cliente.cep || '';
-                logradouroInput.value = cliente.logradouro || '';
-                document.getElementById('numero').value = cliente.numero || '';
-                document.getElementById('complemento').value = cliente.complemento || '';
-                bairroInput.value = cliente.bairro || '';
-                cidadeInput.value = cliente.cidade || '';
-                ufInput.value = cliente.uf || '';
-            } else {
-                modalTitle.textContent = 'Adicionar Novo Cliente';
-                clienteIdField.value = '';
-            }
-            aplicarMascaras();
-        };
-        
-        clienteModalEl.addEventListener('show.bs.modal', (event) => {
-            const button = event.relatedTarget;
-            if (button && button.id === 'add-cliente-btn') {
-                 setupModal(null);
-            }
-        });
+            <div class="row mb-3">
+              <div class="col-md-3">
+                <label for="numero" class="form-label">Número</label>
+                <input type="text" id="numero" class="form-control">
+              </div>
+              <div class="col-md-5">
+                <label for="complemento" class="form-label">Complemento</label>
+                <input type="text" id="complemento" class="form-control">
+              </div>
+              <div class="col-md-4">
+                <label for="bairro" class="form-label">Bairro</label>
+                <input type="text" id="bairro" class="form-control">
+              </div>
+            </div>
 
-        form.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            if (!form.checkValidity()) {
-                e.stopPropagation();
-                form.classList.add('was-validated');
-                return;
-            }
-            
-            const id = clienteIdField.value;
-            const url = id ? `${API_URL}/${id}` : API_URL; // Usa a URL correta
-            const method = id ? 'PUT' : 'POST';
-            const body = {
-                nome_razao_social: document.getElementById('nome_razao_social').value,
-                tipo_pessoa: tipoPessoaSelect.value,
-                documento: documentoMask.unmaskedValue,
-                email: document.getElementById('email').value,
-                telefone: telefoneMask.unmaskedValue,
-                nome_responsavel: document.getElementById('nome_responsavel').value,
-                documento_responsavel: responsavelCpfMask ? responsavelCpfMask.unmaskedValue : null,
-                tipo_cliente: document.getElementById('tipo_cliente').value,
-                cep: cepMask.unmaskedValue,
-                logradouro: logradouroInput.value,
-                bairro: bairroInput.value,
-                cidade: cidadeInput.value,
-                uf: ufInput.value,
-                numero: document.getElementById('numero').value,
-                complemento: document.getElementById('complemento').value,
-            };
-            
-            try {
-                const response = await fetch(url, {
-                    method: method,
-                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                    body: JSON.stringify(body)
-                });
-                const result = await response.json();
-                if (!response.ok) throw new Error(result.error || `Erro ${response.status}`);
-                alert(result.message);
-                clienteModal.hide();
-                carregarClientes();
-            } catch (error) {
-                console.error('Erro ao salvar cliente:', error);
-                alert(`Erro: ${error.message}`);
-            }
-        });
-        
-        document.getElementById('clientes-table-body').addEventListener('click', async (e) => {
-            const button = e.target.closest('button');
-            if (!button) return;
+            <div class="row mb-3">
+              <div class="col-md-8">
+                <label for="cidade" class="form-label">Cidade</label>
+                <input type="text" id="cidade" class="form-control">
+              </div>
+              <div class="col-md-4">
+                <label for="uf" class="form-label">UF</label>
+                <input type="text" id="uf" class="form-control" maxlength="2">
+              </div>
+            </div>
 
-            const id = button.dataset.id;
+            <hr>
+            <div id="responsavel-group" class="mb-3">
+              <h6 class="mb-2">Responsável (apenas PJ)</h6>
+              <div class="row">
+                <div class="col-md-7">
+                  <label for="nome_responsavel" class="form-label">Nome do Responsável</label>
+                  <input type="text" id="nome_responsavel" class="form-control">
+                </div>
+                <div class="col-md-5">
+                  <label for="documento_responsavel" class="form-label">CPF do Responsável</label>
+                  <input type="text" id="documento_responsavel" class="form-control" placeholder="000.000.000-00">
+                </div>
+              </div>
+            </div>
 
-            if (button.classList.contains('btn-edit')) {
-                const clienteData = JSON.parse(button.dataset.cliente);
-                setupModal(clienteData);
-                clienteModal.show();
-            }
+            <div class="mb-3">
+              <label for="tipo_cliente" class="form-label">Classificação (descontos) *</label>
+              <select id="tipo_cliente" class="form-select" required>
+                <option value="Geral">Geral</option>
+                <option value="Governo">Governo</option>
+                <option value="Permissionario">Permissionário</option>
+              </select>
+            </div>
 
-            if (button.classList.contains('btn-delete')) {
-                if (confirm('Tem certeza que deseja excluir este cliente? Esta ação não pode ser desfeita.')) {
-                    try {
-                        const response = await fetch(`${API_URL}/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
-                        const result = await response.json();
-                        if (!response.ok) throw new Error(result.error);
-                        alert('Cliente excluído com sucesso!');
-                        carregarClientes();
-                    } catch (error) {
-                        alert(`Erro ao excluir: ${error.message}`);
-                    }
-                }
-            }
-            
-            if (button.classList.contains('btn-resend')) {
-                button.disabled = true;
-                button.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
-                try {
-                    const response = await fetch(`${API_URL}/${id}/reenviar-senha`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } });
-                    const result = await response.json();
-                    if (!response.ok) throw new Error(result.error);
-                    alert(result.message);
-                    button.outerHTML = `<button class="btn btn-sm btn-outline-success" disabled title="E-mail enviado"><i class="bi bi-check-circle-fill"></i></button>`;
-                } catch (error) {
-                    alert(`Erro ao reenviar e-mail: ${error.message}`);
-                    button.innerHTML = `<i class="bi bi-envelope-arrow-up-fill"></i>`;
-                    button.disabled = false;
-                }
-            }
-        });
-        
-        tipoPessoaSelect.addEventListener('change', aplicarMascaras);
-        cepInput.addEventListener('blur', async () => { /* Lógica de buscar CEP */ });
-        documentoInput.addEventListener('blur', async () => { /* Lógica de buscar CNPJ */ });
+            <div class="alert alert-info small">
+              O cliente receberá um e-mail para criar sua própria senha de acesso ao portal.
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" form="cliente-form" class="btn btn-primary">Salvar</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
-        carregarClientes();
-        aplicarMascaras();
+  <script src="/js/admin-guard.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://unpkg.com/imask"></script>
+  <script>
+  document.addEventListener('DOMContentLoaded', () => {
+    // ======== Auth / Menu ========
+    const token = localStorage.getItem('adminAuthToken');
+    if (!token) { window.location.href = '/admin/login.html'; return; }
+
+    const path = window.location.pathname;
+    document.querySelectorAll('.sidebar-nav .nav-link').forEach(link => {
+      const href = link.getAttribute('href');
+      if (href && path.endsWith(href)) {
+        link.classList.add('active');
+        const parent = link.closest('.menu-dropdown');
+        if (parent) parent.querySelector('.submenu').style.display = 'block';
+      }
     });
-    </script>
+    document.querySelectorAll('.menu-dropdown > a').forEach(toggle => {
+      toggle.addEventListener('click', e => {
+        e.preventDefault();
+        const sub = toggle.nextElementSibling;
+        sub.style.display = sub.style.display === 'block' ? 'none' : 'block';
+      });
+    });
+    document.getElementById('logoutButton').addEventListener('click', e => {
+      e.preventDefault();
+      localStorage.removeItem('adminAuthToken');
+      window.location.href = '/admin/login.html';
+    });
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      if (payload?.nome) document.getElementById('adminName').innerText = payload.nome;
+    } catch {}
 
+    // ======== Constantes / refs ========
+    const API_URL = '/api/admin/eventos-clientes';
+    const tableBody = document.getElementById('clientes-table-body');
+
+    const clienteModalEl = document.getElementById('cliente-modal');
+    const clienteModal = new bootstrap.Modal(clienteModalEl);
+    const modalTitle = document.getElementById('modal-title');
+
+    const form = document.getElementById('cliente-form');
+    const clienteIdField = document.getElementById('cliente-id');
+    const tipoPessoaSelect = document.getElementById('tipo_pessoa');
+    const responsavelGroup = document.getElementById('responsavel-group');
+
+    const inputDocumento = document.getElementById('documento');
+    const btnBuscarCNPJ = document.getElementById('btn-buscar-cnpj');
+
+    const inputNome = document.getElementById('nome_razao_social');
+    const inputEmail = document.getElementById('email');
+    const inputTelefone = document.getElementById('telefone');
+
+    const inputCEP = document.getElementById('cep');
+    const btnBuscarCEP = document.getElementById('btn-buscar-cep');
+    const inputLogradouro = document.getElementById('logradouro');
+    const inputNumero = document.getElementById('numero');
+    const inputCompl = document.getElementById('complemento');
+    const inputBairro = document.getElementById('bairro');
+    const inputCidade = document.getElementById('cidade');
+    const inputUF = document.getElementById('uf');
+
+    const inputRespNome = document.getElementById('nome_responsavel');
+    const inputRespCPF = document.getElementById('documento_responsavel');
+
+    // ======== Máscaras ========
+    let maskDocumento, maskRespCPF, maskTelefone, maskCEP;
+    const applyMasks = () => {
+      if (maskDocumento) maskDocumento.destroy();
+      if (maskRespCPF) maskRespCPF.destroy();
+      if (maskTelefone) maskTelefone.destroy();
+      if (maskCEP) maskCEP.destroy();
+
+      const tipo = tipoPessoaSelect.value;
+      responsavelGroup.style.display = (tipo === 'PJ') ? 'block' : 'none';
+      inputDocumento.placeholder = tipo === 'PJ' ? '00.000.000/0000-00' : '000.000.000-00';
+
+      maskDocumento = IMask(inputDocumento, { mask: tipo === 'PJ' ? '00.000.000/0000-00' : '000.000.000-00' });
+      maskTelefone = IMask(inputTelefone, { mask: [{ mask: '(00) 0000-0000' }, { mask: '(00) 0 0000-0000' }] });
+      maskCEP = IMask(inputCEP, { mask: '00000-000' });
+      if (tipo === 'PJ') {
+        maskRespCPF = IMask(inputRespCPF, { mask: '000.000.000-00' });
+      } else {
+        inputRespCPF.value = '';
+        inputRespNome.value = '';
+      }
+    };
+    applyMasks();
+
+    tipoPessoaSelect.addEventListener('change', () => {
+      // ao trocar PF/PJ, limpa campos específicos e aplica máscaras
+      inputDocumento.value = '';
+      inputRespCPF.value = '';
+      inputRespNome.value = '';
+      applyMasks();
+    });
+
+    inputUF.addEventListener('input', () => inputUF.value = (inputUF.value || '').toUpperCase());
+
+    // ======== Helpers público (sem backend) ========
+    const onlyDigits = s => String(s||'').replace(/\D/g,'');
+    function setBusy(el, busy=true){
+      if (!el) return;
+      el.dataset.oldcursor = el.style.cursor;
+      el.style.cursor = busy ? 'progress' : (el.dataset.oldcursor || '');
+      el.readOnly = !!busy;
+    }
+    function formatarCNPJ(cnpj){
+      const d = onlyDigits(cnpj);
+      return d.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/,'$1.$2.$3/$4-$5');
+    }
+    function formatarCPF(cpf){
+      const d = onlyDigits(cpf);
+      return d.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/,'$1.$2.$3-$4');
+    }
+
+    // Normalizadores
+    function normalizeCNPJFromBrasilAPI(data){
+      return {
+        razao_social : data.razao_social || data.nome_fantasia || data.nome || '',
+        nome_fantasia: data.nome_fantasia || '',
+        email        : data.email || '',
+        telefone     : (data.telefone || '').replace(/\D/g,''),
+        cep          : (data.cep || '').replace(/\D/g,''),
+        logradouro   : data.logradouro || '',
+        numero       : data.numero || '',
+        complemento  : data.complemento || '',
+        bairro       : data.bairro || '',
+        cidade       : data.municipio || data.localidade || data.cidade || '',
+        uf           : (data.uf || '').toUpperCase()
+      };
+    }
+    function normalizeCEPFromBrasilAPI(data){
+      return {
+        logradouro: data.street || data.logradouro || '',
+        bairro    : data.neighborhood || data.bairro || '',
+        cidade    : data.city || data.localidade || data.cidade || '',
+        uf        : (data.state || data.uf || '').toUpperCase()
+      };
+    }
+    function normalizeCEPFromViaCEP(data){
+      return {
+        logradouro: data.logradouro || '',
+        bairro    : data.bairro || '',
+        cidade    : data.localidade || '',
+        uf        : (data.uf || '').toUpperCase()
+      };
+    }
+
+    async function fetchCNPJPublic(cnpj){
+      const r = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`, { mode:'cors' });
+      if (!r.ok) {
+        const t = await r.text().catch(()=> '');
+        throw new Error(`CNPJ inválido ou não encontrado (HTTP ${r.status})${t?`: ${t}`:''}`);
+      }
+      const j = await r.json();
+      return normalizeCNPJFromBrasilAPI(j);
+    }
+    async function fetchCEPPublic(cep){
+      try {
+        const r = await fetch(`https://brasilapi.com.br/api/cep/v2/${cep}`, { mode:'cors' });
+        if (r.ok) return normalizeCEPFromBrasilAPI(await r.json());
+      } catch {}
+      const r2 = await fetch(`https://viacep.com.br/ws/${cep}/json/`, { mode:'cors' });
+      if (!r2.ok) throw new Error(`CEP inválido ou não encontrado (HTTP ${r2.status})`);
+      const j2 = await r2.json();
+      if (j2.erro) throw new Error('CEP não encontrado na ViaCEP.');
+      return normalizeCEPFromViaCEP(j2);
+    }
+
+    async function autoCNPJ(){
+      if (tipoPessoaSelect.value !== 'PJ') return;
+      const clean = onlyDigits(inputDocumento.value);
+      if (clean.length !== 14) return;
+      try{
+        setBusy(inputDocumento, true);
+        const j = await fetchCNPJPublic(clean);
+        if (!inputNome.value) inputNome.value = j.razao_social || j.nome_fantasia || '';
+        if (!inputEmail.value && j.email) inputEmail.value = j.email;
+        if (!inputTelefone.value && j.telefone) inputTelefone.value = j.telefone;
+
+        if (!inputCEP.value && j.cep) inputCEP.value = j.cep;
+        if (!inputLogradouro.value && j.logradouro) inputLogradouro.value = j.logradouro;
+        if (!inputNumero.value && j.numero) inputNumero.value = j.numero;
+        if (!inputCompl.value && j.complemento) inputCompl.value = j.complemento;
+        if (!inputBairro.value && j.bairro) inputBairro.value = j.bairro;
+        if (!inputCidade.value && j.cidade) inputCidade.value = j.cidade;
+        if (!inputUF.value && j.uf) inputUF.value = j.uf;
+      } catch(e){
+        alert(e.message || 'Não foi possível consultar o CNPJ.');
+      } finally {
+        setBusy(inputDocumento, false);
+      }
+    }
+
+    async function autoCEP(){
+      const clean = onlyDigits(inputCEP.value);
+      if (clean.length !== 8) return;
+      try{
+        setBusy(inputCEP, true);
+        const j = await fetchCEPPublic(clean);
+        if (j.logradouro) inputLogradouro.value = j.logradouro;
+        if (j.bairro) inputBairro.value = j.bairro;
+        if (j.cidade) inputCidade.value = j.cidade;
+        if (j.uf) inputUF.value = j.uf;
+      } catch(e){
+        alert(e.message || 'Não foi possível consultar o CEP.');
+      } finally {
+        setBusy(inputCEP, false);
+      }
+    }
+
+    // listeners dos botões/blur
+    btnBuscarCNPJ.addEventListener('click', autoCNPJ);
+    inputDocumento.addEventListener('blur', autoCNPJ);
+    btnBuscarCEP.addEventListener('click', autoCEP);
+    inputCEP.addEventListener('blur', autoCEP);
+
+    // ======== CRUD ========
+    async function carregarClientes(){
+      tableBody.innerHTML = `<tr><td colspan="5" class="text-center text-muted py-3">Carregando...</td></tr>`;
+      try{
+        const r = await fetch(API_URL, { headers:{ Authorization:`Bearer ${token}` }});
+        if (!r.ok) {
+          const er = await r.json().catch(()=> ({}));
+          throw new Error(er.error || `Erro ${r.status}`);
+        }
+        const clientes = await r.json();
+
+        if (!Array.isArray(clientes) || !clientes.length) {
+          tableBody.innerHTML = `<tr><td colspan="5" class="text-center text-muted py-3">Nenhum cliente cadastrado.</td></tr>`;
+          return;
+        }
+        tableBody.innerHTML = '';
+        clientes.forEach(c => {
+          const docFmt = c.tipo_pessoa === 'PJ' ? formatarCNPJ(c.documento) : formatarCPF(c.documento);
+          const resendBtn = !c.senha_hash
+            ? `<button class="btn btn-sm btn-outline-info btn-resend" data-id="${c.id}" title="Reenviar e-mail de senha"><i class="bi bi-envelope-arrow-up-fill"></i></button>`
+            : `<button class="btn btn-sm btn-outline-success" disabled title="Senha já definida"><i class="bi bi-check-circle-fill"></i></button>`;
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${c.nome_razao_social || ''}</td>
+            <td>${docFmt || ''}</td>
+            <td>${c.email || ''}</td>
+            <td><span class="badge bg-secondary">${c.tipo_cliente || ''}</span></td>
+            <td class="text-end">
+              <div class="btn-group" role="group">
+                ${resendBtn}
+                <button class="btn btn-sm btn-outline-primary btn-edit" data-cliente='${JSON.stringify(c)}'><i class="bi bi-pencil-fill"></i> Editar</button>
+                <button class="btn btn-sm btn-outline-danger btn-delete" data-id="${c.id}"><i class="bi bi-trash-fill"></i> Excluir</button>
+              </div>
+            </td>
+          `;
+          tableBody.appendChild(tr);
+        });
+      }catch(e){
+        tableBody.innerHTML = `<tr><td colspan="5" class="text-center text-danger"><b>Erro:</b> ${e.message}</td></tr>`;
+      }
+    }
+
+    function setupModal(cliente=null){
+      form.reset();
+      form.classList.remove('was-validated');
+      if (cliente){
+        modalTitle.textContent = 'Editar Cliente';
+        clienteIdField.value = cliente.id;
+        tipoPessoaSelect.value = cliente.tipo_pessoa || 'PJ';
+        applyMasks();
+
+        inputDocumento.value = cliente.documento || '';
+        inputNome.value = cliente.nome_razao_social || '';
+        inputEmail.value = cliente.email || '';
+        inputTelefone.value = cliente.telefone || '';
+
+        inputCEP.value = cliente.cep || '';
+        inputLogradouro.value = cliente.logradouro || '';
+        inputNumero.value = cliente.numero || '';
+        inputCompl.value = cliente.complemento || '';
+        inputBairro.value = cliente.bairro || '';
+        inputCidade.value = cliente.cidade || '';
+        inputUF.value = cliente.uf || '';
+
+        inputRespNome.value = cliente.nome_responsavel || '';
+        inputRespCPF.value = cliente.documento_responsavel || '';
+        document.getElementById('tipo_cliente').value = cliente.tipo_cliente || 'Geral';
+      } else {
+        modalTitle.textContent = 'Adicionar Novo Cliente';
+        clienteIdField.value = '';
+        tipoPessoaSelect.value = 'PJ';
+        applyMasks();
+      }
+    }
+
+    clienteModalEl.addEventListener('show.bs.modal', (ev) => {
+      const btn = ev.relatedTarget;
+      if (btn && btn.id === 'add-cliente-btn') setupModal(null);
+    });
+
+    // salvar
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!form.checkValidity()){
+        e.stopPropagation();
+        form.classList.add('was-validated');
+        return;
+      }
+      const id = clienteIdField.value;
+      const url = id ? `${API_URL}/${id}` : API_URL;
+      const method = id ? 'PUT' : 'POST';
+
+      const body = {
+        nome_razao_social: inputNome.value,
+        tipo_pessoa: tipoPessoaSelect.value,
+        documento: (maskDocumento?.unmaskedValue ?? onlyDigits(inputDocumento.value)),
+        email: inputEmail.value,
+        telefone: (maskTelefone?.unmaskedValue ?? onlyDigits(inputTelefone.value)),
+        nome_responsavel: inputRespNome.value || null,
+        documento_responsavel: (maskRespCPF?.unmaskedValue ?? onlyDigits(inputRespCPF.value)) || null,
+        tipo_cliente: document.getElementById('tipo_cliente').value,
+        cep: (maskCEP?.unmaskedValue ?? onlyDigits(inputCEP.value)) || null,
+        logradouro: inputLogradouro.value || null,
+        bairro: inputBairro.value || null,
+        cidade: inputCidade.value || null,
+        uf: (inputUF.value || '').toUpperCase() || null,
+        numero: inputNumero.value || null,
+        complemento: inputCompl.value || null
+      };
+
+      try{
+        const btnSubmit = form.querySelector('button[type="submit"]');
+        btnSubmit.disabled = true;
+        btnSubmit.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Salvando...`;
+
+        const r = await fetch(url, {
+          method,
+          headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${token}` },
+          body: JSON.stringify(body)
+        });
+        const result = await r.json().catch(()=> ({}));
+        if (!r.ok) throw new Error(result.error || `Erro ${r.status}`);
+
+        alert(result.message || 'Salvo com sucesso!');
+        clienteModal.hide();
+        carregarClientes();
+      }catch(err){
+        alert(`Erro ao salvar: ${err.message}`);
+      }finally{
+        const btnSubmit = form.querySelector('button[type="submit"]');
+        btnSubmit.disabled = false;
+        btnSubmit.textContent = 'Salvar';
+      }
+    });
+
+    // ações na tabela
+    tableBody.addEventListener('click', async (ev) => {
+      const btn = ev.target.closest('button');
+      if (!btn) return;
+
+      // editar
+      if (btn.classList.contains('btn-edit')){
+        const cliente = JSON.parse(btn.dataset.cliente);
+        setupModal(cliente);
+        clienteModal.show();
+      }
+
+      // excluir
+      if (btn.classList.contains('btn-delete')){
+        const id = btn.dataset.id;
+        if (!confirm('Tem certeza que deseja excluir este cliente?')) return;
+        try{
+          btn.disabled = true;
+          const r = await fetch(`${API_URL}/${id}`, { method:'DELETE', headers:{ Authorization:`Bearer ${token}` }});
+          const result = await r.json().catch(()=> ({}));
+          if (!r.ok) throw new Error(result.error || `Erro ${r.status}`);
+          alert('Cliente excluído com sucesso!');
+          carregarClientes();
+        }catch(e){
+          alert(`Erro ao excluir: ${e.message}`);
+        }finally{
+          btn.disabled = false;
+        }
+      }
+
+      // reenviar senha
+      if (btn.classList.contains('btn-resend')){
+        const id = btn.dataset.id;
+        btn.disabled = true;
+        const original = btn.innerHTML;
+        btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
+        try{
+          const r = await fetch(`${API_URL}/${id}/reenviar-senha`, { method:'POST', headers:{ Authorization:`Bearer ${token}` }});
+          const result = await r.json().catch(()=> ({}));
+          if (!r.ok) throw new Error(result.error || `Erro ${r.status}`);
+          alert(result.message || 'E-mail reenviado!');
+          btn.outerHTML = `<button class="btn btn-sm btn-outline-success" disabled title="E-mail enviado"><i class="bi bi-check-circle-fill"></i></button>`;
+        }catch(e){
+          alert(`Erro ao reenviar e-mail: ${e.message}`);
+          btn.disabled = false;
+          btn.innerHTML = original;
+        }
+      }
+    });
+
+    // inicializa
+    carregarClientes();
+  });
+  </script>
 </body>
 </html>
