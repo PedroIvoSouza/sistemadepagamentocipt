@@ -124,21 +124,26 @@ function baixarPdfBase64(base64, nome){
 }
 const normalizaStatus = s => (s||'').toString();
 
+// Tenta várias rotas conhecidas para listar DARs por evento
 async function fetchDARsCliente(headers, eventoId){
-  for (const u of [
+  const urls = [
     `/api/portal/eventos/${eventoId}/dars`,
-    `/api/eventos/clientes/eventos/${eventoId}/dars`
-  ]){
-    try{ const r=await fetch(u,{headers}); if(r.ok){ const j=await r.json(); const arr=j?.dars||j||[]; if (Array.isArray(arr)&&arr.length) return arr; } }catch{}
+    `/api/eventos/clientes/eventos/${eventoId}/dars`,
+    `/api/eventos/${eventoId}/dars`,
+    `/api/eventos/dars?evento_id=${encodeURIComponent(eventoId)}`,
+    `/api/eventos/dars/lista?evento_id=${encodeURIComponent(eventoId)}`,
+    `/api/admin/eventos/${eventoId}/dars`,
+    `/api/eventos/dars/por-evento/${encodeURIComponent(eventoId)}`
+  ];
+  for (const u of urls){
+    try{
+      const r = await fetch(u, { headers });
+      if (!r.ok) continue;
+      const j = await r.json().catch(()=> ({}));
+      const lista = j?.dars || j?.data || (Array.isArray(j) ? j : []);
+      if (Array.isArray(lista) && lista.length) return lista;
+    }catch{}
   }
-  try{
-    const r = await fetch('/api/portal/eventos/me', { headers });
-    if (r.ok){
-      const { dars } = await r.json();
-      const ds = Array.isArray(dars)? dars : [];
-      return ds.filter(d => String(d.evento_id||d.id_evento||d.eventoId) === String(eventoId));
-    }
-  }catch{}
   return [];
 }
 
@@ -240,37 +245,43 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (btn.dataset.darDownload){
         try{ baixarPdfBase64(btn.dataset.darDownload, `DAR-Evento-${btn.dataset.evento}-P${btn.dataset.parc||'U'}.pdf`); }
         catch{ alert('Não foi possível baixar a DAR. PDF inválido.'); }
+        return;
       }
 
       if (btn.dataset.darReemitir){
         const evento = btn.dataset.evento;
         const linha  = btn.closest('tr');
-        // cria um objeto com os dados da linha pra reemissão
-        const idx   = linha?.children?.[0]?.textContent?.trim();
-        const valor = linha?.children?.[1]?.textContent?.trim();
-        const obj   = { parcela_num: idx, valor_text: valor, dar_id: btn.dataset.darReemitir };
+        const idx    = linha?.children?.[0]?.textContent?.trim();
+        const valor  = linha?.children?.[1]?.textContent?.trim();
+        const obj    = { parcela_num: idx, valor_text: valor, dar_id: btn.dataset.darReemitir };
 
         const original = btn.innerHTML;
         btn.disabled = true; btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
         try{
           const payload = await reemitirDAR(headers, evento, obj);
           if (payload?.dar_pdf){
-            baixarPdfBase64(payload.dar_pdf, `DAR-Evento-${evento}.pdf`);
+            const b64 = String(payload.dar_pdf).trim();
+            const href = b64.startsWith('data:') ? b64 : `data:application/pdf;base64,${b64}`;
+            baixarPdfBase64(href, `DAR-Evento-${evento}-P${obj.parcela_num || 'U'}.pdf`);
           } else {
             const novos = await fetchDARsCliente(headers, evento);
-            const comPdf = (novos||[]).find(x=> x.dar_pdf && x.dar_pdf.length>30);
-            if (comPdf) baixarPdfBase64(comPdf.dar_pdf, `DAR-Evento-${evento}-P${comPdf.parcela_num||'U'}.pdf`);
-            else alert('Não foi possível baixar a DAR. Falha ao obter PDF');
+            const comPdf = (novos||[]).find(x=> x.dar_pdf && String(x.dar_pdf).replace(/\s/g,'').length>30);
+            if (comPdf){
+              const b64 = String(comPdf.dar_pdf);
+              const href = b64.startsWith('data:') ? b64 : `data:application/pdf;base64,${b64}`;
+              baixarPdfBase64(href, `DAR-Evento-${evento}-P${comPdf.parcela_num || 'U'}.pdf`);
+            } else {
+              alert('Não foi possível baixar a DAR. Falha ao obter PDF');
+            }
           }
-          // recarrega a lista após emitir
-          abrirDARsDoEvento(evento, nomeEvento);
+          abrirDARsDoEvento(evento, titulo);
         }catch(err){
           alert(err.message || 'Não foi possível emitir a DAR.');
           btn.disabled=false; btn.innerHTML=original;
         }
       }
     };
-  }
+  } // fecha abrirDARsDoEvento
 
   // carregar dashboard
   try{
@@ -282,7 +293,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     const evs = Array.isArray(eventos)? eventos : [];
     const ds  = Array.isArray(dars)? dars : [];
 
-    // stats
     const aberto = ds.reduce((s,d)=> (['Pendente','Vencido'].includes((d.status||'').toString()) ? s + (Number(d.valor||d.dar_valor||d.parcela_valor||0)) : s), 0);
     document.getElementById('stat-eventos').innerText = evs.length;
     document.getElementById('stat-dars').innerText = ds.length;
