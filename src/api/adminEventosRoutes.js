@@ -4,7 +4,15 @@ const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 
 const adminAuthMiddleware = require('../middleware/adminAuthMiddleware');
+
+// payload builder e config da SEFAZ
+const { buildSefazPayloadFromDarEvento } = require('../services/sefazPayloadBuilder');
+const { RECEITA_CODIGO_EVENTO } = require('../config/sefaz');
+
+// serviço de emissão (chama a API da SEFAZ)
 const { emitirGuiaSefaz } = require('../services/sefazService');
+
+// encargos (opcional, se existir)
 let calcularEncargosAtraso = null;
 try { ({ calcularEncargosAtraso } = require('../services/cobrancaService')); } catch (_) {}
 
@@ -12,7 +20,7 @@ const router = express.Router();
 const dbPath = path.resolve(__dirname, '..', '..', 'sistemacipt.db');
 const db = new sqlite3.Database(dbPath);
 
-// util
+// utils
 const onlyDigits = (v = '') => String(v).replace(/\D/g, '');
 const isCpf = d => d && d.length === 11;
 const isCnpj = d => d && d.length === 14;
@@ -22,8 +30,8 @@ const dbRun = (sql, p = []) => new Promise((r, j) => db.run(sql, p, function (e)
 
 router.use(adminAuthMiddleware);
 
-// listar
-router.get('/', async (req, res) => {
+// LISTAR eventos (dashboard)
+router.get('/', async (_req, res) => {
   try {
     const sql = `
       SELECT e.id, e.nome_evento, e.valor_final, e.status,
@@ -40,7 +48,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-// criar
+// CRIAR evento + DARs (somente registro local)
 router.post('/', async (req, res) => {
   const {
     idCliente, nomeEvento, datasEvento,
@@ -69,11 +77,14 @@ router.post('/', async (req, res) => {
 
     for (let i = 0; i < parcelas.length; i++) {
       const p = parcelas[i];
+
       const darStmt = await dbRun(
         `INSERT INTO dars (valor, data_vencimento, status) VALUES (?, ?, ?)`,
         [Number(p.valor) || 0, p.vencimento, 'Pendente']
       );
+
       const darId = darStmt.lastID;
+
       await dbRun(
         `INSERT INTO DARs_Eventos (id_dar, id_evento, numero_parcela, valor_parcela) VALUES (?, ?, ?, ?)`,
         [darId, eventoId, i + 1, Number(p.valor) || 0]
@@ -89,13 +100,14 @@ router.post('/', async (req, res) => {
   }
 });
 
-// helper emissão (evita código duplicado)
+// Helper: emitir uma DAR (monta payload SEFAZ e chama o serviço externo)
 async function emitirDarByRow(row) {
   if (!row) throw new Error('DAR/Evento não encontrado.');
 
-  let documento = onlyDigits(row.documento || '');
+  // valida documento do contribuinte (CPF/CNPJ)
+  let documento = onlyDigits(row.cliente_documento || '');
   if (!isCpf(documento) && !isCnpj(documento)) {
-    const who = `cliente_id=${row.id_cliente ?? 'desconhecido'}`;
+    const who = `cliente_id=${row.cliente_id ?? 'desconhecido'}`;
     const det = row.tipo_pessoa ? ` (tipo_pessoa=${row.tipo_pessoa})` : '';
     const msg = `Documento do contribuinte ausente ou inválido (CPF/CNPJ). ${who}${det}`;
     const e = new Error(msg);
@@ -103,9 +115,11 @@ async function emitirDarByRow(row) {
     throw e;
   }
 
+  // base DAR/Parcela
   const valor = Number(row.parcela_valor ?? row.dar_valor ?? 0);
   const venc = row.dar_venc;
 
+  // (opcional) objeto de apoio ao cálculo local — mantido para compatibilidade
   const darForService = {
     id: row.dar_id,
     valor,
@@ -115,38 +129,70 @@ async function emitirDarByRow(row) {
     status: row.dar_status
   };
 
-  let enviar = darForService;
+  // monta payload da SEFAZ conforme manual
+  const payload = buildSefazPayloadFromDarEvento({
+    darRow: { id: row.dar_id, valor, data_vencimento: venc, status: row.dar_status },
+    eventoRow: { id: row.evento_id, nome_evento: row.evento_nome },
+    clienteRow: {
+      id: row.cliente_id,
+      documento: row.cliente_documento,
+      nome_razao_social: row.cliente_nome,
+      endereco: row.cliente_endereco,
+      cep: row.cliente_cep,
+      codigo_ibge_municipio: row.cliente_codigo_ibge || null,
+    },
+    receitaCodigo: RECEITA_CODIGO_EVENTO,
+    dataLimite: venc, // regra simples: igual ao vencimento
+  });
+
+  // Encargos de atraso (se existir serviço e a DAR estiver vencida)
   if (darForService.status === 'Vencido' && typeof calcularEncargosAtraso === 'function') {
     try {
       const calc = await calcularEncargosAtraso({
         valor: darForService.valor,
         data_vencimento: darForService.data_vencimento
       });
-      enviar = {
-        ...darForService,
-        valor: calc?.valorAtualizado ?? darForService.valor,
-        data_vencimento: calc?.novaDataVencimento ?? darForService.data_vencimento
-      };
+
+      const receita0 = payload.receitas[0];
+      receita0.valorPrincipal = Number(calc?.valorAtualizado ?? receita0.valorPrincipal);
+      payload.dataLimitePagamento = calc?.novaDataVencimento ?? payload.dataLimitePagamento;
+      receita0.dataVencimento    = calc?.novaDataVencimento ?? receita0.dataVencimento;
     } catch (e) {
       console.warn('[admin/eventos] encargos: prosseguindo sem atualização:', e?.message);
     }
   }
 
-  const overrides = { documento, nome: row.nome_cliente };
-  return emitirGuiaSefaz(null, enviar, overrides);
+  // chama serviço que integra com a SEFAZ (agora passando o payload completo)
+  const sefaz = await emitirGuiaSefaz(payload);
+  return sefaz;
 }
 
-// emitir por evento+dar
+// EMITIR por evento + dar
 router.post('/:eventoId/dars/:darId/emitir', async (req, res) => {
   const { eventoId, darId } = req.params;
   try {
     const row = await dbGet(
       `
       SELECT 
-        d.id AS dar_id, d.valor AS dar_valor, d.data_vencimento AS dar_venc, d.status AS dar_status,
-        de.valor_parcela AS parcela_valor, de.numero_parcela AS parcela_num,
-        e.id AS evento_id, e.nome_evento, e.id_cliente,
-        c.id AS cliente_id, c.nome_razao_social AS nome_cliente, c.tipo_pessoa, c.documento
+        d.id AS dar_id,
+        d.valor AS dar_valor,
+        d.data_vencimento AS dar_venc,
+        d.status AS dar_status,
+
+        de.valor_parcela AS parcela_valor,
+        de.numero_parcela AS parcela_num,
+
+        e.id AS evento_id,
+        e.nome_evento AS evento_nome,
+        e.id_cliente,
+
+        c.id AS cliente_id,
+        c.nome_razao_social AS cliente_nome,
+        c.tipo_pessoa,
+        c.documento AS cliente_documento,
+        c.endereco  AS cliente_endereco,
+        c.cep       AS cliente_cep,
+        c.codigo_ibge_municipio AS cliente_codigo_ibge
       FROM dars d
       JOIN DARs_Eventos de ON de.id_dar = d.id
       JOIN Eventos e       ON e.id = de.id_evento
@@ -155,25 +201,41 @@ router.post('/:eventoId/dars/:darId/emitir', async (req, res) => {
       `,
       [darId, eventoId]
     );
+
     const sefaz = await emitirDarByRow(row);
     res.json(sefaz);
   } catch (err) {
-    const status = err.status || 500;
+    const status = err.status || err?.response?.status || 500;
     res.status(status).json({ error: err.message || 'Falha ao emitir a DAR do evento.' });
   }
 });
 
-// emitir por dar (atalho)
+// EMITIR por dar (atalho)
 router.post('/dars/:darId/emitir', async (req, res) => {
   const { darId } = req.params;
   try {
     const row = await dbGet(
       `
       SELECT 
-        d.id AS dar_id, d.valor AS dar_valor, d.data_vencimento AS dar_venc, d.status AS dar_status,
-        de.valor_parcela AS parcela_valor, de.numero_parcela AS parcela_num,
-        e.id AS evento_id, e.nome_evento, e.id_cliente,
-        c.id AS cliente_id, c.nome_razao_social AS nome_cliente, c.tipo_pessoa, c.documento
+        d.id AS dar_id,
+        d.valor AS dar_valor,
+        d.data_vencimento AS dar_venc,
+        d.status AS dar_status,
+
+        de.valor_parcela AS parcela_valor,
+        de.numero_parcela AS parcela_num,
+
+        e.id AS evento_id,
+        e.nome_evento AS evento_nome,
+        e.id_cliente,
+
+        c.id AS cliente_id,
+        c.nome_razao_social AS cliente_nome,
+        c.tipo_pessoa,
+        c.documento AS cliente_documento,
+        c.endereco  AS cliente_endereco,
+        c.cep       AS cliente_cep,
+        c.codigo_ibge_municipio AS cliente_codigo_ibge
       FROM dars d
       JOIN DARs_Eventos de ON de.id_dar = d.id
       JOIN Eventos e       ON e.id = de.id_evento
@@ -182,10 +244,11 @@ router.post('/dars/:darId/emitir', async (req, res) => {
       `,
       [darId]
     );
+
     const sefaz = await emitirDarByRow(row);
     res.json(sefaz);
   } catch (err) {
-    const status = err.status || 500;
+    const status = err.status || err?.response?.status || 500;
     res.status(status).json({ error: err.message || 'Falha ao emitir a DAR do evento.' });
   }
 });
