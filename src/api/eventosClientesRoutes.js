@@ -96,14 +96,31 @@ clientRouter.put('/me', (req, res) => {
 
   db.run(sql, params, function (err) {
   if (err) {
-    console.error('[EVENTOS-CLIENTES][UPDATE] ERRO SQLite:', err.message); // <— adicione isso
-    if (err.message.includes('UNIQUE constraint failed')) {
+    // LOG completo (SQL + params) pra enxergar qualquer problema real
+    console.error('[EVENTOS-CLIENTES][UPDATE] ERRO SQLite:', err.message);
+    console.error('[EVENTOS-CLIENTES][UPDATE] SQL  :', sql.replace(/\s+/g,' ').trim());
+    console.error('[EVENTOS-CLIENTES][UPDATE] PARAMS:', params);
+
+    // Trate todos os formatos de violação de UNIQUE
+    if (
+      err.message.includes('UNIQUE constraint failed') ||
+      err.message.includes('SQLITE_CONSTRAINT: UNIQUE')
+    ) {
       return res.status(409).json({ error: 'Já existe um cliente com este CPF/CNPJ ou E-mail.' });
     }
-    return res.status(500).json({ error: 'Erro ao atualizar o cliente no banco de dados.' });
+
+    // TEMP: em desenvolvimento, retorne o detalhe do SQLite pra gente ver
+    return res.status(500).json({
+      error: 'Erro ao atualizar o cliente no banco de dados.',
+      detail: err.message
+    });
   }
-  if (this.changes === 0) return res.status(404).json({ error: 'Cliente de evento não encontrado.' });
-  res.json({ message: 'Cliente atualizado com sucesso.', id });
+
+  if (this.changes === 0) {
+    return res.status(404).json({ error: 'Cliente de evento não encontrado.' });
+  }
+
+  return res.json({ message: 'Cliente atualizado com sucesso.', id });
 });
 });
 
