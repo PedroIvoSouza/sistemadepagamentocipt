@@ -7,11 +7,23 @@ const { calcularEncargosAtraso } = require('../services/cobrancaService');
 const { emitirGuiaSefaz } = require('../services/sefazService');
 
 const router = express.Router();
-const db = new sqlite3.Database('./sistemacipt.db');
 
+// Usa o caminho do .env, com fallback
+const DB_PATH = process.env.SQLITE_STORAGE || './sistemacipt.db';
+const db = new sqlite3.Database(DB_PATH);
+
+// Promisify simples
 const dbGetAsync = (sql, params = []) =>
   new Promise((resolve, reject) => {
     db.get(sql, params, (err, row) => (err ? reject(err) : resolve(row)));
+  });
+
+const dbRunAsync = (sql, params = []) =>
+  new Promise((resolve, reject) => {
+    db.run(sql, params, function (err) {
+      if (err) return reject(err);
+      resolve(this);
+    });
   });
 
 // Helpers
@@ -39,7 +51,16 @@ const toISO = (d) => {
   return local.toISOString().slice(0, 10);
 };
 
-// Payload para SEFAZ
+// Normaliza código de receita (aceita "20165-0" ou "20165")
+const normalizeReceita = (raw) => {
+  const dig = onlyDigits(raw || '');
+  if (!dig) return 0;
+  // muitas receitas são 5 dígitos + DV -> se vier 6 e os 5 primeiros formam a receita, corta o último
+  if (dig.length === 6) return Number(dig.slice(0, 5));
+  return Number(dig);
+};
+
+// Payload para SEFAZ (permissionários)
 function buildSefazPayloadPermissionario({ perm, darLike }) {
   const cnpj = onlyDigits(perm.cnpj || '');
   if (cnpj.length !== 14) throw new Error(`CNPJ inválido para o permissionário: ${perm.cnpj || 'vazio'}`);
@@ -62,7 +83,7 @@ function buildSefazPayloadPermissionario({ perm, darLike }) {
   }
 
   const codigoIbge = Number(process.env.COD_IBGE_MUNICIPIO || 0);
-  const receitaCod = Number(process.env.RECEITA_CODIGO_PERMISSIONARIO || 0);
+  const receitaCod = normalizeReceita(process.env.RECEITA_CODIGO_PERMISSIONARIO);
   if (!codigoIbge) throw new Error('COD_IBGE_MUNICIPIO não configurado (.env).');
   if (!receitaCod) throw new Error('RECEITA_CODIGO_PERMISSIONARIO não configurado (.env).');
 
@@ -80,12 +101,13 @@ function buildSefazPayloadPermissionario({ perm, darLike }) {
   return {
     versao: '1.0',
     contribuinteEmitente: {
-      codigoTipoInscricao: 4, // 3=CPF, 4=CNPJ
+      codigoTipoInscricao: 4, // 4=CNPJ
       numeroInscricao: cnpj,
       nome: perm.nome_empresa || 'Contribuinte',
       codigoIbgeMunicipio: codigoIbge,
+      // descricaoEndereco/numeroCep são opcionais na API, mas enviamos se soubermos
       descricaoEndereco,
-      numeroCep
+      numeroCep,
     },
     receitas: [
       {
@@ -93,11 +115,11 @@ function buildSefazPayloadPermissionario({ perm, darLike }) {
         competencia: { mes: compMes, ano: compAno },
         valorPrincipal,
         valorDesconto: 0.0,
-        dataVencimento: dataVenc
-      }
+        dataVencimento: dataVenc,
+      },
     ],
     dataLimitePagamento, // **sempre >= hoje**
-    observacao: `Aluguel CIPT - ${String(perm.nome_empresa || '').slice(0, 60)}`
+    observacao: `Aluguel CIPT - ${String(perm.nome_empresa || '').slice(0, 60)}`,
   };
 }
 
@@ -219,7 +241,7 @@ router.post('/:id/emitir', authMiddleware, async (req, res) => {
     // Payload final para a SEFAZ (com dataLimitePagamento >= hoje)
     const payload = buildSefazPayloadPermissionario({ perm, darLike: guiaSource });
 
-    // Chama SEFAZ (ajuste o sefazService para aceitar o payload direto)
+    // Chama SEFAZ (services/sefazService aceita o payload direto)
     const sefazResponse = await emitirGuiaSefaz(payload);
     // Esperado: { numeroGuia, pdfBase64, ... }
     if (!sefazResponse || !sefazResponse.numeroGuia || !sefazResponse.pdfBase64) {
@@ -227,13 +249,10 @@ router.post('/:id/emitir', authMiddleware, async (req, res) => {
     }
 
     // Atualiza DAR no banco
-    await new Promise((resolve, reject) => {
-      db.run(
-        `UPDATE dars SET numero_documento = ?, pdf_url = ?, status = 'Emitido' WHERE id = ?`,
-        [sefazResponse.numeroGuia, sefazResponse.pdfBase64, darId],
-        function (err) { return err ? reject(err) : resolve(this); }
-      );
-    });
+    await dbRunAsync(
+      `UPDATE dars SET numero_documento = ?, pdf_url = ?, status = 'Emitido' WHERE id = ?`,
+      [sefazResponse.numeroGuia, sefazResponse.pdfBase64, darId]
+    );
 
     return res
       .status(200)
@@ -241,7 +260,7 @@ router.post('/:id/emitir', authMiddleware, async (req, res) => {
   } catch (error) {
     console.error('Erro na rota /emitir:', error);
     const isUnavailable =
-      /indispon[ií]vel|Load balancer|ECONNABORTED|ENOTFOUND|EAI_AGAIN|ECONNRESET|ETIMEDOUT/i.test(
+      /indispon[ií]vel|Load balancer|ECONNABORTED|ENOTFOUND|EAI_AGAIN|ECONNRESET|ETIMEDOUT|A SEFAZ não respondeu/i.test(
         error.message || ''
       );
     const status = isUnavailable ? 503 : 500;
