@@ -144,4 +144,4 @@ cron.schedule('0 8 1 * *', gerarDarsEEnviarNotificacoes, {
 console.log('[ROBÔ] Agendador mensal iniciado.');
 
 // Para testar manualmente, descomente:
-// gerarDarsEEnviarNotificacoes();
+gerarDarsEEnviarNotificacoes();
