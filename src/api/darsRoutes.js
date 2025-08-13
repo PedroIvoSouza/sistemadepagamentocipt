@@ -17,16 +17,13 @@ const dbGetAsync = (sql, params = []) =>
 // Helpers
 const onlyDigits = (v = '') => String(v).replace(/\D/g, '');
 
-// Helpers extras
 const toISO = (d) => {
   if (!d) return null;
-  // aceita Date ou string Y-m-d
-  if (d instanceof Date && !isNaN(d.getTime())) return d.toISOString().slice(0,10);
+  if (d instanceof Date && !isNaN(d.getTime())) return d.toISOString().slice(0, 10);
   const s = String(d).trim();
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-  // tenta parsear genérico
   const dt = new Date(s);
-  return isNaN(dt.getTime()) ? null : dt.toISOString().slice(0,10);
+  return isNaN(dt.getTime()) ? null : dt.toISOString().slice(0, 10);
 };
 
 // Monta payload no MESMO formato usado em eventos
@@ -44,37 +41,40 @@ function buildSefazPayloadPermissionario({ perm, darLike }) {
   if (!codigoIbge) throw new Error('COD_IBGE_MUNICIPIO não configurado (.env).');
   if (!receitaCod) throw new Error('RECEITA_CODIGO_PERMISSIONARIO não configurado (.env).');
 
-  // Se sua tabela permissionarios não tiver endereço/cep, use fallbacks (ajuste para a realidade)
+  // Se tua tabela permissionarios tiver endereço/cep no futuro, caem aqui; senão, usamos os fallbacks:
   const descricaoEndereco =
     (perm.endereco && String(perm.endereco).trim()) ||
-    'R. Barão de Jaraguá, 590 - Jaraguá, Maceió/AL'; // fallback
-  const numeroCep = onlyDigits(perm.cep || '') || '57020000'; // fallback seguro
+    (process.env.ENDERECO_PADRAO || 'R. Barão de Jaraguá, 590 - Jaraguá, Maceió/AL');
+  const numeroCep =
+    onlyDigits(perm.cep || '') ||
+    onlyDigits(process.env.CEP_PADRAO || '57020000');
 
   const valorPrincipal = Number(darLike.valor || 0);
   if (!(valorPrincipal > 0)) throw new Error(`Valor do DAR inválido: ${darLike.valor}`);
 
   return {
-    versao: "1.0",
+    versao: '1.0',
     contribuinteEmitente: {
-      codigoTipoInscricao: 4,          // 3=CPF, 4=CNPJ
+      codigoTipoInscricao: 4, // 3=CPF, 4=CNPJ
       numeroInscricao: cnpj,
       nome: perm.nome_empresa || 'Contribuinte',
       codigoIbgeMunicipio: codigoIbge,
       descricaoEndereco,
       numeroCep
     },
-    receitas: [{
-      codigo: receitaCod,
-      competencia: { mes: Number(mes), ano: Number(ano) },
-      valorPrincipal,
-      valorDesconto: 0.00,
-      dataVencimento: dataVenc
-    }],
+    receitas: [
+      {
+        codigo: receitaCod,
+        competencia: { mes: Number(mes), ano: Number(ano) },
+        valorPrincipal,
+        valorDesconto: 0.0,
+        dataVencimento: dataVenc
+      }
+    ],
     dataLimitePagamento: dataVenc,
-    observacao: `Aluguel CIPT - ${String(perm.nome_empresa || '').slice(0,60)}`
+    observacao: `Aluguel CIPT - ${String(perm.nome_empresa || '').slice(0, 60)}`
   };
 }
-
 
 // -------------------- Listagem --------------------
 router.get('/', authMiddleware, (req, res) => {
@@ -120,7 +120,7 @@ router.get('/:id/recalcular', authMiddleware, (req, res) => {
   });
 });
 
-// -------------------- Preview (novo) --------------------
+// -------------------- Preview --------------------
 router.get('/:id/preview', authMiddleware, async (req, res) => {
   const userId = req.user.id;
   const darId = req.params.id;
@@ -132,8 +132,9 @@ router.get('/:id/preview', authMiddleware, async (req, res) => {
     );
     if (!dar) return res.status(404).json({ error: 'DAR não encontrado.' });
 
+    // Atenção: só colunas existentes
     const perm = await dbGetAsync(
-      `SELECT id, nome_empresa, cnpj, endereco, cep FROM permissionarios WHERE id = ?`,
+      `SELECT id, nome_empresa, cnpj FROM permissionarios WHERE id = ?`,
       [userId]
     );
     if (!perm) return res.status(404).json({ error: 'Permissionário não encontrado.' });
@@ -153,7 +154,7 @@ router.get('/:id/preview', authMiddleware, async (req, res) => {
   }
 });
 
-// -------------------- Emitir (corrigido) --------------------
+// -------------------- Emitir --------------------
 router.post('/:id/emitir', authMiddleware, async (req, res) => {
   const userId = req.user.id;
   const darId = req.params.id;
@@ -166,8 +167,9 @@ router.post('/:id/emitir', authMiddleware, async (req, res) => {
     );
     if (!dar) return res.status(404).json({ error: 'DAR não encontrado.' });
 
+    // Atenção: só colunas existentes
     const perm = await dbGetAsync(
-      `SELECT id, nome_empresa, cnpj, endereco, cep FROM permissionarios WHERE id = ?`,
+      `SELECT id, nome_empresa, cnpj FROM permissionarios WHERE id = ?`,
       [userId]
     );
     if (!perm) return res.status(404).json({ error: 'Permissionário não encontrado.' });
@@ -180,10 +182,10 @@ router.post('/:id/emitir', authMiddleware, async (req, res) => {
       guiaSource.data_vencimento = calculo.novaDataVencimento;
     }
 
-    // Monta payload no formato aceito pelo serviço
+    // Payload final para a SEFAZ
     const payload = buildSefazPayloadPermissionario({ perm, darLike: guiaSource });
 
-    // Chama SEFAZ
+    // Chama SEFAZ (ajuste o sefazService para aceitar o payload direto)
     const sefazResponse = await emitirGuiaSefaz(payload);
     // Esperado: { numeroGuia, pdfBase64, ... }
     if (!sefazResponse || !sefazResponse.numeroGuia || !sefazResponse.pdfBase64) {
@@ -199,10 +201,9 @@ router.post('/:id/emitir', authMiddleware, async (req, res) => {
       );
     });
 
-    return res.status(200).json(
-      debug ? { ...sefazResponse, _payloadDebug: payload } : sefazResponse
-    );
-
+    return res
+      .status(200)
+      .json(debug ? { ...sefazResponse, _payloadDebug: payload } : sefazResponse);
   } catch (error) {
     console.error('Erro na rota /emitir:', error);
     const isUnavailable =
