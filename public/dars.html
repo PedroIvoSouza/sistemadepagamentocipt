@@ -125,6 +125,29 @@
     
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        function parsePdfAndNumero(result){
+            const b64 = result?.pdfBase64 || result?.dar_pdf || result?.pdf || null;
+            const numero = result?.numeroGuia || result?.numero || result?.guia || 'GUIA';
+            return { b64, numero };
+            }
+
+        function showBackendError(rspJson, fallback='Erro ao emitir DAR.'){
+            // Tenta pegar a lista de campos do nosso validador do backend
+            const raw = rspJson?.error || rspJson?.message || fallback;
+            // Se vier algo tipo "Campos: a; b; c"
+            const campos = /Campos:\s*(.+)$/.exec(raw);
+            if (campos && campos[1]) {
+                alert(`Erro: ${raw}\n\nVerifique: ${campos[1]}`);
+            } else {
+                alert(`Erro: ${raw}`);
+            }
+        }
+        function safeDownloadPdfBase64(maybeB64, fileName){
+            if (!maybeB64) throw new Error('PDF não retornado.');
+            const raw = String(maybeB64).trim();
+            const base64 = raw.startsWith('data:') ? raw.split(',')[1] : raw;
+            downloadPdfFromBase64(base64, fileName);
+            }
         function downloadPdfFromBase64(base64, fileName) {
             const byteCharacters = atob(base64);
             const byteNumbers = new Array(byteCharacters.length);
@@ -154,7 +177,25 @@
                 window.location.href = '/login.html'; 
                 return;
             }
-            
+            // Torna disponível no escopo global para uso no onclick do HTML
+                window.tentarPreviewDAR = async function tentarPreviewDAR(darId){
+                const tries = [
+                    `/api/dars/${darId}/preview`,
+                    `/api/dars/${darId}/emitir?debug=1` // se o backend suportar modo "debug"
+                ];
+                for (const u of tries){
+                    try{
+                    const r = await fetch(u, { headers });
+                    if (!r.ok) continue;
+                    const j = await r.json();
+                    console.log('[DEBUG][PREVIEW DAR]', j);
+                    alert('Preview de payload disponível no console (F12).');
+                    return;
+                    }catch{}
+                }
+                alert('Preview indisponível (endpoint não implementado).');
+                };
+
             const recalculateModal = new bootstrap.Modal(document.getElementById('recalculoModal'));
             const confirmarEmissaoBtn = document.getElementById('confirmarEmissaoBtn');
             const filtroAno = document.getElementById('filtro-ano');
@@ -212,15 +253,24 @@
                     let tableHTML = '';
                     dars.forEach(dar => {
                         const statusColor = statusColors[dar.status] || 'bg-secondary text-white';
-                        tableHTML += `
+                            tableHTML += `
                             <tr>
                                 <td>${String(dar.mes_referencia).padStart(2, '0')}/${dar.ano_referencia}</td>
-                                <td>${new Date(dar.data_vencimento).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</td>
+                                <td>${new Date(dar.data_vencimento).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</td>
                                 <td class="text-end">${dar.valor.toFixed(2).replace('.', ',')}</td>
                                 <td class="text-center"><span class="badge ${statusColor}">${dar.status}</span></td>
-                                <td class="text-center"><button class="btn btn-primary btn-sm emitir-btn" data-id="${dar.id}" data-status="${dar.status}">Emitir</button></td>
+                                <td class="text-center">
+                                <div class="btn-group">
+                                    <button class="btn btn-primary btn-sm emitir-btn" data-id="${dar.id}" data-status="${dar.status}">
+                                    Emitir
+                                    </button>
+                                    <button class="btn btn-outline-secondary btn-sm" onclick="tentarPreviewDAR(${dar.id})">
+                                    Preview
+                                    </button>
+                                </div>
+                                </td>
                             </tr>
-                        `;
+                            `;
                     });
                     tableBody.innerHTML = tableHTML;
                     
@@ -262,11 +312,16 @@
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json', ...headers }
                         });
-                        const result = await response.json();
-                        if (!response.ok) throw new Error(result.error);
-                        
-                        downloadPdfFromBase64(result.pdfBase64, `DAR_GUIA_${result.numeroGuia}.pdf`);
-                    }
+
+                        const result = await response.json().catch(() => ({}));
+                        if (!response.ok) {
+                            showBackendError(result, 'Falha ao emitir o DAR.');
+                            return;
+                        }
+
+                        const { b64, numero } = parsePdfAndNumero(result);
+                        safeDownloadPdfBase64(b64, `DAR_GUIA_${numero}.pdf`);
+                        }
                 } catch (error) {
                     alert('Erro: ' + error.message);
                 } finally {
@@ -287,14 +342,18 @@
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', ...headers }
                     });
-                    const result = await response.json();
-                    if (!response.ok) throw new Error(result.error);
-                    
-                    downloadPdfFromBase64(result.pdfBase64, `DAR_GUIA_${result.numeroGuia}_ATUALIZADO.pdf`);
+                    const result = await response.json().catch(() => ({}));
+                    if (!response.ok) {
+                        showBackendError(result, 'Falha ao emitir DAR atualizado.');
+                        return;
+                    }
+
+                    const { b64, numero } = parsePdfAndNumero(result);
+                    safeDownloadPdfBase64(b64, `DAR_GUIA_${numero}_ATUALIZADO.pdf`);
                     recalculateModal.hide();
-                } catch (error) {
+                    } catch (error) {
                     alert('Erro: ' + error.message);
-                } finally {
+                    } finally {
                     confirmarEmissaoBtn.disabled = false;
                     confirmarEmissaoBtn.innerHTML = originalBtnText;
                     darIdParaEmitir = null;
