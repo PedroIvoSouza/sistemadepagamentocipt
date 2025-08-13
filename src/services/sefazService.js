@@ -2,9 +2,9 @@
 const axios = require('axios');
 const https = require('https');
 
-/**
- * Lê variáveis de ambiente (.env)
- */
+// ==========================
+// ENV
+// ==========================
 const {
   SEFAZ_MODE = 'hom',
   SEFAZ_API_URL_HOM = 'https://acessosefaz.hom.sefaz.al.gov.br/sfz-arrecadacao-guia-api',
@@ -13,34 +13,65 @@ const {
   COD_IBGE_MUNICIPIO,
   RECEITA_CODIGO_PERMISSIONARIO,
   RECEITA_CODIGO_EVENTO,
-  DOC_ORIGEM_COD,          // opcional (depende da receita)
+  DOC_ORIGEM_COD,            // opcional (se sua receita exigir documento de origem)
   SEFAZ_TLS_INSECURE = 'false',
+  SEFAZ_TIMEOUT_MS = '120000',  // 120s
+  SEFAZ_RETRIES = '5',          // 1 tentativa + 5 retries
 } = process.env;
 
 const BASE_URL = (SEFAZ_MODE || 'hom').toLowerCase() === 'prod'
   ? SEFAZ_API_URL_PROD
   : SEFAZ_API_URL_HOM;
 
-// Agent para ambientes com TLS interceptado/autoassinado (se precisar)
 const httpsAgent = new https.Agent({
-  rejectUnauthorized: String(SEFAZ_TLS_INSECURE).toLowerCase() !== 'true' ? true : false,
+  rejectUnauthorized: String(SEFAZ_TLS_INSECURE).toLowerCase() !== 'true',
 });
 
-// Instância Axios configurada
+// ==========================
+// AXIOS (instância oficial SEFAZ)
+// ==========================
 const sefaz = axios.create({
   baseURL: BASE_URL,
-  timeout: 120000, // 120s
+  timeout: Number(SEFAZ_TIMEOUT_MS || 120000),
   httpsAgent,
   headers: {
-    // Header OBRIGATÓRIO segundo o manual
     appToken: SEFAZ_APP_TOKEN || '',
     'Content-Type': 'application/json',
     Accept: 'application/json',
   },
 });
 
-/** Utils */
+// ==========================
+// Helpers
+// ==========================
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+async function reqWithRetry(doRequest, label = 'sefaz-call') {
+  const maxRetries = Number(SEFAZ_RETRIES || 5);
+  let lastErr;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await doRequest();
+    } catch (err) {
+      lastErr = err;
+      const isTimeout = err?.code === 'ECONNABORTED' || /timeout/i.test(err?.message || '');
+      const noResp = !err?.response; // erros de rede (DNS, TCP reset etc)
+      const retriable = [429, 502, 503, 504].includes(err?.response?.status);
+
+      if (attempt < maxRetries && (isTimeout || noResp || retriable)) {
+        const delay = Math.min(30000, 1000 * Math.pow(2, attempt)); // 1s,2s,4s,8s,16s,30s
+        console.warn(`[SEFAZ][retry ${attempt + 1}/${maxRetries}] ${label}: ${err.message || err}. +${delay}ms`);
+        await sleep(delay);
+        continue;
+      }
+      break;
+    }
+  }
+  throw lastErr;
+}
+
 const onlyDigits = (v = '') => String(v).replace(/\D/g, '');
+
 const toISO = (d) => {
   if (!d) return null;
   if (d instanceof Date && !isNaN(d.getTime())) return d.toISOString().slice(0, 10);
@@ -50,9 +81,6 @@ const toISO = (d) => {
   return isNaN(dt.getTime()) ? null : dt.toISOString().slice(0, 10);
 };
 
-/**
- * Garante que a data limite não seja menor que hoje.
- */
 function clampDataLimitePagamento(dataVencimentoISO, dataLimiteISO) {
   const hojeISO = new Date().toISOString().slice(0, 10);
   const lim = toISO(dataLimiteISO) || toISO(dataVencimentoISO) || hojeISO;
@@ -60,22 +88,21 @@ function clampDataLimitePagamento(dataVencimentoISO, dataLimiteISO) {
 }
 
 /**
- * Normaliza código de receita (remove DV e não-dígitos).
- * Ex.: "20165-0" -> 20165
+ * Normaliza código da receita (remove DV e não-dígitos).
+ * Ex.: "20165-0" => 20165  |  "201650" (5+DV) => 20165
  */
 function normalizeCodigoReceita(cod) {
   const num = onlyDigits(cod);
-  // se vier "201650", e o último dígito for DV, remova 1 dígito:
-  // regra simples: muitas receitas são 5 dígitos + 1 DV. Se tiver 6 e começar com "20165", corta o último.
-  if (num.length === 6 && /^[1-9]\d{4}/.test(num)) {
+  // Muitas receitas são 5 dígitos + 1 DV → se tiver 6 e começar com 5 dígitos válidos, corta o DV
+  if (num.length === 6 && /^[1-9]\d{4}\d$/.test(num)) {
     return Number(num.slice(0, 5));
   }
   return Number(num);
 }
 
-/**
- * Builder GENERICÃO de payload (use se quiser montar “na mão”).
- */
+// ==========================
+// Builders de Payload
+// ==========================
 function buildSefazPayload({
   cnpj,
   nome,
@@ -85,10 +112,12 @@ function buildSefazPayload({
   competenciaAno,
   valorPrincipal,
   dataVencimentoISO,     // YYYY-MM-DD
-  dataLimiteISO,         // YYYY-MM-DD (opcional; será clampado)
+  dataLimiteISO,         // YYYY-MM-DD (opcional, será clampado)
   observacao,
   docOrigem,             // opcional: { codigo: <int>, numero: <string> }
 }) {
+  if (!SEFAZ_APP_TOKEN) throw new Error('SEFAZ_APP_TOKEN não configurado no .env.');
+
   const numeroInscricao = onlyDigits(cnpj || '');
   if (numeroInscricao.length !== 14) throw new Error('CNPJ do emitente inválido.');
 
@@ -107,11 +136,11 @@ function buildSefazPayload({
   const payload = {
     versao: '1.0',
     contribuinteEmitente: {
-      codigoTipoInscricao: 4, // 4=CNPJ
+      codigoTipoInscricao: 4, // 4 = CNPJ
       numeroInscricao,
       nome: nome || 'Contribuinte',
       codigoIbgeMunicipio: Number(codIbgeMunicipio || COD_IBGE_MUNICIPIO || 0),
-      // descricaoEndereco / numeroCep: OPCIONAIS
+      // descricaoEndereco / numeroCep são opcionais na maioria das UGs
     },
     receitas: [{
       codigo: receitaCod,
@@ -137,9 +166,9 @@ function buildSefazPayload({
 }
 
 /**
- * Builder específico para DARs de Permissionários
+ * Permissionários (aluguel)
  *   perm: { cnpj, nome_empresa }
- *   darLike: { valor, data_vencimento, mes_referencia, ano_referencia }
+ *   darLike: { valor, data_vencimento, mes_referencia, ano_referencia, id? }
  */
 function buildSefazPayloadPermissionario({ perm, darLike, receitaCodigo = RECEITA_CODIGO_PERMISSIONARIO }) {
   const cnpj = onlyDigits(perm?.cnpj || '');
@@ -149,7 +178,6 @@ function buildSefazPayloadPermissionario({ perm, darLike, receitaCodigo = RECEIT
   const mes = Number(darLike?.mes_referencia || 0);
   const ano = Number(darLike?.ano_referencia || 0);
 
-  // documento de origem (se a receita exigir, configure DOC_ORIGEM_COD no .env e passe um número aqui)
   const docOrigem = DOC_ORIGEM_COD
     ? { codigo: Number(DOC_ORIGEM_COD), numero: String(darLike?.id || darLike?.numero_documento || darLike?.referencia || '') || String(Date.now()) }
     : null;
@@ -170,9 +198,9 @@ function buildSefazPayloadPermissionario({ perm, darLike, receitaCodigo = RECEIT
 }
 
 /**
- * Builder específico para DARs de Eventos (caso você use receita distinta)
+ * Eventos (se usar receita distinta)
  *   cliente: { cnpj, nome_razao_social }
- *   parcela: { valor, vencimento, competenciaMes, competenciaAno }
+ *   parcela: { valor, vencimento, competenciaMes, competenciaAno, id? }
  */
 function buildSefazPayloadEvento({ cliente, parcela, receitaCodigo = RECEITA_CODIGO_EVENTO }) {
   const cnpj = onlyDigits(cliente?.cnpj || cliente?.documento || '');
@@ -201,23 +229,51 @@ function buildSefazPayloadEvento({ cliente, parcela, receitaCodigo = RECEITA_COD
   });
 }
 
+// ==========================
+// Emissão de Guia
+// ==========================
+async function _postEmitir(payload) {
+  if (!SEFAZ_APP_TOKEN) {
+    throw new Error('SEFAZ_APP_TOKEN não configurado no .env.');
+  }
+  try {
+    const { data } = await reqWithRetry(
+      () => sefaz.post('/api/public/guia/emitir', payload),
+      'guia/emitir'
+    );
+    if (!data || !data.numeroGuia || !data.pdfBase64) {
+      throw new Error('Retorno da SEFAZ incompleto (sem numeroGuia/pdfBase64).');
+    }
+    return data;
+  } catch (err) {
+    if (err.response) {
+      const status = err.response.status;
+      const body = err.response.data;
+      const msg = (body && (body.message || body.detail || body.title)) || `Erro HTTP ${status}`;
+      if (/Data Limite Pagamento.*menor que a data atual/i.test(JSON.stringify(body))) {
+        throw new Error('Data Limite Pagamento não pode ser menor que hoje. (Ajuste automático recomendado no payload)');
+      }
+      throw new Error(`Erro ${status}: ${msg}`);
+    }
+    if (err.request) {
+      const reason = (err.code === 'ECONNABORTED') ? 'timeout' : 'sem resposta';
+      throw new Error(`A SEFAZ não respondeu (${reason}). Verifique a VPN/Infovia e a disponibilidade do serviço.`);
+    }
+    throw new Error(err.message || 'Falha desconhecida ao emitir guia.');
+  }
+}
+
 /**
- * Emissão da Guia na SEFAZ.
  * Forma preferida: emitirGuiaSefaz(payloadPronto)
- *   - payloadPronto: objeto no formato do manual, gerado por um dos builders acima.
  *
- * Compatibilidade retro:
- *   emitirGuiaSefaz(contribuinte, guiaLike)
- *   -> monta payload mínimo automaticamente (APENAS se possível)
+ * Compat: emitirGuiaSefaz(contribuinte, guiaLike) → monta payload perm.
  */
 async function emitirGuiaSefaz(arg1, arg2) {
-  // Se vier payload já formatado
+  // payload já no formato do manual?
   if (arg1 && typeof arg1 === 'object' && arg1.versao && arg1.contribuinteEmitente && arg1.receitas) {
     return _postEmitir(arg1);
   }
-
-  // Compat legacy: (contribuinte, guiaLike)
-  // Só para não quebrar rotas antigas – tenta montar com RECEITA_CODIGO_PERMISSIONARIO.
+  // Compat (contribuinte, guiaLike)
   if (arg1 && arg2) {
     const contrib = arg1 || {};
     const guia = arg2 || {};
@@ -239,132 +295,85 @@ async function emitirGuiaSefaz(arg1, arg2) {
 
     return _postEmitir(payload);
   }
-
   throw new Error('emitirGuiaSefaz: chame com payload pronto ou (contribuinte, guiaLike).');
 }
 
+// ==========================
+// Consultas
+// ==========================
 /**
- * POST /api/public/guia/emitir
- */
-async function _postEmitir(payload) {
-  if (!SEFAZ_APP_TOKEN) {
-    throw new Error('SEFAZ_APP_TOKEN não configurado no .env.');
-  }
-  try {
-    const { data } = await sefaz.post('/api/public/guia/emitir', payload);
-    // Esperado: { numeroGuia, pdfBase64, ... }
-    if (!data || !data.numeroGuia || !data.pdfBase64) {
-      throw new Error('Retorno da SEFAZ incompleto (sem numeroGuia/pdfBase64).');
-    }
-    return data;
-  } catch (err) {
-    // Erro com resposta HTTP (4xx/5xx)
-    if (err.response) {
-      const status = err.response.status;
-      const body = err.response.data;
-      // Manual diz que usam RFC7807 (problem+json) com "message"/"status"
-      const msg = (body && (body.message || body.detail || body.title)) || `Erro HTTP ${status}`;
-      // tratar o caso clássico: Data Limite menor que hoje
-      if (/Data Limite Pagamento.*menor que a data atual/i.test(JSON.stringify(body))) {
-        throw new Error('Data Limite Pagamento não pode ser menor que hoje. (Ajuste automático recomendado no payload)');
-      }
-      throw new Error(`Erro ${status}: ${msg}`);
-    }
-
-    // Erro de rede / timeout (sem resposta)
-    if (err.request) {
-      const reason = (err.code === 'ECONNABORTED') ? 'timeout' : 'sem resposta';
-      throw new Error(`A SEFAZ não respondeu (${reason}). Verifique a VPN/Infovia e a disponibilidade do serviço.`);
-    }
-
-    // Erro de programação/outros
-    throw new Error(err.message || 'Falha desconhecida ao emitir guia.');
-  }
-}
-
-/**
- * (Opcional) Consulta metadados da receita para saber se exige “documento de origem”.
+ * Consulta metadados da receita (saber se exige doc de origem, etc.)
  * GET /api/public/receita/consultar?codigo=NNNNN
  */
 async function consultarReceita(codigo) {
   const cod = normalizeCodigoReceita(codigo);
   try {
-    const { data } = await sefaz.get('/api/public/receita/consultar', {
-      params: { codigo: cod },
-    });
+    const { data } = await reqWithRetry(
+      () => sefaz.get('/api/public/receita/consultar', { params: { codigo: cod } }),
+      'receita/consultar'
+    );
     return data;
-  } catch (err) {
-    // Melhor não explodir: quem chamar decide o que fazer
+  } catch {
     return null;
   }
 }
 
-// ============= NOVO: CONSULTAR GUIA (por número) =============
 /**
- * Consulta uma guia individual na SEFAZ.
- * Esperado que o retorno tenha algo como: { numeroGuia, dataPagamento, ... }
+ * Lista pagamentos por DATA DE ARRECADAÇÃO (YYYY-MM-DD a YYYY-MM-DD)
  */
-async function consultarGuia(numeroGuia) {
-  try {
-    const url = `${PATH_CONSULTA_GUIA}/${encodeURIComponent(numeroGuia)}`;
-    const { data } = await api.get(url);
-    return data;
-  } catch (err) {
-    if (err.code === 'ECONNABORTED') {
-      throw new Error('Timeout consultando a SEFAZ (guia individual).');
-    }
-    if (err.response) {
-      const { status, data } = err.response;
-      const msg = data?.message || data?.title || 'Erro desconhecido';
-      throw new Error(`Erro ${status} ao consultar guia ${numeroGuia}: ${msg}`);
-    }
-    throw new Error(`Falha ao consultar guia ${numeroGuia}: ${err.message}`);
-  }
+async function listarPagamentosPorDataArrecadacao(dataInicioISO, dataFimISO, codigoReceita) {
+  const params = { dataInicio: dataInicioISO, dataFim: dataFimISO };
+  if (codigoReceita) params.codigoReceita = normalizeCodigoReceita(codigoReceita);
+
+  const { data } = await reqWithRetry(
+    () => sefaz.get('/api/public/pagamento/por-data-arrecadacao', { params }),
+    'pagamento/por-data-arrecadacao'
+  );
+
+  const lista = Array.isArray(data) ? data : (data?.itens || data?.content || []);
+  return lista.map(it => ({
+    numeroGuia: it.numeroGuia || it.numero || it.codigoBarras || it.linhaDigitavel || null,
+    dataPagamento: it.dataPagamento || it.dtPagamento || null,
+    valorPago: it.valorPago || it.valor || null,
+    raw: it,
+  }));
 }
 
-// ============= NOVO: CONSULTAR POR PERÍODO =============
 /**
- * Faz uma busca por período (D-1) filtrando por receita.
- * Cada UG pode usar "dataInclusao" OU "dataArrecadacao". Ajuste os nomes de query abaixo
- * de acordo com o manual da sua UG.
- *
- * Retorno esperado: lista com objetos contendo ao menos { numeroGuia, dataPagamento, ... }
+ * Lista pagamentos por DATA DE INCLUSÃO (YYYY-MM-DDTHH:mm:ss a YYYY-MM-DDTHH:mm:ss)
  */
-async function consultarPagamentosPorPeriodo({ inicioISO, fimISO, receitaCodigo }) {
-  try {
-    // Exemplos de filtros (ajuste para sua API):
-    const params = {
-      receitaCodigo: receitaCodigo,
-      dataInclusaoInicial: `${inicioISO} 00:00:00`,
-      dataInclusaoFinal:   `${fimISO} 23:59:59`,
-      // ou use dataArrecadacaoInicial / dataArrecadacaoFinal, conforme a recomendação da UG
-    };
-    const { data } = await api.get(PATH_CONSULTA_PER, { params });
-    // Normalizar para array
-    return Array.isArray(data) ? data : (data?.content || data?.result || []);
-  } catch (err) {
-    if (err.code === 'ECONNABORTED') {
-      throw new Error('Timeout consultando a SEFAZ (período).');
-    }
-    if (err.response) {
-      const { status, data } = err.response;
-      const msg = data?.message || data?.title || 'Erro desconhecido';
-      throw new Error(`Erro ${status} na consulta por período: ${msg}`);
-    }
-    throw new Error(`Falha na consulta por período: ${err.message}`);
-  }
+async function listarPagamentosPorDataInclusao(dataInicioISODateTime, dataFimISODateTime, codigoReceita) {
+  const params = { dataInicio: dataInicioISODateTime, dataFim: dataFimISODateTime };
+  if (codigoReceita) params.codigoReceita = normalizeCodigoReceita(codigoReceita);
+
+  const { data } = await reqWithRetry(
+    () => sefaz.get('/api/public/pagamento/por-data-inclusao', { params }),
+    'pagamento/por-data-inclusao'
+  );
+
+  const lista = Array.isArray(data) ? data : (data?.itens || data?.content || []);
+  return lista.map(it => ({
+    numeroGuia: it.numeroGuia || it.numero || it.codigoBarras || it.linhaDigitavel || null,
+    dataPagamento: it.dataPagamento || it.dtPagamento || null,
+    valorPago: it.valorPago || it.valor || null,
+    raw: it,
+  }));
 }
 
+// ==========================
+// Exports
+// ==========================
 module.exports = {
   emitirGuiaSefaz,
   buildSefazPayloadPermissionario,
   buildSefazPayloadEvento,
   buildSefazPayload,
   consultarReceita,
-  // utils exportados se precisar em outros módulos
+  // utils
   toISO,
   onlyDigits,
   normalizeCodigoReceita,
-  consultarGuia,
-  consultarPagamentosPorPeriodo,
+  // conciliação
+  listarPagamentosPorDataArrecadacao,
+  listarPagamentosPorDataInclusao,
 };

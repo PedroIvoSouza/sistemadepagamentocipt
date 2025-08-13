@@ -1,126 +1,166 @@
 // Em: cron/conciliarPagamentos.js
 require('dotenv').config();
-const cron = require('node-cron');
 const sqlite3 = require('sqlite3').verbose();
-const path = require('path');
+const cron = require('node-cron');
 
-const { consultarGuia, consultarPagamentosPorPeriodo } = require('../src/services/sefazService');
+const {
+  listarPagamentosPorDataArrecadacao,
+  listarPagamentosPorDataInclusao,
+} = require('../src/services/sefazService');
 
-const DB_PATH = path.resolve(process.cwd(), process.env.SQLITE_STORAGE || './sistemacipt.db');
+// ======= DB =======
+const DB_PATH = process.env.SQLITE_STORAGE || './sistemacipt.db';
 const db = new sqlite3.Database(DB_PATH);
 
-function dbAll(sql, params = []) {
-  return new Promise((resolve, reject) => {
-    db.all(sql, params, (err, rows) => (err ? reject(err) : resolve(rows)));
-  });
-}
 function dbRun(sql, params = []) {
   return new Promise((resolve, reject) => {
-    db.run(sql, params, function (err) { return err ? reject(err) : resolve(this); });
+    db.run(sql, params, function (err) {
+      if (err) return reject(err);
+      resolve(this);
+    });
   });
 }
 
-function ymdLocal(date) {
-  const d = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
-  return d.toISOString().slice(0, 10);
-}
-function ontemLocalISO() {
-  const d = new Date();
-  d.setDate(d.getDate() - 1);
-  return ymdLocal(d);
+function dbGet(sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.get(sql, params, (err, row) => (err ? reject(err) : resolve(row)));
+  });
 }
 
-async function conciliarD1() {
-  console.log(`[CONCILIA] Iniciando conciliação D-1… DB=${DB_PATH}`);
-  const inicio = ontemLocalISO();
-  const fim = inicio;
+// ======= Datas D-1 =======
+function ymd(d) {
+  const off = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+  return off.toISOString().slice(0, 10);
+}
+function toDateTimeISO(date, hh, mm, ss) {
+  const local = new Date(date.getFullYear(), date.getMonth(), date.getDate(), hh, mm, ss);
+  const off = new Date(local.getTime() - local.getTimezoneOffset() * 60000);
+  return off.toISOString().slice(0, 19); // YYYY-MM-DDTHH:mm:ss
+}
 
-  const receitas = []
-    .concat(process.env.RECEITA_CODIGO_PERMISSIONARIO || [])
-    .concat(process.env.RECEITA_CODIGO_EVENTO || [])
-    .filter(Boolean)
-    .map(Number);
+// ======= Receitas para conciliar =======
+function receitasAtivas() {
+  const set = new Set();
+  const r1 = Number(process.env.RECEITA_CODIGO_PERMISSIONARIO || 0);
+  const r2 = Number(process.env.RECEITA_CODIGO_EVENTO || 0);
+  if (r1 > 0) set.add(r1);
+  if (r2 > 0) set.add(r2);
+  return Array.from(set);
+}
 
-  // Plano A: consultar por período (mais eficiente)
-  try {
-    let encontrados = 0;
-    for (const receita of receitas) {
-      console.log(`[CONCILIA] Consultando SEFAZ por período: ${inicio} a ${fim} (receita ${receita})`);
-      const lista = await consultarPagamentosPorPeriodo({
-        inicioISO: inicio, fimISO: fim, receitaCodigo: receita
-      });
+// ======= Conciliação =======
+async function conciliarPagamentosD1() {
+  console.log(`[CONCILIA] Iniciando conciliação D-1... DB=${DB_PATH}`);
 
-      if (!Array.isArray(lista) || lista.length === 0) {
-        console.log(`[CONCILIA] Nenhuma guia retornada para a receita ${receita}.`);
+  // janela D-1
+  const hoje = new Date();
+  const d1 = new Date(hoje);
+  d1.setDate(d1.getDate() - 1);
+
+  const dataIni = ymd(d1); // 'YYYY-MM-DD'
+  const dataFim = ymd(d1);
+
+  const dtIni = toDateTimeISO(d1, 0, 0, 0);   // 'YYYY-MM-DDTHH:mm:ss'
+  const dtFim = toDateTimeISO(d1, 23, 59, 59);
+
+  const receitas = receitasAtivas();
+  if (receitas.length === 0) {
+    console.warn('[CONCILIA] Nenhuma receita configurada no .env (RECEITA_CODIGO_PERMISSIONARIO/RECEITA_CODIGO_EVENTO).');
+    return;
+  }
+
+  let totalEncontrados = 0;
+  let totalAtualizados = 0;
+
+  for (const cod of receitas) {
+    console.log(`[CONCILIA] Buscando pagamentos de ${dataIni} a ${dataFim} para receita ${cod}...`);
+
+    let itens = [];
+    try {
+      itens = await listarPagamentosPorDataArrecadacao(dataIni, dataFim, cod);
+    } catch (e) {
+      console.warn(`[CONCILIA] Falha no por-data-arrecadacao: ${e.message || e}`);
+    }
+
+    if (!Array.isArray(itens) || itens.length === 0) {
+      try {
+        itens = await listarPagamentosPorDataInclusao(dtIni, dtFim, cod);
+      } catch (e) {
+        console.warn(`[CONCILIA] Falha no por-data-inclusao: ${e.message || e}`);
+      }
+    }
+
+    console.log(`[CONCILIA] Receita ${cod}: retornados ${itens.length} registros.`);
+
+    for (const it of itens) {
+      const numero = String(it.numeroGuia || '').trim();
+      if (!numero) continue;
+
+      totalEncontrados += 1;
+
+      // 1) Tenta por numero_documento (caminho oficial)
+      const r1 = await dbRun(
+        `UPDATE dars
+            SET status = 'Pago',
+                data_pagamento = COALESCE(?, data_pagamento)
+          WHERE numero_documento = ?`,
+        [it.dataPagamento || null, numero]
+      );
+      if (r1?.changes > 0) {
+        totalAtualizados += r1.changes;
         continue;
       }
 
-      // Normalizar os campos que precisamos
-      const pagos = lista
-        .map(x => ({
-          numeroGuia: x.numeroGuia || x.numero || x.guia || null,
-          dataPagamento: x.dataPagamento || x.dataArrecadacao || null
-        }))
-        .filter(x => x.numeroGuia && x.dataPagamento);
+      // 2) Fallback: legado sem numero_documento -> usa codigo_barras
+      const r2 = await dbRun(
+        `UPDATE dars
+            SET status = 'Pago',
+                data_pagamento = COALESCE(?, data_pagamento),
+                numero_documento = COALESCE(numero_documento, codigo_barras)
+          WHERE codigo_barras = ?
+            AND (numero_documento IS NULL OR numero_documento = '')`,
+        [it.dataPagamento || null, numero]
+      );
+      if (r2?.changes > 0) {
+        totalAtualizados += r2.changes;
+        continue;
+      }
 
-      console.log(`[CONCILIA] Recebidas ${lista.length}; com pagamento ${pagos.length}.`);
-
-      for (const it of pagos) {
-        const dataPag = String(it.dataPagamento).slice(0, 10); // YYYY-MM-DD
-        await dbRun(
-          `UPDATE dars
-             SET status = 'Pago',
-                 data_pagamento = ?
-           WHERE numero_documento = ?`,
-          [dataPag, String(it.numeroGuia)]
-        );
-        encontrados++;
+      // 3) Em alguns retornos o campo que “bate” é a linha digitável.
+      const r3 = await dbRun(
+        `UPDATE dars
+            SET status = 'Pago',
+                data_pagamento = COALESCE(?, data_pagamento)
+          WHERE linha_digitavel = ?`,
+        [it.dataPagamento || null, numero]
+      );
+      if (r3?.changes > 0) {
+        totalAtualizados += r3.changes;
       }
     }
-    console.log(`[CONCILIA] Plano A concluído. Atualizadas ${encontrados} guias.`);
-    if (encontrados > 0) return; // sucesso — nem precisa do Plano B
-  } catch (err) {
-    console.warn('[CONCILIA] Falha no Plano A (período):', err.message);
   }
 
-  // Plano B: consulta individual (fallback)
-  try {
-    console.log('[CONCILIA] Iniciando fallback: consulta individual de guias emitidas…');
-    const candidatos = await dbAll(
-      `SELECT id, numero_documento
-         FROM dars
-        WHERE numero_documento IS NOT NULL
-          AND status IN ('Emitido','Pendente','Vencido')`
-    );
-
-    let atualizados = 0;
-    for (const row of candidatos) {
-      try {
-        const det = await consultarGuia(row.numero_documento);
-        const dataPag = det?.dataPagamento;
-        if (dataPag) {
-          await dbRun(
-            `UPDATE dars
-               SET status = 'Pago',
-                   data_pagamento = ?
-             WHERE id = ?`,
-            [String(dataPag).slice(0, 10), row.id]
-          );
-          atualizados++;
-        }
-      } catch (e) {
-        // Não quebra o loop por erro em um item
-        console.warn(`[CONCILIA] Falha ao consultar guia ${row.numero_documento}:`, e.message);
-      }
-    }
-    console.log(`[CONCILIA] Fallback concluído. Atualizadas ${atualizados} guias.`);
-  } catch (err) {
-    console.error('[CONCILIA] Falha no fallback:', err.message);
-  }
+  console.log(`[CONCILIA] Finalizado. Registros retornados: ${totalEncontrados}. DARs atualizados: ${totalAtualizados}.`);
 }
 
-cron.schedule('0 2 * * *', conciliarD1, { timezone: 'America/Maceio' });
-console.log('[CONCILIA] Agendador diário iniciado (02:00 America/Maceio).');
+// ======= Agendamento diário (02:05 America/Maceio) =======
+function scheduleConciliacao() {
+  cron.schedule('5 2 * * *', conciliarPagamentosD1, {
+    scheduled: true,
+    timezone: 'America/Maceio',
+  });
+  console.log('[CONCILIA] Agendador diário iniciado (02:05 America/Maceio).');
+}
 
-// Para rodar manualmente:
-// conciliarD1().then(()=>process.exit(0)).catch(()=>process.exit(1));
+// Se rodar diretamente: executa uma vez
+if (require.main === module) {
+  conciliarPagamentosD1()
+    .catch((e) => {
+      console.error('[CONCILIA] ERRO:', e.message || e);
+      process.exit(1);
+    })
+    .finally(() => db.close());
+} else {
+  // exporta para ser usado pelo seu index/boot
+  module.exports = { scheduleConciliacao, conciliarPagamentosD1 };
+}
