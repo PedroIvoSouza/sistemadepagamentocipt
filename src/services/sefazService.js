@@ -29,7 +29,7 @@ const httpsAgent = new https.Agent({
 // Instância Axios configurada
 const sefaz = axios.create({
   baseURL: BASE_URL,
-  timeout: 20000, // 20s
+  timeout: 120000, // 120s
   httpsAgent,
   headers: {
     // Header OBRIGATÓRIO segundo o manual

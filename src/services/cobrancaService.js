@@ -60,7 +60,7 @@ async function calcularEncargosAtraso(dar) {
         const httpsAgent = new https.Agent({ rejectUnauthorized: false });
         const url = 'https://brasilapi.com.br/api/taxas/v1/selic';
 
-        const response = await axios.get(url, { httpsAgent, timeout: 15000 });
+        const response = await axios.get(url, { httpsAgent, timeout: 120000 });
 
         // Verificação de segurança AJUSTADA para esperar um OBJETO, não um array.
         if (response && response.data && typeof response.data === 'object' && response.data.hasOwnProperty('valor')) {
