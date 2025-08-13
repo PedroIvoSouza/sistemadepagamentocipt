@@ -1,6 +1,4 @@
 // Em: src/api/darsRoutes.js
-
-// Em: src/api/darsRoutes.js (topo)
 const path = require('path');
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
@@ -11,11 +9,8 @@ const { emitirGuiaSefaz } = require('../services/sefazService');
 
 const router = express.Router();
 
-// >>> use o caminho do .env, com fallback e log do caminho absoluto
-const DB_PATH = path.resolve(
-  process.cwd(),
-  process.env.SQLITE_STORAGE || './sistemacipt.db'
-);
+// === DB setup ===============================================================
+const DB_PATH = path.resolve(process.cwd(), process.env.SQLITE_STORAGE || './sistemacipt.db');
 console.log(`[DB] Abrindo SQLite em: ${DB_PATH}`);
 const db = new sqlite3.Database(DB_PATH);
 
@@ -38,7 +33,7 @@ const dbRunAsync = (sql, params = []) =>
     });
   });
 
-// Sanity check (log) — ajuda a detectar DB errado na hora
+// Sanity check (log inicial)
 (async () => {
   try {
     const colsDars = (await dbAllAsync('PRAGMA table_info(dars)')).map(c => c.name);
@@ -50,6 +45,7 @@ const dbRunAsync = (sql, params = []) =>
     const missing = [];
     if (!colsDars.includes('numero_documento')) missing.push('dars.numero_documento');
     if (!colsDars.includes('pdf_url')) missing.push('dars.pdf_url');
+    if (!colsDars.includes('linha_digitavel')) missing.push('dars.linha_digitavel');
     if (!colsPerm.includes('numero_documento')) missing.push('permissionarios.numero_documento');
 
     if (missing.length) {
@@ -61,10 +57,7 @@ const dbRunAsync = (sql, params = []) =>
   }
 })();
 
-
-// ======================================================
 // Auto-migrate (garante colunas usadas no código)
-// ======================================================
 async function getTableColumns(table) {
   const sql = `PRAGMA table_info(${table})`;
   return new Promise((resolve, reject) => {
@@ -84,19 +77,16 @@ async function ensureColumn(table, column, type) {
 async function ensureSchema() {
   await ensureColumn('dars', 'numero_documento', 'TEXT');
   await ensureColumn('dars', 'pdf_url', 'TEXT');
+  await ensureColumn('dars', 'linha_digitavel', 'TEXT');
   await ensureColumn('permissionarios', 'numero_documento', 'TEXT');
 }
-// dispara sem bloquear rota
-ensureSchema().catch(err => {
-  console.error('[MIGRATE] Falha garantindo schema:', err);
-});
+// dispara sem bloquear
+ensureSchema().catch(err => console.error('[MIGRATE] Falha garantindo schema:', err));
 
-// ======================================================
-// Utils
-// ======================================================
+// === Utils ==================================================================
 const onlyDigits = (v = '') => String(v).replace(/\D/g, '');
 
-// YYYY-MM-DD no horário local (evita “voltar 1 dia” pelo UTC)
+// YYYY-MM-DD no horário local
 const isoHojeLocal = () => {
   const now = new Date();
   const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
@@ -127,11 +117,11 @@ function buildSefazPayloadPermissionario({ perm, darLike }) {
   let dataVenc = toISO(darLike.data_vencimento);
   if (!dataVenc) throw new Error(`Data de vencimento inválida: ${darLike.data_vencimento}`);
 
-  // hoje local e limite >= hoje
+  // limite >= hoje
   const hoje = isoHojeLocal();
   const dataLimitePagamento = dataVenc < hoje ? hoje : dataVenc;
 
-  // competência: preferir a referência do DAR, senão cair no mês/ano do vencimento
+  // competência
   let compMes = Number(darLike.mes_referencia);
   let compAno = Number(darLike.ano_referencia);
   if (!compMes || !compAno) {
@@ -145,11 +135,10 @@ function buildSefazPayloadPermissionario({ perm, darLike }) {
   if (!codigoIbge) throw new Error('COD_IBGE_MUNICIPIO não configurado (.env).');
   if (!receitaCod) throw new Error('RECEITA_CODIGO_PERMISSIONARIO não configurado (.env).');
 
+  // Sem depender de colunas endereco/cep (usa fallbacks .env)
   const descricaoEndereco =
-    (perm.endereco && String(perm.endereco).trim()) ||
     (process.env.ENDERECO_PADRAO || 'R. Barão de Jaraguá, 590 - Jaraguá, Maceió/AL');
   const numeroCep =
-    onlyDigits(perm.cep || '') ||
     onlyDigits(process.env.CEP_PADRAO || '57020000');
 
   const valorPrincipal = Number(darLike.valor || 0);
@@ -174,14 +163,12 @@ function buildSefazPayloadPermissionario({ perm, darLike }) {
         dataVencimento: dataVenc
       }
     ],
-    dataLimitePagamento, // **sempre >= hoje**
+    dataLimitePagamento,
     observacao: `Aluguel CIPT - ${String(perm.nome_empresa || '').slice(0, 60)}`
   };
 }
 
-// ======================================================
-// Rotas
-// ======================================================
+// === Rotas ==================================================================
 
 // Listagem dos DARs do permissionário logado
 router.get('/', authMiddleware, (req, res) => {
@@ -296,7 +283,7 @@ router.post('/:id/emitir', authMiddleware, async (req, res) => {
     // Payload final para a SEFAZ
     const payload = buildSefazPayloadPermissionario({ perm, darLike: guiaSource });
 
-    // Chamada à SEFAZ (sefazService já trata timeouts e mensagens)
+    // Chamada à SEFAZ
     const sefazResponse = await emitirGuiaSefaz(payload);
     // Esperado: { numeroGuia, pdfBase64, ... }
     if (!sefazResponse || !sefazResponse.numeroGuia || !sefazResponse.pdfBase64) {
@@ -308,6 +295,15 @@ router.post('/:id/emitir', authMiddleware, async (req, res) => {
     await dbRunAsync(
       `UPDATE dars SET numero_documento = ?, pdf_url = ?, status = 'Emitido' WHERE id = ?`,
       [sefazResponse.numeroGuia, sefazResponse.pdfBase64, darId]
+    );
+
+    // Compat com campos antigos (preenche se estiverem nulos)
+    await dbRunAsync(
+      `UPDATE dars
+         SET codigo_barras = COALESCE(numero_documento, codigo_barras),
+             link_pdf      = COALESCE(pdf_url, link_pdf)
+       WHERE id = ?`,
+      [darId]
     );
 
     return res
@@ -324,12 +320,5 @@ router.post('/:id/emitir', authMiddleware, async (req, res) => {
     return res.status(status).json({ error: error.message || 'Erro interno do servidor.' });
   }
 });
-// compat opcional com campos antigos
-await dbRunAsync(
-  `UPDATE dars SET codigo_barras = COALESCE(numero_documento, codigo_barras),
-                   link_pdf      = COALESCE(pdf_url, link_pdf)
-    WHERE id = ?`,
-  [darId]
-);
 
 module.exports = router;
