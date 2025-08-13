@@ -299,6 +299,62 @@ async function consultarReceita(codigo) {
   }
 }
 
+// ============= NOVO: CONSULTAR GUIA (por número) =============
+/**
+ * Consulta uma guia individual na SEFAZ.
+ * Esperado que o retorno tenha algo como: { numeroGuia, dataPagamento, ... }
+ */
+async function consultarGuia(numeroGuia) {
+  try {
+    const url = `${PATH_CONSULTA_GUIA}/${encodeURIComponent(numeroGuia)}`;
+    const { data } = await api.get(url);
+    return data;
+  } catch (err) {
+    if (err.code === 'ECONNABORTED') {
+      throw new Error('Timeout consultando a SEFAZ (guia individual).');
+    }
+    if (err.response) {
+      const { status, data } = err.response;
+      const msg = data?.message || data?.title || 'Erro desconhecido';
+      throw new Error(`Erro ${status} ao consultar guia ${numeroGuia}: ${msg}`);
+    }
+    throw new Error(`Falha ao consultar guia ${numeroGuia}: ${err.message}`);
+  }
+}
+
+// ============= NOVO: CONSULTAR POR PERÍODO =============
+/**
+ * Faz uma busca por período (D-1) filtrando por receita.
+ * Cada UG pode usar "dataInclusao" OU "dataArrecadacao". Ajuste os nomes de query abaixo
+ * de acordo com o manual da sua UG.
+ *
+ * Retorno esperado: lista com objetos contendo ao menos { numeroGuia, dataPagamento, ... }
+ */
+async function consultarPagamentosPorPeriodo({ inicioISO, fimISO, receitaCodigo }) {
+  try {
+    // Exemplos de filtros (ajuste para sua API):
+    const params = {
+      receitaCodigo: receitaCodigo,
+      dataInclusaoInicial: `${inicioISO} 00:00:00`,
+      dataInclusaoFinal:   `${fimISO} 23:59:59`,
+      // ou use dataArrecadacaoInicial / dataArrecadacaoFinal, conforme a recomendação da UG
+    };
+    const { data } = await api.get(PATH_CONSULTA_PER, { params });
+    // Normalizar para array
+    return Array.isArray(data) ? data : (data?.content || data?.result || []);
+  } catch (err) {
+    if (err.code === 'ECONNABORTED') {
+      throw new Error('Timeout consultando a SEFAZ (período).');
+    }
+    if (err.response) {
+      const { status, data } = err.response;
+      const msg = data?.message || data?.title || 'Erro desconhecido';
+      throw new Error(`Erro ${status} na consulta por período: ${msg}`);
+    }
+    throw new Error(`Falha na consulta por período: ${err.message}`);
+  }
+}
+
 module.exports = {
   emitirGuiaSefaz,
   buildSefazPayloadPermissionario,
@@ -309,4 +365,6 @@ module.exports = {
   toISO,
   onlyDigits,
   normalizeCodigoReceita,
+  consultarGuia,
+  consultarPagamentosPorPeriodo,
 };
