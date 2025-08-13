@@ -234,6 +234,85 @@ router.get('/:eventoId/dars', async (req, res) => {
   }
 });
 
+// GET /api/admin/eventos/:id  -> detalhes do evento para edição
+router.get('/:id', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const ev = await dbGet(
+      `SELECT e.*, c.nome_razao_social AS nome_cliente, c.tipo_cliente
+         FROM Eventos e
+         JOIN Clientes_Eventos c ON c.id = e.id_cliente
+        WHERE e.id = ?`,
+      [id],
+      'evento/get-by-id'
+    );
+
+    if (!ev) return res.status(404).json({ error: 'Evento não encontrado.' });
+
+    // Normaliza datas_evento (pode ter sido salvo como JSON string)
+    let datas = [];
+    try {
+      if (typeof ev.datas_evento === 'string') {
+        datas = ev.datas_evento.trim().startsWith('[')
+          ? JSON.parse(ev.datas_evento)
+          : ev.datas_evento.split(',').map(s => s.trim()).filter(Boolean);
+      } else if (Array.isArray(ev.datas_evento)) {
+        datas = ev.datas_evento;
+      }
+    } catch { /* mantém vazio */ }
+
+    const parcelas = await dbAll(
+      `SELECT 
+          de.numero_parcela,
+          de.valor_parcela            AS valor,
+          de.data_vencimento          AS vencimento,
+          d.id                        AS dar_id,
+          d.status                    AS dar_status,
+          d.pdf_url                   AS dar_pdf,
+          d.numero_documento          AS dar_numero
+         FROM DARs_Eventos de
+         JOIN dars d ON d.id = de.id_dar
+        WHERE de.id_evento = ?
+        ORDER BY de.numero_parcela ASC`,
+      [id],
+      'evento/get-parcelas'
+    );
+
+    // Resposta no formato que seu front espera (normalizarEvento)
+    const payload = {
+      evento: {
+        id: ev.id,
+        id_cliente: ev.id_cliente,
+        nome_evento: ev.nome_evento,
+        datas_evento: datas,
+        total_diarias: ev.total_diarias,
+        valor_bruto: ev.valor_bruto,
+        tipo_desconto_auto: ev.tipo_desconto,
+        desconto_manual_percent: ev.desconto_manual,
+        valor_final: ev.valor_final,
+        status: ev.status,
+        nome_cliente: ev.nome_cliente,
+        tipo_cliente: ev.tipo_cliente
+      },
+      parcelas: parcelas
+    };
+
+    return res.json(payload);
+  } catch (err) {
+    console.error('[admin/eventos/:id] erro:', err.message);
+    return res.status(500).json({ error: 'Erro interno ao buscar o evento.' });
+  }
+});
+
+// GET /api/admin/eventos/:id/detalhes  -> alias para o mesmo payload
+router.get('/:id/detalhes', async (req, res) => {
+  // reaproveita a rota acima chamando a própria lógica
+  req.url = `/${req.params.id}`; // “redireciona” internamente
+  return router.handle(req, res); // delega
+});
+
+
 /**
  * Reemitir DAR específica
  */
