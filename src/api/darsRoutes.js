@@ -295,5 +295,12 @@ router.post('/:id/emitir', authMiddleware, async (req, res) => {
     return res.status(status).json({ error: error.message || 'Erro interno do servidor.' });
   }
 });
+// compat opcional com campos antigos
+await dbRunAsync(
+  `UPDATE dars SET codigo_barras = COALESCE(numero_documento, codigo_barras),
+                   link_pdf      = COALESCE(pdf_url, link_pdf)
+    WHERE id = ?`,
+  [darId]
+);
 
 module.exports = router;
