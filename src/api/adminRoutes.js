@@ -1,19 +1,22 @@
+// src/api/adminRoutes.js
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
-// --- MUDANÇA 1: Importando os novos middlewares ---
-const authMiddleware = require('../middleware/authMiddleware');
-const authorizeRole = require('../middleware/roleMiddleware');
-// ----------------------------------------------------
 const { Parser } = require('json2csv');
 const xlsx = require('xlsx');
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
 
+// Middlewares
+const authMiddleware = require('../middleware/authMiddleware');
+const authorizeRole = require('../middleware/roleMiddleware');
+
 const router = express.Router();
 const db = new sqlite3.Database('./sistemacipt.db');
 
-// Funções auxiliares para facilitar as consultas ao banco
+/* =========================
+   Helpers SQLite (promises)
+   ========================= */
 const dbGet = (sql, params = []) =>
   new Promise((resolve, reject) => {
     db.get(sql, params, (err, row) => (err ? reject(err) : resolve(row)));
@@ -24,219 +27,264 @@ const dbAll = (sql, params = []) =>
     db.all(sql, params, (err, rows) => (err ? reject(err) : resolve(rows)));
   });
 
-// --- MUDANÇA 2: Atualizando a proteção da rota ---
-// ROTA 1: GET /api/admin/dashboard-stats
-router.get('/dashboard-stats', [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN'])], async (req, res) => {
-  try {
-    const totalPermissionarios = (await dbGet(
-      `SELECT COUNT(*) as count FROM permissionarios`
-    )).count;
-    const darsPendentes = (await dbGet(
-      `SELECT COUNT(*) as count FROM dars WHERE status = 'Pendente'`
-    )).count;
-    const darsVencidos = (await dbGet(
-      `SELECT COUNT(*) as count FROM dars WHERE status = 'Vencido'`
-    )).count;
-    const receitaPendente =
-      (await dbGet(
-        `SELECT SUM(valor) as sum FROM dars WHERE status = 'Pendente' OR status = 'Vencido'` // Corrigido para incluir vencidos
-      )).sum || 0;
-
-    const resumoMensal = await dbAll(
-      `
-      SELECT
-        ano_referencia,
-        mes_referencia,
-        COUNT(*) as emitidas,
-        SUM(CASE WHEN status = 'Pago' THEN 1 ELSE 0 END) as pagas,
-        SUM(CASE WHEN status = 'Vencido' THEN 1 ELSE 0 END) as vencidas
-      FROM dars
-      GROUP BY ano_referencia, mes_referencia
-      ORDER BY ano_referencia DESC, mes_referencia DESC
-      LIMIT 6
-    `
-    );
-
-    const maioresDevedores = await dbAll(
-      `
-      SELECT
-        p.nome_empresa,
-        SUM(d.valor) as total_devido
-      FROM dars d
-      JOIN permissionarios p ON p.id = d.permissionario_id
-      WHERE d.status IN ('Pendente','Vencido')
-      GROUP BY p.id, p.nome_empresa
-      ORDER BY total_devido DESC
-      LIMIT 5
-    `
-    );
-
-    res.status(200).json({
-      totalPermissionarios,
-      darsPendentes,
-      darsVencidos,
-      receitaPendente: receitaPendente.toFixed(2),
-      resumoMensal,
-      maioresDevedores,
+const dbRun = (sql, params = []) =>
+  new Promise((resolve, reject) => {
+    db.run(sql, params, function (err) {
+      if (err) return reject(err);
+      resolve(this);
     });
-  } catch (error) {
-    console.error('Erro ao buscar estatísticas:', error);
-    res
-      .status(500)
-      .json({ error: 'Erro ao buscar as estatísticas do dashboard.' });
-  }
-});
+  });
 
-// --- MUDANÇA 3: Atualizando a proteção das rotas de permissionários ---
-// ROTA 2: GET /api/admin/permissionarios
-router.get('/permissionarios', [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN'])], async (req, res) => {
-  // ... (o resto do código da rota continua igual)
+/* =========================
+   Índices para performance
+   - idempotentes (IF NOT EXISTS)
+   - importantes para as queries do dashboard
+   ========================= */
+async function ensureIndexes() {
   try {
-    const { search = '', page = 1, limit = 10 } = req.query;
-    const offset = (page - 1) * limit;
+    await dbRun(`PRAGMA journal_mode = WAL;`);
+  } catch {}
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_dars_status             ON dars(status);`);
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_dars_data_vencimento    ON dars(data_vencimento);`);
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_dars_status_venc        ON dars(status, data_vencimento);`);
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_dars_permissionario     ON dars(permissionario_id);`);
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_perm_nome               ON permissionarios(nome_empresa);`);
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_perm_cnpj               ON permissionarios(cnpj);`);
+}
+ensureIndexes().catch(e => console.error('[adminRoutes] ensureIndexes error:', e.message));
 
-    let whereClause = '';
-    const params = [];
-    if (search) {
-      whereClause = `WHERE nome_empresa LIKE ? OR cnpj LIKE ?`;
-      params.push(`%${search}%`, `%${search}%`);
-    }
-
-    const countSql = `SELECT COUNT(*) as count FROM permissionarios ${whereClause}`;
-    const totalResult = await dbGet(countSql, params);
-    const totalPermissionarios = totalResult.count;
-
-    const dataSql = `
-      SELECT
-        id, nome_empresa, cnpj, email, telefone, numero_sala
-      FROM permissionarios
-      ${whereClause}
-      ORDER BY nome_empresa ASC
-      LIMIT ? OFFSET ?
-    `;
-    const permissionarios = await dbAll(dataSql, [
-      ...params,
-      limit,
-      offset,
-    ]);
-
-    res.status(200).json({
-      permissionarios,
-      totalPages: Math.ceil(totalPermissionarios / limit),
-      currentPage: Number(page),
-    });
-  } catch (error) {
-    console.error('Erro ao buscar permissionários:', error);
-    res
-      .status(500)
-      .json({ error: 'Erro ao buscar a lista de permissionários.' });
-  }
-});
-
-// ROTA 3: GET /api/admin/permissionarios/:id
-router.get('/permissionarios/:id', [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN'])], async (req, res) => {
-    // ... (o resto do código da rota continua igual)
+/* ===========================================================
+   GET /api/admin/dashboard-stats
+   - Usa ISO yyyy-mm-dd como parâmetro => ativa índice por comparação
+   - "vencidas" = não pagas com data_vencimento < hoje
+   =========================================================== */
+router.get(
+  '/dashboard-stats',
+  [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN'])],
+  async (req, res) => {
     try {
-        const { id } = req.params;
-        const user = await dbGet(
-          `SELECT * FROM permissionarios WHERE id = ?`,
-          [id]
-        );
-        if (user) {
-          res.json(user);
-        } else {
-          res.status(404).json({ error: 'Permissionário não encontrado.' });
-        }
-      } catch (error) {
-        console.error(
-          'Erro na rota GET /permissionarios/:id:',
-          error
-        );
-        res
-          .status(500)
-          .json({ error: 'Erro ao buscar dados do permissionário.' });
-      }
-});
+      const isoToday = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
 
-// ROTA 4: PUT /api/admin/permissionarios/:id
-router.put('/permissionarios/:id', [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN'])], async (req, res) => {
-    // ... (o resto do código da rota continua igual)
+      const totalPermissionarios = (await dbGet(
+        `SELECT COUNT(*) AS count FROM permissionarios`
+      )).count;
+
+      // Em aberto (não pagos)
+      const pendRow = await dbGet(
+        `SELECT COUNT(*) AS qnt, COALESCE(SUM(valor),0) AS valor
+         FROM dars
+         WHERE status <> 'Pago'`
+      );
+      const darsPendentes   = pendRow?.qnt ?? 0;
+      const receitaPendente = Number(pendRow?.valor ?? 0);
+
+      // Vencidos: não pagos com vencimento anterior a hoje (comparação textual ativa índice)
+      const vencRow = await dbGet(
+        `SELECT COUNT(*) AS qnt
+         FROM dars
+         WHERE status <> 'Pago'
+           AND data_vencimento < ?`,
+        [isoToday]
+      );
+      const darsVencidos = vencRow?.qnt ?? 0;
+
+      // Resumo mensal (últimos 6 grupos)
+      const resumoMensal = await dbAll(
+        `SELECT
+            CAST(strftime('%Y', data_vencimento) AS INTEGER) AS ano_referencia,
+            CAST(strftime('%m', data_vencimento) AS INTEGER) AS mes_referencia,
+            COUNT(*)                                                  AS emitidas,
+            SUM(CASE WHEN status = 'Pago' THEN 1 ELSE 0 END)          AS pagas,
+            SUM(CASE WHEN status <> 'Pago' AND data_vencimento < ? THEN 1 ELSE 0 END) AS vencidas
+         FROM dars
+         GROUP BY ano_referencia, mes_referencia
+         ORDER BY ano_referencia DESC, mes_referencia DESC
+         LIMIT 6`,
+        [isoToday]
+      );
+
+      // Maiores devedores: não pagos
+      const maioresDevedores = await dbAll(
+        `SELECT
+            p.nome_empresa,
+            SUM(d.valor) AS total_devido
+         FROM dars d
+         JOIN permissionarios p ON p.id = d.permissionario_id
+         WHERE d.status <> 'Pago'
+         GROUP BY p.id, p.nome_empresa
+         HAVING total_devido > 0
+         ORDER BY total_devido DESC
+         LIMIT 5`
+      );
+
+      res.status(200).json({
+        totalPermissionarios,
+        darsPendentes,
+        darsVencidos,
+        receitaPendente: receitaPendente.toFixed(2),
+        resumoMensal,
+        maioresDevedores,
+      });
+    } catch (error) {
+      console.error('Erro ao buscar estatísticas:', error);
+      res.status(500).json({ error: 'Erro ao buscar as estatísticas do dashboard.' });
+    }
+  }
+);
+
+/* ===========================================================
+   Rotas de Permissionários (mantidas como você tinha)
+   =========================================================== */
+
+// GET /api/admin/permissionarios
+router.get(
+  '/permissionarios',
+  [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN'])],
+  async (req, res) => {
+    try {
+      const { search = '', page = 1, limit = 10 } = req.query;
+      const offset = (page - 1) * limit;
+
+      let whereClause = '';
+      const params = [];
+      if (search) {
+        whereClause = `WHERE nome_empresa LIKE ? OR cnpj LIKE ?`;
+        params.push(`%${search}%`, `%${search}%`);
+      }
+
+      const countSql = `SELECT COUNT(*) as count FROM permissionarios ${whereClause}`;
+      const totalResult = await dbGet(countSql, params);
+      const totalPermissionarios = totalResult.count;
+
+      const dataSql = `
+        SELECT id, nome_empresa, cnpj, email, telefone, numero_sala
+        FROM permissionarios
+        ${whereClause}
+        ORDER BY nome_empresa ASC
+        LIMIT ? OFFSET ?
+      `;
+      const permissionarios = await dbAll(dataSql, [...params, limit, offset]);
+
+      res.status(200).json({
+        permissionarios,
+        totalPages: Math.ceil(totalPermissionarios / limit),
+        currentPage: Number(page),
+      });
+    } catch (error) {
+      console.error('Erro ao buscar permissionários:', error);
+      res.status(500).json({ error: 'Erro ao buscar a lista de permissionários.' });
+    }
+  }
+);
+
+// GET /api/admin/permissionarios/:id
+router.get(
+  '/permissionarios/:id',
+  [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN'])],
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const user = await dbGet(
+        `SELECT * FROM permissionarios WHERE id = ?`,
+        [id]
+      );
+      if (user) {
+        res.json(user);
+      } else {
+        res.status(404).json({ error: 'Permissionário não encontrado.' });
+      }
+    } catch (error) {
+      console.error('Erro na rota GET /permissionarios/:id:', error);
+      res.status(500).json({ error: 'Erro ao buscar dados do permissionário.' });
+    }
+  }
+);
+
+// PUT /api/admin/permissionarios/:id
+router.put(
+  '/permissionarios/:id',
+  [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN'])],
+  async (req, res) => {
     const { id } = req.params;
     const {
-        nome_empresa, cnpj, email, telefone, numero_sala, valor_aluguel,
-      } = req.body;
-    // ... (validações)
+      nome_empresa, cnpj, email, telefone, numero_sala, valor_aluguel,
+    } = req.body;
+
     try {
-        const sql = `
-          UPDATE permissionarios SET
-            nome_empresa = ?, cnpj = ?, email = ?, telefone = ?, numero_sala = ?, valor_aluguel = ?
-          WHERE id = ?
-        `;
-        const params = [
-            nome_empresa, cnpj, email, telefone, numero_sala, valor_aluguel, id,
-        ];
-    
-        await new Promise((resolve, reject) => {
-          db.run(sql, params, function (err) {
-            if (err) return reject(err);
-            if (this.changes === 0)
-              return reject(new Error('Permissionário não encontrado.'));
-            resolve(this);
-          });
-        });
-    
-        res.status(200).json({ message: 'Permissionário atualizado com sucesso!' });
-      } catch (error) {
-        console.error('Erro ao atualizar permissionário:', error);
-        res.status(500).json({ error: error.message });
-      }
-});
+      const sql = `
+        UPDATE permissionarios SET
+          nome_empresa = ?, cnpj = ?, email = ?, telefone = ?, numero_sala = ?, valor_aluguel = ?
+        WHERE id = ?
+      `;
+      const params = [
+        nome_empresa, cnpj, email, telefone, numero_sala, valor_aluguel, id,
+      ];
 
-// ROTA 5: POST /api/admin/permissionarios
-router.post('/permissionarios', [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN'])], async (req, res) => {
-    // ... (o resto do código da rota continua igual)
+      await new Promise((resolve, reject) => {
+        db.run(sql, params, function (err) {
+          if (err) return reject(err);
+          if (this.changes === 0)
+            return reject(new Error('Permissionário não encontrado.'));
+          resolve(this);
+        });
+      });
+
+      res.status(200).json({ message: 'Permissionário atualizado com sucesso!' });
+    } catch (error) {
+      console.error('Erro ao atualizar permissionário:', error);
+      res.status(500).json({ error: error.message });
+    }
+  }
+);
+
+// POST /api/admin/permissionarios
+router.post(
+  '/permissionarios',
+  [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN'])],
+  async (req, res) => {
     const {
-        nome_empresa, cnpj, email, telefone, numero_sala, valor_aluguel,
-      } = req.body;
-      // ... (validações)
-      try {
-        const sql = `
-          INSERT INTO permissionarios
-            (nome_empresa, cnpj, email, telefone, numero_sala, valor_aluguel)
-          VALUES (?, ?, ?, ?, ?, ?)
-        `;
-        const params = [
-            nome_empresa, cnpj, email, telefone, numero_sala, valor_aluguel,
-        ];
-    
-        const result = await new Promise((resolve, reject) => {
-          db.run(sql, params, function (err) {
-            if (err) {
-              if (err.message.includes('UNIQUE constraint failed')) {
-                return reject(
-                  new Error('CNPJ ou E-mail já cadastrado no sistema.')
-                );
-              }
-              return reject(err);
-            }
-            resolve(this);
-          });
-        });
-    
-        res.status(201).json({
-          message: 'Permissionário cadastrado com sucesso!',
-          id: result.lastID,
-        });
-      } catch (error) {
-        console.error('Erro ao cadastrar permissionário:', error);
-        res.status(500).json({ error: error.message });
-      }
-});
+      nome_empresa, cnpj, email, telefone, numero_sala, valor_aluguel,
+    } = req.body;
 
-// ROTA 6: GET /api/admin/permissionarios/export/:format
+    try {
+      const sql = `
+        INSERT INTO permissionarios
+          (nome_empresa, cnpj, email, telefone, numero_sala, valor_aluguel)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `;
+      const params = [
+        nome_empresa, cnpj, email, telefone, numero_sala, valor_aluguel,
+      ];
+
+      const result = await new Promise((resolve, reject) => {
+        db.run(sql, params, function (err) {
+          if (err) {
+            if (err.message.includes('UNIQUE constraint failed')) {
+              return reject(new Error('CNPJ ou E-mail já cadastrado no sistema.'));
+            }
+            return reject(err);
+          }
+          resolve(this);
+        });
+      });
+
+      res.status(201).json({
+        message: 'Permissionário cadastrado com sucesso!',
+        id: result.lastID,
+      });
+    } catch (error) {
+      console.error('Erro ao cadastrar permissionário:', error);
+      res.status(500).json({ error: error.message });
+    }
+  }
+);
+
+/* ===========================================================
+   Exportações (CSV, XLSX, PDF) — mantidas como estavam
+   =========================================================== */
 router.get(
   '/permissionarios/export/:format',
-  [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN'])], // <--- CORREÇÃO APLICADA
+  [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN'])],
   async (req, res) => {
     try {
       const { format } = req.params;
@@ -251,12 +299,7 @@ router.get(
 
       const permissionarios = await dbAll(
         `
-        SELECT
-          nome_empresa,
-          cnpj,
-          email,
-          telefone,
-          numero_sala
+        SELECT nome_empresa, cnpj, email, telefone, numero_sala
         FROM permissionarios
         ${whereClause}
         ORDER BY nome_empresa ASC
@@ -281,14 +324,8 @@ router.get(
         const ws = xlsx.utils.json_to_sheet(permissionarios);
         const wb = xlsx.utils.book_new();
         xlsx.utils.book_append_sheet(wb, ws, 'Permissionários');
-        const buf = xlsx.write(wb, {
-          bookType: 'xlsx',
-          type: 'buffer',
-        });
-        res.header(
-          'Content-Type',
-          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        );
+        const buf = xlsx.write(wb, { bookType: 'xlsx', type: 'buffer' });
+        res.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         res.attachment('permissionarios.xlsx');
         return res.send(buf);
       }
@@ -311,9 +348,7 @@ router.get(
 
         generateHeader(doc);
         generateFooter(doc);
-        doc.fillColor('#333').fontSize(16).text('Relatório de Permissionários', {
-          align: 'center',
-        });
+        doc.fillColor('#333').fontSize(16).text('Relatório de Permissionários', { align: 'center' });
         doc.moveDown(2);
         generateTable(doc, permissionarios);
 
@@ -329,26 +364,17 @@ router.get(
   }
 );
 
-// FUNÇÕES AUXILIARES PARA PDF
+/* ===========================================================
+   Helpers para PDF
+   =========================================================== */
 function generateHeader(doc) {
-  const sectiLogoPath = path.join(
-    __dirname,
-    '..',
-    '..',
-    'public',
-    'images',
-    'LOGO SECTI.png'
-  );
+  const sectiLogoPath = path.join(__dirname, '..', '..', 'public', 'images', 'LOGO SECTI.png');
   doc.rect(0, 0, doc.page.width, 80).fill('#0056a0');
   try {
     if (fs.existsSync(sectiLogoPath)) {
-      doc.image(sectiLogoPath, doc.page.width / 2 - 50, 15, {
-        height: 50,
-      });
+      doc.image(sectiLogoPath, doc.page.width / 2 - 50, 15, { height: 50 });
     } else {
-      doc.fontSize(18).fillColor('#FFFFFF').text('SECTI', {
-        align: 'center',
-      });
+      doc.fontSize(18).fillColor('#FFFFFF').text('SECTI', { align: 'center' });
     }
   } catch (e) {
     console.error('Erro ao carregar imagem do cabeçalho:', e);
@@ -357,21 +383,12 @@ function generateHeader(doc) {
 }
 
 function generateFooter(doc) {
-  const govLogoPath = path.join(
-    __dirname,
-    '..',
-    '..',
-    'public',
-    'images',
-    'logo-governo.png'
-  );
+  const govLogoPath = path.join(__dirname, '..', '..', 'public', 'images', 'logo-governo.png');
   const pageHeight = doc.page.height;
   doc.rect(0, pageHeight - 70, doc.page.width, 70).fill('#004480');
   try {
     if (fs.existsSync(govLogoPath)) {
-      doc.image(govLogoPath, doc.page.width - 120, pageHeight - 55, {
-        height: 40,
-      });
+      doc.image(govLogoPath, doc.page.width - 120, pageHeight - 55, { height: 40 });
     }
   } catch (e) {
     console.error('Erro ao carregar imagem do rodapé:', e);
@@ -381,23 +398,15 @@ function generateFooter(doc) {
 function generateTable(doc, data) {
   let y = 140;
   const rowHeight = 30;
-  const colWidths = {
-    nome: 230,
-    cnpj: 120,
-    email: 170,
-    telefone: 100,
-    sala: 80,
-  };
+  const colWidths = { nome: 230, cnpj: 120, email: 170, telefone: 100, sala: 80 };
   const headers = ['Razão Social', 'CNPJ', 'E-mail', 'Telefone', 'Sala(s)'];
 
   const drawRow = (row, currentY, isHeader = false) => {
     let x = doc.page.margins.left;
-    doc.font(isHeader ? 'Helvetica-Bold' : 'Helvetica').fontSize(
-      isHeader ? 9 : 8
-    );
+    doc.font(isHeader ? 'Helvetica-Bold' : 'Helvetica').fontSize(isHeader ? 9 : 8);
     row.forEach((cell, i) => {
       const key = Object.keys(colWidths)[i];
-      doc.text(cell.toString(), x + 5, currentY + 10, {
+      doc.text(String(cell), x + 5, currentY + 10, {
         width: colWidths[key] - 10,
         align: 'left',
         lineBreak: true,
