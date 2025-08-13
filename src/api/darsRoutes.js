@@ -1,28 +1,33 @@
 // Em: src/api/darsRoutes.js
 
+// Em: src/api/darsRoutes.js (topo)
 const path = require('path');
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
+
 const authMiddleware = require('../middleware/authMiddleware');
 const { calcularEncargosAtraso } = require('../services/cobrancaService');
 const { emitirGuiaSefaz } = require('../services/sefazService');
 
 const router = express.Router();
 
-// ======================================================
-// DB: use SEMPRE o caminho do .env para evitar divergência
-// ======================================================
-const DB_PATH = process.env.SQLITE_STORAGE
-  ? path.resolve(process.env.SQLITE_STORAGE)
-  : path.resolve('./sistemacipt.db');
-
-console.log(`[DARs] Usando SQLite em: ${DB_PATH}`);
+// >>> use o caminho do .env, com fallback e log do caminho absoluto
+const DB_PATH = path.resolve(
+  process.cwd(),
+  process.env.SQLITE_STORAGE || './sistemacipt.db'
+);
+console.log(`[DB] Abrindo SQLite em: ${DB_PATH}`);
 const db = new sqlite3.Database(DB_PATH);
 
-// Helpers DB (async)
+// helpers async
 const dbGetAsync = (sql, params = []) =>
   new Promise((resolve, reject) => {
     db.get(sql, params, (err, row) => (err ? reject(err) : resolve(row)));
+  });
+
+const dbAllAsync = (sql, params = []) =>
+  new Promise((resolve, reject) => {
+    db.all(sql, params, (err, rows) => (err ? reject(err) : resolve(rows)));
   });
 
 const dbRunAsync = (sql, params = []) =>
@@ -32,6 +37,30 @@ const dbRunAsync = (sql, params = []) =>
       resolve(this);
     });
   });
+
+// Sanity check (log) — ajuda a detectar DB errado na hora
+(async () => {
+  try {
+    const colsDars = (await dbAllAsync('PRAGMA table_info(dars)')).map(c => c.name);
+    const colsPerm = (await dbAllAsync('PRAGMA table_info(permissionarios)')).map(c => c.name);
+
+    console.log('[DB] dars colunas:', colsDars.join(', '));
+    console.log('[DB] permissionarios colunas:', colsPerm.join(', '));
+
+    const missing = [];
+    if (!colsDars.includes('numero_documento')) missing.push('dars.numero_documento');
+    if (!colsDars.includes('pdf_url')) missing.push('dars.pdf_url');
+    if (!colsPerm.includes('numero_documento')) missing.push('permissionarios.numero_documento');
+
+    if (missing.length) {
+      console.warn('⚠️  Colunas ausentes no DB atual:', missing.join(' | '));
+      console.warn('    Verifique se SQLITE_STORAGE aponta para o arquivo migrado.');
+    }
+  } catch (e) {
+    console.warn('Não foi possível inspecionar o schema do DB:', e.message);
+  }
+})();
+
 
 // ======================================================
 // Auto-migrate (garante colunas usadas no código)
