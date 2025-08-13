@@ -136,10 +136,8 @@ function buildSefazPayloadPermissionario({ perm, darLike }) {
   if (!receitaCod) throw new Error('RECEITA_CODIGO_PERMISSIONARIO não configurado (.env).');
 
   // Sem depender de colunas endereco/cep (usa fallbacks .env)
-  const descricaoEndereco =
-    (process.env.ENDERECO_PADRAO || 'R. Barão de Jaraguá, 590 - Jaraguá, Maceió/AL');
-  const numeroCep =
-    onlyDigits(process.env.CEP_PADRAO || '57020000');
+  const descricaoEndereco = (process.env.ENDERECO_PADRAO || 'R. Barão de Jaraguá, 590 - Jaraguá, Maceió/AL');
+  const numeroCep = onlyDigits(process.env.CEP_PADRAO || '57020000');
 
   const valorPrincipal = Number(darLike.valor || 0);
   if (!(valorPrincipal > 0)) throw new Error(`Valor do DAR inválido: ${darLike.valor}`);
@@ -285,7 +283,7 @@ router.post('/:id/emitir', authMiddleware, async (req, res) => {
 
     // Chamada à SEFAZ
     const sefazResponse = await emitirGuiaSefaz(payload);
-    // Esperado: { numeroGuia, pdfBase64, ... }
+    // Esperado: { numeroGuia, pdfBase64, (opcional) linhaDigitavel }
     if (!sefazResponse || !sefazResponse.numeroGuia || !sefazResponse.pdfBase64) {
       throw new Error('Retorno da SEFAZ incompleto.');
     }
@@ -293,8 +291,13 @@ router.post('/:id/emitir', authMiddleware, async (req, res) => {
     // Garante schema e atualiza DAR
     await ensureSchema(); // no-op se já existe
     await dbRunAsync(
-      `UPDATE dars SET numero_documento = ?, pdf_url = ?, status = 'Emitido' WHERE id = ?`,
-      [sefazResponse.numeroGuia, sefazResponse.pdfBase64, darId]
+      `UPDATE dars
+         SET numero_documento = ?,
+             pdf_url = ?,
+             linha_digitavel = COALESCE(?, linha_digitavel),
+             status = 'Emitido'
+       WHERE id = ?`,
+      [sefazResponse.numeroGuia, sefazResponse.pdfBase64, sefazResponse.linhaDigitavel || null, darId]
     );
 
     // Compat com campos antigos (preenche se estiverem nulos)
@@ -306,9 +309,8 @@ router.post('/:id/emitir', authMiddleware, async (req, res) => {
       [darId]
     );
 
-    return res
-      .status(200)
-      .json(debug ? { ...sefazResponse, _payloadDebug: payload } : sefazResponse);
+    const payloadDebug = debug ? { _payloadDebug: payload } : {};
+    return res.status(200).json({ ...sefazResponse, ...payloadDebug });
 
   } catch (error) {
     console.error('Erro na rota /emitir:', error);

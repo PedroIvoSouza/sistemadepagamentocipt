@@ -1,60 +1,61 @@
+// testar_notificacao.js
+require('dotenv').config();
 const sqlite3 = require('sqlite3').verbose();
-const { enviarEmailNovaDar } = require('../src/services/emailService');
 
-const db = new sqlite3.Database('./sistemacipt.db');
+const { enviarEmailNotificacaoDar, enviarEmailNovaDar } = require('./src/services/emailService');
+const { escolherEmailDestino } = require('./src/utils/emailDestino');
 
-// ID do nosso usuário de teste
-const idUsuarioTeste = 26;
+const DB_PATH = process.env.SQLITE_STORAGE || './sistemacipt.db';
+const db = new sqlite3.Database(DB_PATH);
 
 console.log('--- Iniciando Teste de Notificação de Novo DAR ---');
+console.log('DB:', DB_PATH);
 
-// 1. Busca os dados do usuário de teste no banco
-const sqlBuscaUsuario = `SELECT * FROM permissionarios WHERE id = ?`;
+function dbGet(sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.get(sql, params, (err, row) => (err ? reject(err) : resolve(row)));
+  });
+}
 
-db.get(sqlBuscaUsuario, [idUsuarioTeste], (err, user) => {
-    if (err) {
-        return console.error('ERRO: Não foi possível buscar o usuário de teste.', err.message);
+(async () => {
+  try {
+    // Pega um permissionário qualquer (ou ajuste o WHERE para um ID específico)
+    const perm = await dbGet(`SELECT * FROM permissionarios ORDER BY id LIMIT 1`);
+    if (!perm) {
+      throw new Error('Nenhum permissionário encontrado no banco.');
     }
-    if (!user) {
-        return console.error('ERRO: Usuário de teste com ID ' + idUsuarioTeste + ' não encontrado.');
-    }
-    if (!user.email_notificacao) {
-        return console.error(`ERRO: O usuário de teste não tem um 'E-mail para DARs' definido no perfil.`);
+
+    // Escolhe o e-mail com fallback (notificacao -> financeiro -> cadastro)
+    let destinatario = escolherEmailDestino(perm);
+    if (!destinatario) {
+      // Último recurso: manda pra conta de envio (só para teste)
+      destinatario = process.env.EMAIL_USER;
+      console.warn('⚠️ Nenhum e-mail no cadastro do permissionário. Usando EMAIL_USER do .env para teste:', destinatario);
     }
 
-    console.log(`Usuário de teste "${user.nome_empresa}" encontrado.`);
-    console.log(`E-mail de notificação a ser usado: ${user.email_notificacao}`);
+    // Monta um DAR fictício
+    const hoje = new Date();
+    const dataISO = new Date(hoje.getTime() - hoje.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 
-    // 2. Prepara os dados do novo DAR a ser criado (Ex: para o mês de Agosto de 2025)
-    const novoDar = {
-        permissionario_id: user.id,
-        mes_referencia: 8,
-        ano_referencia: 2025,
-        valor: user.valor_aluguel, // Usa o valor base do aluguel do cadastro
-        data_vencimento: '2025-08-29', // Último dia útil de Agosto de 2025
-        status: 'Pendente'
+    const dadosDar = {
+      nome_empresa: perm.nome_empresa || 'Empresa',
+      competencia: 'Teste Automático',
+      valor: 123.45,
+      data_vencimento: dataISO,
+      mes_referencia: hoje.getMonth() + 1,
+      ano_referencia: hoje.getFullYear(),
     };
 
-    // 3. Insere o novo DAR no banco de dados
-    const sqlInsertDar = `INSERT INTO dars (permissionario_id, mes_referencia, ano_referencia, valor, data_vencimento, status) VALUES (?, ?, ?, ?, ?, ?)`;
-    const params = [novoDar.permissionario_id, novoDar.mes_referencia, novoDar.ano_referencia, novoDar.valor, novoDar.data_vencimento, novoDar.status];
-    
-    db.run(sqlInsertDar, params, async function(err) {
-        if (err) {
-            return console.error('ERRO: Falha ao inserir o novo DAR de teste no banco.', err.message);
-        }
+    // Envie um dos dois para testar:
+    await enviarEmailNotificacaoDar(destinatario, dadosDar);
+    // await enviarEmailNovaDar(destinatario, dadosDar);
 
-        console.log(`SUCESSO: Novo DAR para ${novoDar.mes_referencia}/${novoDar.ano_referencia} criado com ID ${this.lastID}.`);
-
-        // 4. Se o DAR foi criado com sucesso, dispara o e-mail de notificação
-        try {
-            const dadosParaEmail = { ...novoDar, nome_empresa: user.nome_empresa };
-            await enviarEmailNovaDar(user.email_notificacao, dadosParaEmail);
-            console.log('--- Teste Finalizado com Sucesso! ---');
-        } catch (emailError) {
-            console.error('ERRO: O DAR foi criado, mas falhou ao enviar o e-mail de notificação.', emailError.message);
-        } finally {
-            db.close();
-        }
-    });
-});
+    console.log('[OK] E-mail enviado para:', destinatario);
+    process.exit(0);
+  } catch (err) {
+    console.error('ERRO ao testar notificação:', err.message || err);
+    process.exit(1);
+  } finally {
+    db.close();
+  }
+})();

@@ -16,6 +16,7 @@ const adminRoutes                 = require('./api/adminRoutes');
 const adminManagementRoutes       = require('./api/adminManagementRoutes');
 const adminDarsRoutes             = require('./api/adminDarsRoutes');
 
+
 // CORREÇÃO: Desestruturando os routers de eventos
 const {
   adminRoutes:  eventosClientesAdminRoutes,

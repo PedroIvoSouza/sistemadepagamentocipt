@@ -1,142 +1,193 @@
-// Em: src/api/adminDarsRoutes.js
-
+// src/api/adminDarsRoutes.js
+const path = require('path');
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
+
 const authMiddleware = require('../middleware/authMiddleware');
 const authorizeRole = require('../middleware/roleMiddleware');
-const { enviarEmailNotificacaoDar } = require('../services/emailService');
+const { calcularEncargosAtraso } = require('../services/cobrancaService');
+const { notificarDarGerado } = require('../services/notificacaoService');
 const { emitirGuiaSefaz } = require('../services/sefazService');
+const { isoHojeLocal, toISO, buildSefazPayloadPermissionario } = require('../utils/sefazPayload');
 
 const router = express.Router();
-const db = new sqlite3.Database('./sistemacipt.db');
 
-// ROTA PRINCIPAL: GET /api/admin/dars (CÓDIGO COMPLETO RESTAURADO)
-router.get('/', [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN'])], (req, res) => {
-    const { search = '', status = 'todos', mes = 'todos', ano = 'todos', page = 1, limit = 10 } = req.query;
+// Usa o caminho definido no .env (SQLITE_STORAGE) com fallback
+const DB_PATH = path.resolve(process.cwd(), process.env.SQLITE_STORAGE || './sistemacipt.db');
+console.log(`[AdminDARs] Abrindo SQLite em: ${DB_PATH}`);
+const db = new sqlite3.Database(DB_PATH);
 
-    let sql = `
+// Helpers async
+const dbGetAsync = (sql, params = []) =>
+  new Promise((resolve, reject) => db.get(sql, params, (err, row) => (err ? reject(err) : resolve(row))));
+const dbAllAsync = (sql, params = []) =>
+  new Promise((resolve, reject) => db.all(sql, params, (err, rows) => (err ? reject(err) : resolve(rows))));
+const dbRunAsync = (sql, params = []) =>
+  new Promise((resolve, reject) => db.run(sql, params, function (err) { return err ? reject(err) : resolve(this); }));
+
+/**
+ * GET /api/admin/dars
+ * Lista paginada com filtros (nome/CNPJ, status, mês, ano)
+ */
+router.get(
+  '/',
+  [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN'])],
+  async (req, res) => {
+    try {
+      const search = String(req.query.search || '').trim();
+      const status = String(req.query.status || 'todos').trim();
+      const mes = String(req.query.mes || 'todos').trim();
+      const ano = String(req.query.ano || 'todos').trim();
+
+      const page = Math.max(1, parseInt(req.query.page || '1', 10));
+      const limit = Math.max(1, parseInt(req.query.limit || '10', 10));
+      const offset = (page - 1) * limit;
+
+      let baseSql = `
         SELECT 
-            d.id, d.mes_referencia, d.ano_referencia, d.valor,
-            d.data_vencimento, d.data_pagamento, d.status,
-            p.nome_empresa, p.cnpj
+          d.id, d.mes_referencia, d.ano_referencia, d.valor,
+          d.data_vencimento, d.data_pagamento, d.status,
+          d.numero_documento, d.pdf_url,
+          p.nome_empresa, p.cnpj
         FROM dars d
         JOIN permissionarios p ON d.permissionario_id = p.id
         WHERE 1=1
-    `;
-    const params = [];
-    
-    if (search) {
-        sql += ` AND (p.nome_empresa LIKE ? OR p.cnpj LIKE ?)`;
+      `;
+      const params = [];
+
+      if (search) {
+        baseSql += ` AND (p.nome_empresa LIKE ? OR p.cnpj LIKE ?)`;
         params.push(`%${search}%`, `%${search}%`);
-    }
-    if (status && status !== 'todos') {
-        sql += ` AND d.status = ?`;
+      }
+      if (status && status !== 'todos') {
+        baseSql += ` AND d.status = ?`;
         params.push(status);
-    }
-    if (mes && mes !== 'todos') {
-        sql += ` AND d.mes_referencia = ?`;
+      }
+      if (mes && mes !== 'todos') {
+        baseSql += ` AND d.mes_referencia = ?`;
         params.push(mes);
-    }
-    if (ano && ano !== 'todos') {
-        sql += ` AND d.ano_referencia = ?`;
+      }
+      if (ano && ano !== 'todos') {
+        baseSql += ` AND d.ano_referencia = ?`;
         params.push(ano);
+      }
+
+      const countSql = `SELECT COUNT(*) as total FROM (${baseSql}) AS src`;
+      const { total } = await dbGetAsync(countSql, params);
+      const totalPages = Math.ceil(total / limit);
+
+      const pageSql = `${baseSql} ORDER BY d.ano_referencia DESC, d.mes_referencia DESC, p.nome_empresa LIMIT ? OFFSET ?`;
+      const rows = await dbAllAsync(pageSql, [...params, limit, offset]);
+
+      return res.status(200).json({
+        dars: rows,
+        totalPages,
+        currentPage: page,
+        totalItems: total
+      });
+    } catch (err) {
+      console.error('[AdminDARs] ERRO GET /api/admin/dars:', err);
+      return res.status(500).json({ error: 'Erro ao buscar os DARs.' });
     }
+  }
+);
 
-    const countSql = `SELECT COUNT(*) as total FROM (${sql.trim()})`; // .trim() para segurança
-
-    db.get(countSql, params, (err, countRow) => {
-        if (err) {
-            console.error('ERRO NO SQL DE CONTAGEM:', err);
-            return res.status(500).json({ error: 'Erro ao contar os DARs.' });
-        }
-        
-        const totalItems = countRow.total;
-        const totalPages = Math.ceil(totalItems / limit);
-        const offset = (page - 1) * limit;
-
-        sql += ` ORDER BY d.ano_referencia DESC, d.mes_referencia DESC, p.nome_empresa LIMIT ? OFFSET ?`;
-        params.push(limit, offset);
-
-        db.all(sql, params, (err, rows) => {
-            if (err) {
-                console.error('ERRO NO SQL DE BUSCA:', err);
-                return res.status(500).json({ error: 'Erro ao buscar os DARs.' });
-            }
-            
-            res.status(200).json({
-                dars: rows,
-                totalPages: totalPages,
-                currentPage: Number(page),
-                totalItems: totalItems
-            });
-        });
-    });
-});
-
-
-// ROTA PARA ENVIAR NOTIFICAÇÃO (CORRIGIDA)
-router.post('/:id/enviar-notificacao', [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN'])], async (req, res) => {
-    const darId = req.params.id;
-
-    // MUDANÇA 1: A consulta agora busca também o email principal (p.email)
-    const sql = `
-        SELECT 
-            d.valor, d.data_vencimento, d.mes_referencia, d.ano_referencia, 
-            p.nome_empresa, p.email_notificacao, p.email 
-        FROM dars d 
-        JOIN permissionarios p ON d.permissionario_id = p.id 
-        WHERE d.id = ?`;
-
-    db.get(sql, [darId], async (err, darInfo) => {
-        if (err) return res.status(500).json({ error: 'Erro de banco de dados.' });
-        if (!darInfo) return res.status(404).json({ error: 'DAR não encontrado.' });
-
-        // MUDANÇA 2: Lógica de fallback para o e-mail
-        const emailParaEnvio = darInfo.email_notificacao || darInfo.email;
-
-        if (!emailParaEnvio) {
-            return res.status(400).json({ error: 'Permissionário não possui e-mail de notificação nem e-mail principal cadastrado.' });
-        }
-
-        try {
-            const dadosEmail = {
-                nome_empresa: darInfo.nome_empresa,
-                competencia: `${String(darInfo.mes_referencia).padStart(2, '0')}/${darInfo.ano_referencia}`,
-                valor: darInfo.valor,
-                data_vencimento: darInfo.data_vencimento
-            };
-            await enviarEmailNotificacaoDar(emailParaEnvio, dadosEmail);
-            res.status(200).json({ message: 'E-mail de notificação enviado com sucesso!' });
-        } catch (error) {
-            res.status(500).json({ error: 'Falha ao enviar o e-mail.' });
-        }
-    });
-});
-
-// ROTA PARA EMITIR O DAR VIA SEFAZ
-router.post('/:id/emitir', authMiddleware, async (req, res) => {
-    const userId = req.user.id;
-    const darId = req.params.id;
-
+/**
+ * POST /api/admin/dars/:id/enviar-notificacao
+ * Envia e-mail (com fallback) para o permissionário daquele DAR.
+ */
+router.post(
+  '/:id/enviar-notificacao',
+  [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN'])],
+  async (req, res) => {
     try {
-        // 1. Busca os dados do DAR e do Permissionário no nosso banco
-        const sql = `SELECT * FROM dars WHERE id = ? AND permissionario_id = ?`;
-        const dar = await new Promise((resolve, reject) => db.get(sql, [darId, userId], (e, r) => e ? reject(e) : resolve(r)));
+      const darId = req.params.id;
 
-        if (!dar) return res.status(404).json({ error: 'DAR não encontrado.' });
+      const dar = await dbGetAsync(`SELECT * FROM dars WHERE id = ?`, [darId]);
+      if (!dar) return res.status(404).json({ error: 'DAR não encontrado.' });
 
-        const sqlUser = `SELECT * FROM permissionarios WHERE id = ?`;
-        const user = await new Promise((resolve, reject) => db.get(sqlUser, [userId], (e, r) => e ? reject(e) : resolve(r)));
+      const perm = await dbGetAsync(`SELECT * FROM permissionarios WHERE id = ?`, [dar.permissionario_id]);
+      if (!perm) return res.status(404).json({ error: 'Permissionário não encontrado.' });
 
-        // 2. Chama nosso serviço que conversa com a SEFAZ
-        const sefazResponse = await emitirGuiaSefaz(user, dar);
-
-        // 3. Retorna a resposta da SEFAZ (com o PDF) para o navegador
-        res.status(200).json(sefazResponse);
-
-    } catch (error) {
-        res.status(500).json({ error: error.message });
+      const ok = await notificarDarGerado(perm, dar, { tipo: 'notificar' });
+      if (!ok) {
+        return res.status(400).json({
+          error: 'Permissionário não possui e-mail de notificação, financeiro ou principal cadastrado.'
+        });
+      }
+      return res.status(200).json({ message: 'E-mail de notificação enviado com sucesso!' });
+    } catch (err) {
+      console.error('[AdminDARs] ERRO POST /:id/enviar-notificacao:', err);
+      return res.status(500).json({ error: 'Falha ao enviar o e-mail.' });
     }
-});
+  }
+);
+
+/**
+ * POST /api/admin/dars/:id/emitir
+ * Emite a guia na SEFAZ pelo admin (independe do usuário logado ser o permissionário).
+ */
+router.post(
+  '/:id/emitir',
+  [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN'])],
+  async (req, res) => {
+    try {
+      const darId = req.params.id;
+
+      const dar = await dbGetAsync(`SELECT * FROM dars WHERE id = ?`, [darId]);
+      if (!dar) return res.status(404).json({ error: 'DAR não encontrado.' });
+
+      const perm = await dbGetAsync(`SELECT * FROM permissionarios WHERE id = ?`, [dar.permissionario_id]);
+      if (!perm) return res.status(404).json({ error: 'Permissionário não encontrado.' });
+
+      // Ajuste de vencimento/valor se estiver vencido + garantir data >= hoje
+      let guiaSource = { ...dar };
+      if (dar.status === 'Vencido') {
+        const calculo = await calcularEncargosAtraso(dar);
+        guiaSource.valor = calculo.valorAtualizado;
+        guiaSource.data_vencimento = calculo.novaDataVencimento || isoHojeLocal();
+      }
+      if (toISO(guiaSource.data_vencimento) < isoHojeLocal()) {
+        guiaSource.data_vencimento = isoHojeLocal();
+      }
+
+      // Monta payload e emite
+      const payload = buildSefazPayloadPermissionario({ perm, darLike: guiaSource });
+      const sefazResponse = await emitirGuiaSefaz(payload);
+
+      if (!sefazResponse || !sefazResponse.numeroGuia || !sefazResponse.pdfBase64) {
+        throw new Error('Retorno da SEFAZ incompleto.');
+      }
+
+      // Persiste número/pdf e marca como Emitido (compat com campos antigos)
+      await dbRunAsync(
+        `UPDATE dars
+           SET numero_documento = ?,
+               pdf_url = ?,
+               codigo_barras = COALESCE(?, codigo_barras),
+               link_pdf      = COALESCE(?, link_pdf),
+               status = 'Emitido'
+         WHERE id = ?`,
+        [
+          sefazResponse.numeroGuia,
+          sefazResponse.pdfBase64,
+          sefazResponse.numeroGuia, // compat
+          sefazResponse.pdfBase64,  // compat
+          darId
+        ]
+      );
+
+      return res.status(200).json(sefazResponse);
+    } catch (error) {
+      console.error('[AdminDARs] ERRO POST /:id/emitir:', error);
+      const isUnavailable =
+        /indispon[ií]vel|Load balancer|ECONNABORTED|ENOTFOUND|EAI_AGAIN|ECONNRESET|ETIMEDOUT|timeout/i.test(
+          error.message || ''
+        );
+      const status = isUnavailable ? 503 : 500;
+      return res.status(status).json({ error: error.message || 'Erro interno do servidor.' });
+    }
+  }
+);
 
 module.exports = router;
