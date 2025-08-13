@@ -11,6 +11,12 @@ const db = new sqlite3.Database(DB_PATH);
 console.log('--- Iniciando Teste de Notificação de Novo DAR ---');
 console.log('DB:', DB_PATH);
 
+// Permite forçar um ID específico:
+// 1) via .env -> TEST_PERMISSIONARIO_ID=26
+// 2) via CLI  -> node testar_notificacao.js --id=26
+const cliId = (process.argv.find(a => a.startsWith('--id=')) || '').split('=')[1];
+const TEST_PERMISSIONARIO_ID = Number(cliId || process.env.TEST_PERMISSIONARIO_ID || 0) || null;
+
 function dbGet(sql, params = []) {
   return new Promise((resolve, reject) => {
     db.get(sql, params, (err, row) => (err ? reject(err) : resolve(row)));
@@ -19,41 +25,46 @@ function dbGet(sql, params = []) {
 
 (async () => {
   try {
-    // --- SOMENTE PARA TESTE: força um permissionário específico (padrão: 26) ---
-    const TEST_PERMISSIONARIO_ID = Number(process.env.TEST_PERMISSIONARIO_ID || 26);
-
-    // Busca apenas o permissionário de teste
-    const perm = await dbGet(
-      `SELECT * FROM permissionarios WHERE id = ? LIMIT 1`,
-      [TEST_PERMISSIONARIO_ID]
-    );
-    if (!perm) {
-      throw new Error(`Permissionário id=${TEST_PERMISSIONARIO_ID} não encontrado.`);
+    // Busca o permissionário-alvo
+    let perm;
+    if (TEST_PERMISSIONARIO_ID) {
+      console.log(`[TESTE] Usando permissionário específico (id=${TEST_PERMISSIONARIO_ID}).`);
+      perm = await dbGet(`SELECT * FROM permissionarios WHERE id = ?`, [TEST_PERMISSIONARIO_ID]);
+      if (!perm) {
+        throw new Error(`Permissionário id=${TEST_PERMISSIONARIO_ID} não encontrado.`);
+      }
+    } else {
+      console.log('[TESTE] Nenhum ID específico informado. Buscando o primeiro permissionário da base.');
+      perm = await dbGet(`SELECT * FROM permissionarios ORDER BY id LIMIT 1`);
+      if (!perm) throw new Error('Nenhum permissionário encontrado no banco.');
     }
 
     // Escolhe o e-mail com fallback (notificacao -> financeiro -> cadastro)
     let destinatario = escolherEmailDestino(perm);
     if (!destinatario) {
-      // Último recurso: manda pra conta de envio (só para teste)
+      // Último recurso: conta do remetente (apenas para teste)
       destinatario = process.env.EMAIL_USER;
-      console.warn('⚠️ Nenhum e-mail no cadastro do permissionário. Usando EMAIL_USER do .env para teste:', destinatario);
+      console.warn('⚠️  Permissionário sem e-mail cadastrado. Usando EMAIL_USER do .env para teste:', destinatario);
     }
 
     // Monta um DAR fictício
-    const hoje = new Date();
-    const dataISO = new Date(hoje.getTime() - hoje.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+    const agora = new Date();
+    const dataISO = new Date(agora.getTime() - agora.getTimezoneOffset() * 60000)
+      .toISOString()
+      .slice(0, 10);
 
     const dadosDar = {
       nome_empresa: perm.nome_empresa || 'Empresa',
       competencia: 'Teste Automático',
       valor: 123.45,
       data_vencimento: dataISO,
-      mes_referencia: hoje.getMonth() + 1,
-      ano_referencia: hoje.getFullYear(),
+      mes_referencia: agora.getMonth() + 1,
+      ano_referencia: agora.getFullYear(),
     };
 
-    // Envie UM dos dois para testar:
+    // Dispare UMA das funções abaixo. Por padrão, testamos a notificação “simples”:
     await enviarEmailNotificacaoDar(destinatario, dadosDar);
+    // Ou, se quiser testar o modelo de “novo DAR disponível”:
     // await enviarEmailNovaDar(destinatario, dadosDar);
 
     console.log('[OK] E-mail enviado para:', destinatario);

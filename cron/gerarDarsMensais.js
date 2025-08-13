@@ -182,4 +182,4 @@ cron.schedule('0 8 1 * *', gerarDarsEEnviarNotificacoes, {
 });
 
 // Para testar manualmente (roda 1x ao executar o arquivo)
-gerarDarsEEnviarNotificacoes().catch(() => {});
+// gerarDarsEEnviarNotificacoes().catch(() => {});
