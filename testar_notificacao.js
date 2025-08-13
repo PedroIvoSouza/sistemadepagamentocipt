@@ -19,10 +19,16 @@ function dbGet(sql, params = []) {
 
 (async () => {
   try {
-    // Pega um permissionário qualquer (ou ajuste o WHERE para um ID específico)
-    const perm = await dbGet(`SELECT * FROM permissionarios ORDER BY id LIMIT 1`);
+    // --- SOMENTE PARA TESTE: força um permissionário específico (padrão: 26) ---
+    const TEST_PERMISSIONARIO_ID = Number(process.env.TEST_PERMISSIONARIO_ID || 26);
+
+    // Busca apenas o permissionário de teste
+    const perm = await dbGet(
+      `SELECT * FROM permissionarios WHERE id = ? LIMIT 1`,
+      [TEST_PERMISSIONARIO_ID]
+    );
     if (!perm) {
-      throw new Error('Nenhum permissionário encontrado no banco.');
+      throw new Error(`Permissionário id=${TEST_PERMISSIONARIO_ID} não encontrado.`);
     }
 
     // Escolhe o e-mail com fallback (notificacao -> financeiro -> cadastro)
@@ -46,7 +52,7 @@ function dbGet(sql, params = []) {
       ano_referencia: hoje.getFullYear(),
     };
 
-    // Envie um dos dois para testar:
+    // Envie UM dos dois para testar:
     await enviarEmailNotificacaoDar(destinatario, dadosDar);
     // await enviarEmailNovaDar(destinatario, dadosDar);
 

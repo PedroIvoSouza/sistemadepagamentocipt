@@ -60,7 +60,7 @@ async function gerarDarsEEnviarNotificacoes() {
   const dbRun = (sql, params=[]) => new Promise((resolve, reject) => {
     db.run(sql, params, function(err){ err ? reject(err) : resolve(this); });
   });
-
+    
   try {
     const hoje = new Date();
     const mesReferencia = hoje.getMonth() + 1; // 1..12
@@ -69,7 +69,9 @@ async function gerarDarsEEnviarNotificacoes() {
     const venc = getUltimoDiaUtil(anoReferencia, mesReferencia);
     const vencISO = toISODateLocal(venc);
 
-    const permissionarios = await dbAll(`SELECT * FROM permissionarios`);
+    const TEST_PERMISSIONARIO_ID = 26;
+
+    const permissionarios = await db.all(`SELECT * FROM permissionarios WHERE id = ?`, [TEST_PERMISSIONARIO_ID]);
     console.log(`[ROBÔ] ${permissionarios.length} permissionários. Competência ${String(mesReferencia).padStart(2,'0')}/${anoReferencia} - vencimento ${vencISO}`);
 
     for (const p of permissionarios) {
