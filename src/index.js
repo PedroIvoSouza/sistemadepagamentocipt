@@ -6,6 +6,9 @@ const express = require('express');
 const cors = require('cors');
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
+const { scheduleConciliacao } = require('./cron/conciliarPagamentos');
+scheduleConciliacao();
+
 
 // --- Importação das Rotas ---
 const authRoutes                  = require('./api/authRoutes');
