@@ -312,6 +312,172 @@ router.get('/:id/detalhes', async (req, res) => {
   return router.handle(req, res); // delega
 });
 
+// PUT /api/admin/eventos/:id  -> atualiza evento e recria/remeite DARs
+router.put('/:id', async (req, res) => {
+  const { id } = req.params;
+
+  const {
+    idCliente,             // obrigatório
+    nomeEvento,            // obrigatório
+    datasEvento = [],      // array ISO YYYY-MM-DD
+    totalDiarias = 0,
+    valorBruto = 0,
+    tipoDescontoAuto = null,
+    descontoManualPercent = 0,
+    valorFinal = 0,
+    parcelas = []          // [{ valor, vencimento(YYYY-MM-DD) }, ...]
+  } = req.body || {};
+
+  if (!idCliente || !nomeEvento || !Array.isArray(parcelas) || parcelas.length === 0) {
+    return res.status(400).json({ error: 'Campos obrigatórios estão faltando.' });
+  }
+
+  const somaParcelas = parcelas.reduce((acc, p) => acc + (Number(p.valor) || 0), 0);
+  if (Math.abs(somaParcelas - Number(valorFinal || 0)) > 0.01) {
+    return res.status(400).json({
+      error: `A soma das parcelas (R$ ${somaParcelas.toFixed(2)}) não corresponde ao Valor Final (R$ ${Number(valorFinal||0).toFixed(2)}).`
+    });
+  }
+
+  try {
+    await dbRun('BEGIN TRANSACTION', [], 'update-evento/BEGIN');
+
+    // 1) Atualiza os campos do evento
+    const upd = await dbRun(
+      `UPDATE Eventos
+          SET id_cliente = ?,
+              nome_evento = ?,
+              datas_evento = ?,
+              total_diarias = ?,
+              valor_bruto = ?,
+              tipo_desconto = ?,
+              desconto_manual = ?,
+              valor_final = ?,
+              status = ?
+        WHERE id = ?`,
+      [
+        idCliente,
+        nomeEvento,
+        JSON.stringify(datasEvento),
+        Number(totalDiarias || 0),
+        Number(valorBruto || 0),
+        tipoDescontoAuto,
+        Number(descontoManualPercent || 0),
+        Number(valorFinal || 0),
+        'Pendente',
+        id
+      ],
+      'update-evento/UPDATE-Eventos'
+    );
+
+    if (upd.changes === 0) {
+      await dbRun('ROLLBACK');
+      return res.status(404).json({ error: 'Evento não encontrado.' });
+    }
+
+    // 2) Remove DARs antigas (join + DARs)
+    const antigos = await dbAll(
+      'SELECT id_dar FROM DARs_Eventos WHERE id_evento = ?',
+      [id],
+      'update-evento/listar-antigos'
+    );
+    const antigosIds = antigos.map(r => r.id_dar);
+
+    await dbRun('DELETE FROM DARs_Eventos WHERE id_evento = ?', [id], 'update-evento/delete-join');
+
+    if (antigosIds.length) {
+      const ph = antigosIds.map(() => '?').join(',');
+      await dbRun(`DELETE FROM dars WHERE id IN (${ph})`, antigosIds, 'update-evento/delete-dars');
+    }
+
+    // 3) Busca dados do cliente (para payload SEFAZ)
+    const cliente = await dbGet(
+      `SELECT nome_razao_social, documento, endereco, cep
+         FROM Clientes_Eventos
+        WHERE id = ?`,
+      [idCliente],
+      'update-evento/buscar-cliente'
+    );
+    if (!cliente) {
+      await dbRun('ROLLBACK');
+      return res.status(400).json({ error: `Cliente com ID ${idCliente} não encontrado.` });
+    }
+
+    // 4) Recria & emite DARs (uma por parcela)
+    const onlyDigits = v => String(v || '').replace(/\D/g, '');
+    const docLimpo = onlyDigits(cliente.documento);
+    const tipoInscricao = docLimpo.length === 11 ? 3 : 4;
+
+    for (let i = 0; i < parcelas.length; i++) {
+      const p = parcelas[i];
+      const valorParcela = Number(p.valor) || 0;
+      const vencimentoISO = p.vencimento;
+
+      if (!vencimentoISO || !(new Date(vencimentoISO).getTime() > 0)) {
+        throw new Error(`A data de vencimento da parcela ${i + 1} é inválida.`);
+      }
+      if (valorParcela <= 0) {
+        throw new Error(`O valor da parcela ${i + 1} deve ser maior que zero.`);
+      }
+
+      const [ano, mes] = vencimentoISO.split('-');
+
+      // cria DAR
+      const darStmt = await dbRun(
+        `INSERT INTO dars (valor, data_vencimento, status, mes_referencia, ano_referencia)
+         VALUES (?, ?, 'Pendente', ?, ?)`,
+        [valorParcela, vencimentoISO, Number(mes), Number(ano)],
+        `update-evento/insert-dar/${i+1}`
+      );
+      const darId = darStmt.lastID;
+
+      // vincula à tabela de junção
+      await dbRun(
+        `INSERT INTO DARs_Eventos (id_dar, id_evento, numero_parcela, valor_parcela, data_vencimento)
+         VALUES (?, ?, ?, ?, ?)`,
+        [darId, id, i + 1, valorParcela, vencimentoISO],
+        `update-evento/insert-join/${i+1}`
+      );
+
+      // emite na SEFAZ
+      const payloadSefaz = {
+        versao: '1.0',
+        contribuinteEmitente: {
+          codigoTipoInscricao: tipoInscricao,
+          numeroInscricao: docLimpo,
+          nome: cliente.nome_razao_social,
+          codigoIbgeMunicipio: Number(process.env.COD_IBGE_MUNICIPIO),
+          descricaoEndereco: cliente.endereco,
+          numeroCep: onlyDigits(cliente.cep)
+        },
+        receitas: [{
+          codigo: Number(process.env.RECEITA_CODIGO_EVENTO),
+          competencia: { mes: Number(mes), ano: Number(ano) },
+          valorPrincipal: valorParcela,
+          valorDesconto: 0.00,
+          dataVencimento: vencimentoISO
+        }],
+        dataLimitePagamento: vencimentoISO,
+        observacao: `CIPT Evento: ${nomeEvento} | Parcela ${i + 1} de ${parcelas.length} (Atualização)`
+      };
+
+      const retorno = await emitirGuiaSefaz(payloadSefaz);
+
+      await dbRun(
+        `UPDATE dars SET numero_documento = ?, pdf_url = ?, status = 'Emitido' WHERE id = ?`,
+        [retorno.numeroGuia, retorno.pdfBase64, darId],
+        `update-evento/update-dar/${i+1}`
+      );
+    }
+
+    await dbRun('COMMIT', [], 'update-evento/COMMIT');
+    return res.json({ message: 'Evento atualizado e DARs reemitidas com sucesso.', id: Number(id) });
+  } catch (err) {
+    console.error('[admin/eventos PUT/:id] erro:', err.message);
+    try { await dbRun('ROLLBACK'); } catch {}
+    return res.status(500).json({ error: err.message || 'Erro ao atualizar o evento.' });
+  }
+});
 
 /**
  * Reemitir DAR específica
