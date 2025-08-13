@@ -1,5 +1,6 @@
 // Em: src/api/darsRoutes.js
 
+const path = require('path');
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const authMiddleware = require('../middleware/authMiddleware');
@@ -8,11 +9,17 @@ const { emitirGuiaSefaz } = require('../services/sefazService');
 
 const router = express.Router();
 
-// Usa o caminho do .env, com fallback
-const DB_PATH = process.env.SQLITE_STORAGE || './sistemacipt.db';
+// ======================================================
+// DB: use SEMPRE o caminho do .env para evitar divergência
+// ======================================================
+const DB_PATH = process.env.SQLITE_STORAGE
+  ? path.resolve(process.env.SQLITE_STORAGE)
+  : path.resolve('./sistemacipt.db');
+
+console.log(`[DARs] Usando SQLite em: ${DB_PATH}`);
 const db = new sqlite3.Database(DB_PATH);
 
-// Promisify simples
+// Helpers DB (async)
 const dbGetAsync = (sql, params = []) =>
   new Promise((resolve, reject) => {
     db.get(sql, params, (err, row) => (err ? reject(err) : resolve(row)));
@@ -26,7 +33,38 @@ const dbRunAsync = (sql, params = []) =>
     });
   });
 
-// Helpers
+// ======================================================
+// Auto-migrate (garante colunas usadas no código)
+// ======================================================
+async function getTableColumns(table) {
+  const sql = `PRAGMA table_info(${table})`;
+  return new Promise((resolve, reject) => {
+    db.all(sql, [], (err, rows) => (err ? reject(err) : resolve(rows || [])));
+  });
+}
+async function ensureColumn(table, column, type) {
+  const cols = await getTableColumns(table);
+  const exists = cols.some(c => String(c.name).toLowerCase() === String(column).toLowerCase());
+  if (!exists) {
+    console.log(`[MIGRATE] Criando coluna ${table}.${column} ${type}...`);
+    await dbRunAsync(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+  } else {
+    console.log(`[MIGRATE] OK: ${table}.${column} já existe.`);
+  }
+}
+async function ensureSchema() {
+  await ensureColumn('dars', 'numero_documento', 'TEXT');
+  await ensureColumn('dars', 'pdf_url', 'TEXT');
+  await ensureColumn('permissionarios', 'numero_documento', 'TEXT');
+}
+// dispara sem bloquear rota
+ensureSchema().catch(err => {
+  console.error('[MIGRATE] Falha garantindo schema:', err);
+});
+
+// ======================================================
+// Utils
+// ======================================================
 const onlyDigits = (v = '') => String(v).replace(/\D/g, '');
 
 // YYYY-MM-DD no horário local (evita “voltar 1 dia” pelo UTC)
@@ -51,16 +89,7 @@ const toISO = (d) => {
   return local.toISOString().slice(0, 10);
 };
 
-// Normaliza código de receita (aceita "20165-0" ou "20165")
-const normalizeReceita = (raw) => {
-  const dig = onlyDigits(raw || '');
-  if (!dig) return 0;
-  // muitas receitas são 5 dígitos + DV -> se vier 6 e os 5 primeiros formam a receita, corta o último
-  if (dig.length === 6) return Number(dig.slice(0, 5));
-  return Number(dig);
-};
-
-// Payload para SEFAZ (permissionários)
+// Monta payload da SEFAZ para permissionários
 function buildSefazPayloadPermissionario({ perm, darLike }) {
   const cnpj = onlyDigits(perm.cnpj || '');
   if (cnpj.length !== 14) throw new Error(`CNPJ inválido para o permissionário: ${perm.cnpj || 'vazio'}`);
@@ -83,11 +112,10 @@ function buildSefazPayloadPermissionario({ perm, darLike }) {
   }
 
   const codigoIbge = Number(process.env.COD_IBGE_MUNICIPIO || 0);
-  const receitaCod = normalizeReceita(process.env.RECEITA_CODIGO_PERMISSIONARIO);
+  const receitaCod = Number(process.env.RECEITA_CODIGO_PERMISSIONARIO || 0);
   if (!codigoIbge) throw new Error('COD_IBGE_MUNICIPIO não configurado (.env).');
   if (!receitaCod) throw new Error('RECEITA_CODIGO_PERMISSIONARIO não configurado (.env).');
 
-  // Endereço/CEP — fallbacks caso não existam colunas no DB
   const descricaoEndereco =
     (perm.endereco && String(perm.endereco).trim()) ||
     (process.env.ENDERECO_PADRAO || 'R. Barão de Jaraguá, 590 - Jaraguá, Maceió/AL');
@@ -101,13 +129,12 @@ function buildSefazPayloadPermissionario({ perm, darLike }) {
   return {
     versao: '1.0',
     contribuinteEmitente: {
-      codigoTipoInscricao: 4, // 4=CNPJ
+      codigoTipoInscricao: 4, // 3=CPF, 4=CNPJ
       numeroInscricao: cnpj,
       nome: perm.nome_empresa || 'Contribuinte',
       codigoIbgeMunicipio: codigoIbge,
-      // descricaoEndereco/numeroCep são opcionais na API, mas enviamos se soubermos
       descricaoEndereco,
-      numeroCep,
+      numeroCep
     },
     receitas: [
       {
@@ -115,15 +142,19 @@ function buildSefazPayloadPermissionario({ perm, darLike }) {
         competencia: { mes: compMes, ano: compAno },
         valorPrincipal,
         valorDesconto: 0.0,
-        dataVencimento: dataVenc,
-      },
+        dataVencimento: dataVenc
+      }
     ],
     dataLimitePagamento, // **sempre >= hoje**
-    observacao: `Aluguel CIPT - ${String(perm.nome_empresa || '').slice(0, 60)}`,
+    observacao: `Aluguel CIPT - ${String(perm.nome_empresa || '').slice(0, 60)}`
   };
 }
 
-// -------------------- Listagem --------------------
+// ======================================================
+// Rotas
+// ======================================================
+
+// Listagem dos DARs do permissionário logado
 router.get('/', authMiddleware, (req, res) => {
   const userId = req.user.id;
   const { ano, status } = req.query;
@@ -148,7 +179,7 @@ router.get('/', authMiddleware, (req, res) => {
   });
 });
 
-// -------------------- Recalcular --------------------
+// Recalcular encargos (para DAR vencido)
 router.get('/:id/recalcular', authMiddleware, (req, res) => {
   const userId = req.user.id;
   const darId = req.params.id;
@@ -167,7 +198,7 @@ router.get('/:id/recalcular', authMiddleware, (req, res) => {
   });
 });
 
-// -------------------- Preview --------------------
+// Preview do payload que será enviado à SEFAZ
 router.get('/:id/preview', authMiddleware, async (req, res) => {
   const userId = req.user.id;
   const darId = req.params.id;
@@ -185,20 +216,15 @@ router.get('/:id/preview', authMiddleware, async (req, res) => {
     );
     if (!perm) return res.status(404).json({ error: 'Permissionário não encontrado.' });
 
-    // Se vencido, simula com valor/data atualizados
+    // corrige vencimento no passado
     let guiaSource = { ...dar };
     if (dar.status === 'Vencido') {
       const calculo = await calcularEncargosAtraso(dar);
       guiaSource.valor = calculo.valorAtualizado;
       guiaSource.data_vencimento = calculo.novaDataVencimento || isoHojeLocal();
-      if (toISO(guiaSource.data_vencimento) < isoHojeLocal()) {
-        guiaSource.data_vencimento = isoHojeLocal();
-      }
-    } else {
-      // Se por acaso o DB tiver um vencimento no passado, evita erro de limite
-      if (toISO(guiaSource.data_vencimento) < isoHojeLocal()) {
-        guiaSource.data_vencimento = isoHojeLocal();
-      }
+    }
+    if (toISO(guiaSource.data_vencimento) < isoHojeLocal()) {
+      guiaSource.data_vencimento = isoHojeLocal();
     }
 
     const payload = buildSefazPayloadPermissionario({ perm, darLike: guiaSource });
@@ -208,7 +234,7 @@ router.get('/:id/preview', authMiddleware, async (req, res) => {
   }
 });
 
-// -------------------- Emitir --------------------
+// Emitir guia (chama SEFAZ)
 router.post('/:id/emitir', authMiddleware, async (req, res) => {
   const userId = req.user.id;
   const darId = req.params.id;
@@ -227,7 +253,7 @@ router.post('/:id/emitir', authMiddleware, async (req, res) => {
     );
     if (!perm) return res.status(404).json({ error: 'Permissionário não encontrado.' });
 
-    // Ajusta valor/data caso vencido (e garante vencimento >= hoje)
+    // corrige vencimento no passado
     let guiaSource = { ...dar };
     if (dar.status === 'Vencido') {
       const calculo = await calcularEncargosAtraso(dar);
@@ -238,17 +264,18 @@ router.post('/:id/emitir', authMiddleware, async (req, res) => {
       guiaSource.data_vencimento = isoHojeLocal();
     }
 
-    // Payload final para a SEFAZ (com dataLimitePagamento >= hoje)
+    // Payload final para a SEFAZ
     const payload = buildSefazPayloadPermissionario({ perm, darLike: guiaSource });
 
-    // Chama SEFAZ (services/sefazService aceita o payload direto)
+    // Chamada à SEFAZ (sefazService já trata timeouts e mensagens)
     const sefazResponse = await emitirGuiaSefaz(payload);
     // Esperado: { numeroGuia, pdfBase64, ... }
     if (!sefazResponse || !sefazResponse.numeroGuia || !sefazResponse.pdfBase64) {
       throw new Error('Retorno da SEFAZ incompleto.');
     }
 
-    // Atualiza DAR no banco
+    // Garante schema e atualiza DAR
+    await ensureSchema(); // no-op se já existe
     await dbRunAsync(
       `UPDATE dars SET numero_documento = ?, pdf_url = ?, status = 'Emitido' WHERE id = ?`,
       [sefazResponse.numeroGuia, sefazResponse.pdfBase64, darId]
@@ -257,10 +284,11 @@ router.post('/:id/emitir', authMiddleware, async (req, res) => {
     return res
       .status(200)
       .json(debug ? { ...sefazResponse, _payloadDebug: payload } : sefazResponse);
+
   } catch (error) {
     console.error('Erro na rota /emitir:', error);
     const isUnavailable =
-      /indispon[ií]vel|Load balancer|ECONNABORTED|ENOTFOUND|EAI_AGAIN|ECONNRESET|ETIMEDOUT|A SEFAZ não respondeu/i.test(
+      /indispon[ií]vel|Load balancer|ECONNABORTED|ENOTFOUND|EAI_AGAIN|ECONNRESET|ETIMEDOUT|timeout/i.test(
         error.message || ''
       );
     const status = isUnavailable ? 503 : 500;
