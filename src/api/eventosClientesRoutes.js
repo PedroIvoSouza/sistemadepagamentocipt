@@ -32,6 +32,13 @@ const isCnpj = d => d && d.length === 14;
 // ===================================================================
 clientRouter.use(authMiddleware, authorizeRole(['CLIENTE_EVENTO']));
 
+const normalizeTipoPessoa = (v='') => {
+  const s = String(v).trim().toUpperCase();
+  if (s === 'PF' || s === 'FISICA' || s === 'FÍSICA') return 'PF';
+  if (s === 'PJ' || s === 'JURIDICA' || s === 'JURÍDICA') return 'PJ';
+  return '';
+};
+
 // topo do arquivo (perto dos utils)
 const mapTipoPessoa = (v='') => {
   const t = String(v).trim().toUpperCase();
@@ -233,21 +240,19 @@ adminRouter.post('/', async (req, res) => {
     cep, logradouro, numero, complemento, bairro, cidade, uf
   } = req.body;
 
-  if (!nome_razao_social || !tipo_pessoa || !documento || !email || !tipo_cliente) {
+  const tp = normalizeTipoPessoa(tipo_pessoa);
+  if (!nome_razao_social || !tp || !documento || !email || !tipo_cliente) {
     return res.status(400).json({ error: 'Campos obrigatórios estão faltando.' });
   }
 
-  // 🔹 normaliza o tipo vindo do front (PF/PJ → FISICA/JURIDICA)
-  const tipoNormalizado = mapTipoPessoa(tipo_pessoa);
-
   documento = onlyDigits(documento);
   const docOk =
-    (tipoNormalizado === 'FISICA' && isCpf(documento)) ||
-    (tipoNormalizado === 'JURIDICA' && isCnpj(documento));
-
+    (tp === 'PF' && isCpf(documento)) ||
+    (tp === 'PJ' && isCnpj(documento));
   if (!docOk) {
     return res.status(400).json({ error: 'Documento do contribuinte ausente ou inválido (CPF/CNPJ).' });
   }
+
 
   // Se PF, zera documento_responsavel
   const documentoRespDigits = (tipoNormalizado === 'JURIDICA')
@@ -267,11 +272,10 @@ adminRouter.post('/', async (req, res) => {
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
     const params = [
-      nome_razao_social, tipoNormalizado, documento, email, telefone || null,
-      nome_responsavel || null, tipo_cliente, token, documentoRespDigits,
-      cep || null, logradouro || null, numero || null, complemento || null,
-      bairro || null, cidade || null, uf || null, enderecoCompleto || null
-    ];
+    nome_razao_social, tp, documento, email, telefone,
+    nome_responsavel, tipo_cliente, token, onlyDigits(documento_responsavel || ''),
+    cep, logradouro, numero, complemento, bairro, cidade, uf, enderecoCompleto
+  ];
 
     db.run(sql, params, async function (err) {
       if (err) {
@@ -303,30 +307,33 @@ adminRouter.put('/:id', (req, res) => {
 
   // 1) Normalização + defaults seguros
   const body = req.body || {};
+  const tp = normalizeTipoPessoa(body.tipo_pessoa); // <- PF/PJ
   const safe = {
-    nome_razao_social   : (body.nome_razao_social ?? body.nome ?? '').trim(),
-    tipo_pessoa         : String(body.tipo_pessoa ?? '').trim().toUpperCase(), // espera FISICA/JURIDICA
-    documento           : onlyDigits(body.documento ?? ''),
-    email               : (body.email ?? '').trim(),
-    telefone            : onlyDigits(body.telefone ?? ''),
-    nome_responsavel    : (body.nome_responsavel ?? '').trim(),
-    tipo_cliente        : (body.tipo_cliente ?? 'Geral').trim(),               // fallback p/ 'Geral'
+    nome_razao_social    : (body.nome_razao_social ?? body.nome ?? '').trim(),
+    tipo_pessoa          : tp,
+    documento            : onlyDigits(body.documento ?? ''),
+    email                : (body.email ?? '').trim(),
+    telefone             : onlyDigits(body.telefone ?? ''),
+    nome_responsavel     : (body.nome_responsavel ?? '').trim(),
+    tipo_cliente         : (body.tipo_cliente ?? 'Geral').trim(),
     documento_responsavel: onlyDigits(body.documento_responsavel ?? ''),
-    cep                 : onlyDigits(body.cep ?? ''),
-    logradouro          : (body.logradouro ?? '').trim(),
-    numero              : (body.numero ?? '').toString().trim(),
-    complemento         : (body.complemento ?? '').trim(),
-    bairro              : (body.bairro ?? '').trim(),
-    cidade              : (body.cidade ?? '').trim(),
-    uf                  : (body.uf ?? '').toString().trim().toUpperCase().slice(0,2),
-    // se vier endereço pronto, usamos; senão montamos
-    endereco            : (body.endereco ?? '').trim()
+    cep                  : onlyDigits(body.cep ?? ''),
+    logradouro           : (body.logradouro ?? '').trim(),
+    numero               : (body.numero ?? '').toString().trim(),
+    complemento          : (body.complemento ?? '').trim(),
+    bairro               : (body.bairro ?? '').trim(),
+    cidade               : (body.cidade ?? '').trim(),
+    uf                   : (body.uf ?? '').toString().trim().toUpperCase().slice(0, 2),
+    endereco             : (body.endereco ?? '').trim()
   };
 
   if (!safe.endereco) {
-    safe.endereco =
-      `${safe.logradouro || ''}, ${safe.numero || ''} ${safe.complemento || ''} - ` +
-      `${safe.bairro || ''}, ${safe.cidade || ''} - ${safe.uf || ''}, ${safe.cep || ''}`.replace(/\s+/g, ' ').trim();
+    // monta endereço legível e sem espaços múltiplos
+    safe.endereco = (
+      `${safe.logradouro || ''}, ${safe.numero || ''}` +
+      `${safe.complemento ? ' ' + safe.complemento : ''} - ` +
+      `${safe.bairro || ''}, ${safe.cidade || ''} - ${safe.uf || ''}, ${safe.cep || ''}`
+    ).replace(/\s+/g, ' ').trim();
   }
 
   // 2) Validação dos obrigatórios
@@ -334,16 +341,16 @@ adminRouter.put('/:id', (req, res) => {
     return res.status(400).json({ error: 'Campos obrigatórios estão faltando.' });
   }
 
-  // 3) Validação do documento de acordo com o tipo
+  // 3) Validação do documento conforme PF/PJ
   const docOk =
-    (safe.tipo_pessoa === 'FISICA'   && isCpf(safe.documento)) ||
-    (safe.tipo_pessoa === 'JURIDICA' && isCnpj(safe.documento));
+    (safe.tipo_pessoa === 'PF' && isCpf(safe.documento)) ||
+    (safe.tipo_pessoa === 'PJ' && isCnpj(safe.documento));
 
   if (!docOk) {
     return res.status(400).json({ error: 'Documento do contribuinte ausente ou inválido (CPF/CNPJ).' });
   }
 
-  // 4) Monta SQL/params (ordem EXATA das colunas)
+  // 4) SQL/params — respeita a ordem das colunas da tabela
   const sql = `
     UPDATE Clientes_Eventos SET
       nome_razao_social = ?, tipo_pessoa = ?, documento = ?, email = ?,
@@ -359,19 +366,22 @@ adminRouter.put('/:id', (req, res) => {
     id
   ];
 
-  // 5) Executa e LOGA o erro real do SQLite
+  // 5) Executa e trata erros do SQLite
   db.run(sql, params, function (err) {
     if (err) {
       console.error('[EVENTOS-CLIENTES][UPDATE] ERRO SQLite:', err.message);
       if (err.message.includes('UNIQUE constraint failed')) {
         return res.status(409).json({ error: 'Já existe um cliente com este CPF/CNPJ ou E-mail.' });
       }
+      if (err.message.includes('CHECK constraint failed')) {
+        return res.status(400).json({ error: "Valor inválido para 'tipo_pessoa'. Use 'PF' ou 'PJ'." });
+      }
       return res.status(500).json({ error: 'Erro ao atualizar o cliente no banco de dados.' });
     }
     if (this.changes === 0) {
       return res.status(404).json({ error: 'Cliente de evento não encontrado.' });
     }
-    return res.json({ message: 'Cliente atualizado com sucesso.', id });
+    res.json({ message: 'Cliente atualizado com sucesso.', id });
   });
 });
 
