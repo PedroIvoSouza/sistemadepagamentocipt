@@ -17,6 +17,65 @@ const dbGetAsync = (sql, params = []) =>
 // Helpers
 const onlyDigits = (v = '') => String(v).replace(/\D/g, '');
 
+// Helpers extras
+const toISO = (d) => {
+  if (!d) return null;
+  // aceita Date ou string Y-m-d
+  if (d instanceof Date && !isNaN(d.getTime())) return d.toISOString().slice(0,10);
+  const s = String(d).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  // tenta parsear genérico
+  const dt = new Date(s);
+  return isNaN(dt.getTime()) ? null : dt.toISOString().slice(0,10);
+};
+
+// Monta payload no MESMO formato usado em eventos
+function buildSefazPayloadPermissionario({ perm, darLike }) {
+  const cnpj = onlyDigits(perm.cnpj || '');
+  if (cnpj.length !== 14) throw new Error(`CNPJ inválido para o permissionário: ${perm.cnpj || 'vazio'}`);
+
+  const dataVenc = toISO(darLike.data_vencimento);
+  if (!dataVenc) throw new Error(`Data de vencimento inválida: ${darLike.data_vencimento}`);
+
+  const [ano, mes] = dataVenc.split('-'); // 'YYYY-MM-DD'
+  const codigoIbge = Number(process.env.COD_IBGE_MUNICIPIO || 0);
+  const receitaCod = Number(process.env.RECEITA_CODIGO_PERMISSIONARIO || 0);
+
+  if (!codigoIbge) throw new Error('COD_IBGE_MUNICIPIO não configurado (.env).');
+  if (!receitaCod) throw new Error('RECEITA_CODIGO_PERMISSIONARIO não configurado (.env).');
+
+  // Se sua tabela permissionarios não tiver endereço/cep, use fallbacks (ajuste para a realidade)
+  const descricaoEndereco =
+    (perm.endereco && String(perm.endereco).trim()) ||
+    'R. Barão de Jaraguá, 590 - Jaraguá, Maceió/AL'; // fallback
+  const numeroCep = onlyDigits(perm.cep || '') || '57020000'; // fallback seguro
+
+  const valorPrincipal = Number(darLike.valor || 0);
+  if (!(valorPrincipal > 0)) throw new Error(`Valor do DAR inválido: ${darLike.valor}`);
+
+  return {
+    versao: "1.0",
+    contribuinteEmitente: {
+      codigoTipoInscricao: 4,          // 3=CPF, 4=CNPJ
+      numeroInscricao: cnpj,
+      nome: perm.nome_empresa || 'Contribuinte',
+      codigoIbgeMunicipio: codigoIbge,
+      descricaoEndereco,
+      numeroCep
+    },
+    receitas: [{
+      codigo: receitaCod,
+      competencia: { mes: Number(mes), ano: Number(ano) },
+      valorPrincipal,
+      valorDesconto: 0.00,
+      dataVencimento: dataVenc
+    }],
+    dataLimitePagamento: dataVenc,
+    observacao: `Aluguel CIPT - ${String(perm.nome_empresa || '').slice(0,60)}`
+  };
+}
+
+
 // -------------------- Listagem --------------------
 router.get('/', authMiddleware, (req, res) => {
   const userId = req.user.id;
@@ -61,8 +120,8 @@ router.get('/:id/recalcular', authMiddleware, (req, res) => {
   });
 });
 
-// -------------------- Emitir --------------------
-router.post('/:id/emitir', authMiddleware, async (req, res) => {
+// -------------------- Preview (novo) --------------------
+router.get('/:id/preview', authMiddleware, async (req, res) => {
   const userId = req.user.id;
   const darId = req.params.id;
 
@@ -73,39 +132,76 @@ router.post('/:id/emitir', authMiddleware, async (req, res) => {
     );
     if (!dar) return res.status(404).json({ error: 'DAR não encontrado.' });
 
-    // Busca permissionário (usa CNPJ sempre)
-    const userRow = await dbGetAsync(
-      `SELECT id, nome_empresa, cnpj FROM permissionarios WHERE id = ?`,
+    const perm = await dbGetAsync(
+      `SELECT id, nome_empresa, cnpj, endereco, cep FROM permissionarios WHERE id = ?`,
       [userId]
     );
-    if (!userRow) return res.status(404).json({ error: 'Permissionário não encontrado.' });
+    if (!perm) return res.status(404).json({ error: 'Permissionário não encontrado.' });
 
-    const cnpj = onlyDigits(userRow.cnpj || '');
-    if (!cnpj || cnpj.length !== 14) {
-      return res.status(400).json({
-        error: `CNPJ do permissionário ausente ou inválido (recebido: ${userRow.cnpj || 'undefined'})`
-      });
-    }
-
-    const userForSefaz = {
-      documento: cnpj,
-      tipoDocumento: 'CNPJ',
-      nomeRazaoSocial: userRow.nome_empresa || 'Contribuinte'
-    };
-
-    // Se vencido, recalcula
-    let guiaSource = dar;
+    // Se vencido, simula com valor/data atualizados
+    let guiaSource = { ...dar };
     if (dar.status === 'Vencido') {
       const calculo = await calcularEncargosAtraso(dar);
-      guiaSource = {
-        ...dar,
-        valor: calculo.valorAtualizado,
-        data_vencimento: calculo.novaDataVencimento
-      };
+      guiaSource.valor = calculo.valorAtualizado;
+      guiaSource.data_vencimento = calculo.novaDataVencimento;
     }
 
-    const sefazResponse = await emitirGuiaSefaz(userForSefaz, guiaSource);
-    return res.status(200).json(sefazResponse);
+    const payload = buildSefazPayloadPermissionario({ perm, darLike: guiaSource });
+    return res.status(200).json({ payloadPreview: payload });
+  } catch (error) {
+    return res.status(500).json({ error: error.message || 'Erro ao montar preview.' });
+  }
+});
+
+// -------------------- Emitir (corrigido) --------------------
+router.post('/:id/emitir', authMiddleware, async (req, res) => {
+  const userId = req.user.id;
+  const darId = req.params.id;
+  const debug = String(req.query.debug || '').trim() === '1';
+
+  try {
+    const dar = await dbGetAsync(
+      `SELECT * FROM dars WHERE id = ? AND permissionario_id = ?`,
+      [darId, userId]
+    );
+    if (!dar) return res.status(404).json({ error: 'DAR não encontrado.' });
+
+    const perm = await dbGetAsync(
+      `SELECT id, nome_empresa, cnpj, endereco, cep FROM permissionarios WHERE id = ?`,
+      [userId]
+    );
+    if (!perm) return res.status(404).json({ error: 'Permissionário não encontrado.' });
+
+    // Ajusta valor/data caso vencido
+    let guiaSource = { ...dar };
+    if (dar.status === 'Vencido') {
+      const calculo = await calcularEncargosAtraso(dar);
+      guiaSource.valor = calculo.valorAtualizado;
+      guiaSource.data_vencimento = calculo.novaDataVencimento;
+    }
+
+    // Monta payload no formato aceito pelo serviço
+    const payload = buildSefazPayloadPermissionario({ perm, darLike: guiaSource });
+
+    // Chama SEFAZ
+    const sefazResponse = await emitirGuiaSefaz(payload);
+    // Esperado: { numeroGuia, pdfBase64, ... }
+    if (!sefazResponse || !sefazResponse.numeroGuia || !sefazResponse.pdfBase64) {
+      throw new Error('Retorno da SEFAZ incompleto.');
+    }
+
+    // Atualiza DAR no banco
+    await new Promise((resolve, reject) => {
+      db.run(
+        `UPDATE dars SET numero_documento = ?, pdf_url = ?, status = 'Emitido' WHERE id = ?`,
+        [sefazResponse.numeroGuia, sefazResponse.pdfBase64, darId],
+        function (err) { return err ? reject(err) : resolve(this); }
+      );
+    });
+
+    return res.status(200).json(
+      debug ? { ...sefazResponse, _payloadDebug: payload } : sefazResponse
+    );
 
   } catch (error) {
     console.error('Erro na rota /emitir:', error);
