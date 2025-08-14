@@ -88,12 +88,15 @@
                         <div class="card">
                             <div class="card-body p-4">
                                 <h5 class="card-title">Resumo Mensal de DARs</h5><hr>
-                                <div class="table-responsive">
-                                    <table class="table table-sm">
-                                        <thead><tr><th>Competência</th><th>Emitidas</th><th>Pagas</th><th>Vencidas</th></tr></thead>
-                                        <tbody id="resumo-mensal-body"></tbody>
-                                    </table>
+                                <div class="d-none d-md-block">
+                                    <div class="table-responsive">
+                                        <table class="table table-sm">
+                                            <thead><tr><th>Competência</th><th>Emitidas</th><th>Pagas</th><th>Vencidas</th></tr></thead>
+                                            <tbody id="resumo-mensal-body"></tbody>
+                                        </table>
+                                    </div>
                                 </div>
+                                <canvas id="resumoMensalChart" class="d-md-none w-100" height="200"></canvas>
                             </div>
                         </div>
                     </div>
@@ -113,6 +116,7 @@
 <script defer src="/js/mobile-adapter.js"></script>
   <script defer src="/js/ui-kit.js"></script>
   <script defer src="/js/mobile-tweaks.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <script>
 window.onload = async () => {
@@ -193,9 +197,9 @@ window.onload = async () => {
     document.getElementById('stat-vencidos').innerText       = stats.darsVencidos ?? '0';
     document.getElementById('stat-receita').innerText        = `R$ ${Number(stats.receitaPendente || 0).toFixed(2).replace('.',',')}`;
 
+    const meses = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
     const resumoBody = document.getElementById('resumo-mensal-body');
     if (stats.resumoMensal && stats.resumoMensal.length > 0) {
-      const meses = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
       resumoBody.innerHTML = stats.resumoMensal.map(item => `
         <tr>
           <td><strong>${meses[(item.mes_referencia||1)-1]}/${item.ano_referencia}</strong></td>
@@ -206,6 +210,30 @@ window.onload = async () => {
       `).join('');
     } else {
       resumoBody.innerHTML = '<tr><td colspan="4" class="text-muted text-center">Nenhum dado mensal para exibir.</td></tr>';
+    }
+
+    if (document.documentElement.classList.contains('is-mobile')) {
+      const labels = stats.resumoMensal?.map(item => `${meses[(item.mes_referencia||1)-1]}/${item.ano_referencia}`) || [];
+      const emitidas = stats.resumoMensal?.map(item => item.emitidas || 0) || [];
+      const pagas = stats.resumoMensal?.map(item => item.pagas || 0) || [];
+      const vencidas = stats.resumoMensal?.map(item => item.vencidas || 0) || [];
+      const hasData = labels.length > 0 && [...emitidas, ...pagas, ...vencidas].some(v => v > 0);
+      const chartCanvas = document.getElementById('resumoMensalChart');
+      if (hasData) {
+        new Chart(chartCanvas, {
+          type: 'bar',
+          data: {
+            labels,
+            datasets: [
+              { label: 'Emitidas', data: emitidas, backgroundColor: '#0d6efd' },
+              { label: 'Pagas', data: pagas, backgroundColor: '#198754' },
+              { label: 'Vencidas', data: vencidas, backgroundColor: '#dc3545' }
+            ]
+          }
+        });
+      } else {
+        chartCanvas.outerHTML = '<p class="text-muted text-center">Sem dados suficientes para exibir.</p>';
+      }
     }
 
     const devedoresList = document.getElementById('maiores-devedores-list');
