@@ -106,8 +106,7 @@ body{
 @media (max-width: 768px){
   .portal-logo,
   .navbar-brand img{
-    max-height:48px;
-    height:auto;
+    height: clamp(56px, 18vw, 96px);
     display:block;
     margin:0 auto;
     width:auto;
