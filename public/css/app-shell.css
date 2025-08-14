@@ -105,11 +105,12 @@ body{
 
 @media (max-width: 768px){
   .portal-logo,
-  .navbar-brand img{
-    height: clamp(56px, 18vw, 96px);
-    display:block;
-    margin:0 auto;
-    width:auto;
+  .navbar-brand img {
+    width: 100%;
+    max-width: 420px; /* mesma largura máxima do box de login */
+    height: auto;
+    display: block;
+    margin: 0 auto;
   }
 }
 
