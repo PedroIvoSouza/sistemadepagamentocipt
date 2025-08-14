@@ -52,54 +52,99 @@
     });
   }
 
-  // ---- 4) Reflow de tabelas -> cards ----
-  function reflowTable(tbl) {
-    if (!tbl || tbl.__reflowApplied) return;
-    const headers = [...tbl.querySelectorAll('thead th')].map(th => th.textContent.trim());
-    tbl.__headers = headers;
-    const applyRow = (tr) => {
-      [...tr.children].forEach((td, i) => {
-        const label = headers[i];
-        if (!label) return;
-        if (!td.querySelector('div.__label')) {
-          const l = document.createElement('div');
-          l.className = '__label';
-          l.textContent = label;
-          td.prepend(l);
-        }
-      });
-    };
-    tbl.querySelectorAll('tbody tr').forEach(applyRow);
-    tbl.__reflowApplied = true;
-    tbl.__applyRow = applyRow;
-  }
+  // ---- 4) Reflow de tabelas -> cards (agora pega QUALQUER <table>) ----
+function reflowTable(tbl) {
+  if (!tbl || tbl.hasAttribute('data-no-mobile-cards')) return;
+  // precisa ter thead com th para extrair os rótulos
+  const ths = tbl.querySelectorAll('thead th');
+  if (!ths.length) return;
+  if (tbl.__reflowApplied) return;
 
-  function reflowTables() {
-    if (!document.body.classList.contains('mobile')) return;
-    document.querySelectorAll('table.table').forEach(reflowTable);
-  }
+  const headers = [...ths].map(th => th.textContent.trim());
+  tbl.__headers = headers;
 
-  function undoReflow() {
-    document.querySelectorAll('table.table').forEach(tbl => {
-      if (!tbl.__reflowApplied) return;
-      tbl.__reflowApplied = false;
-      tbl.querySelectorAll('tbody td .__label').forEach(n => n.remove());
+  const applyRow = (tr) => {
+    [...tr.children].forEach((td, i) => {
+      const label = headers[i];
+      if (!label) return;
+      if (!td.querySelector('div.__label')) {
+        const l = document.createElement('div');
+        l.className = '__label';
+        l.textContent = label;
+        td.prepend(l);
+      }
     });
+  };
+
+  tbl.querySelectorAll('tbody tr').forEach(applyRow);
+  tbl.__reflowApplied = true;
+  tbl.__applyRow = applyRow;
+}
+
+function reflowTables() {
+  if (!document.body.classList.contains('mobile')) return;
+  document.querySelectorAll('table').forEach(reflowTable);
+}
+
+function undoReflow() {
+  document.querySelectorAll('table').forEach(tbl => {
+    if (!tbl.__reflowApplied) return;
+    tbl.__reflowApplied = false;
+    tbl.querySelectorAll('tbody td .__label').forEach(n => n.remove());
+  });
+}
+
+// Observer (debounced) para quando a tabela mudar por fetch/paginação
+let tableObserver;
+function observeTables() {
+  if (tableObserver) return;
+  const cb = () => {
+    clearTimeout(observeTables.__to);
+    observeTables.__to = setTimeout(reflowTables, 80);
+  };
+  tableObserver = new MutationObserver(cb);
+  document.querySelectorAll('table tbody').forEach(tb => {
+    tableObserver.observe(tb, { childList: true, subtree: true });
+  });
+}
+
+// ---- Compat de login: aplica classes “compat” quando não existem ----
+function compatLoginBrandAndHero() {
+  if (!isMobile()) return;
+
+  // Tenta identificar páginas de login pela presença de um form com senha ou botão "Acessar"
+  const isLogin = !!document.querySelector('form [type="password"], form button[type="submit"], form .btn-primary');
+
+  if (!isLogin) return;
+
+  // 1) Faixa de marcas (topo azul) — se existir uma faixa com múltiplas <img>, aplica classes
+  const possibleStrips = [
+    '.brand-strip', 'header .logos', '.header-brand', '.header .logos', '.topbar .logos'
+  ];
+  let strip = document.querySelector(possibleStrips.join(','));
+  if (!strip) {
+    // cria uma strip se houver um header azul com imagens
+    const headerImgs = document.querySelectorAll('header img, .topbar img');
+    if (headerImgs.length >= 2) {
+      const header = document.querySelector('header') || document.querySelector('.topbar');
+      if (header) {
+        strip = document.createElement('div');
+        strip.className = 'brand-strip';
+        header.appendChild(strip);
+        headerImgs.forEach(img => strip.appendChild(img)); // move as imagens para o strip
+      }
+    }
+  } else {
+    strip.classList.add('brand-strip'); // garante a classe
   }
 
-  // Observer (debounced) para quando a tabela mudar por fetch/paginação
-  let tableObserver;
-  function observeTables() {
-    if (tableObserver) return;
-    const cb = () => {
-      clearTimeout(observeTables.__to);
-      observeTables.__to = setTimeout(reflowTables, 80);
-    };
-    tableObserver = new MutationObserver(cb);
-    document.querySelectorAll('table.table tbody').forEach(tb => {
-      tableObserver.observe(tb, { childList: true, subtree: true });
-    });
+  // 2) Hero/Logo central — reduz a logo “grande”
+  const heroLogo = document.querySelector('.login-hero img, .hero img, .banner img');
+  if (heroLogo && !heroLogo.classList.contains('hero-logo')) {
+    heroLogo.classList.add('hero-logo');
   }
+}
+
 
   // ---- 5) Pull-to-refresh só no topo ----
   function setupPullToRefresh() {
@@ -168,6 +213,26 @@
 
     topbarShadow();
   }
+
+  function apply() {
+  setVhUnit();
+
+  if (isMobile()) {
+    document.body.classList.add('mobile');
+    ensureHamburger();
+    compatLoginBrandAndHero();   // <<< ADICIONADA AQUI
+    reflowTables();
+    observeTables();
+    setupPullToRefresh();
+  } else {
+    document.body.classList.remove('mobile');
+    undoReflow();
+    document.querySelector('.sidebar')?.classList.remove('open');
+  }
+
+  topbarShadow();
+}
+
 
   // Listeners globais (throttled/debounced)
   document.addEventListener('DOMContentLoaded', apply);

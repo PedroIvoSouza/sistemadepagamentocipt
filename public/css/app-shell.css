@@ -183,3 +183,66 @@ body{
 @media (prefers-reduced-motion: reduce){
   *{animation:none!important; transition:none!important; scroll-behavior:auto!important}
 }
+/* ====== COMPAT: tiras de marcas do login (topo azul) ====== */
+@media (max-width: 768px){
+  /* qualquer barra azul com múltiplas logos */
+  .brand-strip img,
+  header .logos img,
+  header .brand img,
+  .topbar .logos img,
+  .header-brand img,
+  .header .logos img {
+    height: clamp(16px, 2.8vw, 22px) !important;
+    width: auto !important;
+    object-fit: contain !important;
+    margin: 0 .4rem !important;
+    filter: none !important;
+  }
+
+  /* reduz padding do topo azul para ficar mais “leve” */
+  .brand-strip,
+  header .logos,
+  .header-brand {
+    padding: .35rem .8rem !important;
+    display:flex; align-items:center; justify-content:center;
+    gap:.5rem;
+  }
+
+  /* logo central do herói (mesmo sem classes novas) */
+  .login-hero img.hero-logo,
+  .hero img.logo,
+  .hero img[alt*="logo" i],
+  .login-hero img[alt*="inovacao" i],
+  .login-hero img[alt*="centro" i]{
+    width: clamp(68px, 24vw, 110px) !important;
+    height:auto !important;
+    display:block; margin: 0 auto 10px auto !important;
+  }
+
+  /* títulos do herói mais contidos */
+  .login-hero h1 { font-size: clamp(1.35rem, 5.2vw, 2.3rem) !important; }
+  .login-hero h2, .login-hero .subtitle { font-size: clamp(.95rem, 3.4vw, 1.1rem) !important; }
+}
+
+/* ====== COMPAT: tabelas sem classe .table => viram “cards” no mobile ====== */
+@media (max-width: 768px){
+  body.mobile table:not([data-no-mobile-cards]){
+    display:block; width:100%;
+  }
+  body.mobile table:not([data-no-mobile-cards]) thead{ display:none; }
+  body.mobile table:not([data-no-mobile-cards]) tbody{
+    display:grid; gap:.85rem;
+  }
+  body.mobile table:not([data-no-mobile-cards]) tbody tr{
+    display:grid; gap:.25rem;
+    padding:.95rem; border:1px solid var(--border);
+    border-radius:var(--radius-sm); background:#fff; box-shadow:var(--shadow);
+  }
+  body.mobile table:not([data-no-mobile-cards]) tbody td{
+    display:block; padding:.3rem 0; border:0 !important; word-break: break-word;
+  }
+  body.mobile table:not([data-no-mobile-cards]) tbody td + td{
+    border-top:1px dashed #eef1f4; padding-top:.55rem; margin-top:.25rem;
+  }
+  body.mobile .__label{ display:block; font-size:.75rem; color:var(--muted); margin:0 0 2px }
+}
