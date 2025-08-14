@@ -1,0 +1,139 @@
+/* ========= FUNDAMENTAIS ========= */
+html, body {
+  overscroll-behavior-y: contain;           /* evita pull-to-refresh em browsers compatíveis */
+  -webkit-text-size-adjust: 100%;           /* evita zoom involuntário ao focar inputs */
+  background: #f5f7f9;
+}
+:root {
+  --cipt-primary: #0056a0;
+  --cipt-muted: #6c757d;
+  --cipt-card: #ffffff;
+  --cipt-radius: 14px;
+  --cipt-shadow: 0 6px 16px rgba(0,0,0,.06);
+  --tap-target: 44px;                        /* mínimo recomendado Apple */
+}
+
+/* Use dvh/svh para evitar “pulos” quando a barra do navegador esconde/mostra */
+.min-100vh {
+  min-height: 100dvh;                        /* iOS 16+ / Android modernos */
+  min-height: 100svh;                        /* fallback moderno */
+  min-height: -webkit-fill-available;        /* fallback iOS antigos */
+}
+
+/* ========= LOGIN (LOGO BAR + HERO) ========= */
+.logo-bar, .hero-top {
+  background: #0a5aa1;                       /* seu azul do banner */
+  display: flex; align-items: center; justify-content: center;
+  padding: clamp(8px, 2vw, 16px);
+  border-bottom: 1px solid rgba(255,255,255,.12);
+}
+.logo-bar img, .hero-top img {
+  height: clamp(26px, 4.2vw, 40px);          /* diminui no mobile, mantém harmonia */
+  max-width: 100%; object-fit: contain;
+}
+.login-hero-wrap {
+  display: grid; place-items: center;
+  padding: clamp(16px, 4vw, 32px);
+}
+.login-card {
+  background: var(--cipt-card);
+  border-radius: var(--cipt-radius);
+  box-shadow: var(--cipt-shadow);
+  padding: clamp(16px, 4vw, 28px);
+  width: min(520px, 92vw);
+}
+.login-card h1, .login-card h2 {
+  font-size: clamp(20px, 4.8vw, 28px);
+  line-height: 1.2; margin-bottom: 6px;
+}
+.login-card p.sub {
+  color: var(--cipt-muted);
+  font-size: clamp(14px, 3.6vw, 16px);
+  margin-bottom: 18px;
+}
+
+/* inputs grandes para toque confortável */
+.login-card input, .login-card select, .login-card button {
+  height: max(40px, var(--tap-target));
+  border-radius: 12px;
+}
+
+/* ========= NAV INTERNA (MOBILE HEADER) ========= */
+.app-header {
+  position: sticky; top: 0; z-index: 50;
+  backdrop-filter: saturate(140%) blur(10px);
+  background: color-mix(in srgb, #fff 86%, transparent);
+  border-bottom: 1px solid rgba(0,0,0,.06);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px;
+}
+.app-title {
+  font-weight: 700; letter-spacing: .2px;
+  font-size: clamp(16px, 4.6vw, 18px);
+  color: #233243;
+  display: flex; flex-direction: column;
+  line-height: 1.15;
+}
+.app-title small { color: var(--cipt-muted); font-weight: 500; }
+
+/* hambúrguer confortável */
+.btn-burger {
+  width: var(--tap-target); height: var(--tap-target);
+  display: grid; place-items: center;
+  border: 0; border-radius: 12px; background: transparent;
+}
+.btn-burger:active { background: rgba(0,0,0,.05); }
+
+/* ========= CARDS DE DAR ========= */
+.dar-card {
+  background: var(--cipt-card);
+  border-radius: var(--cipt-radius);
+  box-shadow: var(--cipt-shadow);
+  padding: 14px 14px 12px;
+  margin: 12px 8px;
+}
+.dar-card + .dar-card { margin-top: 10px; }
+
+.dar-meta {
+  display: grid; grid-template-columns: 1fr auto; gap: 6px 10px;
+  align-items: center;
+}
+.dar-comp { font-weight: 700; font-size: clamp(15px, 4.4vw, 18px); }
+.dar-venc { color: var(--cipt-muted); font-size: 14px; }
+
+.badge-status {
+  font-size: 12px; padding: 6px 10px; border-radius: 999px;
+}
+.badge-status.pendente { background: #fff6d8; color: #8a6d00; }
+.badge-status.vencido { background: #ffe1e1; color: #9a2333; }
+.badge-status.emitido { background: #e7f1ff; color: #0b5ed7; }
+.badge-status.pago    { background: #eaf8ef; color: #146c43; }
+
+.dar-actions {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+  margin-top: 12px;
+}
+.dar-actions .btn {
+  height: max(40px, var(--tap-target));
+  border-radius: 12px; font-weight: 600;
+}
+
+/* Em telas muito estreitas, uma coluna */
+@media (max-width: 370px) {
+  .dar-actions { grid-template-columns: 1fr; }
+}
+
+/* ========= LISTAS MAIS FLUÍDAS ========= */
+.list-fluid { padding: 8px; }
+.list-fluid > .card, .list-fluid > .dar-card { margin-bottom: 12px; }
+
+/* ========= BOTÕES & LINKS ========= */
+.btn-primary { background: var(--cipt-primary); border-color: var(--cipt-primary); }
+.btn-primary:focus { outline: 3px solid rgba(0,86,160,.25); }
+
+/* ========= CORREÇÕES GERAIS ========= */
+/* evita “pulo” quando o navegador recolhe a barra, substitui 100vh em containers */
+.full-height-fix { min-height: 100dvh; }
+
+/* corrige toques duplos em iOS que dão zoom */
+input, select, textarea, button { font-size: 16px; }
