@@ -139,7 +139,7 @@ function compatLoginBrandAndHero() {
   }
 
   // 2) Hero/Logo central — reduz a logo “grande”
-  const heroLogo = document.querySelector('.login-hero img, .hero img, .banner img');
+  const heroLogo = document.querySelector('.login-hero img, .hero img, .banner img, .portal-logo');
   if (heroLogo && !heroLogo.classList.contains('hero-logo')) {
     heroLogo.classList.add('hero-logo');
   }
