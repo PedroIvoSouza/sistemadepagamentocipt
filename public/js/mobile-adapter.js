@@ -109,7 +109,7 @@ function observeTables() {
 }
 
 // ---- Compat de login: aplica classes “compat” quando não existem ----
-function compatLoginBrandAndHero() {
+  function compatLoginBrandAndHero() {
   if (!isMobile()) return;
 
   // Tenta identificar páginas de login pela presença de um form com senha ou botão "Acessar"
@@ -139,10 +139,17 @@ function compatLoginBrandAndHero() {
   }
 
   // 2) Hero/Logo central — reduz a logo “grande”
-  const heroLogo = document.querySelector('.login-hero img, .hero img, .banner img');
+  const heroLogo = document.querySelector('.login-hero img, .hero img, .banner img, .portal-logo');
   if (heroLogo && !heroLogo.classList.contains('hero-logo')) {
     heroLogo.classList.add('hero-logo');
   }
+}
+
+// ---- Impede pinch-zoom para evitar layout quebrado ----
+function disableZoom() {
+  document.addEventListener('gesturestart', e => e.preventDefault(), { passive: false });
+  document.addEventListener('gesturechange', e => e.preventDefault(), { passive: false });
+  document.addEventListener('gestureend', e => e.preventDefault(), { passive: false });
 }
 
 
@@ -199,14 +206,16 @@ function compatLoginBrandAndHero() {
     // define --vh
     setVhUnit();
 
-    if (isMobile()) {
-      document.body.classList.add('mobile');
-      ensureHamburger();
-      reflowTables();
-      observeTables();
-      setupPullToRefresh();
-    } else {
-      document.body.classList.remove('mobile');
+  if (isMobile()) {
+    document.body.classList.add('mobile');
+    ensureHamburger();
+    compatLoginBrandAndHero();
+    disableZoom();
+    reflowTables();
+    observeTables();
+    setupPullToRefresh();
+  } else {
+    document.body.classList.remove('mobile');
       undoReflow();
       document.querySelector('.sidebar')?.classList.remove('open');
     }
@@ -221,6 +230,7 @@ function compatLoginBrandAndHero() {
     document.body.classList.add('mobile');
     ensureHamburger();
     compatLoginBrandAndHero();   // <<< ADICIONADA AQUI
+    disableZoom();
     reflowTables();
     observeTables();
     setupPullToRefresh();

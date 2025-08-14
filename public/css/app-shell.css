@@ -103,6 +103,16 @@ body{
   font-size: clamp(.95rem, 3.4vw, 1.15rem);
 }
 
+@media (max-width: 768px){
+  .portal-logo,
+  .navbar-brand img{
+    height: clamp(56px, 18vw, 96px);
+    display:block;
+    margin:0 auto;
+    width:auto;
+  }
+}
+
 /* cartão de login */
 .login-card{
   margin: clamp(12px, 3vw, 24px) auto;
