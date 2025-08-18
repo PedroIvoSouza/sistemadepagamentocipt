@@ -50,6 +50,23 @@ db.serialize(() => {
         }
         console.log('Tabela "dars" verificada/criada com sucesso.');
     });
+
+    // Tabela 3: Certidões de Quitação
+    db.run(`
+        CREATE TABLE IF NOT EXISTS certidoes_quitacao (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            permissionario_id INTEGER NOT NULL,
+            token TEXT NOT NULL,
+            file_path TEXT NOT NULL,
+            data_emissao TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (permissionario_id) REFERENCES permissionarios (id)
+        );
+    `, (err) => {
+        if (err) {
+            return console.error('Erro ao criar a tabela "certidoes_quitacao":', err.message);
+        }
+        console.log('Tabela "certidoes_quitacao" verificada/criada com sucesso.');
+    });
 });
 
 db.close((err) => {
