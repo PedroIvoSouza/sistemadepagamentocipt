@@ -8,7 +8,6 @@ const fs = require('fs');
 const path = require('path');
 const { gerarTokenDocumento } = require('../utils/token');
 const os = require('os');
-const crypto = require('crypto');
 const DB_PATH = path.resolve(process.cwd(), process.env.SQLITE_STORAGE || './sistemacipt.db');
 
 // Middlewares
@@ -415,13 +414,15 @@ router.get(
       const stream = fs.createWriteStream(filePath);
       doc.pipe(stream);
 
+      const tokenDoc = await gerarTokenDocumento('RELATORIO_DEVEDORES', null);
+
       doc.on('pageAdded', () => {
         generateHeader(doc);
-        generateFooter(doc);
+        generateFooter(doc, tokenDoc);
       });
 
       generateHeader(doc);
-      generateFooter(doc);
+      generateFooter(doc, tokenDoc);
       doc.fillColor('#333').fontSize(16).text('Relatório de Devedores', { align: 'center' });
       doc.moveDown(2);
       generateDebtorsTable(doc, devedores);
@@ -432,14 +433,14 @@ router.get(
         stream.on('error', reject);
       });
 
-      const token = crypto.randomBytes(16).toString('hex');
       await dbRun(
         `INSERT INTO documentos (tipo, caminho, token) VALUES (?, ?, ?)`,
-        ['RELATORIO_DEVEDORES', filePath, token]
+        ['RELATORIO_DEVEDORES', filePath, tokenDoc]
       );
 
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', 'attachment; filename="relatorio_devedores.pdf"');
+      res.setHeader('X-Document-Token', tokenDoc);
       const fileStream = fs.createReadStream(filePath);
       fileStream.pipe(res);
       fileStream.on('close', () => {

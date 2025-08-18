@@ -56,8 +56,8 @@ router.post(
       }
 
       const total = pendentes.reduce((acc, d) => acc + Number(d.valor || 0), 0);
-      const token = await gerarTokenDocumento('oficio', permissionarioId);
-      const docRow = await dbGet(`SELECT id FROM documentos WHERE token = ?`, [token]);
+      const tokenDoc = await gerarTokenDocumento('oficio', permissionarioId);
+      const docRow = await dbGet(`SELECT id FROM documentos WHERE token = ?`, [tokenDoc]);
       const documentoId = docRow ? docRow.id : null;
 
       const mesesNomes = [
@@ -67,7 +67,6 @@ router.post(
       const mesesFormatados = pendentes.map(d => `${mesesNomes[d.mes_referencia - 1]}/${d.ano_referencia}`);
       const mesesStr = mesesFormatados.join(', ');
       const totalStr = total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-      const token = crypto.randomBytes(16).toString('hex');
       const agora = new Date();
       const dataAtual = agora.toLocaleDateString('pt-BR');
 
@@ -108,7 +107,7 @@ router.post(
       doc.text(`Total devido: R$ ${total.toFixed(2)}`);
       doc.text(`Total devido: ${totalStr}`);
       doc.moveDown(2);
-      doc.fontSize(10).text(`Token de autenticação: ${token}`);
+      doc.fontSize(10).text(`Token de autenticação: ${tokenDoc}`);
       const headerPath = path.join(__dirname, '..', '..', 'public', 'images', 'papel-timbrado-secti.png');
 
       const addHeader = () => {
@@ -119,7 +118,14 @@ router.post(
       };
 
       const addFooter = () => {
-        doc.font('Times-Roman').fontSize(10).text(`Token de autenticidade: ${token}`, doc.page.margins.left, doc.page.height - doc.page.margins.bottom + 20);
+        doc
+          .font('Times-Roman')
+          .fontSize(10)
+          .text(
+            `Token de autenticidade: ${tokenDoc}`,
+            doc.page.margins.left,
+            doc.page.height - doc.page.margins.bottom + 20
+          );
       };
 
       doc.on('pageAdded', () => {
@@ -161,7 +167,7 @@ router.post(
       await new Promise(resolve => stream.on('finish', resolve));
 
       let pdfBase64 = fs.readFileSync(filePath).toString('base64');
-      pdfBase64 = await imprimirTokenEmPdf(pdfBase64, token);
+      pdfBase64 = await imprimirTokenEmPdf(pdfBase64, tokenDoc);
       fs.writeFileSync(filePath, Buffer.from(pdfBase64, 'base64'));
 
       if (documentoId) {
@@ -171,7 +177,7 @@ router.post(
         );
       }
 
-      return res.status(201).json({ token, pdfUrl });
+      return res.status(201).json({ token: tokenDoc, pdfUrl });
     } catch (err) {
       console.error('[adminOficios] erro:', err);
       return res.status(500).json({ error: 'Erro ao gerar ofício.' });
