@@ -421,10 +421,11 @@ router.get(
         stream.on('error', reject);
       });
 
-      await dbRun(`UPDATE documentos SET caminho = ? WHERE token = ?`, [filePath, tokenDoc]);
       await dbRun(
-        `INSERT INTO documentos (tipo, caminho, token) VALUES (?, ?, ?)`,
-        ['RELATORIO_DEVEDORES', filePath, tokenDoc])
+        `INSERT INTO documentos (tipo, caminho, token) VALUES (?, ?, ?)
+         ON CONFLICT(token) DO UPDATE SET caminho = excluded.caminho`,
+        ['RELATORIO_DEVEDORES', filePath, tokenDoc]
+      );
 
 
       res.setHeader('Content-Type', 'application/pdf');
