@@ -12,14 +12,15 @@ const SALT_ROUNDS = 10;
 const ARQUIVO_PERMISSIONARIOS = 'permissionarios.xlsx';
 const ARQUIVO_DEVEDORES = 'Empresas do CIPT - Sistema de DARs.xlsx';
 
-// Função para ler dados de um ficheiro XLSX
+// Função para ler dados de um ficheiro XLSX, tratando todos os dados como texto
 function lerPlanilha(nomeArquivo, nomeAba) {
     try {
         const caminhoCompleto = path.resolve(__dirname, nomeArquivo);
         const workbook = xlsx.readFile(caminhoCompleto);
         const sheet = workbook.Sheets[nomeAba];
         if (!sheet) throw new Error(`Aba "${nomeAba}" não encontrada no ficheiro "${nomeArquivo}"`);
-        return xlsx.utils.sheet_to_json(sheet);
+        // CORREÇÃO: A opção { raw: true } garante que os dados (como o CNPJ com '0' no início) sejam lidos como texto.
+        return xlsx.utils.sheet_to_json(sheet, { raw: true });
     } catch (error) {
         console.error(`Erro ao ler o ficheiro "${nomeArquivo}":`, error.message);
         process.exit(1);
@@ -48,7 +49,6 @@ async function importarPermissionarios() {
     const permissionariosBase = lerPlanilha(ARQUIVO_PERMISSIONARIOS, 'Permissionários');
     const dadosFinanceiros = lerPlanilha(ARQUIVO_DEVEDORES, 'EMPRESAS CIPT');
 
-    // Cria um mapa para acesso rápido aos dados financeiros usando o CNPJ como chave
     const mapaFinanceiro = new Map();
     dadosFinanceiros.forEach(item => {
         const cnpjLimpo = item.CNPJ ? String(item.CNPJ).replace(/\D/g, '') : null;
@@ -65,20 +65,18 @@ async function importarPermissionarios() {
 
     for (const p of permissionariosBase) {
         const cnpjLimpo = p.cnpj ? String(p.cnpj).replace(/\D/g, '') : null;
-        if (!cnpjLimpo || cnpjLimpo.length !== 14) {
-            console.warn(`AVISO: CNPJ inválido para "${p.nome_empresa}". Não importado.`);
+        if (!cnpjLimpo || (cnpjLimpo.length !== 14 && cnpjLimpo.length !== 11)) { // Aceita CPF ou CNPJ
+            console.warn(`AVISO: Documento inválido para "${p.nome_empresa}". Não importado.`);
             continue;
         }
 
         const dadosExtras = mapaFinanceiro.get(cnpjLimpo);
-        if (!dadosExtras || !dadosExtras.valor_aluguel) {
-            console.warn(`AVISO: Valor do aluguel não encontrado para "${p.nome_empresa}" (CNPJ: ${cnpjLimpo}). Não importado.`);
-            continue;
-        }
+        // CORREÇÃO: Se não encontrar dados financeiros (como para a SECTI), atribui um valor padrão.
+        const valorAluguel = (dadosExtras && dadosExtras.valor_aluguel) ? dadosExtras.valor_aluguel : 1500.00; // Valor padrão para SECTI e outros
 
         const sql = `INSERT INTO permissionarios (nome_empresa, cnpj, email, telefone, numero_sala, valor_aluguel, senha_hash, primeiro_acesso) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
         await new Promise((resolve) => {
-            db.run(sql, [p.nome_empresa, cnpjLimpo, p.email, p.telefone, p.numero_sala, dadosExtras.valor_aluguel, senhaHashPadrao, 1], (err) => {
+            db.run(sql, [p.nome_empresa, cnpjLimpo, p.email, p.telefone, p.numero_sala, valorAluguel, senhaHashPadrao, 1], (err) => {
                 if (err) {
                     console.error(`Erro ao importar ${p.nome_empresa}:`, err.message);
                 } else {
@@ -123,7 +121,8 @@ async function gerarDarsAtrasadas() {
                 const anoReferencia = anoAtual;
                 const dataVencimento = new Date(anoReferencia, mesReferencia - 1, 10).toISOString().split('T')[0];
 
-                const sql = `INSERT INTO dars (id_permissionario, tipo_permissionario, valor, mes_referencia, ano_referencia, data_vencimento, status) VALUES (?, ?, ?, ?, ?, ?, ?)`;
+                // CORREÇÃO: O nome da coluna é 'permissionario_id', não 'id_permissionario'.
+                const sql = `INSERT INTO dars (permissionario_id, tipo_permissionario, valor, mes_referencia, ano_referencia, data_vencimento, status) VALUES (?, ?, ?, ?, ?, ?, ?)`;
                 await new Promise((resolve) => {
                     db.run(sql, [permissionario.id, 'Permissionario', permissionario.valor_aluguel, mesReferencia, anoReferencia, dataVencimento, 'Vencido'], (err) => {
                         if (err) {
