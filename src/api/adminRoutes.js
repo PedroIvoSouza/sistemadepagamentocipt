@@ -353,13 +353,10 @@ router.get(
         res.setHeader('X-Document-Token', tokenDoc);
         doc.pipe(res);
 
-        doc.on('pageAdded', () => {
-          generateFooter(doc, tokenDoc);
-          generateHeader(doc);
-        });
+        doc.on('pageAdded', () => placeHeaderFooter(doc, tokenDoc));
+         placeHeaderFooter(doc, tokenDoc);
+         doc.fillColor('#333'); // cor default do conteúdo
 
-        generateHeader(doc);
-        generateFooter(doc, tokenDoc);
         doc.fillColor('#333').fontSize(16).text('Relatório de Permissionários', { align: 'center' });
         doc.moveDown(2);
         generateTable(doc, permissionarios);
@@ -412,13 +409,11 @@ router.get(
 
       const tokenDoc = await gerarTokenDocumento('RELATORIO_DEVEDORES', null);
 
-      doc.on('pageAdded', () => {
-        generateFooter(doc, tokenDoc);
-        generateHeader(doc);
-      });
+      doc.on('pageAdded', () => placeHeaderFooter(doc, tokenDoc));
+      placeHeaderFooter(doc, tokenDoc);
+      doc.fillColor('#333'); // cor default do conteúdo
 
-      generateHeader(doc);
-      generateFooter(doc, tokenDoc);
+
       doc.fillColor('#333').fontSize(16).text('Relatório de Devedores', { align: 'center' });
       doc.moveDown(2);
       generateDebtorsTable(doc, devedores);
@@ -453,43 +448,85 @@ router.get(
   }
 );
 
-/* ===========================================================
-   Helpers para PDF
-   =========================================================== */
+// ===== Header/Footer "seguros" (sem quebra e sem recursão) =====
+let _hfRendering = false;
+
 function generateHeader(doc) {
+  const left   = doc.page.margins.left;
+  const right  = doc.page.margins.right;
+  const topBarH = 80;
+
   const sectiLogoPath = path.join(__dirname, '..', '..', 'public', 'images', 'LOGO SECTI.png');
-  doc.rect(0, 0, doc.page.width, 80).fill('#0056a0');
+
+  doc.save();
+  // barra superior
+  doc.rect(0, 0, doc.page.width, topBarH).fill('#0056a0');
+
+  // logo ou texto, em posição ABSOLUTA, sem quebra
   try {
     if (fs.existsSync(sectiLogoPath)) {
       doc.image(sectiLogoPath, doc.page.width / 2 - 50, 15, { height: 50 });
     } else {
-      doc.fontSize(18).fillColor('#FFFFFF').text('SECTI', { align: 'center' });
+      doc.fillColor('#FFFFFF').fontSize(18).text(
+        'SECTI',
+        left,
+        26,
+        { width: doc.page.width - left - right, align: 'center', lineBreak: false }
+      );
     }
   } catch (e) {
     console.error('Erro ao carregar imagem do cabeçalho:', e);
   }
-  doc.y = 100;
+  doc.restore();
 }
 
 function generateFooter(doc, token) {
-  const y = doc.y;
+  const left   = doc.page.margins.left;
+  const right  = doc.page.margins.right;
+  const pageH  = doc.page.height;
+  const barH   = 70;
+
   const govLogoPath = path.join(__dirname, '..', '..', 'public', 'images', 'logo-governo.png');
-  const pageHeight = doc.page.height;
-  doc.rect(0, pageHeight - 70, doc.page.width, 70).fill('#004480');
+
+  doc.save();
+  // barra inferior
+  doc.rect(0, pageH - barH, doc.page.width, barH).fill('#004480');
+
+  // logo governo em posição absoluta
   try {
     if (fs.existsSync(govLogoPath)) {
-      doc.image(govLogoPath, doc.page.width - 120, pageHeight - 55, { height: 40 });
+      doc.image(govLogoPath, doc.page.width - right - 110, pageH - barH + 15, { height: 40 });
     }
   } catch (e) {
     console.error('Erro ao carregar imagem do rodapé:', e);
   }
+
   if (token) {
-    doc
-      .fillColor('#fff')
-      .fontSize(8)
-      .text(`Token: ${token}`, doc.page.margins.left, pageHeight - 50);
+    // texto ABSOLUTO e SEM lineBreak para não criar nova página
+    doc.fillColor('#FFFFFF').fontSize(8).text(
+      `Token: ${token}`,
+      left,
+      pageH - barH + 20,
+      { lineBreak: false, width: doc.page.width - left - right - 140 }
+    );
   }
-  doc.y = y;
+  doc.restore();
+}
+
+// Aplica header+footer e reposiciona o cursor para a área útil
+function placeHeaderFooter(doc, token) {
+  if (_hfRendering) return;      // evita reentrada
+  _hfRendering = true;
+
+  generateHeader(doc);
+  generateFooter(doc, token);
+
+  // Cursor de conteúdo sempre inicia abaixo do header
+  doc.x = doc.page.margins.left;
+  // seu header tem ~80px; use 100 para folga
+  doc.y = Math.max(doc.page.margins.top, 100);
+
+  _hfRendering = false;
 }
 
 function generateTable(doc, data) {
