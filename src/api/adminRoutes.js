@@ -344,32 +344,35 @@ router.get(
       // PDF
       if (format === 'pdf') {
         const tokenDoc = await gerarTokenDocumento('RELATORIO_PERMISSIONARIOS', null);
-        const doc = new PDFDocument({
-          layout: 'landscape',
-          size: 'A4',
-          margins: { top: 50, bottom: 50, left: 50, right: 50 },
-        });
-         const doc = new PDFDocument({ size: 'A4', margins: abntMargins(0.5, 0.5) });
+      
+        const doc = new PDFDocument({ size: 'A4', margins: abntMargins(0.5, 0.5) });
         res.header('Content-Type', 'application/pdf');
         res.attachment('permissionarios.pdf');
         res.setHeader('X-Document-Token', tokenDoc);
         doc.pipe(res);
-
-        doc.on('pageAdded', () => placeHeaderFooter(doc, tokenDoc));
-         placeHeaderFooter(doc, tokenDoc);
-         doc.fillColor('#333'); // cor default do conteúdo
-
-         applyLetterhead(doc, { imagePath: path.join(__dirname, '..', 'assets', 'papel-timbrado-secti.png') });
-          doc.x = doc.page.margins.left;
-         doc.y = doc.page.margins.top;
-         doc.fillColor('#333'); // cor padrão do conteúdo
+      
+        // Papel timbrado em todas as páginas
+        applyLetterhead(doc, { imagePath: path.join(__dirname, '..', 'assets', 'papel-timbrado-secti.png') });
+      
+        // Cursor inicial dentro da área útil
+        doc.x = doc.page.margins.left;
+        doc.y = doc.page.margins.top;
+      
+        // Token por página (sem quebras)
+        printToken(doc, tokenDoc);
+        doc.on('pageAdded', () => {
+          printToken(doc, tokenDoc);
+        });
+      
+        // Conteúdo
         doc.fillColor('#333').fontSize(16).text('Relatório de Permissionários', { align: 'center' });
         doc.moveDown(2);
         generateTable(doc, permissionarios);
-
+      
         doc.end();
         return;
       }
+
 
       return res.status(400).json({ error: 'Formato de exportação inválido.' });
     } catch (error) {
@@ -378,9 +381,6 @@ router.get(
     }
   }
 );
-
-printToken(doc, tokenDoc);
-doc.on('pageAdded', () => printToken(doc, tokenDoc));
 
 /* ===========================================================
    GET /api/admin/relatorios/devedores
@@ -418,19 +418,24 @@ router.get(
 
       const tokenDoc = await gerarTokenDocumento('RELATORIO_DEVEDORES', null);
 
-      doc.on('pageAdded', () => placeHeaderFooter(doc, tokenDoc));
-      placeHeaderFooter(doc, tokenDoc);
-      doc.fillColor('#333'); // cor default do conteúdo
-      // aplica o papel timbrado em todas as páginas
+      // Papel timbrado em todas as páginas
       applyLetterhead(doc, { imagePath: path.join(__dirname, '..', 'assets', 'papel-timbrado-secti.png') });
-      // garante cursor no início da área útil
+      
+      // Cursor inicial dentro da área útil
       doc.x = doc.page.margins.left;
-      doc.y = doc.page.margins.top;             
-       
+      doc.y = doc.page.margins.top;
+      
+      // Token por página
+      printToken(doc, tokenDoc);
+      doc.on('pageAdded', () => {
+        printToken(doc, tokenDoc);
+      });
+      
       doc.fillColor('#333').fontSize(16).text('Relatório de Devedores', { align: 'center' });
       doc.moveDown(2);
       generateDebtorsTable(doc, devedores);
       doc.end();
+
 
       await new Promise((resolve, reject) => {
         stream.on('finish', resolve);
@@ -460,87 +465,6 @@ router.get(
     }
   }
 );
-
-// ===== Header/Footer "seguros" (sem quebra e sem recursão) =====
-let _hfRendering = false;
-
-function generateHeader(doc) {
-  const left   = doc.page.margins.left;
-  const right  = doc.page.margins.right;
-  const topBarH = 80;
-
-  const sectiLogoPath = path.join(__dirname, '..', '..', 'public', 'images', 'LOGO SECTI.png');
-
-  doc.save();
-  // barra superior
-  doc.rect(0, 0, doc.page.width, topBarH).fill('#0056a0');
-
-  // logo ou texto, em posição ABSOLUTA, sem quebra
-  try {
-    if (fs.existsSync(sectiLogoPath)) {
-      doc.image(sectiLogoPath, doc.page.width / 2 - 50, 15, { height: 50 });
-    } else {
-      doc.fillColor('#FFFFFF').fontSize(18).text(
-        'SECTI',
-        left,
-        26,
-        { width: doc.page.width - left - right, align: 'center', lineBreak: false }
-      );
-    }
-  } catch (e) {
-    console.error('Erro ao carregar imagem do cabeçalho:', e);
-  }
-  doc.restore();
-}
-
-function generateFooter(doc, token) {
-  const left   = doc.page.margins.left;
-  const right  = doc.page.margins.right;
-  const pageH  = doc.page.height;
-  const barH   = 70;
-
-  const govLogoPath = path.join(__dirname, '..', '..', 'public', 'images', 'logo-governo.png');
-
-  doc.save();
-  // barra inferior
-  doc.rect(0, pageH - barH, doc.page.width, barH).fill('#004480');
-
-  // logo governo em posição absoluta
-  try {
-    if (fs.existsSync(govLogoPath)) {
-      doc.image(govLogoPath, doc.page.width - right - 110, pageH - barH + 15, { height: 40 });
-    }
-  } catch (e) {
-    console.error('Erro ao carregar imagem do rodapé:', e);
-  }
-
-  if (token) {
-    // texto ABSOLUTO e SEM lineBreak para não criar nova página
-    doc.fillColor('#FFFFFF').fontSize(8).text(
-      `Token: ${token}`,
-      left,
-      pageH - barH + 20,
-      { lineBreak: false, width: doc.page.width - left - right - 140 }
-    );
-  }
-  doc.restore();
-}
-
-// Aplica header+footer e reposiciona o cursor para a área útil
-function placeHeaderFooter(doc, token) {
-  if (_hfRendering) return;      // evita reentrada
-  _hfRendering = true;
-
-  generateHeader(doc);
-  generateFooter(doc, token);
-
-  // Cursor de conteúdo sempre inicia abaixo do header
-  doc.x = doc.page.margins.left;
-  // seu header tem ~80px; use 100 para folga
-  doc.y = Math.max(doc.page.margins.top, 100);
-
-  _hfRendering = false;
-}
 
 function generateTable(doc, data) {
   let y = doc.y;
@@ -574,9 +498,9 @@ function generateTable(doc, data) {
   y += rowHeight;
 
   for (const item of data) {
-    if (y + rowHeight > doc.page.height - doc.page.margins.bottom - 70) {
-      doc.addPage();
-      y = 100;
+     if (y + rowHeight > doc.page.height - doc.page.margins.bottom - 10) {
+       doc.addPage();
+       y = doc.page.margins.top;   
       drawRow(headers, y, true);
       y += rowHeight;
     }
@@ -623,9 +547,9 @@ function generateDebtorsTable(doc, data) {
   y += rowHeight;
 
   for (const item of data) {
-    if (y + rowHeight > doc.page.height - doc.page.margins.bottom - 70) {
-      doc.addPage();
-      y = 100;
+    if (y + rowHeight > doc.page.height - doc.page.margins.bottom - 10) {
+     doc.addPage();
+      y = doc.page.margins.top;
       drawRow(headers, y, true);
       y += rowHeight;
     }
