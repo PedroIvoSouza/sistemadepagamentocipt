@@ -114,7 +114,22 @@
     }, {passive:true});
   })();
 
+  // -------- Toggle para campos de senha
+  function setupPasswordToggle(inputId, buttonId){
+    const toggleButton = document.getElementById(buttonId);
+    const passwordInput = document.getElementById(inputId);
+    if (!toggleButton || !passwordInput) return;
+    const icon = toggleButton.querySelector('i');
+    toggleButton.addEventListener('click', () => {
+      const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
+      passwordInput.setAttribute('type', type);
+      icon.classList.toggle('bi-eye-fill');
+      icon.classList.toggle('bi-eye-slash-fill');
+    });
+  }
+
   // Expor a API
-  window.AppUI = { toast, loading, sheet, attachPullToRefresh, withLongTask };
+  window.AppUI = { toast, loading, sheet, attachPullToRefresh, withLongTask, setupPasswordToggle };
+  window.setupPasswordToggle = setupPasswordToggle;
   document.addEventListener('DOMContentLoaded', netBanner);
 })();

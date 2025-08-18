@@ -50,6 +50,8 @@
     }
     .btn-primary { background-color: var(--cor-primaria); border-color: var(--cor-primaria); border-radius: var(--raio-borda); }
     .form-control { border-radius: var(--raio-borda); }
+    .input-group .form-control { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+    .input-group .btn { border-top-left-radius: 0; border-bottom-left-radius: 0; border-color: #ced4da; }
     .footer { background-color: var(--cor-footer); padding: 1.5rem 0; color: rgba(255,255,255,0.8); }
     .footer-top { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 1.5rem; margin-bottom: 1rem; }
     .footer-info h5 { color: white; font-weight: 700; font-size: 1rem; margin-bottom: 0.5rem; }
@@ -93,10 +95,12 @@
                   <input type="text" class="form-control" id="usuario" name="usuario" placeholder="Usuário ou e-mail" autocomplete="username" required>
                   <label for="usuario">Usuário ou e-mail</label>
                 </div>
-                <div class="form-floating mb-3">
+                <label for="senha" class="form-label">Senha</label>
+                <div class="input-group mb-3">
                   <input type="password" class="form-control" id="senha" name="senha" placeholder="Senha" autocomplete="current-password" required>
-                  <label for="senha">Senha</label>
+                  <button class="btn btn-outline-secondary" type="button" id="toggleSenha"><i class="bi bi-eye-fill"></i></button>
                 </div>
+                <div class="d-flex justify-content-end mb-3"><a href="/admin/solicitar-redefinicao.html">Primeiro acesso ou esqueceu a senha?</a></div>
                 <button id="btnEntrar" class="w-100 btn btn-lg btn-primary" type="submit">Entrar</button>
                 <div id="message" class="alert alert-danger mt-4" style="display:none;" role="alert"></div>
               </form>
@@ -129,6 +133,20 @@
   <script defer src="/js/ui-kit.js"></script>
   <script defer src="/js/mobile-tweaks.js"></script>
   <script>
+  function setupPasswordToggle(inputId, buttonId) {
+    const toggleButton = document.getElementById(buttonId);
+    const passwordInput = document.getElementById(inputId);
+    if (!toggleButton || !passwordInput) return;
+    const icon = toggleButton.querySelector('i');
+
+    toggleButton.addEventListener('click', () => {
+      const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
+      passwordInput.setAttribute('type', type);
+      icon.classList.toggle('bi-eye-fill');
+      icon.classList.toggle('bi-eye-slash-fill');
+    });
+  }
+
   async function handleAdminLogin(e) {
     try { e.preventDefault(); } catch(_) {}
 
@@ -180,8 +198,12 @@
     }
   }
 
+  setupPasswordToggle('senha','toggleSenhaAdmin');
   // prende o submit
   document.getElementById('adminLoginForm')?.addEventListener('submit', handleAdminLogin);
+  document.addEventListener('DOMContentLoaded', () => {
+    setupPasswordToggle('senha', 'toggleSenha');
+  });
 </script>
 </body>
 </html>
