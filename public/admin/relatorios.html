@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Relatórios - Painel de Gestão</title>
+
+    <link rel="icon" type="image/png" href="/images/logo-cipt.png">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/app-shell.css">
+    <link rel="stylesheet" href="/css/mobile-tweaks.css">
+
+    <style>
+        :root {
+            --cor-primaria: #0056a0;
+            --cor-sidebar: #004480;
+            --raio-borda: 0.5rem;
+        }
+        body { font-family: 'Montserrat', sans-serif; background-color: #f4f7f6; }
+        .wrapper { display: flex; width: 100%; min-height: 100vh; }
+        .sidebar { width: 260px; background-color: var(--cor-sidebar); color: rgba(255, 255, 255, 0.8); display: flex; flex-direction: column; }
+        .sidebar-header { padding: 1.5rem; text-align: center; background-color: rgba(0,0,0,0.1); }
+        .sidebar-header img { max-width: 180px; height: auto; }
+        .sidebar-nav { padding: 1rem 0; flex-grow: 1; }
+        .sidebar-nav .nav-link { color: rgba(255, 255, 255, 0.8); padding: 0.8rem 1.5rem; display: flex; align-items: center; font-weight: 500; text-decoration: none; }
+        .sidebar-nav .nav-link .bi { margin-right: 1rem; font-size: 1.2rem; }
+        .sidebar-nav .nav-link:hover { color: #ffffff; background-color: rgba(255,255,255,0.05); }
+        .sidebar-nav .nav-link.active { color: white; background-color: var(--cor-primaria); }
+        .sidebar-footer { padding: 1.5rem; text-align: center; border-top: 1px solid rgba(255,255,255,0.1); }
+        .sidebar-footer img { max-height: 100px; width: auto; }
+        .main-content { flex-grow: 1; display: flex; flex-direction: column; }
+        .topbar { background-color: #ffffff; padding: 1rem 2rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); display: flex; justify-content: flex-end; align-items: center; }
+        .content { padding: 2rem; }
+    </style>
+</head>
+<body>
+    <div class="wrapper">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <a href="/admin/dashboard.html"><img src="/images/painel-gestao.png" alt="Painel de Gestão"></a>
+            </div>
+            <ul class="nav flex-column sidebar-nav">
+                <li class="nav-item"><a class="nav-link" href="/admin/dashboard.html"><i class="bi bi-grid-1x2-fill"></i>Dashboard</a></li>
+                <li class="nav-item"><a class="nav-link" href="/admin/permissionarios.html"><i class="bi bi-people-fill"></i>Permissionários</a></li>
+                <li class="nav-item"><a class="nav-link" href="/admin/dars.html"><i class="bi bi-file-earmark-text-fill"></i>DARs</a></li>
+
+                <li class="nav-item menu-dropdown">
+                    <a class="nav-link" href="#"><i class="bi bi-calendar-event-fill"></i>Eventos</a>
+                    <ul class="submenu" style="list-style: none; padding-left: 20px; display: none;">
+                        <li><a class="nav-link" href="/admin/eventos-clientes.html">Clientes de Eventos</a></li>
+                        <li><a class="nav-link" href="/admin/eventos-dars.html">DARs de Eventos</a></li>
+                    </ul>
+                </li>
+
+                <li class="nav-item"><a class="nav-link" href="/admin/relatorios.html"><i class="bi bi-file-earmark-bar-graph"></i>Relatórios</a></li>
+                <li class="nav-item"><a class="nav-link" href="/admin/admin-management.html"><i class="bi bi-person-badge-fill"></i>Administradores</a></li>
+                <li class="nav-item"><a id="logoutButton" class="nav-link" href="#" style="color: #ffc107;"><i class="bi bi-box-arrow-right"></i>Sair</a></li>
+            </ul>
+            <div class="sidebar-footer"><img src="/images/logo-secti-vertical.png" alt="Logo SECTI"></div>
+        </aside>
+
+        <div class="main-content">
+            <header class="topbar">
+                <div id="userInfo" class="text-end">
+                    <strong id="adminName">Carregando...</strong>
+                </div>
+            </header>
+
+            <main class="content">
+                <h1 class="h2 mb-4">Relatórios</h1>
+                <button id="btnRelatorioDevedores" class="btn btn-primary">Relatório de Devedores</button>
+            </main>
+        </div>
+    </div>
+
+    <script src="/js/admin-guard.js"></script>
+    <script defer src="/js/mobile-adapter.js"></script>
+    <script defer src="/js/ui-kit.js"></script>
+    <script defer src="/js/mobile-tweaks.js"></script>
+    <script src="/js/admin-relatorios.js"></script>
+    <script>
+    window.onload = async () => {
+        let token = localStorage.getItem('adminToken') || localStorage.getItem('adminAuthToken');
+        if (!token) {
+            window.location.href = '/admin/login.html';
+            return;
+        }
+        localStorage.setItem('adminToken', token);
+        localStorage.removeItem('adminAuthToken');
+
+        const path = window.location.pathname;
+        const navLinks = document.querySelectorAll('.sidebar-nav .nav-link');
+        navLinks.forEach(link => {
+            const href = link.getAttribute('href');
+            if (path.endsWith(href)) {
+                link.classList.add('active');
+                const parentDropdown = link.closest('.menu-dropdown');
+                if (parentDropdown) {
+                    parentDropdown.querySelector('.submenu').style.display = 'block';
+                }
+            }
+        });
+
+        const dropdownToggles = document.querySelectorAll('.menu-dropdown > a');
+        dropdownToggles.forEach(toggle => {
+            toggle.addEventListener('click', (e) => {
+                e.preventDefault();
+                const submenu = toggle.nextElementSibling;
+                submenu.style.display = submenu.style.display === 'block' ? 'none' : 'block';
+            });
+        });
+
+        document.getElementById('logoutButton').addEventListener('click', (e) => {
+            e.preventDefault();
+            localStorage.removeItem('adminToken');
+            window.location.href = '/admin/login.html';
+        });
+
+        try {
+            const base64url = token.split('.')[1] || '';
+            const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(base64url.length / 4) * 4, '=');
+            const payload = JSON.parse(atob(base64));
+            document.getElementById('adminName').innerText = payload?.nome || 'Administrador';
+        } catch (e) {
+            console.error('Erro ao decodificar token:', e);
+        }
+    };
+    </script>
+</body>
+</html>
