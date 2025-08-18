@@ -48,7 +48,7 @@ router.post(
       }
 
       const pendentes = await dbAll(
-        `SELECT mes_referencia, ano_referencia, valor, data_vencimento FROM dars WHERE permissionario_id = ? AND status <> 'Pago'`,
+        `SELECT mes_referencia, ano_referencia, valor, data_vencimento FROM dars WHERE permissionario_id = ? AND status <> 'Pago' AND DATE(data_vencimento) < DATE('now')`,
         [permissionarioId]
       );
       if (!pendentes.length) {
