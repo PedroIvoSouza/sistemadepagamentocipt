@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>Certidão de Quitação</title>
+</head>
+<body>
+  <div class="container">
+    <h1>Certidão de Quitação</h1>
+    <p>Clique no botão abaixo para gerar sua certidão de quitação.</p>
+    <button id="btnCertidao">Baixar Certidão</button>
+  </div>
+  <script>
+    document.getElementById('btnCertidao').addEventListener('click', async () => {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        alert('Usuário não autenticado.');
+        return;
+      }
+      const meRes = await fetch('/api/user/me', {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+      if (!meRes.ok) {
+        alert('Erro ao obter dados do usuário.');
+        return;
+      }
+      const user = await meRes.json();
+      const res = await fetch(`/api/permissionarios/${user.id}/certidao`, {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'certidao.pdf';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || 'Falha ao gerar certidão.');
+      }
+    });
+  </script>
+</body>
+</html>
