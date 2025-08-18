@@ -92,9 +92,10 @@ router.post(
       doc.text(`Data: ${dataAtual}`);
       doc.moveDown();
 
+      const contentWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
       doc.text(
         `Constam pendências de pagamento referentes às competências ${mesesStr}, totalizando ${totalStr}.`,
-        { width: 500 }
+        { width: contentWidth }
       );
       doc.moveDown();
       doc.text('Detalhamento das DARs pendentes:');
@@ -169,6 +170,8 @@ router.post(
       let pdfBase64 = fs.readFileSync(filePath).toString('base64');
       pdfBase64 = await imprimirTokenEmPdf(pdfBase64, tokenDoc);
       fs.writeFileSync(filePath, Buffer.from(pdfBase64, 'base64'));
+
+      await dbRun(`UPDATE documentos SET caminho = ? WHERE token = ?`, [filePath, tokenDoc]);
 
       if (documentoId) {
         await dbRun(

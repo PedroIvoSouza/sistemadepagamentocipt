@@ -56,18 +56,6 @@ async function ensureIndexes() {
 }
 ensureIndexes().catch(e => console.error('[adminRoutes] ensureIndexes error:', e.message));
 
-// Tabela para registrar documentos gerados
-async function ensureDocumentosTable() {
-  await dbRun(`CREATE TABLE IF NOT EXISTS documentos (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    tipo TEXT,
-    caminho TEXT,
-    token TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
-}
-ensureDocumentosTable().catch(e => console.error('[adminRoutes] ensureDocumentosTable error:', e.message));
-
 /* ===========================================================
    GET /api/admin/dashboard-stats
    - Usa ISO yyyy-mm-dd como parâmetro => ativa índice por comparação
@@ -433,10 +421,11 @@ router.get(
         stream.on('error', reject);
       });
 
+      await dbRun(`UPDATE documentos SET caminho = ? WHERE token = ?`, [filePath, tokenDoc]);
       await dbRun(
         `INSERT INTO documentos (tipo, caminho, token) VALUES (?, ?, ?)`,
         ['RELATORIO_DEVEDORES', filePath, tokenDoc]
-      );
+
 
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', 'attachment; filename="relatorio_devedores.pdf"');
@@ -490,9 +479,16 @@ function generateFooter(doc, token) {
 }
 
 function generateTable(doc, data) {
-  let y = 140;
+  let y = doc.y;
   const rowHeight = 30;
-  const colWidths = { nome: 230, cnpj: 120, email: 170, telefone: 100, sala: 80 };
+  const availableWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+  const colWidths = {
+    nome: availableWidth * 0.3,
+    cnpj: availableWidth * 0.2,
+    email: availableWidth * 0.25,
+    telefone: availableWidth * 0.15,
+    sala: availableWidth * 0.1,
+  };
   const headers = ['Razão Social', 'CNPJ', 'E-mail', 'Telefone', 'Sala(s)'];
 
   const drawRow = (row, currentY, isHeader = false) => {
@@ -533,9 +529,15 @@ function generateTable(doc, data) {
 }
 
 function generateDebtorsTable(doc, data) {
-  let y = 140;
+  let y = doc.y;
   const rowHeight = 30;
-  const colWidths = { nome: 230, cnpj: 120, quantidade: 80, total: 120 };
+  const availableWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+  const colWidths = {
+    nome: availableWidth * 0.45,
+    cnpj: availableWidth * 0.2,
+    quantidade: availableWidth * 0.15,
+    total: availableWidth * 0.2,
+  };
   const headers = ['Razão Social', 'CNPJ', 'Qtde DARs', 'Total Devido (R$)'];
 
   const drawRow = (row, currentY, isHeader = false) => {

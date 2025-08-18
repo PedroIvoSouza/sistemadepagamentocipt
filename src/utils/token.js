@@ -6,20 +6,6 @@ const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
 const DB_PATH = path.resolve(process.cwd(), process.env.SQLITE_STORAGE || './sistemacipt.db');
 const db = new sqlite3.Database(DB_PATH);
 
-// Ensure documentos table exists
-const initPromise = new Promise((resolve, reject) => {
-  db.run(
-    `CREATE TABLE IF NOT EXISTS documentos (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      token TEXT NOT NULL,
-      tipo TEXT NOT NULL,
-      permissionario_id INTEGER,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP
-    )`,
-    err => (err ? reject(err) : resolve())
-  );
-});
-
 function runAsync(sql, params = []) {
   return new Promise((resolve, reject) => {
     db.run(sql, params, function (err) {
@@ -28,6 +14,40 @@ function runAsync(sql, params = []) {
     });
   });
 }
+
+// Ensure documentos table exists and has required columns
+const initPromise = new Promise((resolve, reject) => {
+  db.serialize(() => {
+    db.run(
+      `CREATE TABLE IF NOT EXISTS documentos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        token TEXT NOT NULL,
+        tipo TEXT NOT NULL,
+        caminho TEXT,
+        permissionario_id INTEGER,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      )`,
+      err => {
+        if (err) return reject(err);
+        db.all(`PRAGMA table_info(documentos)`, async (e, rows) => {
+          if (e) return reject(e);
+          const cols = rows.map(r => r.name);
+          try {
+            if (!cols.includes('caminho')) {
+              await runAsync(`ALTER TABLE documentos ADD COLUMN caminho TEXT`);
+            }
+            if (!cols.includes('permissionario_id')) {
+              await runAsync(`ALTER TABLE documentos ADD COLUMN permissionario_id INTEGER`);
+            }
+            resolve();
+          } catch (alterErr) {
+            reject(alterErr);
+          }
+        });
+      }
+    );
+  });
+});
 
 async function gerarTokenDocumento(tipo, permissionarioId) {
   await initPromise;
