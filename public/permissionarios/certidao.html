@@ -8,40 +8,46 @@
   <div class="container">
     <h1>Certidão de Quitação</h1>
     <p>Clique no botão abaixo para gerar sua certidão de quitação.</p>
+    <p id="tokenContainer" style="word-break: break-all;"></p>
     <button id="btnCertidao">Baixar Certidão</button>
   </div>
   <script>
-    document.getElementById('btnCertidao').addEventListener('click', async () => {
-      const token = localStorage.getItem('token');
+    document.addEventListener('DOMContentLoaded', () => {
+      const token = localStorage.getItem('authToken');
+      const tokenEl = document.getElementById('tokenContainer');
       if (!token) {
-        alert('Usuário não autenticado.');
+        tokenEl.textContent = 'Token não encontrado. Faça login novamente.';
         return;
       }
-      const meRes = await fetch('/api/user/me', {
-        headers: { Authorization: 'Bearer ' + token }
+      tokenEl.textContent = `Token: ${token}`;
+
+      document.getElementById('btnCertidao').addEventListener('click', async () => {
+        const meRes = await fetch('/api/user/me', {
+          headers: { Authorization: 'Bearer ' + token }
+        });
+        if (!meRes.ok) {
+          alert('Erro ao obter dados do usuário.');
+          return;
+        }
+        const user = await meRes.json();
+        const res = await fetch(`/api/permissionarios/${user.id}/certidao`, {
+          headers: { Authorization: 'Bearer ' + token }
+        });
+        if (res.ok) {
+          const blob = await res.blob();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = 'certidao.pdf';
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          window.URL.revokeObjectURL(url);
+        } else {
+          const data = await res.json().catch(() => ({}));
+          alert(data.error || 'Falha ao gerar certidão.');
+        }
       });
-      if (!meRes.ok) {
-        alert('Erro ao obter dados do usuário.');
-        return;
-      }
-      const user = await meRes.json();
-      const res = await fetch(`/api/permissionarios/${user.id}/certidao`, {
-        headers: { Authorization: 'Bearer ' + token }
-      });
-      if (res.ok) {
-        const blob = await res.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'certidao.pdf';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        window.URL.revokeObjectURL(url);
-      } else {
-        const data = await res.json().catch(() => ({}));
-        alert(data.error || 'Falha ao gerar certidão.');
-      }
     });
   </script>
 </body>
