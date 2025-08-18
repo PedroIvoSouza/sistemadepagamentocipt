@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Redefinir Senha - Gestão CIPT</title>
-    
+    <title>Verificar Documento - Gestão CIPT</title>
+
     <link rel="icon" type="image/png" href="/images/logo-cipt.png">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
@@ -35,9 +35,7 @@
         <header>
             <nav class="navbar navbar-dark">
                 <div class="container">
-                    <a class="navbar-brand" href="/login.html">
-                        <img src="/images/logos-cabecalho.png" alt="Logos SECTI e Centro de Inovação Jaraguá">
-                    </a>
+                    <a class="navbar-brand" href="/login.html"><img src="/images/logos-cabecalho.png" alt="Logos SECTI e Centro de Inovação Jaraguá"></a>
                 </div>
             </nav>
         </header>
@@ -48,24 +46,19 @@
                     <div class="col-lg-5">
                         <div class="card shadow-sm">
                             <div class="card-body p-5">
-                                <div id="formContainer">
-                                    <div class="text-center mb-4">
-                                        <h1 class="h3 mb-3 fw-normal">Recuperar Acesso</h1>
-                                        <p class="text-muted">Digite seu CNPJ para receber um código de verificação por e-mail.</p>
-                                    </div>
-                                    
-                                    <form id="requestCodeForm">
-                                        <div class="form-floating mb-3">
-                                            <input type="text" class="form-control" id="cnpj" name="cnpj" placeholder="CNPJ" required>
-                                            <label for="cnpj">CNPJ</label>
-                                        </div>
-                                        <button class="w-100 btn btn-lg btn-primary" type="submit">Enviar Código</button>
-                                    </form>
-                                    <div class="text-center mt-3">
-                                        <a href="/login.html" class="text-secondary">Voltar para o Login</a>
-                                    </div>
+                                <div class="text-center mb-4">
+                                    <h1 class="h3 mb-3 fw-normal">Verificação de Documento</h1>
+                                    <p class="text-muted">Digite o token do documento para verificar sua autenticidade.</p>
                                 </div>
-                                <div id="message" class="alert mt-4" style="display:none;" role="alert"></div>
+
+                                <form id="verifyTokenForm">
+                                    <div class="form-floating mb-3">
+                                        <input type="text" class="form-control" id="token" name="token" placeholder="Token do documento" required>
+                                        <label for="token">Token do documento</label>
+                                    </div>
+                                    <button class="w-100 btn btn-lg btn-primary" type="submit">Verificar</button>
+                                </form>
+                                <div id="result" class="mt-4"></div>
                             </div>
                         </div>
                     </div>
@@ -87,49 +80,42 @@
             </div>
         </footer>
     </div>
-    
-    <script src="https://unpkg.com/imask"></script>
     <script defer src="/js/mobile-adapter.js"></script>
     <script defer src="/js/ui-kit.js"></script>
     <script defer src="/js/mobile-tweaks.js"></script>
     <script>
-        const cnpjInput = document.getElementById('cnpj');
-        IMask(cnpjInput, { mask: '00.000.000/0000-00' });
-
-        document.getElementById('requestCodeForm').addEventListener('submit', async (event) => {
+        document.getElementById('verifyTokenForm').addEventListener('submit', async (event) => {
             event.preventDefault();
-            const form = event.target;
-            const messageDiv = document.getElementById('message');
-            const formContainer = document.getElementById('formContainer');
-            const cnpj = cnpjInput.value;
-            
+            const token = document.getElementById('token').value.trim();
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = '';
+            resultDiv.className = 'mt-4';
+
+            if (!token) {
+                resultDiv.className = 'alert alert-danger mt-4';
+                resultDiv.textContent = 'Informe um token.';
+                return;
+            }
+
             try {
-                const response = await fetch('/api/auth/solicitar-acesso', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ cnpj: cnpj })
-                });
-
-                const result = await response.json();
+                const response = await fetch(`/api/documentos/verify/${encodeURIComponent(token)}`);
                 if (!response.ok) {
-                    throw new Error(result.error || 'Ocorreu um erro.');
+                    throw new Error('Documento inválido ou não encontrado.');
                 }
-                
-                messageDiv.innerText = 'Código enviado com sucesso! Verifique seu e-mail. Redirecionando...';
-                messageDiv.className = 'alert alert-success';
-                messageDiv.style.display = 'block';
-                formContainer.style.display = 'none';
-
-                setTimeout(() => {
-                    window.location.href = `/verificar-codigo.html?cnpj=${encodeURIComponent(cnpj)}`;
-                }, 3000);
-
-            } catch (error) {
-                messageDiv.innerText = error.message;
-                messageDiv.className = 'alert alert-danger';
-                messageDiv.style.display = 'block';
+                const data = await response.json();
+                let html = '<h4 class="mb-3">Documento válido</h4><ul class="list-group">';
+                for (const [key, value] of Object.entries(data)) {
+                    html += `<li class="list-group-item d-flex justify-content-between"><strong>${key}</strong><span>${value}</span></li>`;
+                }
+                html += '</ul>';
+                resultDiv.className = 'mt-4';
+                resultDiv.innerHTML = html;
+            } catch (err) {
+                resultDiv.className = 'alert alert-danger mt-4';
+                resultDiv.textContent = err.message;
             }
         });
     </script>
 </body>
 </html>
+
