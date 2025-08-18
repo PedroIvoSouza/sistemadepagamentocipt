@@ -1,14 +1,11 @@
 // Em: src/api/adminEventosRoutes.js
 const express = require('express');
-const sqlite3 = require('sqlite3').verbose();
-const path = require('path');
 const adminAuthMiddleware = require('../middleware/adminAuthMiddleware');
 const { emitirGuiaSefaz } = require('../services/sefazService');
 const { gerarTokenDocumento, imprimirTokenEmPdf } = require('../utils/token');
+const db = require('../database/db');
 
 const router = express.Router();
-const dbPath = path.resolve(__dirname, '..', '..', 'sistemacipt.db');
-const db = new sqlite3.Database(dbPath);
 
 // Helpers com logging
 const onlyDigits = (v = '') => String(v).replace(/\D/g, '');
@@ -169,7 +166,7 @@ router.post('/', async (req, res) => {
       }; 
 
       const retornoSefaz = await emitirGuiaSefaz(payloadSefaz);
-      const tokenDoc = await gerarTokenDocumento('DAR_EVENTO', null);
+      const tokenDoc = await gerarTokenDocumento('DAR_EVENTO', null, db);
       retornoSefaz.pdfBase64 = await imprimirTokenEmPdf(retornoSefaz.pdfBase64, tokenDoc);
 
       // Atualiza DAR com dados da emissão
@@ -465,7 +462,7 @@ router.put('/:id', async (req, res) => {
       };
 
       const retorno = await emitirGuiaSefaz(payloadSefaz);
-      const tokenDoc = await gerarTokenDocumento('DAR_EVENTO', null);
+      const tokenDoc = await gerarTokenDocumento('DAR_EVENTO', null, db);
       retorno.pdfBase64 = await imprimirTokenEmPdf(retorno.pdfBase64, tokenDoc);
 
       await dbRun(
@@ -537,7 +534,7 @@ router.post('/:eventoId/dars/:darId/reemitir', async (req, res) => {
     };
 
     const retornoSefaz = await emitirGuiaSefaz(payloadSefaz);
-    const tokenDoc = await gerarTokenDocumento('DAR_EVENTO', null);
+    const tokenDoc = await gerarTokenDocumento('DAR_EVENTO', null, db);
     retornoSefaz.pdfBase64 = await imprimirTokenEmPdf(retornoSefaz.pdfBase64, tokenDoc);
 
     await dbRun(

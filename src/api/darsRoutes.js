@@ -1,19 +1,14 @@
 // Em: src/api/darsRoutes.js
-const path = require('path');
 const express = require('express');
-const sqlite3 = require('sqlite3').verbose();
 
 const authMiddleware = require('../middleware/authMiddleware');
 const { calcularEncargosAtraso } = require('../services/cobrancaService');
 const { emitirGuiaSefaz } = require('../services/sefazService');
 const { gerarTokenDocumento, imprimirTokenEmPdf } = require('../utils/token');
 
-const router = express.Router();
+const db = require('../database/db');
 
-// === DB setup ===============================================================
-const DB_PATH = path.resolve(process.cwd(), process.env.SQLITE_STORAGE || './sistemacipt.db');
-console.log(`[DB] Abrindo SQLite em: ${DB_PATH}`);
-const db = new sqlite3.Database(DB_PATH);
+const router = express.Router();
 
 // helpers async
 const dbGetAsync = (sql, params = []) =>
@@ -289,7 +284,7 @@ router.post('/:id/emitir', authMiddleware, async (req, res) => {
       throw new Error('Retorno da SEFAZ incompleto.');
     }
 
-    const tokenDoc = await gerarTokenDocumento('DAR', userId);
+    const tokenDoc = await gerarTokenDocumento('DAR', userId, db);
     sefazResponse.pdfBase64 = await imprimirTokenEmPdf(sefazResponse.pdfBase64, tokenDoc);
 
     // Garante schema e atualiza DAR

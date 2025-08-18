@@ -4,9 +4,9 @@ require('dotenv').config();
 
 const express = require('express');
 const cors = require('cors');
-const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const { scheduleConciliacao } = require('../cron/conciliarPagamentos');
+const db = require('./database/db');
 scheduleConciliacao();
 
 
@@ -96,22 +96,7 @@ app.use('/admin', (req, res) => {
 });
 
 // Conexão com o Banco de Dados (SQLite)
-let db;
-try {
-  db = new sqlite3.Database('./sistemacipt.db', err => {
-    if (err) {
-      console.error('[ERRO DE BANCO DE DADOS] Não foi possível conectar ao SQLite:', err.message);
-      process.exit(1);
-    }
-    console.log('[INFO] Conectado ao banco de dados SQLite com sucesso.');
-    
-    // 🔹 Após conectar, garante que as colunas existem
-    ensureClientesEventosColumns(db);
-  });
-} catch (error) {
-  console.error('[ERRO FATAL] Falha ao instanciar o banco de dados:', error.message);
-  process.exit(1);
-}
+ensureClientesEventosColumns(db);
 
 // Função para garantir colunas que seu update precisa
 function ensureClientesEventosColumns(db){

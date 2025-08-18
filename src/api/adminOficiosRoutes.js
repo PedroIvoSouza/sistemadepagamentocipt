@@ -1,6 +1,5 @@
 // src/api/adminOficiosRoutes.js
 const express = require('express');
-const sqlite3 = require('sqlite3').verbose();
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
@@ -12,9 +11,8 @@ const { gerarTokenDocumento } = require('../utils/token');
 const authMiddleware = require('../middleware/authMiddleware');
 const authorizeRole = require('../middleware/roleMiddleware');
 
-const DB_PATH = path.resolve(process.cwd(), process.env.SQLITE_STORAGE || './sistemacipt.db');
+const db = require('../database/db');
 const router = express.Router();
-const db = new sqlite3.Database(DB_PATH);
 
 /* ========= SQLite helpers ========= */
 const dbGet = (sql, params = []) =>
@@ -67,7 +65,7 @@ router.get(
       const totalDevido = debitos.reduce((acc, d) => acc + Number(d.valor || 0), 0);
       const totalStr = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalDevido);
 
-      const tokenDoc = await gerarTokenDocumento('OFICIO', permissionarioId);
+      const tokenDoc = await gerarTokenDocumento('OFICIO', permissionarioId, db);
 
       // 3) Cria PDF com margens ABNT (+0,5cm topo/rodapé)
       const doc = new PDFDocument({ size: 'A4', margins: abntMargins(0.5, 0.5) });
