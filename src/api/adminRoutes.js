@@ -113,7 +113,8 @@ router.get(
             SUM(d.valor) AS total_devido
          FROM dars d
          JOIN permissionarios p ON p.id = d.permissionario_id
-         WHERE d.status <> 'Pago' AND DATE(d.data_vencimento) < DATE('now')
+         WHERE d.status <> 'Pago'
+           AND DATE(d.data_vencimento) < DATE('now')
          GROUP BY p.id, p.nome_empresa
          HAVING total_devido > 0
          ORDER BY total_devido DESC
@@ -151,7 +152,10 @@ router.get(
       let whereClause = '';
       const params = [];
       if (search) {
-        whereClause = `WHERE nome_empresa LIKE ? OR cnpj LIKE ?`;
+        whereClause = `
+          WHERE nome_empresa LIKE ?
+             OR cnpj         LIKE ?
+        `.trim();
         params.push(`%${search}%`, `%${search}%`);
       }
 
@@ -296,7 +300,10 @@ router.get(
       let whereClause = '';
       const params = [];
       if (search) {
-        whereClause = `WHERE nome_empresa LIKE ? OR cnpj LIKE ?`;
+        whereClause = `
+          WHERE nome_empresa LIKE ?
+             OR cnpj         LIKE ?
+        `.trim();
         params.push(`%${search}%`, `%${search}%`);
       }
 
@@ -378,15 +385,16 @@ router.get(
   async (req, res) => {
     try {
       const devedores = await dbAll(
-        `SELECT 
+        `SELECT
             p.nome_empresa,
             p.cnpj,
             COUNT(d.id)  AS quantidade_dars,
             SUM(d.valor) AS total_devido
          FROM dars d
          JOIN permissionarios p ON p.id = d.permissionario_id
-         WHERE d.status <> 'Pago' AND DATE(d.data_vencimento) < DATE('now')
-        GROUP BY p.id, p.nome_empresa, p.cnpj
+         WHERE d.status <> 'Pago'
+           AND DATE(d.data_vencimento) < DATE('now')
+         GROUP BY p.id, p.nome_empresa, p.cnpj
          HAVING total_devido > 0
          ORDER BY total_devido DESC`
       );
