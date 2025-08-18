@@ -131,7 +131,8 @@
         function parsePdfAndNumero(result){
             const b64 = result?.pdfBase64 || result?.dar_pdf || result?.pdf || null;
             const numero = result?.numeroGuia || result?.numero || result?.guia || 'GUIA';
-            return { b64, numero };
+            const token = result?.token;
+            return { b64, numero, token };
             }
 
         function showBackendError(rspJson, fallback='Erro ao emitir DAR.'){
@@ -322,8 +323,11 @@
                             return;
                         }
 
-                        const { b64, numero } = parsePdfAndNumero(result);
+                        const { b64, numero, token: tokenDoc } = parsePdfAndNumero(result);
                         safeDownloadPdfBase64(b64, `DAR_GUIA_${numero}.pdf`);
+                        if (tokenDoc) {
+                            alert(`Token do documento: ${tokenDoc}\nVerifique em ${window.location.origin}/api/documentos/verify/${tokenDoc}`);
+                        }
                         }
                 } catch (error) {
                     alert('Erro: ' + error.message);
@@ -351,8 +355,11 @@
                         return;
                     }
 
-                    const { b64, numero } = parsePdfAndNumero(result);
+                    const { b64, numero, token: tokenDoc } = parsePdfAndNumero(result);
                     safeDownloadPdfBase64(b64, `DAR_GUIA_${numero}_ATUALIZADO.pdf`);
+                    if (tokenDoc) {
+                        alert(`Token do documento: ${tokenDoc}\nVerifique em ${window.location.origin}/api/documentos/verify/${tokenDoc}`);
+                    }
                     recalculateModal.hide();
                     } catch (error) {
                     alert('Erro: ' + error.message);
