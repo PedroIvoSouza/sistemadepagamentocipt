@@ -45,7 +45,7 @@ function printToken(doc, token) {
 function fmtId(docStr) {
   const s = String(docStr || '').replace(/\D/g, '');
   if (s.length === 14) return s.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5'); // CNPJ
-  if (s.length === 11) return s.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4');           // CPF
+  if (s.length === 11) return s.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4');           // CPF (não usado aqui)
   return docStr || '';
 }
 
@@ -65,9 +65,9 @@ router.get('/:id/certidao', authMiddleware, async (req, res) => {
   }
 
   try {
-    // Dados do permissionário
+    // ✅ TIRA o cpf do SELECT (sua tabela não tem essa coluna)
     const perm = await getAsync(
-      `SELECT id, nome_empresa, cnpj, cpf, email FROM permissionarios WHERE id = ?`,
+      `SELECT id, nome_empresa, cnpj, email FROM permissionarios WHERE id = ?`,
       [id]
     );
     if (!perm) {
@@ -104,7 +104,7 @@ router.get('/:id/certidao', authMiddleware, async (req, res) => {
     fs.mkdirSync(dir, { recursive: true });
     const filename = `certidao_${id}_${Date.now()}.pdf`;
     const filePath = path.join(dir, filename);
-    const publicRelativePath = path.join('permissionarios', 'certidoes', filename); // usado pra servir via /public
+    const publicRelativePath = path.join('permissionarios', 'certidoes', filename); // para servir via /public
 
     // Documento PDF: padrão timbrado + ABNT + 0,5cm
     const doc = new PDFDocument({ size: 'A4', margins: abntMargins(0.5, 0.5) });
@@ -161,7 +161,9 @@ router.get('/:id/certidao', authMiddleware, async (req, res) => {
     const larguraUtil = doc.page.width - doc.page.margins.left - doc.page.margins.right;
     const hoje = new Date();
     const dataBR = hoje.toLocaleDateString('pt-BR');
-    const idFiscal = fmtId(perm.cnpj || perm.cpf);
+
+    // Documento fiscal (usa só CNPJ aqui)
+    const idFiscal = fmtId(perm.cnpj);
 
     // Título
     doc.fillColor('#333').fontSize(16).text(
