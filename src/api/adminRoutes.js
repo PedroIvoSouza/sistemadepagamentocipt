@@ -347,8 +347,8 @@ router.get(
         doc.pipe(res);
 
         doc.on('pageAdded', () => {
-          generateHeader(doc);
           generateFooter(doc, tokenDoc);
+          generateHeader(doc);
         });
 
         generateHeader(doc);
@@ -405,8 +405,8 @@ router.get(
       const tokenDoc = await gerarTokenDocumento('RELATORIO_DEVEDORES', null);
 
       doc.on('pageAdded', () => {
-        generateHeader(doc);
         generateFooter(doc, tokenDoc);
+        generateHeader(doc);
       });
 
       generateHeader(doc);
@@ -463,6 +463,7 @@ function generateHeader(doc) {
 }
 
 function generateFooter(doc, token) {
+  const y = doc.y;
   const govLogoPath = path.join(__dirname, '..', '..', 'public', 'images', 'logo-governo.png');
   const pageHeight = doc.page.height;
   doc.rect(0, pageHeight - 70, doc.page.width, 70).fill('#004480');
@@ -474,8 +475,12 @@ function generateFooter(doc, token) {
     console.error('Erro ao carregar imagem do rodapé:', e);
   }
   if (token) {
-    doc.fillColor('#fff').fontSize(8).text(`Token: ${token}`, doc.page.margins.left, pageHeight - 50);
+    doc
+      .fillColor('#fff')
+      .fontSize(8)
+      .text(`Token: ${token}`, doc.page.margins.left, pageHeight - 50);
   }
+  doc.y = y;
 }
 
 function generateTable(doc, data) {
