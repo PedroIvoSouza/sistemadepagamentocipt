@@ -79,20 +79,6 @@
     <script defer src="/js/ui-kit.js"></script>
     <script defer src="/js/mobile-tweaks.js"></script>
    <script>
-    function setupPasswordToggle(inputId, buttonId) {
-        const toggleButton = document.getElementById(buttonId);
-        const passwordInput = document.getElementById(inputId);
-        if (!toggleButton || !passwordInput) return;
-        const icon = toggleButton.querySelector('i');
-
-        toggleButton.addEventListener('click', () => {
-            const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
-            passwordInput.setAttribute('type', type);
-            icon.classList.toggle('bi-eye-fill');
-            icon.classList.toggle('bi-eye-slash-fill');
-        });
-    }
-
     document.addEventListener('DOMContentLoaded', async () => {
         setupPasswordToggle('nova_senha', 'toggleNovaSenha');
         setupPasswordToggle('confirmar_nova_senha', 'toggleConfirmarNovaSenha');
