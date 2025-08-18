@@ -1,9 +1,9 @@
 const path = require('path');
 const fs = require('fs');
-const crypto = require('crypto');
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const PDFDocument = require('pdfkit');
+const { gerarTokenDocumento, imprimirTokenEmPdf } = require('../utils/token');
 
 const authMiddleware = require('../middleware/authMiddleware');
 const authorizeRole = require('../middleware/roleMiddleware');
@@ -25,8 +25,7 @@ const dbRun = (sql, params = []) =>
   try {
     await dbRun(`CREATE TABLE IF NOT EXISTS oficios_audit (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      permissionario_id INTEGER NOT NULL,
-      token TEXT NOT NULL,
+      documento_id INTEGER NOT NULL,
       pdf_path TEXT NOT NULL,
       created_at TEXT NOT NULL
     );`);
@@ -56,7 +55,9 @@ router.post(
       }
 
       const total = pendentes.reduce((acc, d) => acc + Number(d.valor || 0), 0);
-      const token = crypto.randomBytes(16).toString('hex');
+      const token = await gerarTokenDocumento('oficio', permissionarioId);
+      const docRow = await dbGet(`SELECT id FROM documentos WHERE token = ?`, [token]);
+      const documentoId = docRow ? docRow.id : null;
       const agora = new Date();
       const dataAtual = agora.toLocaleDateString('pt-BR');
 
@@ -90,16 +91,20 @@ router.post(
       });
       doc.moveDown();
       doc.text(`Total devido: R$ ${total.toFixed(2)}`);
-      doc.moveDown(2);
-      doc.fontSize(10).text(`Token de autenticação: ${token}`);
 
       doc.end();
       await new Promise(resolve => stream.on('finish', resolve));
 
-      await dbRun(
-        `INSERT INTO oficios_audit (permissionario_id, token, pdf_path, created_at) VALUES (?, ?, ?, ?)`,
-        [permissionarioId, token, pdfUrl, agora.toISOString()]
-      );
+      let pdfBase64 = fs.readFileSync(filePath).toString('base64');
+      pdfBase64 = await imprimirTokenEmPdf(pdfBase64, token);
+      fs.writeFileSync(filePath, Buffer.from(pdfBase64, 'base64'));
+
+      if (documentoId) {
+        await dbRun(
+          `INSERT INTO oficios_audit (documento_id, pdf_path, created_at) VALUES (?, ?, ?)`,
+          [documentoId, pdfUrl, agora.toISOString()]
+        );
+      }
 
       return res.status(201).json({ token, pdfUrl });
     } catch (err) {
