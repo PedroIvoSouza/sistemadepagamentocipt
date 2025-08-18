@@ -6,13 +6,14 @@ const xlsx = require('xlsx');
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
+const DB_PATH = path.resolve(process.cwd(), process.env.SQLITE_STORAGE || './sistemacipt.db');
 
 // Middlewares
 const authMiddleware = require('../middleware/authMiddleware');
 const authorizeRole = require('../middleware/roleMiddleware');
 
 const router = express.Router();
-const db = new sqlite3.Database('./sistemacipt.db');
+const db = new sqlite3.Database(DB_PATH);
 
 /* =========================
    Helpers SQLite (promises)
