@@ -8,7 +8,6 @@ const fs = require('fs');
 const path = require('path');
 const { gerarTokenDocumento } = require('../utils/token');
 const os = require('os');
-const crypto = require('crypto');
 const DB_PATH = path.resolve(process.cwd(), process.env.SQLITE_STORAGE || './sistemacipt.db');
 
 // Middlewares
@@ -56,18 +55,6 @@ async function ensureIndexes() {
   await dbRun(`CREATE INDEX IF NOT EXISTS idx_perm_cnpj               ON permissionarios(cnpj);`);
 }
 ensureIndexes().catch(e => console.error('[adminRoutes] ensureIndexes error:', e.message));
-
-// Tabela para registrar documentos gerados
-async function ensureDocumentosTable() {
-  await dbRun(`CREATE TABLE IF NOT EXISTS documentos (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    tipo TEXT,
-    caminho TEXT,
-    token TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
-}
-ensureDocumentosTable().catch(e => console.error('[adminRoutes] ensureDocumentosTable error:', e.message));
 
 /* ===========================================================
    GET /api/admin/dashboard-stats
@@ -415,13 +402,15 @@ router.get(
       const stream = fs.createWriteStream(filePath);
       doc.pipe(stream);
 
+      const tokenDoc = await gerarTokenDocumento('RELATORIO_DEVEDORES', null);
+
       doc.on('pageAdded', () => {
         generateHeader(doc);
-        generateFooter(doc);
+        generateFooter(doc, tokenDoc);
       });
 
       generateHeader(doc);
-      generateFooter(doc);
+      generateFooter(doc, tokenDoc);
       doc.fillColor('#333').fontSize(16).text('Relatório de Devedores', { align: 'center' });
       doc.moveDown(2);
       generateDebtorsTable(doc, devedores);
@@ -432,14 +421,11 @@ router.get(
         stream.on('error', reject);
       });
 
-      const token = crypto.randomBytes(16).toString('hex');
-      await dbRun(
-        `INSERT INTO documentos (tipo, caminho, token) VALUES (?, ?, ?)`,
-        ['RELATORIO_DEVEDORES', filePath, token]
-      );
+      await dbRun(`UPDATE documentos SET caminho = ? WHERE token = ?`, [filePath, tokenDoc]);
 
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', 'attachment; filename="relatorio_devedores.pdf"');
+      res.setHeader('X-Document-Token', tokenDoc);
       const fileStream = fs.createReadStream(filePath);
       fileStream.pipe(res);
       fileStream.on('close', () => {
@@ -489,9 +475,16 @@ function generateFooter(doc, token) {
 }
 
 function generateTable(doc, data) {
-  let y = 140;
+  let y = doc.y;
   const rowHeight = 30;
-  const colWidths = { nome: 230, cnpj: 120, email: 170, telefone: 100, sala: 80 };
+  const availableWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+  const colWidths = {
+    nome: availableWidth * 0.3,
+    cnpj: availableWidth * 0.2,
+    email: availableWidth * 0.25,
+    telefone: availableWidth * 0.15,
+    sala: availableWidth * 0.1,
+  };
   const headers = ['Razão Social', 'CNPJ', 'E-mail', 'Telefone', 'Sala(s)'];
 
   const drawRow = (row, currentY, isHeader = false) => {
@@ -532,9 +525,15 @@ function generateTable(doc, data) {
 }
 
 function generateDebtorsTable(doc, data) {
-  let y = 140;
+  let y = doc.y;
   const rowHeight = 30;
-  const colWidths = { nome: 230, cnpj: 120, quantidade: 80, total: 120 };
+  const availableWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+  const colWidths = {
+    nome: availableWidth * 0.45,
+    cnpj: availableWidth * 0.2,
+    quantidade: availableWidth * 0.15,
+    total: availableWidth * 0.2,
+  };
   const headers = ['Razão Social', 'CNPJ', 'Qtde DARs', 'Total Devido (R$)'];
 
   const drawRow = (row, currentY, isHeader = false) => {
