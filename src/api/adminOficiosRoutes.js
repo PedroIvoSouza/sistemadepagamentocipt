@@ -175,42 +175,64 @@ router.get(
           y += rowHeight;
         }
 
+        // resetar âncora horizontal antes de qualquer texto corrido
+        doc.x = doc.page.margins.left;
         doc.y = y + 10;
         doc.moveDown(1);
-        doc.font('Helvetica-Bold').text(`Total devido: ${totalStr}`, { width: larguraUtil });
+        
+        doc.font('Helvetica-Bold').text(
+          `Total devido: ${totalStr}`,
+          doc.page.margins.left,
+          doc.y,
+          { width: larguraUtil, align: 'left' }
+        );
         doc.font('Helvetica');
         doc.moveDown(1.5);
       }
 
-      // Fecho (conforme solicitado)
+      // Fecho (justificado + centralizado, ancorado no left)
       {
+        const left = doc.page.margins.left;
         const larguraUtil = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+      
+        // Garantir âncora correta
+        doc.x = left;
       
         // 1) Parágrafo justificado
         doc.font('Helvetica').fontSize(11).text(
           'Para quaisquer esclarecimentos, permanecemos à disposição.',
+          left,
+          doc.y,
           { width: larguraUtil, align: 'justify', lineGap: 2 }
         );
         doc.moveDown(1);
-        doc.text('Atenciosamente,', { width: larguraUtil, align: 'left' });
+      
+        // 2) "Atenciosamente," à esquerda
+        doc.text('Atenciosamente,', left, doc.y, { width: larguraUtil, align: 'left' });
         doc.moveDown(2);
       
-        // 2) Bloco centralizado "assinatura digital" (sem sublinhado)
+        // 3) Bloco centralizado (sem cortar à direita)
         const blocoAltura = 40;
         if (doc.y + blocoAltura > doc.page.height - doc.page.margins.bottom) {
           doc.addPage();
+          doc.x = left; // reancora em nova página
         }
       
         doc.font('Helvetica-Bold').fontSize(10).text(
           'DOCUMENTO ASSINADO DIGITALMENTE',
+          left,
+          doc.y,
           { width: larguraUtil, align: 'center' }
         );
         doc.moveDown(0.2);
         doc.font('Helvetica').fontSize(10).text(
           'Secretaria de Estado da Ciência, da Tecnologia e da Inovação',
+          left,
+          doc.y,
           { width: larguraUtil, align: 'center' }
         );
       }
+
 
 
       // 7) Finaliza
