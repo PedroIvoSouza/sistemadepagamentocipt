@@ -113,7 +113,7 @@ router.get(
             SUM(d.valor) AS total_devido
          FROM dars d
          JOIN permissionarios p ON p.id = d.permissionario_id
-         WHERE d.status <> 'Pago'
+         WHERE d.status <> 'Pago' AND DATE(d.data_vencimento) < DATE('now')
          GROUP BY p.id, p.nome_empresa
          HAVING total_devido > 0
          ORDER BY total_devido DESC
