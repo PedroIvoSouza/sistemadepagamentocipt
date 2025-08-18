@@ -96,7 +96,7 @@ async function enviarEmailRedefinicao(emailDestino, codigo) {
  * (Sua função existente)
  */
 async function enviarEmailPrimeiroAcesso(emailDestino, token) {
-    const link = `${process.env.BASE_URL}/admin/definir-senha.html?token=${token}`;
+    const link = `${process.env.ADMIN_BASE_URL}/admin/definir-senha.html?token=${token}`;
     
     const mailOptions = {
         from: `"Gestão CIPT" <${process.env.EMAIL_USER}>`,
