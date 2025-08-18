@@ -57,6 +57,13 @@ router.post(
       }
 
       const total = pendentes.reduce((acc, d) => acc + Number(d.valor || 0), 0);
+      const mesesNomes = [
+        'Janeiro','Fevereiro','Março','Abril','Maio','Junho',
+        'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'
+      ];
+      const mesesFormatados = pendentes.map(d => `${mesesNomes[d.mes_referencia - 1]}/${d.ano_referencia}`);
+      const mesesStr = mesesFormatados.join(', ');
+      const totalStr = total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
       const token = crypto.randomBytes(16).toString('hex');
       const agora = new Date();
       const dataAtual = agora.toLocaleDateString('pt-BR');
@@ -71,6 +78,33 @@ router.post(
       const stream = fs.createWriteStream(filePath);
       doc.pipe(stream);
 
+      const logoPath = path.join(__dirname, '..', '..', 'public', 'images', 'logo-secti-vertical.png');
+      if (fs.existsSync(logoPath)) {
+        doc.image(logoPath, 50, 40, { width: 80 });
+      }
+      doc.fontSize(18).text('Ofício', { align: 'center' });
+      doc.moveDown();
+
+      doc.fontSize(12).text(`Empresa: ${permissionario.nome_empresa}`);
+      doc.text(`CNPJ: ${permissionario.cnpj}`);
+      doc.text(`Data: ${dataAtual}`);
+      doc.moveDown();
+
+      doc.text(
+        `Constam pendências de pagamento referentes às competências ${mesesStr}, totalizando ${totalStr}.`,
+        { width: 500 }
+      );
+      doc.moveDown();
+      doc.text('Detalhamento das DARs pendentes:');
+      pendentes.forEach(d => {
+        const mes = String(d.mes_referencia).padStart(2, '0');
+        const venc = new Date(d.data_vencimento).toLocaleDateString('pt-BR');
+        doc.text(`- ${mes}/${d.ano_referencia} - venc. ${venc} - R$ ${Number(d.valor).toFixed(2)}`);
+      });
+      doc.moveDown();
+      doc.text(`Total devido: ${totalStr}`);
+      doc.moveDown(2);
+      doc.fontSize(10).text(`Token de autenticação: ${token}`);
       const headerPath = path.join(__dirname, '..', '..', 'public', 'images', 'papel-timbrado-secti.png');
 
       const addHeader = () => {
@@ -119,7 +153,6 @@ router.post(
       });
 
       addFooter();
-
       doc.end();
       await new Promise(resolve => stream.on('finish', resolve));
 
