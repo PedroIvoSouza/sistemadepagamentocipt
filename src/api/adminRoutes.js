@@ -424,7 +424,7 @@ router.get(
       await dbRun(`UPDATE documentos SET caminho = ? WHERE token = ?`, [filePath, tokenDoc]);
       await dbRun(
         `INSERT INTO documentos (tipo, caminho, token) VALUES (?, ?, ?)`,
-        ['RELATORIO_DEVEDORES', filePath, tokenDoc]
+        ['RELATORIO_DEVEDORES', filePath, tokenDoc])
 
 
       res.setHeader('Content-Type', 'application/pdf');
