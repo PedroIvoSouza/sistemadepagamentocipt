@@ -1,5 +1,5 @@
-// Em: src/api/eventosClientesRoutes.js
-// VERSÃO COMPLETA E CORRIGIDA — normaliza/valida CPF/CNPJ ao criar/editar clientes
+// src/api/eventosClientesRoutes.js
+// Normaliza/valida CPF/CNPJ e corrige POST (sem tipoNormalizado), PF/PJ coerente com CHECK('PF','PJ')
 
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
@@ -10,42 +10,35 @@ const jwt = require('jsonwebtoken');
 
 const { enviarEmailDefinirSenha } = require('../services/emailService');
 const adminAuthMiddleware = require('../middleware/adminAuthMiddleware');
-const authMiddleware = require('../middleware/authMiddleware'); // Middleware de autenticação de cliente
-const authorizeRole = require('../middleware/roleMiddleware'); // Middleware de autorização de papel
+const authMiddleware = require('../middleware/authMiddleware');
+const authorizeRole = require('../middleware/roleMiddleware');
 
 const adminRouter = express.Router();
 const publicRouter = express.Router();
-const clientRouter = express.Router(); // Router para clientes logados
+const clientRouter = express.Router();
 
 const dbPath = path.resolve(__dirname, '..', '..', 'sistemacipt.db');
 const db = new sqlite3.Database(dbPath);
 
 const SALT_ROUNDS = 10;
 
-// utils
+// Utils
 const onlyDigits = (v = '') => String(v).replace(/\D/g, '');
-const isCpf = d => d && d.length === 11;
-const isCnpj = d => d && d.length === 14;
+const isCpf = d => !!d && d.length === 11;
+const isCnpj = d => !!d && d.length === 14;
 
-// ===================================================================
-// ROTAS DO CLIENTE LOGADO (PORTAL DE EVENTOS) – exigem CLIENTE_EVENTO
-// ===================================================================
-clientRouter.use(authMiddleware, authorizeRole(['CLIENTE_EVENTO']));
-
-const normalizeTipoPessoa = (v='') => {
+// PF/PJ para o CHECK da tabela (aceita entradas variadas e devolve 'PF' | 'PJ')
+const normalizeTipoPessoa = (v = '') => {
   const s = String(v).trim().toUpperCase();
-  if (s === 'PF' || s === 'FISICA' || s === 'FÍSICA') return 'PF';
-  if (s === 'PJ' || s === 'JURIDICA' || s === 'JURÍDICA') return 'PJ';
+  if (['PF', 'FISICA', 'FÍSICA', 'PESSOA FISICA', 'PESSOA FÍSICA'].includes(s)) return 'PF';
+  if (['PJ', 'JURIDICA', 'JURÍDICA', 'PESSOA JURIDICA', 'PESSOA JURÍDICA'].includes(s)) return 'PJ';
   return '';
 };
 
-// topo do arquivo (perto dos utils)
-const mapTipoPessoa = (v='') => {
-  const t = String(v).trim().toUpperCase();
-  if (t === 'PF' || t === 'FISICA' || t === 'PESSOA FISICA' || t === 'PESSOA FÍSICA') return 'FISICA';
-  if (t === 'PJ' || t === 'JURIDICA' || t === 'PESSOA JURIDICA' || t === 'PESSOA JURÍDICA') return 'JURIDICA';
-  return t; // fallback, mas não deve cair aqui
-};
+/* ===================================================================
+   ROTAS DO CLIENTE LOGADO (PORTAL DE EVENTOS) – exigem CLIENTE_EVENTO
+   =================================================================== */
+clientRouter.use(authMiddleware, authorizeRole(['CLIENTE_EVENTO']));
 
 clientRouter.get('/me', async (req, res) => {
   const clienteId = req.user.id;
@@ -73,7 +66,6 @@ clientRouter.get('/me', async (req, res) => {
     });
 
     const [user, eventos, dars] = await Promise.all([fetchUser, fetchEventos, fetchDars]);
-
     if (!user) return res.status(404).json({ error: 'Cliente não encontrado.' });
 
     delete user.senha_hash;
@@ -81,54 +73,43 @@ clientRouter.get('/me', async (req, res) => {
 
     res.json({ user, eventos, dars });
   } catch (err) {
-    console.error('[ERRO] Ao buscar dados completos do cliente de evento:', err.message);
+    console.error('[CLIENTE-EVENTO]/me erro:', err);
     return res.status(500).json({ error: 'Erro interno ao buscar os dados do cliente.' });
   }
 });
 
 clientRouter.put('/me', (req, res) => {
   const clienteId = req.user.id;
-  const { telefone, nomeResponsavel, cep, logradouro, numero, bairro, cidade, uf } = req.body;
+  const {
+    telefone, nomeResponsavel, cep, logradouro, numero, bairro, cidade, uf, complemento
+  } = req.body;
 
-  const enderecoCompleto =
-    `${logradouro || ''}, ${numero || ''} - ${bairro || ''}, ${cidade || ''} - ${uf || ''}, ${cep || ''}`;
+  const enderecoCompleto = (
+    `${logradouro || ''}, ${numero || ''}` +
+    `${complemento ? ' ' + complemento : ''} - ` +
+    `${bairro || ''}, ${cidade || ''} - ${(uf || '').toUpperCase()}, ${cep || ''}`
+  ).replace(/\s+/g, ' ').trim();
 
   const sql = `
     UPDATE Clientes_Eventos SET
       telefone = ?, nome_responsavel = ?, cep = ?, logradouro = ?, 
-      numero = ?, bairro = ?, cidade = ?, uf = ?, endereco = ?
+      numero = ?, bairro = ?, cidade = ?, uf = ?, endereco = ?, complemento = ?
     WHERE id = ?
   `;
-  const params = [telefone, nomeResponsavel, cep, logradouro, numero, bairro, cidade, uf, enderecoCompleto, clienteId];
+  const params = [
+    onlyDigits(telefone || ''), nomeResponsavel || null, onlyDigits(cep || ''), logradouro || null,
+    (numero ?? '').toString(), bairro || null, cidade || null, (uf || '').toUpperCase(),
+    enderecoCompleto || null, complemento || null, clienteId
+  ];
 
   db.run(sql, params, function (err) {
-  if (err) {
-    // LOG completo (SQL + params) pra enxergar qualquer problema real
-    console.error('[EVENTOS-CLIENTES][UPDATE] ERRO SQLite:', err.message);
-    console.error('[EVENTOS-CLIENTES][UPDATE] SQL  :', sql.replace(/\s+/g,' ').trim());
-    console.error('[EVENTOS-CLIENTES][UPDATE] PARAMS:', params);
-
-    // Trate todos os formatos de violação de UNIQUE
-    if (
-      err.message.includes('UNIQUE constraint failed') ||
-      err.message.includes('SQLITE_CONSTRAINT: UNIQUE')
-    ) {
-      return res.status(409).json({ error: 'Já existe um cliente com este CPF/CNPJ ou E-mail.' });
+    if (err) {
+      console.error('[CLIENTE-EVENTO]/me UPDATE erro:', err.message);
+      return res.status(500).json({ error: 'Erro ao atualizar o cliente no banco de dados.' });
     }
-
-    // TEMP: em desenvolvimento, retorne o detalhe do SQLite pra gente ver
-    return res.status(500).json({
-      error: 'Erro ao atualizar o cliente no banco de dados.',
-      detail: err.message
-    });
-  }
-
-  if (this.changes === 0) {
-    return res.status(404).json({ error: 'Cliente de evento não encontrado.' });
-  }
-
-  return res.json({ message: 'Cliente atualizado com sucesso.', id });
-});
+    if (this.changes === 0) return res.status(404).json({ error: 'Cliente de evento não encontrado.' });
+    return res.json({ message: 'Cliente atualizado com sucesso.', id: clienteId });
+  });
 });
 
 clientRouter.post('/change-password', (req, res) => {
@@ -145,29 +126,29 @@ clientRouter.post('/change-password', (req, res) => {
   db.get(`SELECT senha_hash FROM Clientes_Eventos WHERE id = ?`, [clienteId], async (err, user) => {
     if (err || !user) return res.status(404).json({ error: 'Usuário não encontrado.' });
 
-    const match = await bcrypt.compare(senha_atual, user.senha_hash);
+    const match = await bcrypt.compare(senha_atual, user.senha_hash || '');
     if (!match) return res.status(401).json({ error: 'A senha atual está incorreta.' });
 
     const novaSenhaHash = await bcrypt.hash(nova_senha, SALT_ROUNDS);
     db.run(`UPDATE Clientes_Eventos SET senha_hash = ? WHERE id = ?`, [novaSenhaHash, clienteId], (err2) => {
       if (err2) {
-        console.error('[ERRO] Ao alterar senha do cliente de evento:', err2.message);
-        return res.status(500).json({ error: 'Erro ao atualizar a senha no banco de dados.' });
+        console.error('[CLIENTE-EVENTO]/change-password erro:', err2.message);
+        return res.status(500).json({ error: 'Erro ao atualizar a senha.' });
       }
       res.json({ message: 'Senha alterada com sucesso!' });
     });
   });
 });
 
-// ===================================================================
-// ROTAS PÚBLICAS (Login/Definir Senha) — sem token
-// ===================================================================
+/* ===================================================================
+   ROTAS PÚBLICAS (Login/Definir Senha) — sem token
+   =================================================================== */
 
 publicRouter.post('/definir-senha', async (req, res) => {
   const { token, senha } = req.body;
   if (!token || !senha) return res.status(400).json({ error: 'Token e senha são obrigatórios.' });
 
-  const sql = `SELECT * FROM Clientes_Eventos WHERE token_definir_senha = ?`;
+  const sql = `SELECT id FROM Clientes_Eventos WHERE token_definir_senha = ?`;
   db.get(sql, [token], async (err, cliente) => {
     if (err) return res.status(500).json({ error: 'Erro interno no servidor.' });
     if (!cliente) return res.status(404).json({ error: 'Token inválido ou já utilizado.' });
@@ -180,7 +161,7 @@ publicRouter.post('/definir-senha', async (req, res) => {
         res.json({ message: 'Senha definida com sucesso!' });
       });
     } catch (hashError) {
-      res.status(500).json({ error: 'Erro interno no servidor ao processar senha.' });
+      res.status(500).json({ error: 'Erro interno ao processar a senha.' });
     }
   });
 });
@@ -219,9 +200,9 @@ publicRouter.post('/login', (req, res) => {
   });
 });
 
-// ===================================================================
-// ROTAS DE ADMIN (Gerenciamento de Clientes de Eventos) – exigem ADMIN
-// ===================================================================
+/* ===================================================================
+   ROTAS DE ADMIN (Gerenciamento) – exigem ADMIN
+   =================================================================== */
 adminRouter.use(adminAuthMiddleware);
 
 // LISTAR
@@ -233,12 +214,13 @@ adminRouter.get('/', (req, res) => {
   });
 });
 
+// CRIAR (corrigido: sem tipoNormalizado, PF/PJ correto, endereço e token)
 adminRouter.post('/', async (req, res) => {
   let {
     nome_razao_social, tipo_pessoa, documento, email, telefone,
     nome_responsavel, tipo_cliente, documento_responsavel,
     cep, logradouro, numero, complemento, bairro, cidade, uf
-  } = req.body;
+  } = req.body || {};
 
   const tp = normalizeTipoPessoa(tipo_pessoa);
   if (!nome_razao_social || !tp || !documento || !email || !tipo_cliente) {
@@ -246,21 +228,20 @@ adminRouter.post('/', async (req, res) => {
   }
 
   documento = onlyDigits(documento);
-  const docOk =
-    (tp === 'PF' && isCpf(documento)) ||
-    (tp === 'PJ' && isCnpj(documento));
+  const docOk = (tp === 'PF' && isCpf(documento)) || (tp === 'PJ' && isCnpj(documento));
   if (!docOk) {
-    return res.status(400).json({ error: 'Documento do contribuinte ausente ou inválido (CPF/CNPJ).' });
+    return res.status(400).json({ error: 'Documento inválido (CPF/CNPJ).' });
   }
 
+  const telDigits = onlyDigits(telefone || '');
+  const docRespDigits = tp === 'PJ' ? onlyDigits(documento_responsavel || '') : null;
+  const nomeResp = tp === 'PJ' ? (nome_responsavel || null) : null;
 
-  // Se PF, zera documento_responsavel
-  const documentoRespDigits = (tipoNormalizado === 'JURIDICA')
-    ? onlyDigits(documento_responsavel || '')
-    : null;
-
-  const enderecoCompleto =
-    `${logradouro || ''}, ${numero || ''} ${complemento || ''} - ${bairro || ''}, ${cidade || ''} - ${uf || ''}, ${cep || ''}`;
+  const enderecoCompleto = (
+    `${logradouro || ''}, ${numero || ''}` +
+    `${complemento ? ' ' + complemento : ''} - ` +
+    `${bairro || ''}, ${cidade || ''} - ${(uf || '').toUpperCase()}, ${onlyDigits(cep || '')}`
+  ).replace(/\s+/g, ' ').trim();
 
   try {
     const token = crypto.randomBytes(32).toString('hex');
@@ -272,16 +253,17 @@ adminRouter.post('/', async (req, res) => {
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
     const params = [
-    nome_razao_social, tp, documento, email, telefone,
-    nome_responsavel, tipo_cliente, token, onlyDigits(documento_responsavel || ''),
-    cep, logradouro, numero, complemento, bairro, cidade, uf, enderecoCompleto
-  ];
+      String(nome_razao_social).trim(), tp, documento, String(email).trim(),
+      telDigits || null, nomeResp, String(tipo_cliente).trim(), token, docRespDigits,
+      onlyDigits(cep || ''), logradouro || null, (numero ?? '').toString(), complemento || null,
+      bairro || null, cidade || null, (uf || '').toUpperCase(), enderecoCompleto || null
+    ];
 
     db.run(sql, params, async function (err) {
       if (err) {
         console.error('[ADMIN EVENTOS CLIENTES][POST] SQL erro:', err.message, '| params:', params);
-        if (err.message.includes('UNIQUE constraint failed')) {
-          return res.status(409).json({ error: 'Já existe um cliente com este CPF/CNPJ ou E-mail.' });
+        if (String(err.message).includes('UNIQUE constraint failed')) {
+          return res.status(409).json({ error: 'Já existe um cliente com este CPF/CNPJ.' });
         }
         return res.status(500).json({ error: 'Erro ao salvar o cliente no banco de dados.' });
       }
@@ -295,28 +277,26 @@ adminRouter.post('/', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('[ADMIN EVENTOS CLIENTES][POST] Erro:', error?.message);
+    console.error('[ADMIN EVENTOS CLIENTES][POST] Erro inesperado:', error);
     res.status(500).json({ error: 'Erro interno no servidor.' });
   }
 });
 
-
-// ATUALIZAR (normaliza e valida CPF/CNPJ)
+// ATUALIZAR
 adminRouter.put('/:id', (req, res) => {
   const { id } = req.params;
-
-  // 1) Normalização + defaults seguros
   const body = req.body || {};
-  const tp = normalizeTipoPessoa(body.tipo_pessoa); // <- PF/PJ
+
+  const tp = normalizeTipoPessoa(body.tipo_pessoa);
   const safe = {
     nome_razao_social    : (body.nome_razao_social ?? body.nome ?? '').trim(),
     tipo_pessoa          : tp,
     documento            : onlyDigits(body.documento ?? ''),
     email                : (body.email ?? '').trim(),
     telefone             : onlyDigits(body.telefone ?? ''),
-    nome_responsavel     : (body.nome_responsavel ?? '').trim(),
+    nome_responsavel     : tp === 'PJ' ? (body.nome_responsavel ?? '').trim() : null,
     tipo_cliente         : (body.tipo_cliente ?? 'Geral').trim(),
-    documento_responsavel: onlyDigits(body.documento_responsavel ?? ''),
+    documento_responsavel: tp === 'PJ' ? onlyDigits(body.documento_responsavel ?? '') : null,
     cep                  : onlyDigits(body.cep ?? ''),
     logradouro           : (body.logradouro ?? '').trim(),
     numero               : (body.numero ?? '').toString().trim(),
@@ -324,33 +304,22 @@ adminRouter.put('/:id', (req, res) => {
     bairro               : (body.bairro ?? '').trim(),
     cidade               : (body.cidade ?? '').trim(),
     uf                   : (body.uf ?? '').toString().trim().toUpperCase().slice(0, 2),
-    endereco             : (body.endereco ?? '').trim()
   };
 
-  if (!safe.endereco) {
-    // monta endereço legível e sem espaços múltiplos
-    safe.endereco = (
-      `${safe.logradouro || ''}, ${safe.numero || ''}` +
-      `${safe.complemento ? ' ' + safe.complemento : ''} - ` +
-      `${safe.bairro || ''}, ${safe.cidade || ''} - ${safe.uf || ''}, ${safe.cep || ''}`
-    ).replace(/\s+/g, ' ').trim();
-  }
-
-  // 2) Validação dos obrigatórios
   if (!safe.nome_razao_social || !safe.tipo_pessoa || !safe.documento || !safe.email || !safe.tipo_cliente) {
     return res.status(400).json({ error: 'Campos obrigatórios estão faltando.' });
   }
 
-  // 3) Validação do documento conforme PF/PJ
-  const docOk =
-    (safe.tipo_pessoa === 'PF' && isCpf(safe.documento)) ||
-    (safe.tipo_pessoa === 'PJ' && isCnpj(safe.documento));
+  const docOk = (safe.tipo_pessoa === 'PF' && isCpf(safe.documento)) ||
+                (safe.tipo_pessoa === 'PJ' && isCnpj(safe.documento));
+  if (!docOk) return res.status(400).json({ error: 'Documento inválido (CPF/CNPJ).' });
 
-  if (!docOk) {
-    return res.status(400).json({ error: 'Documento do contribuinte ausente ou inválido (CPF/CNPJ).' });
-  }
+  const enderecoCompleto = (
+    `${safe.logradouro || ''}, ${safe.numero || ''}` +
+    `${safe.complemento ? ' ' + safe.complemento : ''} - ` +
+    `${safe.bairro || ''}, ${safe.cidade || ''} - ${safe.uf || ''}, ${safe.cep || ''}`
+  ).replace(/\s+/g, ' ').trim();
 
-  // 4) SQL/params — respeita a ordem das colunas da tabela
   const sql = `
     UPDATE Clientes_Eventos SET
       nome_razao_social = ?, tipo_pessoa = ?, documento = ?, email = ?,
@@ -358,20 +327,18 @@ adminRouter.put('/:id', (req, res) => {
       cep = ?, logradouro = ?, numero = ?, complemento = ?, bairro = ?, cidade = ?, uf = ?, endereco = ?
     WHERE id = ?
   `;
-
   const params = [
     safe.nome_razao_social, safe.tipo_pessoa, safe.documento, safe.email,
-    safe.telefone, safe.nome_responsavel, safe.tipo_cliente, safe.documento_responsavel,
-    safe.cep, safe.logradouro, safe.numero, safe.complemento, safe.bairro, safe.cidade, safe.uf, safe.endereco,
-    id
+    safe.telefone || null, safe.nome_responsavel, safe.tipo_cliente, safe.documento_responsavel,
+    safe.cep, safe.logradouro || null, safe.numero, safe.complemento || null, safe.bairro || null,
+    safe.cidade || null, safe.uf, enderecoCompleto || null, id
   ];
 
-  // 5) Executa e trata erros do SQLite
   db.run(sql, params, function (err) {
     if (err) {
       console.error('[EVENTOS-CLIENTES][UPDATE] ERRO SQLite:', err.message);
       if (err.message.includes('UNIQUE constraint failed')) {
-        return res.status(409).json({ error: 'Já existe um cliente com este CPF/CNPJ ou E-mail.' });
+        return res.status(409).json({ error: 'Já existe um cliente com este CPF/CNPJ.' });
       }
       if (err.message.includes('CHECK constraint failed')) {
         return res.status(400).json({ error: "Valor inválido para 'tipo_pessoa'. Use 'PF' ou 'PJ'." });
@@ -384,7 +351,6 @@ adminRouter.put('/:id', (req, res) => {
     res.json({ message: 'Cliente atualizado com sucesso.', id });
   });
 });
-
 
 module.exports = {
   adminRoutes: adminRouter,
