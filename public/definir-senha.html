@@ -136,7 +136,11 @@
                 const response = await fetch('/api/auth/definir-senha', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ token: passwordResetToken, senha: senha })
+                    body: JSON.stringify({
+                        token: passwordResetToken,
+                        password: senha,
+                        passwordConfirmation: confirmacao
+                    })
                 });
 
                 const result = await response.json();
