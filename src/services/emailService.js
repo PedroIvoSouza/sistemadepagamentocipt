@@ -2,16 +2,13 @@
 
 const nodemailer = require('nodemailer');
 // O dotenv é geralmente carregado no index.js principal, mas não há problema em tê-lo aqui.
-require('dotenv').config(); 
+require('dotenv').config();
 
 const transporter = nodemailer.createTransport({
-    host: process.env.EMAIL_HOST,
-    port: process.env.EMAIL_PORT,
-    secure: true,
-    auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-    },
+  host: process.env.EMAIL_HOST,
+  port: process.env.EMAIL_PORT,
+  secure: true,
+  auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
 });
 
 /**
@@ -165,37 +162,33 @@ async function enviarEmailNotificacaoDar(emailDestino, dadosDar) {
  * Envia um e-mail para um novo cliente de evento com um link para definir a sua senha.
  * (Nova função)
  */
+// Corrigida: usa EVENTOS_BASE_URL ou BASE_URL e remove barra final
 async function enviarEmailDefinirSenha(destinatario, nomeCliente, token) {
-    // --- CORREÇÃO APLICADA AQUI ---
-    // Remove qualquer barra final da BASE_URL para evitar a duplicação.
-    const baseUrl = process.env.BASE_URL.replace(/\/$/, ""); 
-    const linkDefinirSenha = `${baseUrl}/definir-senha-evento.html?token=${token}`;
+  const baseUrlRaw = process.env.EVENTOS_BASE_URL || process.env.BASE_URL || '';
+  const baseUrl = baseUrlRaw.replace(/\/+$/, '');
+  const linkDefinirSenha = `${baseUrl}/definir-senha-evento.html?token=${token}`;
 
-    const mailOptions = {
-        from: `"Sistema CIPT" <${process.env.EMAIL_USER}>`,
-        to: destinatario,
-        subject: 'Crie sua Senha de Acesso - Evento no CIPT',
-        html: `
-            <h1>Olá, ${nomeCliente}!</h1>
-            <p>Seu cadastro para o aluguel de espaço para evento no Centro de Inovação foi realizado com sucesso.</p>
-            <p>Para gerenciar suas DARs e informações, por favor, crie uma senha de acesso clicando no link abaixo:</p>
-            <br>
-            <p><a href="${linkDefinirSenha}" style="background-color: #0056a0; color: white; padding: 15px 25px; text-align: center; text-decoration: none; display: inline-block; border-radius: 5px;">Criar Minha Senha</a></p>
-            <br>
-            <p>Se você não solicitou este cadastro, por favor, ignore este e-mail.</p>
-            <br>
-            <p>Atenciosamente,</p>
-            <p><strong>Equipe do Centro de Inovação do Jaraguá</strong></p>
-        `
-    };
+  const mailOptions = {
+    from: `"Sistema CIPT" <${process.env.EMAIL_USER}>`,
+    to: destinatario,
+    subject: 'Crie sua Senha de Acesso - Evento no CIPT',
+    html: `
+      <h1>Olá, ${nomeCliente}!</h1>
+      <p>Seu cadastro para o aluguel de espaço para evento no Centro de Inovação foi realizado com sucesso.</p>
+      <p>Para gerenciar suas DARs e informações, crie sua senha:</p>
+      <p><a href="${linkDefinirSenha}" style="background:#0056a0;color:#fff;padding:12px 20px;border-radius:6px;text-decoration:none;">Criar Minha Senha</a></p>
+      <p>Se você não solicitou este cadastro, ignore este e-mail.</p>
+      <p><strong>Equipe do Centro de Inovação do Jaraguá</strong></p>
+    `,
+  };
 
-    try {
-        await transporter.sendMail(mailOptions);
-        console.log(`E-mail para definir senha enviado para ${destinatario}`);
-    } catch (error) {
-        console.error(`Erro ao enviar e-mail de definição de senha para ${destinatario}:`, error);
-        throw new Error('Falha ao enviar e-mail de definição de senha.');
-    }
+  try {
+    await transporter.sendMail(mailOptions);
+    console.log(`E-mail para definir senha enviado para ${destinatario}`);
+  } catch (error) {
+    console.error(`Erro ao enviar e-mail de definição de senha para ${destinatario}:`, error);
+    throw new Error('Falha ao enviar e-mail de definição de senha.');
+  }
 }
 
 // Exporta TODAS as funções para que possam ser usadas em outros arquivos
