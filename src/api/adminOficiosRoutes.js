@@ -111,7 +111,6 @@ router.post(
         doc.text(`- ${mes}/${d.ano_referencia} - venc. ${venc} - R$ ${Number(d.valor).toFixed(2)}`);
       });
       doc.moveDown();
-      doc.text(`Total devido: R$ ${total.toFixed(2)}`);
       doc.text(`Total devido: ${totalStr}`);
       doc.moveDown(2);
       doc.fontSize(10).text(`Token de autenticação: ${tokenDoc}`);
