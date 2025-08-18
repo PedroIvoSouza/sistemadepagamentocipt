@@ -44,47 +44,6 @@ router.post('/login', (req, res) => {
 });
 
 
-// --- ROTA PARA DEFINIR A SENHA (PRIMEIRO ACESSO DO ADMIN) ---
-router.post('/definir-senha', async (req, res) => {
-    const { token, password } = req.body;
-
-    if (!token || !password) {
-        return res.status(400).json({ error: 'Token e nova senha são obrigatórios.' });
-    }
-    if (password.length < 8) {
-        return res.status(400).json({ error: 'A senha deve ter no mínimo 8 caracteres.' });
-    }
-
-    try {
-        // Verifica se o token é válido e foi assinado por nós
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-        // Verificação extra para garantir que é um token do tipo certo
-        if (decoded.type !== 'primeiro-acesso-admin') {
-            return res.status(401).json({ error: 'Tipo de token inválido.' });
-        }
-
-        const adminId = decoded.id;
-        const hashedPassword = await bcrypt.hash(password, 10);
-
-        const sql = `UPDATE administradores SET senha = ? WHERE id = ?`;
-        db.run(sql, [hashedPassword, adminId], function (err) {
-            if (err) {
-                return res.status(500).json({ error: 'Erro ao atualizar a senha no banco de dados.' });
-            }
-            if (this.changes === 0) {
-                return res.status(404).json({ error: 'Administrador não encontrado.' });
-            }
-            res.status(200).json({ message: 'Senha definida com sucesso! Você já pode fazer o login.' });
-        });
-
-    } catch (error) {
-        // Se o token for inválido, expirado, ou malicioso, o jwt.verify vai gerar um erro
-        return res.status(401).json({ error: 'Token inválido ou expirado.' });
-    }
-});
-
-
 // --- NOVA ROTA ADICIONADA ---
 // Rota para solicitar a redefinição de senha
 router.post('/solicitar-redefinicao', (req, res) => {
