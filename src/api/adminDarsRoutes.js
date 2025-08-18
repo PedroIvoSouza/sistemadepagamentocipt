@@ -60,8 +60,13 @@ router.get(
         params.push(`%${search}%`, `%${search}%`);
       }
       if (status && status !== 'todos') {
-        baseSql += ` AND d.status = ?`;
-        params.push(status);
+        if (['vencido', 'vencida'].includes(status.toLowerCase())) {
+          baseSql += ` AND d.status IN (?, ?)`;
+          params.push('Vencido', 'Vencida');
+        } else {
+          baseSql += ` AND d.status = ?`;
+          params.push(status);
+        }
       }
       if (mes && mes !== 'todos') {
         baseSql += ` AND d.mes_referencia = ?`;
@@ -142,7 +147,7 @@ router.post(
 
       // Ajuste de vencimento/valor se estiver vencido + garantir data >= hoje
       let guiaSource = { ...dar };
-      if (dar.status === 'Vencido') {
+      if (dar.status === 'Vencido' || dar.status === 'Vencida') {
         const calculo = await calcularEncargosAtraso(dar);
         guiaSource.valor = calculo.valorAtualizado;
         guiaSource.data_vencimento = calculo.novaDataVencimento || isoHojeLocal();
