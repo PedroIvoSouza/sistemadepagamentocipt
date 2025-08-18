@@ -93,7 +93,7 @@ router.get(
 
       const hoje = new Date();
       const dataBR = hoje.toLocaleDateString('pt-BR');
-      const titulo = 'OFÍCIO';
+      const titulo = 'OFÍCIO SECTI SUPTI - PENDÊNCIAS DE PAGAMENTOS';
       doc.fillColor('#333').fontSize(14).text(titulo, { align: 'center', width: larguraUtil });
       doc.moveDown(1);
 
