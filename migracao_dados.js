@@ -3,29 +3,44 @@
 const sqlite3 = require('sqlite3').verbose();
 const fs = require('fs');
 const path = require('path');
-const csv = require('csv-parser');
+const xlsx = require('xlsx'); // Usamos a biblioteca XLSX em vez de CSV
 const bcrypt = require('bcrypt');
 
 const db = new sqlite3.Database('./sistemacipt.db');
 const SALT_ROUNDS = 10;
 
-const ARQUIVO_PERMISSIONARIOS = 'permissionarios.xlsx - Permissionários.csv';
-const ARQUIVO_DEVEDORES = 'Empresas do CIPT - Sistema de DARs.xlsx - EMPRESAS CIPT.csv';
+// ATUALIZADO: Nomes dos ficheiros XLSX originais
+const ARQUIVO_PERMISSIONARIOS = 'permissionarios.xlsx';
+const ARQUIVO_DEVEDORES = 'Empresas do CIPT - Sistema de DARs.xlsx';
+
+// Função para ler dados de um ficheiro XLSX
+function lerPlanilha(nomeArquivo, nomeAba) {
+    try {
+        const caminhoCompleto = path.resolve(__dirname, nomeArquivo);
+        const workbook = xlsx.readFile(caminhoCompleto);
+        const sheet = workbook.Sheets[nomeAba];
+        if (!sheet) {
+            throw new Error(`Aba "${nomeAba}" não encontrada no ficheiro "${nomeArquivo}"`);
+        }
+        return xlsx.utils.sheet_to_json(sheet);
+    } catch (error) {
+        console.error(`Erro ao ler o ficheiro "${nomeArquivo}":`, error.message);
+        // Se o ficheiro não for encontrado, encerra o script para evitar erros.
+        process.exit(1); 
+    }
+}
+
 
 // Função para limpar as tabelas
 async function limparTabelas() {
     console.log('--- ETAPA 1: Limpando tabelas existentes ---');
     const tabelas = ['DARs_Eventos', 'Eventos', 'Clientes_Eventos', 'dars', 'permissionarios'];
     for (const tabela of tabelas) {
-        await new Promise((resolve, reject) => {
+        await new Promise((resolve) => {
             db.run(`DELETE FROM ${tabela}`, function(err) {
-                if (err) {
-                    console.error(`Erro ao limpar a tabela ${tabela}:`, err.message);
-                    reject(err);
-                } else {
-                    console.log(`Tabela "${tabela}" limpa. ${this.changes} registos removidos.`);
-                    db.run(`DELETE FROM sqlite_sequence WHERE name = '${tabela}'`, () => resolve());
-                }
+                if (err) console.warn(`Aviso ao limpar a tabela ${tabela}:`, err.message);
+                else console.log(`Tabela "${tabela}" limpa. ${this.changes} registos removidos.`);
+                db.run(`DELETE FROM sqlite_sequence WHERE name = '${tabela}'`, () => resolve());
             });
         });
     }
@@ -34,20 +49,14 @@ async function limparTabelas() {
 // Função para importar os permissionários
 async function importarPermissionarios() {
     console.log('\n--- ETAPA 2: Importando a nova lista de permissionários ---');
-    const permissionarios = [];
-    await new Promise((resolve, reject) => {
-        fs.createReadStream(path.resolve(__dirname, ARQUIVO_PERMISSIONARIOS))
-            .pipe(csv())
-            .on('data', (row) => permissionarios.push(row))
-            .on('end', resolve)
-            .on('error', reject);
-    });
+    // ATUALIZADO: Lê a aba "Permissionários" do ficheiro XLSX
+    const permissionarios = lerPlanilha(ARQUIVO_PERMISSIONARIOS, 'Permissionários');
 
     const senhaHashPadrao = await bcrypt.hash('mudar123', SALT_ROUNDS);
     let importados = 0;
 
     for (const p of permissionarios) {
-        const cnpjLimpo = p.cnpj ? p.cnpj.replace(/\D/g, '') : null;
+        const cnpjLimpo = p.cnpj ? String(p.cnpj).replace(/\D/g, '') : null;
         if (!cnpjLimpo || cnpjLimpo.length !== 14) {
             console.warn(`AVISO: CNPJ inválido ou ausente para "${p.nome_empresa}". Permissionário não importado.`);
             continue;
@@ -68,33 +77,24 @@ async function importarPermissionarios() {
     console.log(`${importados} de ${permissionarios.length} permissionários importados com sucesso.`);
 }
 
-// Função para GERAR REGISTOS de DARs em atraso
+// Função para gerar DARs em atraso
 async function gerarDarsAtrasadas() {
     console.log('\n--- ETAPA 3: Criando registos de DARs para meses em atraso ---');
-    const devedores = [];
-    await new Promise((resolve, reject) => {
-        fs.createReadStream(path.resolve(__dirname, ARQUIVO_DEVEDORES))
-            .pipe(csv())
-            .on('data', (row) => devedores.push(row))
-            .on('end', resolve)
-            .on('error', reject);
-    });
+    // ATUALIZADO: Lê a aba "EMPRESAS CIPT" do ficheiro XLSX
+    const devedores = lerPlanilha(ARQUIVO_DEVEDORES, 'EMPRESAS CIPT');
 
     let darsCriadas = 0;
 
     for (const dev of devedores) {
         const mesesDevendo = dev['Meses Devendo'];
-        const cnpjLimpo = dev.CNPJ ? dev.CNPJ.replace(/\D/g, '') : null;
+        const cnpjLimpo = dev.CNPJ ? String(dev.CNPJ).replace(/\D/g, '') : null;
 
-        if (!cnpjLimpo || !mesesDevendo || mesesDevendo.toLowerCase().startsWith('quitado')) {
+        if (!cnpjLimpo || !mesesDevendo || String(mesesDevendo).toLowerCase().startsWith('quitado')) {
             continue;
         }
 
-        const permissionario = await new Promise((resolve, reject) => {
-            db.get('SELECT id, valor_aluguel FROM permissionarios WHERE cnpj = ?', [cnpjLimpo], (err, row) => {
-                if (err) reject(err);
-                else resolve(row);
-            });
+        const permissionario = await new Promise((resolve) => {
+            db.get('SELECT id, valor_aluguel FROM permissionarios WHERE cnpj = ?', [cnpjLimpo], (err, row) => resolve(row));
         });
 
         if (!permissionario || !permissionario.valor_aluguel) {
@@ -106,12 +106,11 @@ async function gerarDarsAtrasadas() {
         const anoAtual = new Date().getFullYear();
 
         await Promise.all(meses.map(async (mesNome, index) => {
-            if (mesesDevendo.toLowerCase().includes(mesNome)) {
+            if (String(mesesDevendo).toLowerCase().includes(mesNome)) {
                 const mesReferencia = index + 1;
                 const anoReferencia = anoAtual;
                 const dataVencimento = new Date(anoReferencia, mesReferencia - 1, 10).toISOString().split('T')[0];
 
-                // LÓGICA ALTERADA: Inserimos a DAR sem dados da SEFAZ, apenas com o status "Vencido"
                 const sql = `INSERT INTO dars (id_permissionario, tipo_permissionario, valor, mes_referencia, ano_referencia, data_vencimento, status) VALUES (?, ?, ?, ?, ?, ?, ?)`;
                 await new Promise((resolve) => {
                     db.run(sql, [permissionario.id, 'Permissionario', permissionario.valor_aluguel, mesReferencia, anoReferencia, dataVencimento, 'Vencido'], (err) => {
