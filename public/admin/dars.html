@@ -86,7 +86,7 @@
                   <option value="todos" selected>Todos os Status</option>
                   <option value="Pendente">Pendente</option>
                   <option value="Pago">Pago</option>
-                  <option value="Vencido">Vencido</option>
+                  <option value="Vencida">Vencida</option>
                 </select>
               </div>
               <div class="col-md-2">
@@ -211,10 +211,16 @@
           tableBody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Nenhum DAR encontrado para os filtros selecionados.</td></tr>';
           return;
         }
-        const statusColors = { Pendente:'bg-warning text-dark', Pago:'bg-success text-white', Vencido:'bg-danger text-white' };
+        const statusColors = {
+          Pendente: 'bg-warning text-dark',
+          Pago: 'bg-success text-white',
+          Vencido: 'bg-danger text-white',
+          Vencida: 'bg-danger text-white'
+        };
         const rows = dars.map(dar=>{
           const statusColor = statusColors[dar.status] || 'bg-secondary text-white';
-          const acaoBotao = (dar.status==='Pendente' || dar.status==='Vencido')
+          const acaoBotao =
+            (dar.status==='Pendente' || dar.status==='Vencido' || dar.status==='Vencida')
             ? `<button class="btn btn-sm btn-outline-info enviar-notificacao-btn" data-id="${esc(dar.id)}" title="Enviar notificação por e-mail"><i class="bi bi-envelope-fill"></i> Notificar</button>`
             : `<span class="text-muted"><i class="bi bi-check-circle-fill text-success"></i> Pago</span>`;
           return `
