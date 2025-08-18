@@ -1,0 +1,49 @@
+// src/utils/pdfLetterhead.js
+const fs = require('fs');
+const path = require('path');
+
+const CM = 28.3464566929; // pontos por cm
+const cm = (n) => Math.round(n * CM);
+
+// ABNT: topo/esq = 3 cm; dir/baixo = 2 cm.
+// Pedido: +0,5 cm em topo/baixo → topo=3.5; baixo=2.5
+function abntMargins(extraTopCm = 0.5, extraBottomCm = 0.5) {
+  return {
+    top: cm(3 + extraTopCm),     // 3,5 cm ~ 99 pt
+    bottom: cm(2 + extraBottomCm), // 2,5 cm ~ 71 pt
+    left: cm(3),                 // 3 cm ~ 85 pt
+    right: cm(2),                // 2 cm ~ 57 pt
+  };
+}
+
+// desenha o PNG de papel timbrado como fundo em TODAS as páginas
+function applyLetterhead(doc, opts = {}) {
+  const candidates = [
+    opts.imagePath, // caminho explícito
+    path.join(__dirname, '..', 'assets', 'papel-timbrado-secti.png'),
+    path.join(__dirname, '..', '..', 'public', 'images', 'papel-timbrado-secti.png'),
+  ].filter(Boolean);
+
+  let imgPath = null;
+  for (const p of candidates) {
+    const full = path.resolve(p);
+    try { if (fs.existsSync(full)) { imgPath = full; break; } } catch { /* ignore */ }
+  }
+  if (!imgPath) return; // sem imagem → segue sem timbrado
+
+  const buf = fs.readFileSync(imgPath);
+
+  const render = () => {
+    doc.save();
+    // cobre a página inteira
+    doc.image(buf, 0, 0, { width: doc.page.width, height: doc.page.height });
+    doc.restore();
+  };
+
+  // primeira página
+  render();
+  // novas páginas
+  doc.on('pageAdded', render);
+}
+
+module.exports = { applyLetterhead, abntMargins, cm };
