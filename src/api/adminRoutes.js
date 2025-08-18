@@ -7,6 +7,7 @@ const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
 const { gerarTokenDocumento } = require('../utils/token');
+const { applyLetterhead, abntMargins } = require('../utils/pdfLetterhead');
 const os = require('os');
 const DB_PATH = path.resolve(process.cwd(), process.env.SQLITE_STORAGE || './sistemacipt.db');
 
@@ -348,6 +349,7 @@ router.get(
           size: 'A4',
           margins: { top: 50, bottom: 50, left: 50, right: 50 },
         });
+         const doc = new PDFDocument({ size: 'A4', margins: abntMargins(0.5, 0.5) });
         res.header('Content-Type', 'application/pdf');
         res.attachment('permissionarios.pdf');
         res.setHeader('X-Document-Token', tokenDoc);
@@ -357,6 +359,10 @@ router.get(
          placeHeaderFooter(doc, tokenDoc);
          doc.fillColor('#333'); // cor default do conteúdo
 
+         applyLetterhead(doc, { imagePath: path.join(__dirname, '..', 'assets', 'papel-timbrado-secti.png') });
+          doc.x = doc.page.margins.left;
+         doc.y = doc.page.margins.top;
+         doc.fillColor('#333'); // cor padrão do conteúdo
         doc.fillColor('#333').fontSize(16).text('Relatório de Permissionários', { align: 'center' });
         doc.moveDown(2);
         generateTable(doc, permissionarios);
@@ -372,6 +378,9 @@ router.get(
     }
   }
 );
+
+printToken(doc, tokenDoc);
+doc.on('pageAdded', () => printToken(doc, tokenDoc));
 
 /* ===========================================================
    GET /api/admin/relatorios/devedores
@@ -400,7 +409,7 @@ router.get(
         return res.status(404).json({ error: 'Nenhum devedor encontrado.' });
       }
 
-      const doc = new PDFDocument({ size: 'A4', margins: { top: 50, bottom: 50, left: 50, right: 50 } });
+      const doc = new PDFDocument({ size: 'A4', margins: abntMargins(0.5, 0.5) });
 
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'secti-'));
       const filePath = path.join(tmpDir, `relatorio_devedores_${Date.now()}.pdf`);
@@ -412,8 +421,12 @@ router.get(
       doc.on('pageAdded', () => placeHeaderFooter(doc, tokenDoc));
       placeHeaderFooter(doc, tokenDoc);
       doc.fillColor('#333'); // cor default do conteúdo
-
-
+      // aplica o papel timbrado em todas as páginas
+      applyLetterhead(doc, { imagePath: path.join(__dirname, '..', 'assets', 'papel-timbrado-secti.png') });
+      // garante cursor no início da área útil
+      doc.x = doc.page.margins.left;
+      doc.y = doc.page.margins.top;             
+       
       doc.fillColor('#333').fontSize(16).text('Relatório de Devedores', { align: 'center' });
       doc.moveDown(2);
       generateDebtorsTable(doc, devedores);
@@ -626,5 +639,15 @@ function generateDebtorsTable(doc, data) {
     y += rowHeight;
   }
 }
+
+function printToken(doc, token) {
+  if (!token) return;
+  doc.save();
+  const x = doc.page.margins.left;
+  const y = doc.page.height - doc.page.margins.bottom - 10; // dentro da área útil
+  doc.fontSize(8).fillColor('#222').text(`Token: ${token}`, x, y, { lineBreak: false });
+  doc.restore();
+}
+
 
 module.exports = router;
