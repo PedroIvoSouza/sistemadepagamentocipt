@@ -434,7 +434,7 @@ router.get(
       fileStream.pipe(res);
       fileStream.on('close', () => {
         fs.unlink(filePath, () => {
-          fs.rmdir(tmpDir, () => {});
+          fs.rm(tmpDir, { recursive: true }, () => {});
         });
       });
     } catch (error) {
