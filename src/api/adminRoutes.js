@@ -1,6 +1,5 @@
 // src/api/adminRoutes.js
 const express = require('express');
-const sqlite3 = require('sqlite3').verbose();
 const { Parser } = require('json2csv');
 const xlsx = require('xlsx');
 const PDFDocument = require('pdfkit');
@@ -11,14 +10,12 @@ const os = require('os');
 const { gerarTokenDocumento } = require('../utils/token');
 const { applyLetterhead, abntMargins } = require('../utils/pdfLetterhead');
 
-const DB_PATH = path.resolve(process.cwd(), process.env.SQLITE_STORAGE || './sistemacipt.db');
-
 // Middlewares
 const authMiddleware = require('../middleware/authMiddleware');
 const authorizeRole = require('../middleware/roleMiddleware');
 
 const router = express.Router();
-const db = new sqlite3.Database(DB_PATH);
+const db = require('../database/db');
 
 /* =========================
    Helpers SQLite (promises)
@@ -337,7 +334,7 @@ router.get(
 
       // PDF
       if (format === 'pdf') {
-        const tokenDoc = await gerarTokenDocumento('RELATORIO_PERMISSIONARIOS', null);
+        const tokenDoc = await gerarTokenDocumento('RELATORIO_PERMISSIONARIOS', null, db);
 
         const doc = new PDFDocument({ size: 'A4', margins: abntMargins(0.5, 0.5) });
         res.header('Content-Type', 'application/pdf');
@@ -407,7 +404,7 @@ router.get(
       const stream = fs.createWriteStream(filePath);
       doc.pipe(stream);
 
-      const tokenDoc = await gerarTokenDocumento('RELATORIO_DEVEDORES', null);
+      const tokenDoc = await gerarTokenDocumento('RELATORIO_DEVEDORES', null, db);
 
       // Papel timbrado em todas as páginas
       applyLetterhead(doc, { imagePath: path.join(__dirname, '..', 'assets', 'papel-timbrado-secti.png') });

@@ -1,7 +1,5 @@
 // src/api/adminDarsRoutes.js
-const path = require('path');
 const express = require('express');
-const sqlite3 = require('sqlite3').verbose();
 
 const authMiddleware = require('../middleware/authMiddleware');
 const authorizeRole = require('../middleware/roleMiddleware');
@@ -10,13 +8,9 @@ const { notificarDarGerado } = require('../services/notificacaoService');
 const { emitirGuiaSefaz } = require('../services/sefazService');
 const { isoHojeLocal, toISO, buildSefazPayloadPermissionario } = require('../utils/sefazPayload');
 const { gerarTokenDocumento, imprimirTokenEmPdf } = require('../utils/token');
+const db = require('../database/db');
 
 const router = express.Router();
-
-// Usa o caminho definido no .env (SQLITE_STORAGE) com fallback
-const DB_PATH = path.resolve(process.cwd(), process.env.SQLITE_STORAGE || './sistemacipt.db');
-console.log(`[AdminDARs] Abrindo SQLite em: ${DB_PATH}`);
-const db = new sqlite3.Database(DB_PATH);
 
 // Helpers async
 const dbGetAsync = (sql, params = []) =>
@@ -165,7 +159,7 @@ router.post(
         throw new Error('Retorno da SEFAZ incompleto.');
       }
 
-      const tokenDoc = await gerarTokenDocumento('DAR', dar.permissionario_id);
+      const tokenDoc = await gerarTokenDocumento('DAR', dar.permissionario_id, db);
       sefazResponse.pdfBase64 = await imprimirTokenEmPdf(sefazResponse.pdfBase64, tokenDoc);
 
       // Persiste número/pdf e marca como Emitido (compat com campos antigos)

@@ -1,6 +1,5 @@
 // src/api/permissionariosRoutes.js
 const express = require('express');
-const sqlite3 = require('sqlite3').verbose();
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
@@ -9,8 +8,8 @@ const authMiddleware = require('../middleware/authMiddleware');
 const { applyLetterhead, abntMargins } = require('../utils/pdfLetterhead');
 const { gerarTokenDocumento } = require('../utils/token');
 
+const db = require('../database/db');
 const router = express.Router();
-const db = new sqlite3.Database('./sistemacipt.db');
 
 /* =========================
    Helpers SQLite (promises)
@@ -97,7 +96,7 @@ router.get('/:id/certidao', authMiddleware, async (req, res) => {
     )`);
 
     // Token padronizado do sistema (também usado em /api/documentos/validar)
-    const tokenDoc = await gerarTokenDocumento('CERTIDAO_QUITACAO', id);
+    const tokenDoc = await gerarTokenDocumento('CERTIDAO_QUITACAO', id, db);
 
     // Caminho público onde o PDF ficará disponível
     const dir = path.join(__dirname, '..', '..', 'public', 'permissionarios', 'certidoes');
