@@ -19,7 +19,6 @@ function lerPlanilha(nomeArquivo, nomeAba) {
         const workbook = xlsx.readFile(caminhoCompleto);
         const sheet = workbook.Sheets[nomeAba];
         if (!sheet) throw new Error(`Aba "${nomeAba}" não encontrada no ficheiro "${nomeArquivo}"`);
-        // CORREÇÃO: A opção { raw: true } garante que os dados (como o CNPJ com '0' no início) sejam lidos como texto.
         return xlsx.utils.sheet_to_json(sheet, { raw: true });
     } catch (error) {
         console.error(`Erro ao ler o ficheiro "${nomeArquivo}":`, error.message);
@@ -64,7 +63,14 @@ async function importarPermissionarios() {
     let importados = 0;
 
     for (const p of permissionariosBase) {
-        const cnpjLimpo = p.cnpj ? String(p.cnpj).replace(/\D/g, '') : null;
+        let cnpjLimpo = p.cnpj ? String(p.cnpj).replace(/\D/g, '') : null;
+        
+        // CORREÇÃO ESPECIAL PARA O CNPJ DO VERTEX
+        if (p.nome_empresa && String(p.nome_empresa).toUpperCase().includes('VERTEX')) {
+            cnpjLimpo = '01703922000128';
+            console.log(`INFO: CNPJ do Vertex corrigido para ${cnpjLimpo}`);
+        }
+
         if (!cnpjLimpo || (cnpjLimpo.length !== 14 && cnpjLimpo.length !== 11)) { // Aceita CPF ou CNPJ
             console.warn(`AVISO: Documento inválido para "${p.nome_empresa}". Não importado.`);
             continue;
@@ -121,7 +127,6 @@ async function gerarDarsAtrasadas() {
                 const anoReferencia = anoAtual;
                 const dataVencimento = new Date(anoReferencia, mesReferencia - 1, 10).toISOString().split('T')[0];
 
-                // CORREÇÃO: O nome da coluna é 'permissionario_id', não 'id_permissionario'.
                 const sql = `INSERT INTO dars (permissionario_id, tipo_permissionario, valor, mes_referencia, ano_referencia, data_vencimento, status) VALUES (?, ?, ?, ?, ?, ?, ?)`;
                 await new Promise((resolve) => {
                     db.run(sql, [permissionario.id, 'Permissionario', permissionario.valor_aluguel, mesReferencia, anoReferencia, dataVencimento, 'Vencido'], (err) => {
