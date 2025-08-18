@@ -119,7 +119,7 @@
                   <input type="text" class="form-control" id="cnpj" name="cnpj" placeholder="CNPJ" required>
                   <label for="cnpj">CNPJ</label>
                 </div>
-                
+
                 <label for="senha" class="form-label">Senha</label>
                 <div class="input-group mb-3">
                   <input type="password" class="form-control" id="senha" name="senha" placeholder="Senha" required>
@@ -172,6 +172,20 @@
       IMask(input, { mask: '00.000.000/0000-00' });
     } catch (_) {}
   })();
+
+  function setupPasswordToggle(inputId, buttonId) {
+    const toggleButton = document.getElementById(buttonId);
+    const passwordInput = document.getElementById(inputId);
+    if (!toggleButton || !passwordInput) return;
+    const icon = toggleButton.querySelector('i');
+
+    toggleButton.addEventListener('click', () => {
+      const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
+      passwordInput.setAttribute('type', type);
+      icon.classList.toggle('bi-eye-fill');
+      icon.classList.toggle('bi-eye-slash-fill');
+    });
+  }
 
   async function handleLogin(e) {
     e.preventDefault();
