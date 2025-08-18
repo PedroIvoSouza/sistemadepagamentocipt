@@ -127,6 +127,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script src="/js/admin-guard.js"></script>
+<script src="/js/gerar-oficio.js"></script>
 <script defer src="/js/mobile-adapter.js"></script>
 <script defer src="/js/ui-kit.js"></script>
 <script defer src="/js/mobile-tweaks.js"></script>
@@ -220,7 +221,10 @@
                     <td>${formatarCNPJ(p.cnpj)}</td>
                     <td>${p.email}</td>
                     <td>${p.telefone || 'Não informado'}</td>
-                    <td><a href="/admin/permissionario-form.html?id=${p.id}" class="btn btn-sm btn-outline-primary">Ver/Editar</a></td>
+                    <td>
+                        <a href="/admin/permissionario-form.html?id=${p.id}" class="btn btn-sm btn-outline-primary me-2">Ver/Editar</a>
+                        <button class="btn btn-sm btn-outline-secondary gerar-oficio-btn" data-id="${p.id}">Gerar Ofício</button>
+                    </td>
                 </tr>
             `).join('');
         }
@@ -241,6 +245,13 @@
         searchInput.addEventListener('keyup', () => { clearTimeout(searchTimeout); searchTimeout = setTimeout(() => { currentSearch = searchInput.value; currentPage = 1; fetchPermissionarios(); }, 300); });
         limitSelect.addEventListener('change', () => { currentLimit = limitSelect.value; currentPage = 1; fetchPermissionarios(); });
         paginationNav.addEventListener('click', (e) => { if (e.target.tagName === 'A' && !e.target.parentElement.classList.contains('disabled')) { e.preventDefault(); currentPage = Number(e.target.dataset.page); fetchPermissionarios(); } });
+
+        tableBody.addEventListener('click', (e) => {
+            if (e.target.classList.contains('gerar-oficio-btn')) {
+                const id = e.target.dataset.id;
+                gerarOficio(id);
+            }
+        });
 
         // --- CORREÇÃO NA LÓGICA DE EXPORTAÇÃO ---
         async function handleExport(format, searchTerm) {
