@@ -7,6 +7,8 @@ const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
 const { gerarTokenDocumento } = require('../utils/token');
+const os = require('os');
+const crypto = require('crypto');
 const DB_PATH = path.resolve(process.cwd(), process.env.SQLITE_STORAGE || './sistemacipt.db');
 
 // Middlewares
@@ -54,6 +56,18 @@ async function ensureIndexes() {
   await dbRun(`CREATE INDEX IF NOT EXISTS idx_perm_cnpj               ON permissionarios(cnpj);`);
 }
 ensureIndexes().catch(e => console.error('[adminRoutes] ensureIndexes error:', e.message));
+
+// Tabela para registrar documentos gerados
+async function ensureDocumentosTable() {
+  await dbRun(`CREATE TABLE IF NOT EXISTS documentos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tipo TEXT,
+    caminho TEXT,
+    token TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+}
+ensureDocumentosTable().catch(e => console.error('[adminRoutes] ensureDocumentosTable error:', e.message));
 
 /* ===========================================================
    GET /api/admin/dashboard-stats
@@ -369,6 +383,78 @@ router.get(
 );
 
 /* ===========================================================
+   GET /api/admin/relatorios/devedores
+   =========================================================== */
+router.get(
+  '/relatorios/devedores',
+  [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN'])],
+  async (req, res) => {
+    try {
+      const devedores = await dbAll(
+        `SELECT 
+            p.nome_empresa,
+            p.cnpj,
+            COUNT(d.id)  AS quantidade_dars,
+            SUM(d.valor) AS total_devido
+         FROM dars d
+         JOIN permissionarios p ON p.id = d.permissionario_id
+         WHERE d.status <> 'Pago'
+         GROUP BY p.id, p.nome_empresa, p.cnpj
+         HAVING total_devido > 0
+         ORDER BY total_devido DESC`
+      );
+
+      if (!devedores.length) {
+        return res.status(404).json({ error: 'Nenhum devedor encontrado.' });
+      }
+
+      const doc = new PDFDocument({ size: 'A4', margins: { top: 50, bottom: 50, left: 50, right: 50 } });
+
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'secti-'));
+      const filePath = path.join(tmpDir, `relatorio_devedores_${Date.now()}.pdf`);
+      const stream = fs.createWriteStream(filePath);
+      doc.pipe(stream);
+
+      doc.on('pageAdded', () => {
+        generateHeader(doc);
+        generateFooter(doc);
+      });
+
+      generateHeader(doc);
+      generateFooter(doc);
+      doc.fillColor('#333').fontSize(16).text('Relatório de Devedores', { align: 'center' });
+      doc.moveDown(2);
+      generateDebtorsTable(doc, devedores);
+      doc.end();
+
+      await new Promise((resolve, reject) => {
+        stream.on('finish', resolve);
+        stream.on('error', reject);
+      });
+
+      const token = crypto.randomBytes(16).toString('hex');
+      await dbRun(
+        `INSERT INTO documentos (tipo, caminho, token) VALUES (?, ?, ?)`,
+        ['RELATORIO_DEVEDORES', filePath, token]
+      );
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', 'attachment; filename="relatorio_devedores.pdf"');
+      const fileStream = fs.createReadStream(filePath);
+      fileStream.pipe(res);
+      fileStream.on('close', () => {
+        fs.unlink(filePath, () => {
+          fs.rmdir(tmpDir, () => {});
+        });
+      });
+    } catch (error) {
+      console.error('Erro ao gerar relatório devedores:', error);
+      res.status(500).json({ error: 'Erro ao gerar o relatório de devedores.' });
+    }
+  }
+);
+
+/* ===========================================================
    Helpers para PDF
    =========================================================== */
 function generateHeader(doc) {
@@ -439,6 +525,48 @@ function generateTable(doc, data) {
       item.email,
       item.telefone || 'N/A',
       item.numero_sala,
+    ];
+    drawRow(row, y);
+    y += rowHeight;
+  }
+}
+
+function generateDebtorsTable(doc, data) {
+  let y = 140;
+  const rowHeight = 30;
+  const colWidths = { nome: 230, cnpj: 120, quantidade: 80, total: 120 };
+  const headers = ['Razão Social', 'CNPJ', 'Qtde DARs', 'Total Devido (R$)'];
+
+  const drawRow = (row, currentY, isHeader = false) => {
+    let x = doc.page.margins.left;
+    doc.font(isHeader ? 'Helvetica-Bold' : 'Helvetica').fontSize(isHeader ? 9 : 8);
+    row.forEach((cell, i) => {
+      const key = Object.keys(colWidths)[i];
+      doc.text(String(cell), x + 5, currentY + 10, {
+        width: colWidths[key] - 10,
+        align: 'left',
+        lineBreak: true,
+      });
+      doc.rect(x, currentY, colWidths[key], rowHeight).stroke('#ccc');
+      x += colWidths[key];
+    });
+  };
+
+  drawRow(headers, y, true);
+  y += rowHeight;
+
+  for (const item of data) {
+    if (y + rowHeight > doc.page.height - doc.page.margins.bottom - 70) {
+      doc.addPage();
+      y = 100;
+      drawRow(headers, y, true);
+      y += rowHeight;
+    }
+    const row = [
+      item.nome_empresa,
+      item.cnpj,
+      item.quantidade_dars,
+      Number(item.total_devido).toFixed(2),
     ];
     drawRow(row, y);
     y += rowHeight;
