@@ -44,7 +44,7 @@ router.get('/:id/certidao', authMiddleware, async (req, res) => {
     }
 
     const pend = await getAsync(
-      `SELECT COUNT(*) as count FROM dars WHERE permissionario_id = ? AND status = 'Pendente'`,
+      `SELECT COUNT(*) as count FROM dars WHERE permissionario_id = ? AND status = 'Pendente' AND DATE(data_vencimento) < DATE('now')`,
       [id]
     );
     if ((pend?.count || 0) > 0) {
