@@ -18,6 +18,7 @@ const adminAuthRoutes             = require('./api/adminAuthRoutes');
 const adminRoutes                 = require('./api/adminRoutes');
 const adminManagementRoutes       = require('./api/adminManagementRoutes');
 const adminDarsRoutes             = require('./api/adminDarsRoutes');
+const adminOficiosRoutes          = require('./api/adminOficiosRoutes');
 
 
 // CORREÇÃO: Desestruturando os routers de eventos
@@ -59,6 +60,7 @@ app.use('/api/dars',              darsRoutes);
 // Administração Geral
 app.use('/api/admin/auth',        adminAuthRoutes);
 app.use('/api/admin/dars',        adminDarsRoutes);
+app.use('/api/admin/oficios',     adminOficiosRoutes);
 app.use('/api/admins',            adminManagementRoutes);
 app.use('/api/admin',             adminRoutes); // Rota para permissionários no painel admin
 
