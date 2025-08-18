@@ -124,6 +124,7 @@ router.post(
       };
 
       const addFooter = () => {
+        const y = doc.y;
         doc
           .font('Times-Roman')
           .fontSize(10)
@@ -132,11 +133,12 @@ router.post(
             doc.page.margins.left,
             doc.page.height - doc.page.margins.bottom + 20
           );
+        doc.y = y;
       };
 
       doc.on('pageAdded', () => {
-        addHeader();
         addFooter();
+        addHeader();
       });
 
       addHeader();
