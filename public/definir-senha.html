@@ -94,9 +94,13 @@
     <script defer src="/js/mobile-tweaks.js"></script>
     <script>
     document.addEventListener('DOMContentLoaded', () => {
-        setupPasswordToggle('nova_senha', 'toggleNovaSenha');
-        setupPasswordToggle('confirmar_nova_senha', 'toggleConfirmarNovaSenha');
-        
+        if (window.setupPasswordToggle) {
+            setupPasswordToggle('nova_senha', 'toggleNovaSenha');
+            setupPasswordToggle('confirmar_nova_senha', 'toggleConfirmarNovaSenha');
+        } else {
+            console.error('ui-kit.js não carregado');
+        }
+
         const passwordResetToken = localStorage.getItem('passwordResetToken');
         const form = document.getElementById('passwordForm');
         const messageDiv = document.getElementById('message');
@@ -132,7 +136,11 @@
                 const response = await fetch('/api/auth/definir-senha', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ token: passwordResetToken, senha: senha })
+                    body: JSON.stringify({
+                        token: passwordResetToken,
+                        password: senha,
+                        passwordConfirmation: confirmacao
+                    })
                 });
 
                 const result = await response.json();
