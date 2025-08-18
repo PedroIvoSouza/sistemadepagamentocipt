@@ -6,9 +6,11 @@ const xlsx = require('xlsx');
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
+
 const { gerarTokenDocumento } = require('../utils/token');
 const { applyLetterhead, abntMargins } = require('../utils/pdfLetterhead');
-const os = require('os');
+
 const DB_PATH = path.resolve(process.cwd(), process.env.SQLITE_STORAGE || './sistemacipt.db');
 
 // Middlewares
@@ -41,8 +43,6 @@ const dbRun = (sql, params = []) =>
 
 /* =========================
    Índices para performance
-   - idempotentes (IF NOT EXISTS)
-   - importantes para as queries do dashboard
    ========================= */
 async function ensureIndexes() {
   try {
@@ -59,8 +59,6 @@ ensureIndexes().catch(e => console.error('[adminRoutes] ensureIndexes error:', e
 
 /* ===========================================================
    GET /api/admin/dashboard-stats
-   - Usa ISO yyyy-mm-dd como parâmetro => ativa índice por comparação
-   - "vencidas" = não pagas com data_vencimento < hoje
    =========================================================== */
 router.get(
   '/dashboard-stats',
@@ -73,7 +71,6 @@ router.get(
         `SELECT COUNT(*) AS count FROM permissionarios`
       )).count;
 
-      // Em aberto (não pagos)
       const pendRow = await dbGet(
         `SELECT COUNT(*) AS qnt, COALESCE(SUM(valor),0) AS valor
          FROM dars
@@ -82,7 +79,6 @@ router.get(
       const darsPendentes   = pendRow?.qnt ?? 0;
       const receitaPendente = Number(pendRow?.valor ?? 0);
 
-      // Vencidos: não pagos com vencimento anterior a hoje (comparação textual ativa índice)
       const vencRow = await dbGet(
         `SELECT COUNT(*) AS qnt
          FROM dars
@@ -92,7 +88,6 @@ router.get(
       );
       const darsVencidos = vencRow?.qnt ?? 0;
 
-      // Resumo mensal (últimos 6 grupos)
       const resumoMensal = await dbAll(
         `SELECT
             CAST(strftime('%Y', data_vencimento) AS INTEGER) AS ano_referencia,
@@ -107,7 +102,6 @@ router.get(
         [isoToday]
       );
 
-      // Maiores devedores: não pagos
       const maioresDevedores = await dbAll(
         `SELECT
             p.nome_empresa,
@@ -138,7 +132,7 @@ router.get(
 );
 
 /* ===========================================================
-   Rotas de Permissionários (mantidas como você tinha)
+   Rotas de Permissionários
    =========================================================== */
 
 // GET /api/admin/permissionarios
@@ -288,7 +282,7 @@ router.post(
 );
 
 /* ===========================================================
-   Exportações (CSV, XLSX, PDF) — mantidas como estavam
+   Exportações (CSV, XLSX, PDF)
    =========================================================== */
 router.get(
   '/permissionarios/export/:format',
@@ -344,35 +338,32 @@ router.get(
       // PDF
       if (format === 'pdf') {
         const tokenDoc = await gerarTokenDocumento('RELATORIO_PERMISSIONARIOS', null);
-      
+
         const doc = new PDFDocument({ size: 'A4', margins: abntMargins(0.5, 0.5) });
         res.header('Content-Type', 'application/pdf');
         res.attachment('permissionarios.pdf');
         res.setHeader('X-Document-Token', tokenDoc);
         doc.pipe(res);
-      
+
         // Papel timbrado em todas as páginas
         applyLetterhead(doc, { imagePath: path.join(__dirname, '..', 'assets', 'papel-timbrado-secti.png') });
-      
+
         // Cursor inicial dentro da área útil
         doc.x = doc.page.margins.left;
         doc.y = doc.page.margins.top;
-      
-        // Token por página (sem quebras)
+
+        // Token por página (sem mover o cursor do conteúdo)
         printToken(doc, tokenDoc);
-        doc.on('pageAdded', () => {
-          printToken(doc, tokenDoc);
-        });
-      
+        doc.on('pageAdded', () => printToken(doc, tokenDoc));
+
         // Conteúdo
         doc.fillColor('#333').fontSize(16).text('Relatório de Permissionários', { align: 'center' });
         doc.moveDown(2);
         generateTable(doc, permissionarios);
-      
+
         doc.end();
         return;
       }
-
 
       return res.status(400).json({ error: 'Formato de exportação inválido.' });
     } catch (error) {
@@ -420,22 +411,20 @@ router.get(
 
       // Papel timbrado em todas as páginas
       applyLetterhead(doc, { imagePath: path.join(__dirname, '..', 'assets', 'papel-timbrado-secti.png') });
-      
+
       // Cursor inicial dentro da área útil
       doc.x = doc.page.margins.left;
       doc.y = doc.page.margins.top;
-      
-      // Token por página
+
+      // Token por página (sem mover o cursor do conteúdo)
       printToken(doc, tokenDoc);
-      doc.on('pageAdded', () => {
-        printToken(doc, tokenDoc);
-      });
-      
+      doc.on('pageAdded', () => printToken(doc, tokenDoc));
+
+      // Conteúdo
       doc.fillColor('#333').fontSize(16).text('Relatório de Devedores', { align: 'center' });
       doc.moveDown(2);
       generateDebtorsTable(doc, devedores);
       doc.end();
-
 
       await new Promise((resolve, reject) => {
         stream.on('finish', resolve);
@@ -447,7 +436,6 @@ router.get(
          ON CONFLICT(token) DO UPDATE SET caminho = excluded.caminho`,
         ['RELATORIO_DEVEDORES', filePath, tokenDoc]
       );
-
 
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', 'attachment; filename="relatorio_devedores.pdf"');
@@ -466,6 +454,9 @@ router.get(
   }
 );
 
+/* ===========================================================
+   Render helpers (tabelas + token)
+   =========================================================== */
 function generateTable(doc, data) {
   let y = doc.y;
   const rowHeight = 30;
@@ -498,9 +489,9 @@ function generateTable(doc, data) {
   y += rowHeight;
 
   for (const item of data) {
-     if (y + rowHeight > doc.page.height - doc.page.margins.bottom - 10) {
-       doc.addPage();
-       y = doc.page.margins.top;   
+    if (y + rowHeight > doc.page.height - doc.page.margins.bottom - 10) {
+      doc.addPage();
+      y = doc.page.margins.top;   // reinicia na margem superior
       drawRow(headers, y, true);
       y += rowHeight;
     }
@@ -548,8 +539,8 @@ function generateDebtorsTable(doc, data) {
 
   for (const item of data) {
     if (y + rowHeight > doc.page.height - doc.page.margins.bottom - 10) {
-     doc.addPage();
-      y = doc.page.margins.top;
+      doc.addPage();
+      y = doc.page.margins.top;   // reinicia na margem superior
       drawRow(headers, y, true);
       y += rowHeight;
     }
@@ -566,12 +557,20 @@ function generateDebtorsTable(doc, data) {
 
 function printToken(doc, token) {
   if (!token) return;
+
+  // preserve o cursor do conteúdo
+  const prevX = doc.x;
+  const prevY = doc.y;
+
   doc.save();
   const x = doc.page.margins.left;
   const y = doc.page.height - doc.page.margins.bottom - 10; // dentro da área útil
   doc.fontSize(8).fillColor('#222').text(`Token: ${token}`, x, y, { lineBreak: false });
   doc.restore();
-}
 
+  // restaura o cursor do conteúdo
+  doc.x = prevX;
+  doc.y = prevY;
+}
 
 module.exports = router;
