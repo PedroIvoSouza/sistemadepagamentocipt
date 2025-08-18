@@ -21,7 +21,7 @@ const initPromise = new Promise((resolve, reject) => {
     db.run(
       `CREATE TABLE IF NOT EXISTS documentos (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        token TEXT NOT NULL,
+        token TEXT NOT NULL UNIQUE,
         tipo TEXT NOT NULL,
         caminho TEXT,
         permissionario_id INTEGER,
@@ -29,21 +29,29 @@ const initPromise = new Promise((resolve, reject) => {
       )`,
       err => {
         if (err) return reject(err);
-        db.all(`PRAGMA table_info(documentos)`, async (e, rows) => {
-          if (e) return reject(e);
-          const cols = rows.map(r => r.name);
-          try {
-            if (!cols.includes('caminho')) {
-              await runAsync(`ALTER TABLE documentos ADD COLUMN caminho TEXT`);
-            }
-            if (!cols.includes('permissionario_id')) {
-              await runAsync(`ALTER TABLE documentos ADD COLUMN permissionario_id INTEGER`);
-            }
-            resolve();
-          } catch (alterErr) {
-            reject(alterErr);
+        db.run(
+          `CREATE UNIQUE INDEX IF NOT EXISTS idx_documentos_token ON documentos(token)`,
+          idxErr => {
+            if (idxErr) return reject(idxErr);
+            db.all(`PRAGMA table_info(documentos)`, async (e, rows) => {
+              if (e) return reject(e);
+              const cols = rows.map(r => r.name);
+              try {
+                if (!cols.includes('caminho')) {
+                  await runAsync(`ALTER TABLE documentos ADD COLUMN caminho TEXT`);
+                }
+                if (!cols.includes('permissionario_id')) {
+                  await runAsync(
+                    `ALTER TABLE documentos ADD COLUMN permissionario_id INTEGER`
+                  );
+                }
+                resolve();
+              } catch (alterErr) {
+                reject(alterErr);
+              }
+            });
           }
-        });
+        );
       }
     );
   });
