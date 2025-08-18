@@ -9,6 +9,7 @@ const { calcularEncargosAtraso } = require('../services/cobrancaService');
 const { notificarDarGerado } = require('../services/notificacaoService');
 const { emitirGuiaSefaz } = require('../services/sefazService');
 const { isoHojeLocal, toISO, buildSefazPayloadPermissionario } = require('../utils/sefazPayload');
+const { gerarTokenDocumento, imprimirTokenEmPdf } = require('../utils/token');
 
 const router = express.Router();
 
@@ -164,6 +165,9 @@ router.post(
         throw new Error('Retorno da SEFAZ incompleto.');
       }
 
+      const tokenDoc = await gerarTokenDocumento('DAR', dar.permissionario_id);
+      sefazResponse.pdfBase64 = await imprimirTokenEmPdf(sefazResponse.pdfBase64, tokenDoc);
+
       // Persiste número/pdf e marca como Emitido (compat com campos antigos)
       await dbRunAsync(
         `UPDATE dars
@@ -181,8 +185,7 @@ router.post(
           darId
         ]
       );
-
-      return res.status(200).json(sefazResponse);
+      return res.status(200).json({ ...sefazResponse, token: tokenDoc });
     } catch (error) {
       console.error('[AdminDARs] ERRO POST /:id/emitir:', error);
       const isUnavailable =

@@ -32,6 +32,7 @@ const eventosRoutes               = require('./api/eventosRoutes');
 
 // NOVA LINHA: Importe o novo arquivo de rotas de eventos para admin
 const adminEventosRoutes = require('./api/adminEventosRoutes');
+const documentosRoutes           = require('./api/documentosRoutes');
 
 const app  = express();
 app.use(cors({
@@ -80,6 +81,7 @@ app.use('/api/admin/eventos', adminEventosRoutes);
 
 // Eventos (gerenciamento geral de eventos)
 app.use('/api/eventos',           eventosRoutes);
+app.use('/api/documentos',       documentosRoutes);
 
 
 

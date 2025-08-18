@@ -4,6 +4,7 @@ const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const adminAuthMiddleware = require('../middleware/adminAuthMiddleware');
 const { emitirGuiaSefaz } = require('../services/sefazService');
+const { gerarTokenDocumento, imprimirTokenEmPdf } = require('../utils/token');
 
 const router = express.Router();
 const dbPath = path.resolve(__dirname, '..', '..', 'sistemacipt.db');
@@ -165,9 +166,11 @@ router.post('/', async (req, res) => {
         }],
         dataLimitePagamento: vencimentoISO,
         observacao: `CIPT Evento: ${nomeEvento} | Parcela ${i + 1} de ${parcelas.length}`
-      };
+      }; 
 
       const retornoSefaz = await emitirGuiaSefaz(payloadSefaz);
+      const tokenDoc = await gerarTokenDocumento('DAR_EVENTO', null);
+      retornoSefaz.pdfBase64 = await imprimirTokenEmPdf(retornoSefaz.pdfBase64, tokenDoc);
 
       // Atualiza DAR com dados da emissão
       await dbRun(
@@ -462,6 +465,8 @@ router.put('/:id', async (req, res) => {
       };
 
       const retorno = await emitirGuiaSefaz(payloadSefaz);
+      const tokenDoc = await gerarTokenDocumento('DAR_EVENTO', null);
+      retorno.pdfBase64 = await imprimirTokenEmPdf(retorno.pdfBase64, tokenDoc);
 
       await dbRun(
         `UPDATE dars SET numero_documento = ?, pdf_url = ?, status = 'Emitido' WHERE id = ?`,
@@ -532,6 +537,8 @@ router.post('/:eventoId/dars/:darId/reemitir', async (req, res) => {
     };
 
     const retornoSefaz = await emitirGuiaSefaz(payloadSefaz);
+    const tokenDoc = await gerarTokenDocumento('DAR_EVENTO', null);
+    retornoSefaz.pdfBase64 = await imprimirTokenEmPdf(retornoSefaz.pdfBase64, tokenDoc);
 
     await dbRun(
       `UPDATE dars SET numero_documento = ?, pdf_url = ?, status = 'Reemitido' WHERE id = ?`,

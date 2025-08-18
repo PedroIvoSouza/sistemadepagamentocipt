@@ -6,6 +6,7 @@ const sqlite3 = require('sqlite3').verbose();
 const authMiddleware = require('../middleware/authMiddleware');
 const { calcularEncargosAtraso } = require('../services/cobrancaService');
 const { emitirGuiaSefaz } = require('../services/sefazService');
+const { gerarTokenDocumento, imprimirTokenEmPdf } = require('../utils/token');
 
 const router = express.Router();
 
@@ -288,6 +289,9 @@ router.post('/:id/emitir', authMiddleware, async (req, res) => {
       throw new Error('Retorno da SEFAZ incompleto.');
     }
 
+    const tokenDoc = await gerarTokenDocumento('DAR', userId);
+    sefazResponse.pdfBase64 = await imprimirTokenEmPdf(sefazResponse.pdfBase64, tokenDoc);
+
     // Garante schema e atualiza DAR
     await ensureSchema(); // no-op se já existe
     await dbRunAsync(
@@ -310,7 +314,7 @@ router.post('/:id/emitir', authMiddleware, async (req, res) => {
     );
 
     const payloadDebug = debug ? { _payloadDebug: payload } : {};
-    return res.status(200).json({ ...sefazResponse, ...payloadDebug });
+    return res.status(200).json({ ...sefazResponse, token: tokenDoc, ...payloadDebug });
 
   } catch (error) {
     console.error('Erro na rota /emitir:', error);

@@ -6,6 +6,7 @@ const xlsx = require('xlsx');
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
+const { gerarTokenDocumento } = require('../utils/token');
 const DB_PATH = path.resolve(process.cwd(), process.env.SQLITE_STORAGE || './sistemacipt.db');
 
 // Middlewares
@@ -333,6 +334,7 @@ router.get(
 
       // PDF
       if (format === 'pdf') {
+        const tokenDoc = await gerarTokenDocumento('RELATORIO_PERMISSIONARIOS', null);
         const doc = new PDFDocument({
           layout: 'landscape',
           size: 'A4',
@@ -340,15 +342,16 @@ router.get(
         });
         res.header('Content-Type', 'application/pdf');
         res.attachment('permissionarios.pdf');
+        res.setHeader('X-Document-Token', tokenDoc);
         doc.pipe(res);
 
         doc.on('pageAdded', () => {
           generateHeader(doc);
-          generateFooter(doc);
+          generateFooter(doc, tokenDoc);
         });
 
         generateHeader(doc);
-        generateFooter(doc);
+        generateFooter(doc, tokenDoc);
         doc.fillColor('#333').fontSize(16).text('Relatório de Permissionários', { align: 'center' });
         doc.moveDown(2);
         generateTable(doc, permissionarios);
@@ -383,7 +386,7 @@ function generateHeader(doc) {
   doc.y = 100;
 }
 
-function generateFooter(doc) {
+function generateFooter(doc, token) {
   const govLogoPath = path.join(__dirname, '..', '..', 'public', 'images', 'logo-governo.png');
   const pageHeight = doc.page.height;
   doc.rect(0, pageHeight - 70, doc.page.width, 70).fill('#004480');
@@ -393,6 +396,9 @@ function generateFooter(doc) {
     }
   } catch (e) {
     console.error('Erro ao carregar imagem do rodapé:', e);
+  }
+  if (token) {
+    doc.fillColor('#fff').fontSize(8).text(`Token: ${token}`, doc.page.margins.left, pageHeight - 50);
   }
 }
 
