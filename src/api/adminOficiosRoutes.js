@@ -1,196 +1,215 @@
-const path = require('path');
-const fs = require('fs');
+// src/api/adminOficiosRoutes.js
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const PDFDocument = require('pdfkit');
-const { gerarTokenDocumento, imprimirTokenEmPdf } = require('../utils/token');
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+
+const { applyLetterhead, abntMargins } = require('../utils/pdfLetterhead');
+const { gerarTokenDocumento } = require('../utils/token');
 
 const authMiddleware = require('../middleware/authMiddleware');
 const authorizeRole = require('../middleware/roleMiddleware');
 
-const router = express.Router();
-
 const DB_PATH = path.resolve(process.cwd(), process.env.SQLITE_STORAGE || './sistemacipt.db');
+const router = express.Router();
 const db = new sqlite3.Database(DB_PATH);
 
+/* ========= SQLite helpers ========= */
 const dbGet = (sql, params = []) =>
   new Promise((resolve, reject) => db.get(sql, params, (err, row) => (err ? reject(err) : resolve(row))));
 const dbAll = (sql, params = []) =>
   new Promise((resolve, reject) => db.all(sql, params, (err, rows) => (err ? reject(err) : resolve(rows))));
 const dbRun = (sql, params = []) =>
-  new Promise((resolve, reject) => db.run(sql, params, function (err) { return err ? reject(err) : resolve(this); }));
+  new Promise((resolve, reject) => db.run(sql, params, function (err) { if (err) reject(err); else resolve(this); }));
 
-// Tabela de auditoria para oficios
-(async () => {
-  try {
-    await dbRun(`CREATE TABLE IF NOT EXISTS oficios_audit (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      documento_id INTEGER NOT NULL,
-      pdf_path TEXT NOT NULL,
-      created_at TEXT NOT NULL
-    );`);
-  } catch (e) {
-    console.error('[adminOficios] erro ao criar tabela oficios_audit:', e.message);
-  }
-})();
+/* ========= Util: imprime token sem mexer no cursor do conteúdo ========= */
+function printToken(doc, token) {
+  if (!token) return;
+  const prevX = doc.x, prevY = doc.y;   // preserva cursor do conteúdo
+  doc.save();
+  const x = doc.page.margins.left;
+  const y = doc.page.height - doc.page.margins.bottom - 10; // dentro da área útil
+  doc.fontSize(8).fillColor('#222').text(`Token: ${token}`, x, y, { lineBreak: false });
+  doc.restore();
+  doc.x = prevX; doc.y = prevY;         // restaura cursor do conteúdo
+}
 
-router.post(
-  '/:permissionarioId',
+/* ===========================================================
+   GET /api/admin/oficios/:permissionarioId
+   Gera o ofício para um permissionário com timbrado PNG + ABNT
+   =========================================================== */
+router.get(
+  '/oficios/:permissionarioId',
   [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN'])],
   async (req, res) => {
     try {
       const { permissionarioId } = req.params;
-      const { numeroProcesso = '___/____/____', dataLimite = '__/__/____' } = req.body || {};
 
-      const permissionario = await dbGet(`SELECT * FROM permissionarios WHERE id = ?`, [permissionarioId]);
-      if (!permissionario) {
+      // 1) Dados do permissionário
+      const perm = await dbGet(`SELECT id, nome_empresa, cnpj, email FROM permissionarios WHERE id = ?`, [permissionarioId]);
+      if (!perm) {
         return res.status(404).json({ error: 'Permissionário não encontrado.' });
       }
 
-      const pendentes = await dbAll(
-        `
-          SELECT mes_referencia, ano_referencia, valor, data_vencimento
-          FROM dars
+      // 2) Débitos em aberto (exemplo: tudo não pago e vencido)
+      const debitos = await dbAll(
+        `SELECT id, ano_referencia, mes_referencia, data_vencimento, valor
+           FROM dars
           WHERE permissionario_id = ?
             AND status <> 'Pago'
             AND DATE(data_vencimento) < DATE('now')
-        `,
+          ORDER BY data_vencimento ASC`,
         [permissionarioId]
       );
-      if (!pendentes.length) {
-        return res.status(400).json({ error: 'Nenhuma DAR pendente para o permissionário.' });
-      }
 
-      const total = pendentes.reduce((acc, d) => acc + Number(d.valor || 0), 0);
-      const tokenDoc = await gerarTokenDocumento('oficio', permissionarioId);
-      const docRow = await dbGet(`SELECT id FROM documentos WHERE token = ?`, [tokenDoc]);
-      const documentoId = docRow ? docRow.id : null;
+      const totalDevido = debitos.reduce((acc, d) => acc + Number(d.valor || 0), 0);
+      const totalStr = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalDevido);
 
-      const mesesNomes = [
-        'Janeiro','Fevereiro','Março','Abril','Maio','Junho',
-        'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'
-      ];
-      const mesesFormatados = pendentes.map(d => `${mesesNomes[d.mes_referencia - 1]}/${d.ano_referencia}`);
-      const mesesStr = mesesFormatados.join(', ');
-      const totalStr = total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-      const agora = new Date();
-      const dataAtual = agora.toLocaleDateString('pt-BR');
+      const tokenDoc = await gerarTokenDocumento('OFICIO', permissionarioId);
 
-      const oficiosDir = path.join(__dirname, '..', '..', 'public', 'oficios');
-      fs.mkdirSync(oficiosDir, { recursive: true });
-      const fileName = `oficio-${permissionarioId}-${Date.now()}.pdf`;
-      const filePath = path.join(oficiosDir, fileName);
-      const pdfUrl = `/oficios/${fileName}`;
+      // 3) Cria PDF com margens ABNT (+0,5cm topo/rodapé)
+      const doc = new PDFDocument({ size: 'A4', margins: abntMargins(0.5, 0.5) });
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="oficio_${permissionarioId}.pdf"`);
+      res.setHeader('X-Document-Token', tokenDoc);
+      doc.pipe(res);
 
-      const doc = new PDFDocument({ size: 'A4', margins: { top: 85, left: 85, right: 56, bottom: 56 } });
-      const stream = fs.createWriteStream(filePath);
-      doc.pipe(stream);
+      // 4) Aplica papel timbrado (todas as páginas)
+      applyLetterhead(doc, { imagePath: path.join(__dirname, '..', 'assets', 'papel-timbrado-secti.png') });
 
-      const logoPath = path.join(__dirname, '..', '..', 'public', 'images', 'logo-secti-vertical.png');
-      if (fs.existsSync(logoPath)) {
-        doc.image(logoPath, 50, 40, { width: 80 });
-      }
-      doc.fontSize(18).text('Ofício', { align: 'center' });
-      doc.moveDown();
-
-      doc.fontSize(12).text(`Empresa: ${permissionario.nome_empresa}`);
-      doc.text(`CNPJ: ${permissionario.cnpj}`);
-      doc.text(`Data: ${dataAtual}`);
-      doc.moveDown();
-
-      const contentWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-      doc.text(
-        `Constam pendências de pagamento referentes às competências ${mesesStr}, totalizando ${totalStr}.`,
-        { width: contentWidth }
-      );
-      doc.moveDown();
-      doc.text('Detalhamento das DARs pendentes:');
-      pendentes.forEach(d => {
-        const mes = String(d.mes_referencia).padStart(2, '0');
-        const venc = new Date(d.data_vencimento).toLocaleDateString('pt-BR');
-        doc.text(`- ${mes}/${d.ano_referencia} - venc. ${venc} - R$ ${Number(d.valor).toFixed(2)}`);
-      });
-      doc.moveDown();
-      doc.text(`Total devido: ${totalStr}`);
-      doc.moveDown(2);
-      doc.fontSize(10).text(`Token de autenticação: ${tokenDoc}`);
-      const headerPath = path.join(__dirname, '..', '..', 'public', 'images', 'papel-timbrado-secti.png');
-
-      const addHeader = () => {
-        if (fs.existsSync(headerPath)) {
-          doc.image(headerPath, 0, 0, { width: doc.page.width });
-        }
-        doc.y = doc.page.margins.top;
-      };
-
-      const addFooter = () => {
-        const y = doc.y;
-        doc
-          .font('Times-Roman')
-          .fontSize(10)
-          .text(
-            `Token de autenticidade: ${tokenDoc}`,
-            doc.page.margins.left,
-            doc.page.height - doc.page.margins.bottom + 20
-          );
-        doc.y = y;
-      };
-
+      // 5) Cursor inicial na área útil + token por página
+      doc.x = doc.page.margins.left;
+      doc.y = doc.page.margins.top;
+      printToken(doc, tokenDoc);
       doc.on('pageAdded', () => {
-        addFooter();
-        addHeader();
+        // applyLetterhead já está plugado no helper
+        printToken(doc, tokenDoc); // só o token aqui; nada de header/footer com text()
       });
 
-      addHeader();
+      // 6) Conteúdo do ofício
+      const larguraUtil = doc.page.width - doc.page.margins.left - doc.page.margins.right;
 
-      const listaPendencias = pendentes
-        .map(d => {
-          const mes = String(d.mes_referencia).padStart(2, '0');
-          const venc = new Date(d.data_vencimento).toLocaleDateString('pt-BR');
-          return `- ${mes}/${d.ano_referencia} - venc. ${venc} - R$ ${Number(d.valor).toFixed(2)}`;
-        })
-        .join('\n');
+      const hoje = new Date();
+      const dataBR = hoje.toLocaleDateString('pt-BR');
+      const titulo = 'OFÍCIO';
+      doc.fillColor('#333').fontSize(14).text(titulo, { align: 'center', width: larguraUtil });
+      doc.moveDown(1);
 
-      const paragrafos = [
-        `À empresa ${permissionario.nome_empresa}, inscrita no CNPJ ${permissionario.cnpj},`,
-        `Conforme Processo Administrativo nº ${numeroProcesso}, notificamos que constam em aberto os débitos abaixo relacionados:`,
-        listaPendencias,
-        `Total devido: R$ ${total.toFixed(2)}.`,
-        `Solicitamos a quitação até ${dataLimite}.`,
-        `Goiânia, ${dataAtual}.`,
-        `Atenciosamente,`,
-        `Secretaria de Ciência, Tecnologia e Inovação`,
-      ];
+      doc.fontSize(11).text(`Maceió, ${dataBR}`, { align: 'right', width: larguraUtil });
+      doc.moveDown(2);
 
-      paragrafos.forEach(p => {
-        doc.font('Times-Roman').fontSize(12).text(p, {
-          align: 'justify',
-          lineGap: 4,
-          paragraphGap: 12,
-        });
+      // Destinatário
+      doc.font('Helvetica-Bold').text(perm.nome_empresa, { width: larguraUtil });
+      doc.font('Helvetica').text(`CNPJ: ${perm.cnpj}`, { width: larguraUtil });
+      if (perm.email) doc.text(`E-mail: ${perm.email}`, { width: larguraUtil });
+      doc.moveDown(2);
+
+      // Corpo (exemplo; ajuste ao seu texto oficial)
+      const corpo = [
+        `Prezados,`,
+        `Identificamos pendências financeiras em aberto referentes aos contratos de uso do espaço no Centro de Inovação do Polo Tecnológico (CIPT).`,
+        `Solicitamos a regularização no prazo de 5 (cinco) dias úteis a contar do recebimento deste ofício.`,
+        `O valor total devido até a presente data é de ${totalStr}.`,
+      ].join('\n\n');
+
+      doc.text(corpo, {
+        width: larguraUtil,
+        align: 'justify',
+        lineGap: 2,
       });
+      doc.moveDown(1.5);
 
-      addFooter();
-      doc.end();
-      await new Promise(resolve => stream.on('finish', resolve));
+      // Tabela simples com os títulos vencidos (se houver)
+      if (debitos.length) {
+        doc.font('Helvetica-Bold').text('Títulos em aberto:', { width: larguraUtil });
+        doc.moveDown(0.5);
+        doc.font('Helvetica');
 
-      let pdfBase64 = fs.readFileSync(filePath).toString('base64');
-      pdfBase64 = await imprimirTokenEmPdf(pdfBase64, tokenDoc);
-      fs.writeFileSync(filePath, Buffer.from(pdfBase64, 'base64'));
+        const rowHeight = 18;
+        let y = doc.y;
 
-      await dbRun(`UPDATE documentos SET caminho = ? WHERE token = ?`, [filePath, tokenDoc]);
+        // Cabeçalho
+        const cols = [
+          { w: larguraUtil * 0.25, label: 'Vencimento' },
+          { w: larguraUtil * 0.25, label: 'Referência (mês/ano)' },
+          { w: larguraUtil * 0.25, label: 'DAR' },
+          { w: larguraUtil * 0.25, label: 'Valor (R$)' },
+        ];
 
-      if (documentoId) {
-        await dbRun(
-          `INSERT INTO oficios_audit (documento_id, pdf_path, created_at) VALUES (?, ?, ?)`,
-          [documentoId, pdfUrl, agora.toISOString()]
-        );
+        const drawRow = (cells, yy, bold = false) => {
+          let x = doc.page.margins.left;
+          doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(10);
+          cells.forEach((cell, i) => {
+            doc.text(String(cell), x + 2, yy + 4, {
+              width: cols[i].w - 4,
+              lineBreak: false,
+            });
+            doc.rect(x, yy, cols[i].w, rowHeight).stroke('#ccc');
+            x += cols[i].w;
+          });
+        };
+
+        drawRow(cols.map(c => c.label), y, true);
+        y += rowHeight;
+
+        for (const d of debitos) {
+          // quebra de página segura (não escrever nada em pageAdded além do token)
+          if (y + rowHeight > doc.page.height - doc.page.margins.bottom - 10) {
+            doc.addPage();
+            y = doc.page.margins.top;
+            drawRow(cols.map(c => c.label), y, true);
+            y += rowHeight;
+          }
+          const mesAno = String(d.mes_referencia).padStart(2, '0') + '/' + d.ano_referencia;
+          drawRow(
+            [
+              new Date(d.data_vencimento).toLocaleDateString('pt-BR'),
+              mesAno,
+              d.id,
+              Number(d.valor || 0).toFixed(2),
+            ],
+            y
+          );
+          y += rowHeight;
+        }
+
+        doc.y = y + 10;
+        doc.moveDown(1);
+        doc.font('Helvetica-Bold').text(`Total devido: ${totalStr}`, { width: larguraUtil });
+        doc.font('Helvetica');
+        doc.moveDown(1.5);
       }
 
-      return res.status(201).json({ token: tokenDoc, pdfUrl });
+      // Fecho
+      const fecho = `Para quaisquer esclarecimentos, permanecemos à disposição.\n\nAtenciosamente,`;
+      doc.text(fecho, { width: larguraUtil, align: 'left' });
+      doc.moveDown(3);
+
+      // Assinatura (reserva espaço; evita ficar “colado” no rodapé)
+      const precisaEspaco = 80;
+      if (doc.y + precisaEspaco > doc.page.height - doc.page.margins.bottom) {
+        doc.addPage();
+      }
+      doc.text('______________________________', { width: larguraUtil });
+      doc.text('Secretaria de Estado da Ciência, da Tecnologia e da Inovação – SECTI/AL', {
+        width: larguraUtil,
+      });
+
+      // 7) Finaliza
+      doc.end();
+
+      // (opcional) gravar referência no banco
+      await dbRun(
+        `INSERT INTO documentos (tipo, caminho, token) VALUES (?, ?, ?)
+           ON CONFLICT(token) DO UPDATE SET caminho = excluded.caminho`,
+        // caminho vazio pois foi stream direto; se quiser salvar arquivo, mude o pipe para fs
+        ['OFICIO', '', tokenDoc]
+      );
     } catch (err) {
       console.error('[adminOficios] erro:', err);
-      return res.status(500).json({ error: 'Erro ao gerar ofício.' });
+      res.status(500).json({ error: 'Erro ao gerar ofício.' });
     }
   }
 );
