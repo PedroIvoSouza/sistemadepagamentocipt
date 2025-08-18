@@ -182,20 +182,36 @@ router.get(
         doc.moveDown(1.5);
       }
 
-      // Fecho
-      const fecho = `Para quaisquer esclarecimentos, permanecemos à disposição.\n\nAtenciosamente,`;
-      doc.text(fecho, { width: larguraUtil, align: 'left' });
-      doc.moveDown(3);
-
-      // Assinatura (reserva espaço; evita ficar “colado” no rodapé)
-      const precisaEspaco = 80;
-      if (doc.y + precisaEspaco > doc.page.height - doc.page.margins.bottom) {
-        doc.addPage();
+      // Fecho (conforme solicitado)
+      {
+        const larguraUtil = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+      
+        // 1) Parágrafo justificado
+        doc.font('Helvetica').fontSize(11).text(
+          'Para quaisquer esclarecimentos, permanecemos à disposição.',
+          { width: larguraUtil, align: 'justify', lineGap: 2 }
+        );
+        doc.moveDown(1);
+        doc.text('Atenciosamente,', { width: larguraUtil, align: 'left' });
+        doc.moveDown(2);
+      
+        // 2) Bloco centralizado "assinatura digital" (sem sublinhado)
+        const blocoAltura = 40;
+        if (doc.y + blocoAltura > doc.page.height - doc.page.margins.bottom) {
+          doc.addPage();
+        }
+      
+        doc.font('Helvetica-Bold').fontSize(10).text(
+          'DOCUMENTO ASSINADO DIGITALMENTE',
+          { width: larguraUtil, align: 'center' }
+        );
+        doc.moveDown(0.2);
+        doc.font('Helvetica').fontSize(10).text(
+          'Secretaria de Estado da Ciência, da Tecnologia e da Inovação',
+          { width: larguraUtil, align: 'center' }
+        );
       }
-      doc.text('______________________________', { width: larguraUtil });
-      doc.text('Secretaria de Estado da Ciência, da Tecnologia e da Inovação – SECTI/AL', {
-        width: larguraUtil,
-      });
+
 
       // 7) Finaliza
       doc.end();
