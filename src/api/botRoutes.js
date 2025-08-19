@@ -89,21 +89,21 @@ function findClienteEventoByMsisdn(msisdn) {
 // Lista DARs pendentes (vigente + vencidas) para permissionário
 function listarDarsPermissionario(permissionarioId) {
   const sqlVencidas = `
-    SELECT id, valor, data_vencimento, status, numero_documento, linha_digitavel, pdf_url
+    SELECT id, valor, data_vencimento, status, numero_documento, linha_digitavel, pdf_url, mes_referencia, ano_referencia
       FROM dars
-     WHERE permissionario_id = ?
-       AND status = 'Pendente'
-       AND DATE(data_vencimento) < DATE('now')
-     ORDER BY DATE(data_vencimento) ASC, id ASC
+      WHERE permissionario_id = ?
+        AND status <> 'Pago'
+        AND DATE(data_vencimento) < DATE('now')
+      ORDER BY DATE(data_vencimento) ASC, id ASC;
   `;
   const sqlVigente = `
-    SELECT id, valor, data_vencimento, status, numero_documento, linha_digitavel, pdf_url
+    SELECT id, valor, data_vencimento, status, numero_documento, linha_digitavel, pdf_url, mes_referencia, ano_referencia
       FROM dars
-     WHERE permissionario_id = ?
-       AND status = 'Pendente'
-       AND DATE(data_vencimento) >= DATE('now')
-     ORDER BY DATE(data_vencimento) ASC, id ASC
-     LIMIT 1
+      WHERE permissionario_id = ?
+        AND status <> 'Pago'
+        AND DATE(data_vencimento) >= DATE('now')
+      ORDER BY DATE(data_vencimento) ASC, id ASC
+      LIMIT 1;
   `;
   return new Promise((resolve, reject) => {
     db.all(sqlVencidas, [permissionarioId], (e1, vencidas = []) => {
@@ -124,7 +124,7 @@ function listarDarsClienteEvento(clienteId) {
       JOIN DARs_Eventos de ON de.id_dar = d.id
       JOIN Eventos e ON e.id = de.id_evento
      WHERE e.id_cliente = ?
-       AND d.status = 'Pendente'
+       AND d.status <> 'Pago'
   `;
   const sqlVencidas = `${base} AND DATE(d.data_vencimento) < DATE('now')
                        ORDER BY DATE(d.data_vencimento) ASC, d.id ASC`;
