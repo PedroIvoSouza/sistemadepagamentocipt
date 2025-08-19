@@ -10,6 +10,9 @@ const { isoHojeLocal, toISO, buildSefazPayloadPermissionario } = require('../uti
 const { gerarTokenDocumento, imprimirTokenEmPdf } = require('../utils/token');
 const db = require('../database/db');
 
+const fs = require('fs');
+const path = require('path');
+
 const router = express.Router();
 
 // Helpers async
@@ -191,5 +194,59 @@ router.post(
     }
   }
 );
+
+/**
+ * GET /api/admin/dars/:id/pdf
+ * Retorna o PDF (base64, URL absoluta ou caminho relativo).
+ */
+router.get(
+  '/:id/pdf',
+  [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN'])],
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const dar = await dbGetAsync('SELECT * FROM dars WHERE id = ?', [id]);
+      if (!dar) return res.status(404).json({ error: 'DAR não encontrado.' });
+
+      const pdf = dar.pdf_url || dar.link_pdf || '';
+      if (!pdf || String(pdf).length < 20) {
+        return res.status(404).json({ error: 'PDF indisponível para este DAR.' });
+      }
+
+      // base64 direto?
+      const isBase64Pdf =
+        typeof pdf === 'string' &&
+        (/^JVBER/i.test(pdf) || /^data:application\/pdf;base64,/i.test(pdf));
+      if (isBase64Pdf) {
+        const base64 = String(pdf).replace(/^data:application\/pdf;base64,/i, '');
+        const buf = Buffer.from(base64, 'base64');
+        res.set('Content-Type', 'application/pdf');
+        res.set('Content-Disposition', `inline; filename="DAR-${dar.numero_documento || id}.pdf"`);
+        return res.send(buf);
+      }
+
+      // URL absoluta?
+      if (/^https?:\/\//i.test(pdf)) {
+        return res.redirect(302, pdf);
+      }
+
+      // Caminho relativo? (usa base pública, ou stream do disco)
+      const rel = String(pdf).replace(/^\/+/, '');
+      const base = (process.env.ADMIN_PUBLIC_BASE || '').replace(/\/$/, '');
+      if (base) return res.redirect(302, `${base}/${rel}`);
+
+      const fsPath = path.join(process.env.UPLOADS_DIR || 'uploads', rel);
+      if (!fs.existsSync(fsPath)) {
+        return res.status(404).json({ error: 'Arquivo não encontrado.' });
+      }
+      res.type('application/pdf');
+      return fs.createReadStream(fsPath).pipe(res);
+    } catch (err) {
+      console.error('[AdminDARs] ERRO GET /:id/pdf:', err);
+      return res.status(500).json({ error: 'Erro interno.' });
+    }
+  }
+);
+
 
 module.exports = router;
