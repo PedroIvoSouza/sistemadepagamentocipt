@@ -249,8 +249,8 @@ async function _postEmitir(payload) {
     if (err.response) {
       const status = err.response.status;
       const body = err.response.data;
-      // log raw body for troubleshooting
-      console.error(body);
+      // log status and raw body for troubleshooting
+      console.error('[SEFAZ][EMIT] response error:', status, body);
       const msg = (body && (body.message || body.detail || body.title)) || `Erro HTTP ${status}`;
       if (/Data Limite Pagamento.*menor que a data atual/i.test(JSON.stringify(body))) {
         throw new Error('Data Limite Pagamento não pode ser menor que hoje. (Ajuste automático recomendado no payload)');
