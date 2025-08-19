@@ -313,11 +313,12 @@ router.post('/dars/:darId/emit', botAuthMiddleware, async (req, res) => {
   try {
     // Se informaram msisdn, valida a posse
     if (msisdn) {
+      const hasCobr = await detectTelCobranca();
       const checkSql = `
         SELECT
-          p.telefone          AS tel_perm,
-          p.telefone_cobranca AS tel_cob,
-          ce.telefone         AS tel_cli
+          p.telefone AS tel_perm,
+          ${hasCobr ? 'p.telefone_cobranca AS tel_cob,' : 'NULL AS tel_cob,'}
+          ce.telefone AS tel_cli
         FROM dars d
         LEFT JOIN permissionarios p ON p.id = d.permissionario_id
         LEFT JOIN DARs_Eventos de   ON de.id_dar = d.id
@@ -389,6 +390,5 @@ async function emitirDarViaSefaz(darId, contexto) {
     pdf_url: row?.pdf_url || row?.link_pdf || null
   };
 }
-
 
 module.exports = router;
