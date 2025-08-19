@@ -156,7 +156,7 @@ router.get(
       const totalPermissionarios = totalResult.count;
 
       const dataSql = `
-        SELECT id, nome_empresa, cnpj, email, telefone, numero_sala
+        SELECT id, nome_empresa, cnpj, email, telefone, telefone_cobranca, numero_sala
         FROM permissionarios
         ${whereClause}
         ORDER BY nome_empresa ASC
@@ -206,17 +206,30 @@ router.put(
   async (req, res) => {
     const { id } = req.params;
     const {
-      nome_empresa, cnpj, email, telefone, numero_sala, valor_aluguel,
+      nome_empresa,
+      cnpj,
+      email,
+      telefone,
+      telefone_cobranca,
+      numero_sala,
+      valor_aluguel,
     } = req.body;
 
     try {
       const sql = `
         UPDATE permissionarios SET
-          nome_empresa = ?, cnpj = ?, email = ?, telefone = ?, numero_sala = ?, valor_aluguel = ?
+          nome_empresa = ?, cnpj = ?, email = ?, telefone = ?, telefone_cobranca = ?, numero_sala = ?, valor_aluguel = ?
         WHERE id = ?
       `;
       const params = [
-        nome_empresa, cnpj, email, telefone, numero_sala, valor_aluguel, id,
+        nome_empresa,
+        cnpj,
+        email,
+        telefone,
+        telefone_cobranca,
+        numero_sala,
+        valor_aluguel,
+        id,
       ];
 
       await new Promise((resolve, reject) => {
@@ -242,17 +255,29 @@ router.post(
   [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN'])],
   async (req, res) => {
     const {
-      nome_empresa, cnpj, email, telefone, numero_sala, valor_aluguel,
+      nome_empresa,
+      cnpj,
+      email,
+      telefone,
+      telefone_cobranca,
+      numero_sala,
+      valor_aluguel,
     } = req.body;
 
     try {
       const sql = `
         INSERT INTO permissionarios
-          (nome_empresa, cnpj, email, telefone, numero_sala, valor_aluguel)
-        VALUES (?, ?, ?, ?, ?, ?)
+          (nome_empresa, cnpj, email, telefone, telefone_cobranca, numero_sala, valor_aluguel)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
       `;
       const params = [
-        nome_empresa, cnpj, email, telefone, numero_sala, valor_aluguel,
+        nome_empresa,
+        cnpj,
+        email,
+        telefone,
+        telefone_cobranca,
+        numero_sala,
+        valor_aluguel,
       ];
 
       const result = await new Promise((resolve, reject) => {
@@ -301,7 +326,7 @@ router.get(
 
       const permissionarios = await dbAll(
         `
-        SELECT nome_empresa, cnpj, email, telefone, numero_sala
+        SELECT nome_empresa, cnpj, email, telefone, telefone_cobranca, numero_sala
         FROM permissionarios
         ${whereClause}
         ORDER BY nome_empresa ASC
@@ -459,13 +484,14 @@ function generateTable(doc, data) {
   const rowHeight = 30;
   const availableWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
   const colWidths = {
-    nome: availableWidth * 0.3,
-    cnpj: availableWidth * 0.2,
-    email: availableWidth * 0.25,
-    telefone: availableWidth * 0.15,
+    nome: availableWidth * 0.25,
+    cnpj: availableWidth * 0.18,
+    email: availableWidth * 0.22,
+    telefone: availableWidth * 0.12,
+    telefone_cobranca: availableWidth * 0.13,
     sala: availableWidth * 0.1,
   };
-  const headers = ['Razão Social', 'CNPJ', 'E-mail', 'Telefone', 'Sala(s)'];
+  const headers = ['Razão Social', 'CNPJ', 'E-mail', 'Telefone', 'Tel. Cobrança', 'Sala(s)'];
 
   const drawRow = (row, currentY, isHeader = false) => {
     let x = doc.page.margins.left;
@@ -497,6 +523,7 @@ function generateTable(doc, data) {
       item.cnpj,
       item.email,
       item.telefone || 'N/A',
+      item.telefone_cobranca || 'N/A',
       item.numero_sala,
     ];
     drawRow(row, y);
