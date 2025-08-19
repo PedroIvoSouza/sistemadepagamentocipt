@@ -8,6 +8,72 @@ const router = express.Router();
 const dbPath = path.resolve(__dirname, '..', '..', 'sistemacipt.db');
 const db = new sqlite3.Database(dbPath);
 
+const fs   = require('fs');
+
+
+// --- cole abaixo dos requires existentes no botRoutes.js ---
+const fs   = require('fs');
+const path = require('path');
+
+// Normaliza número para só dígitos
+const digits = (s) => String(s || '').replace(/\D/g, '');
+
+// Remove +, (), -, espaço dentro do SQL (SQLite não tem regex)
+const PHONE_SQL_CLEAN = `
+REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(p.telefone,''), '+',''), '(',''), ')',''), '-',''), ' ','')
+`;
+
+// GET /api/bot/dars/:darId/pdf?msisdn=55XXXXXXXXXXX
+router.get('/dars/:darId/pdf', botAuthMiddleware, (req, res) => {
+  const darId  = Number(req.params.darId);
+  const msisdn = digits(req.query.msisdn);
+
+  if (!darId || !msisdn) {
+    return res.status(400).json({ error: 'Parâmetros inválidos.' });
+  }
+
+  // Aceita variações do número (com/sem 55)
+  const alt11 = msisdn.startsWith('55') ? msisdn.slice(2) : msisdn;
+
+  const sql = `
+    SELECT d.id AS dar_id, d.pdf_url, d.permissionario_id
+      FROM dars d
+      JOIN permissionarios p ON p.id = d.permissionario_id
+     WHERE d.id = ?
+       AND ${PHONE_SQL_CLEAN} IN (?, ?)
+     LIMIT 1
+  `;
+
+  db.get(sql, [darId, msisdn, alt11], (err, row) => {
+    if (err) {
+      console.error('[BOT][PDF] ERRO SQL:', err.message);
+      return res.status(500).json({ error: 'Erro interno.' });
+    }
+    if (!row) {
+      return res.status(404).json({ error: 'DAR não encontrada para este telefone.' });
+    }
+    if (!row.pdf_url) {
+      return res.status(404).json({ error: 'DAR ainda não possui PDF gerado.' });
+    }
+
+    // Se estiver armazenando link absoluto (ex.: GCS/S3), redireciona:
+    if (/^https?:\/\//i.test(row.pdf_url)) {
+      return res.redirect(row.pdf_url);
+    }
+
+    // Caso seja caminho relativo dentro de /public
+    const abs = path.join(__dirname, '..', '..', 'public', row.pdf_url);
+    if (!fs.existsSync(abs)) {
+      return res.status(404).json({ error: 'Arquivo PDF não encontrado no servidor.' });
+    }
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="dar_${row.dar_id}.pdf"`);
+    fs.createReadStream(abs).pipe(res);
+  });
+});
+
+
 // util
 const digits = (s='') => String(s).replace(/\D/g, '');
 const last11 = (s='') => {
