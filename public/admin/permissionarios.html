@@ -110,7 +110,7 @@
                             <table class="table table-hover align-middle">
                                 <thead>
                                     <tr>
-                                        <th>Nome da Empresa</th><th>CNPJ</th><th>E-mail</th><th>Telefone</th><th>Ações</th>
+                                        <th>Nome da Empresa</th><th>CNPJ</th><th>E-mail</th><th>Telefone</th><th>Tel. Cobrança</th><th>Ações</th>
                                     </tr>
                                 </thead>
                                 <tbody id="permissionarios-table-body"></tbody>
@@ -197,7 +197,7 @@
         let currentPage = 1, currentSearch = '', currentLimit = 10, searchTimeout;
         
         async function fetchPermissionarios() {
-            tableBody.innerHTML = '<tr><td colspan="5" class="text-center">Carregando...</td></tr>';
+            tableBody.innerHTML = '<tr><td colspan="6" class="text-center">Carregando...</td></tr>';
             try {
                 const response = await fetch(`/api/admin/permissionarios?search=${encodeURIComponent(currentSearch)}&page=${currentPage}&limit=${currentLimit}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
@@ -207,13 +207,13 @@
                 renderTable(data.permissionarios);
                 renderPagination(data.totalPages, data.currentPage);
             } catch (error) {
-                tableBody.innerHTML = `<tr><td colspan="5" class="text-center text-danger">${error.message}</td></tr>`;
+                tableBody.innerHTML = `<tr><td colspan="6" class="text-center text-danger">${error.message}</td></tr>`;
             }
         }
 
         function renderTable(permissionarios) {
             if (!permissionarios || permissionarios.length === 0) {
-                tableBody.innerHTML = '<tr><td colspan="5" class="text-center">Nenhum permissionário encontrado.</td></tr>';
+                tableBody.innerHTML = '<tr><td colspan="6" class="text-center">Nenhum permissionário encontrado.</td></tr>';
                 return;
             }
             tableBody.innerHTML = permissionarios.map(p => `
@@ -222,6 +222,7 @@
                     <td>${formatarCNPJ(p.cnpj)}</td>
                     <td>${p.email}</td>
                     <td>${p.telefone || 'Não informado'}</td>
+                    <td>${p.telefone_cobranca || 'Não informado'}</td>
                     <td>
                         <a href="/admin/permissionario-form.html?id=${p.id}" class="btn btn-sm btn-outline-primary me-2">Ver/Editar</a>
                         <button class="btn btn-sm btn-outline-secondary gerar-oficio-btn" data-id="${p.id}">Gerar Ofício</button>

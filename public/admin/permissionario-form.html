@@ -108,6 +108,10 @@
                                     <input type="text" readonly class="form-control" id="telefone">
                                 </div>
                                 <div class="col-md-6 mb-3">
+                                    <label for="telefone_cobranca" class="form-label">Telefone Cobrança</label>
+                                    <input type="text" readonly class="form-control" id="telefone_cobranca">
+                                </div>
+                                <div class="col-md-6 mb-3">
                                     <label for="numero_sala" class="form-label">Sala(s)</label>
                                     <input type="text" readonly class="form-control" id="numero_sala" required>
                                 </div>
@@ -215,6 +219,12 @@
                 { mask: '(00) 0 0000-0000' }
             ]
         });
+        IMask(document.getElementById('telefone_cobranca'), {
+            mask: [
+                { mask: '(00) 0000-0000' },
+                { mask: '(00) 0 0000-0000' }
+            ]
+        });
 
         if (isEditMode) {
             pageTitle.innerText = 'Editar Permissionário - Painel de Gestão';
@@ -233,6 +243,7 @@
                 document.getElementById('cnpj').value = formatarCNPJ(data.cnpj);
                 document.getElementById('email').value = data.email;
                 document.getElementById('telefone').value = data.telefone || '';
+                document.getElementById('telefone_cobranca').value = data.telefone_cobranca || '';
                 document.getElementById('numero_sala').value = data.numero_sala;
                 document.getElementById('valor_aluguel').value = data.valor_aluguel;
                 toggleEditMode(false);
@@ -264,6 +275,7 @@
                 cnpj: document.getElementById('cnpj').value,
                 email: document.getElementById('email').value,
                 telefone: document.getElementById('telefone').value,
+                telefone_cobranca: document.getElementById('telefone_cobranca').value,
                 numero_sala: document.getElementById('numero_sala').value,
                 valor_aluguel: parseFloat(document.getElementById('valor_aluguel').value)
             };
