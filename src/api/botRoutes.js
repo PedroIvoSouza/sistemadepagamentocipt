@@ -1,4 +1,5 @@
 // src/api/botRoutes.js
+'use strict';
 require('dotenv').config();
 
 const express = require('express');
@@ -10,11 +11,29 @@ const PDFDocument = require('pdfkit');
 const botAuthMiddleware = require('../middleware/botAuthMiddleware');
 
 const router = express.Router();
-const dbPath = path.resolve(__dirname, '..', '..', 'sistemacipt.db');
-const db = new sqlite3.Database(dbPath);
+
+// -------------------- DB --------------------
+const defaultDbPath = path.resolve(__dirname, '..', '..', 'sistemacipt.db');
+const db = new sqlite3.Database(process.env.SQLITE_PATH || defaultDbPath);
 
 // Evita SQLITE_BUSY em picos (se disponível nesta versão do sqlite3)
 try { db.configure && db.configure('busyTimeout', 5000); } catch {}
+
+// Garante colunas mínimas sem alterar esquema existente
+db.serialize(() => {
+  ensureColumn('dars', 'status', 'TEXT');
+});
+
+function ensureColumn(table, column, type) {
+  db.all(`PRAGMA table_info(${table})`, (err, rows = []) => {
+    if (err) return console.error('PRAGMA table_info failed:', err);
+    if (!rows.some(r => r.name === column)) {
+      db.run(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`, e => {
+        if (e) console.error(`ALTER TABLE ${table} ADD COLUMN ${column} failed:`, e);
+      });
+    }
+  });
+}
 
 // -------------------- helpers --------------------
 const digits = (s = '') => String(s).replace(/\D/g, '');
@@ -54,7 +73,9 @@ function detectTelCobranca() {
 // Busca um permissionário por telefone (principal e, se existir, cobrança)
 async function findPermissionarioByMsisdn(msisdn) {
   const hasCobr = await detectTelCobranca();
-  const cols = hasCobr ? `id, nome_empresa, telefone, telefone_cobranca` : `id, nome_empresa, telefone`;
+  const cols = hasCobr
+    ? `id, nome_empresa, telefone, telefone_cobranca`
+    : `id, nome_empresa, telefone`;
 
   return new Promise((resolve, reject) => {
     db.all(`SELECT ${cols} FROM permissionarios`, [], (e, rows = []) => {
@@ -427,8 +448,8 @@ async function emitirDarViaSefaz(darId, { msisdn }) {
   await new Promise((resolve, reject) => {
     const sql = `
       UPDATE dars
-         SET status          = 'Emitido',
-             linha_digitavel = COALESCE(linha_digitavel, ?),
+         SET status           = 'Emitido',
+             linha_digitavel  = COALESCE(linha_digitavel, ?),
              numero_documento = COALESCE(numero_documento, ?)
        WHERE id = ?`;
     db.run(sql, [linha_digitavel, numero_documento, darId], function (e) {
