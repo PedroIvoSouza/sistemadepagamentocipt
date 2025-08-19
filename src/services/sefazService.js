@@ -249,11 +249,13 @@ async function _postEmitir(payload) {
     if (err.response) {
       const status = err.response.status;
       const body = err.response.data;
+      // log raw body for troubleshooting
+      console.error(body);
       const msg = (body && (body.message || body.detail || body.title)) || `Erro HTTP ${status}`;
       if (/Data Limite Pagamento.*menor que a data atual/i.test(JSON.stringify(body))) {
         throw new Error('Data Limite Pagamento não pode ser menor que hoje. (Ajuste automático recomendado no payload)');
       }
-      throw new Error(`Erro ${status}: ${msg}`);
+      throw new Error(`Erro ${status}: ${msg} - ${JSON.stringify(body)}`);
     }
     if (err.request) {
       const reason = (err.code === 'ECONNABORTED') ? 'timeout' : 'sem resposta';
