@@ -225,59 +225,78 @@ router.get('/dars', botAuthMiddleware, async (req, res) => {
  * Retorna/encaminha o PDF, validando que o MSISDN é dono do DAR
  * (permissionário OU cliente de eventos).
  */
-router.get('/dars/:darId/pdf', botAuthMiddleware, (req, res) => {
-  const darId = Number(req.params.darId);
-  const msisdn = digits(req.query.msisdn || '');
-  if (!darId || !msisdn) return res.status(400).json({ error: 'Parâmetros inválidos.' });
+router.get('/dars/:darId/pdf', botAuthMiddleware, async (req, res) => {
+  try {
+    const darId = Number(req.params.darId);
+    const msisdn = String(req.query.msisdn || '').trim();
+    if (!darId || !msisdn) return res.status(400).json({ error: 'Parâmetros inválidos.' });
 
-  // Buscamos os telefones possíveis tanto de permissionário quanto de cliente de evento
-  const sql = `
-    SELECT
-      d.id                  AS dar_id,
-      d.pdf_url             AS pdf_url,
-      p.telefone            AS tel_perm,
-      p.telefone_cobranca   AS tel_cob,
-      ce.telefone           AS tel_cli
-    FROM dars d
-    LEFT JOIN permissionarios p ON p.id = d.permissionario_id
-    LEFT JOIN DARs_Eventos de   ON de.id_dar = d.id
-    LEFT JOIN Eventos e         ON e.id = de.id_evento
-    LEFT JOIN Clientes_Eventos ce ON ce.id = e.id_cliente
-   WHERE d.id = ?
-   LIMIT 1
-  `;
+    const hasCobr = await detectTelCobranca();
+    const telCobrSelect = hasCobr ? ', p.telefone_cobranca AS tel_cob' : ', NULL AS tel_cob';
 
-  db.get(sql, [darId], (err, row) => {
-    if (err) {
-      console.error('[BOT][PDF] ERRO SQL:', err.message);
-      return res.status(500).json({ error: 'Erro interno.' });
-    }
+    const sql = `
+      SELECT
+        d.id        AS dar_id,
+        d.pdf_url   AS pdf_url,
+        p.telefone  AS tel_perm
+        ${telCobrSelect},
+        ce.telefone AS tel_cli
+      FROM dars d
+      LEFT JOIN permissionarios p   ON p.id = d.permissionario_id
+      LEFT JOIN DARs_Eventos de     ON de.id_dar = d.id
+      LEFT JOIN Eventos e           ON e.id = de.id_evento
+      LEFT JOIN Clientes_Eventos ce ON ce.id = e.id_cliente
+     WHERE d.id = ?
+     LIMIT 1
+    `;
+    const row = await new Promise((resolve, reject) =>
+      db.get(sql, [darId], (e, r) => (e ? reject(e) : resolve(r)))
+    );
     if (!row) return res.status(404).json({ error: 'DAR não encontrada.' });
 
-    const okPhone = phoneMatches(msisdn, [row.tel_perm, row.tel_cob, row.tel_cli]);
-    if (!okPhone) {
+    // Checagem de posse por telefone
+    if (!phoneMatches(msisdn, [row.tel_perm, row.tel_cob, row.tel_cli])) {
       return res.status(403).json({ error: 'Este telefone não está autorizado a acessar este DAR.' });
     }
 
-    if (!row.pdf_url) {
+    const pdf = row.pdf_url || '';
+    if (!pdf || String(pdf).length < 20) {
       return res.status(404).json({ error: 'DAR ainda não possui PDF gerado.' });
     }
 
-    // Link absoluto (S3/GCS) -> redirect
-    if (/^https?:\/\//i.test(row.pdf_url)) {
-      return res.redirect(row.pdf_url);
+    // 1) Base64 embutido?
+    const isBase64 =
+      /^JVBER/i.test(pdf) || /^data:application\/pdf;base64,/i.test(pdf);
+    if (isBase64) {
+      const base64 = String(pdf).replace(/^data:application\/pdf;base64,/i, '');
+      const buf = Buffer.from(base64, 'base64');
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename="dar_${row.dar_id}.pdf"`);
+      return res.send(buf);
     }
 
-    // Caminho relativo sob /public
-    const abs = path.join(__dirname, '..', '..', 'public', row.pdf_url);
-    if (!fs.existsSync(abs)) {
+    // 2) URL absoluta?
+    if (/^https?:\/\//i.test(pdf)) {
+      return res.redirect(302, pdf);
+    }
+
+    // 3) Caminho relativo (tenta UPLOADS_DIR; fallback para /public)
+    const rel = String(pdf).replace(/^\/+/, '');
+    const upDir = process.env.UPLOADS_DIR || path.join(__dirname, '..', '..', 'uploads');
+    const pubDir = path.join(__dirname, '..', '..', 'public');
+    const tryPaths = [path.join(upDir, rel), path.join(pubDir, rel)];
+    const fsPath = tryPaths.find(p => fs.existsSync(p));
+    if (!fsPath) {
       return res.status(404).json({ error: 'Arquivo PDF não encontrado no servidor.' });
     }
 
-    res.setHeader('Content-Type', 'application/pdf');
+    res.type('application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="dar_${row.dar_id}.pdf"`);
-    fs.createReadStream(abs).pipe(res);
-  });
+    return fs.createReadStream(fsPath).pipe(res);
+  } catch (err) {
+    console.error('[BOT][PDF] erro:', err);
+    return res.status(500).json({ error: 'Erro interno.' });
+  }
 });
 
 /**
@@ -377,32 +396,5 @@ async function emitirDarViaSefaz(darId, contexto) {
     throw e;
   }
 }
-
-router.get('/dars/:id/pdf', async (req, res) => {
-  try {
-    const botKey = req.header('x-bot-key');
-    if (botKey !== process.env.BOT_SHARED_KEY) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-
-    const { id } = req.params;
-    const { msisdn } = req.query;
-    if (!msisdn) return res.status(400).json({ error: 'msisdn é obrigatório' });
-
-    const dar = await dbGetAsync('SELECT * FROM dars WHERE id = ?', [id]);
-    if (!dar) return res.status(404).json({ error: 'DAR não encontrada' });
-
-    // TODO: implementar/verificar função que garanta o vínculo MSISDN ↔ DAR
-    // const ok = await verificarVinculoMsisdnComDar(msisdn, dar);
-    // if (!ok) return res.status(403).json({ error: 'Proibido' });
-
-    const pdf = dar.pdf_url || dar.link_pdf || '';
-    // ... mesmo tratamento de base64 / url / relativo do admin acima ...
-  } catch (err) {
-    console.error('[BotDARs] ERRO GET /api/bot/dars/:id/pdf:', err);
-    return res.status(500).json({ error: 'Erro interno.' });
-  }
-});
-
 
 module.exports = router;
