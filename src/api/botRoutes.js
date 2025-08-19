@@ -5,6 +5,7 @@ const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const fs = require('fs');
+const PDFDocument = require('pdfkit');
 
 const botAuthMiddleware = require('../middleware/botAuthMiddleware');
 
@@ -172,6 +173,26 @@ function obterContextoDar(darId) {
   });
 }
 
+function isDummyNumeroDocumento(s) {
+  return typeof s === 'string' && /^DUMMY-\d+$/i.test(s);
+}
+
+function generateDarPdfBase64({ id, numero_documento, linha_digitavel, msisdn }) {
+  const doc = new PDFDocument({ size: 'A4', margin: 36 });
+  const chunks = [];
+  doc.on('data', c => chunks.push(c));
+
+  doc.fontSize(16).text('DAR - Documento de Arrecadação', { align: 'left' }).moveDown();
+  doc.fontSize(12).text(`DAR ID: ${id}`);
+  doc.text(`Número do Documento: ${numero_documento || '-'}`);
+  doc.text(`Linha Digitável: ${linha_digitavel || '-'}`);
+  if (msisdn) doc.text(`MSISDN: ${msisdn}`);
+  doc.moveDown().text('*** Documento gerado para consulta via BOT ***');
+  doc.end();
+
+  return Buffer.concat(chunks).toString('base64');
+}
+
 // -------------------- ROTAS --------------------
 
 /**
@@ -224,6 +245,7 @@ router.get('/dars', botAuthMiddleware, async (req, res) => {
  * GET /api/bot/dars/:darId/pdf?msisdn=55XXXXXXXXXXX
  * Retorna/encaminha o PDF, validando que o MSISDN é dono do DAR
  * (permissionário OU cliente de eventos).
+ * Se não houver PDF salvo, gera um PDF simples "on-the-fly" (placeholder).
  */
 router.get('/dars/:darId/pdf', botAuthMiddleware, async (req, res) => {
   try {
@@ -238,6 +260,8 @@ router.get('/dars/:darId/pdf', botAuthMiddleware, async (req, res) => {
       SELECT
         d.id        AS dar_id,
         d.pdf_url   AS pdf_url,
+        d.numero_documento AS numero_documento,
+        d.linha_digitavel  AS linha_digitavel,
         p.telefone  AS tel_perm
         ${telCobrSelect},
         ce.telefone AS tel_cli
@@ -259,40 +283,57 @@ router.get('/dars/:darId/pdf', botAuthMiddleware, async (req, res) => {
       return res.status(403).json({ error: 'Este telefone não está autorizado a acessar este DAR.' });
     }
 
-    const pdf = row.pdf_url || '';
-    if (!pdf || String(pdf).length < 20) {
-      return res.status(404).json({ error: 'DAR ainda não possui PDF gerado.' });
-    }
-
-    // 1) Base64 embutido?
-    const isBase64 =
-      /^JVBER/i.test(pdf) || /^data:application\/pdf;base64,/i.test(pdf);
-    if (isBase64) {
-      const base64 = String(pdf).replace(/^data:application\/pdf;base64,/i, '');
-      const buf = Buffer.from(base64, 'base64');
-      res.setHeader('Content-Type', 'application/pdf');
+    // Se houver PDF salvo, devolve (base64/URL/arquivo)
+    const savedPdf = row.pdf_url || '';
+    if (savedPdf && String(savedPdf).length >= 20) {
+      // 1) Base64 embutido?
+      const isBase64 =
+        /^JVBER/i.test(savedPdf) || /^data:application\/pdf;base64,/i.test(savedPdf);
+      if (isBase64) {
+        const base64 = String(savedPdf).replace(/^data:application\/pdf;base64,/i, '');
+        const buf = Buffer.from(base64, 'base64');
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `inline; filename="dar_${row.dar_id}.pdf"`);
+        return res.send(buf);
+      }
+      // 2) URL absoluta?
+      if (/^https?:\/\//i.test(savedPdf)) {
+        return res.redirect(302, savedPdf);
+      }
+      // 3) Caminho relativo (tenta UPLOADS_DIR; fallback /public)
+      const rel = String(savedPdf).replace(/^\/+/, '');
+      const upDir = process.env.UPLOADS_DIR || path.join(__dirname, '..', '..', 'uploads');
+      const pubDir = path.join(__dirname, '..', '..', 'public');
+      const tryPaths = [path.join(upDir, rel), path.join(pubDir, rel)];
+      const fsPath = tryPaths.find(p => fs.existsSync(p));
+      if (!fsPath) {
+        return res.status(404).json({ error: 'Arquivo PDF não encontrado no servidor.' });
+      }
+      res.type('application/pdf');
       res.setHeader('Content-Disposition', `inline; filename="dar_${row.dar_id}.pdf"`);
-      return res.send(buf);
+      return fs.createReadStream(fsPath).pipe(res);
     }
 
-    // 2) URL absoluta?
-    if (/^https?:\/\//i.test(pdf)) {
-      return res.redirect(302, pdf);
-    }
+    // Sem PDF salvo: gera placeholder on-the-fly
+    const numero_documento =
+      row.numero_documento && !isDummyNumeroDocumento(row.numero_documento)
+        ? row.numero_documento
+        : `DUMMY-${row.dar_id}`;
+    const linha_digitavel =
+      row.linha_digitavel ||
+      '00000.00000 00000.000000 00000.000000 0 00000000000000';
 
-    // 3) Caminho relativo (tenta UPLOADS_DIR; fallback para /public)
-    const rel = String(pdf).replace(/^\/+/, '');
-    const upDir = process.env.UPLOADS_DIR || path.join(__dirname, '..', '..', 'uploads');
-    const pubDir = path.join(__dirname, '..', '..', 'public');
-    const tryPaths = [path.join(upDir, rel), path.join(pubDir, rel)];
-    const fsPath = tryPaths.find(p => fs.existsSync(p));
-    if (!fsPath) {
-      return res.status(404).json({ error: 'Arquivo PDF não encontrado no servidor.' });
-    }
-
-    res.type('application/pdf');
+    const pdfBase64 = generateDarPdfBase64({
+      id: row.dar_id,
+      numero_documento,
+      linha_digitavel,
+      msisdn
+    });
+    const buf = Buffer.from(pdfBase64, 'base64');
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Length', buf.length);
     res.setHeader('Content-Disposition', `inline; filename="dar_${row.dar_id}.pdf"`);
-    return fs.createReadStream(fsPath).pipe(res);
+    return res.status(200).send(buf);
   } catch (err) {
     console.error('[BOT][PDF] erro:', err);
     return res.status(500).json({ error: 'Erro interno.' });
@@ -302,7 +343,10 @@ router.get('/dars/:darId/pdf', botAuthMiddleware, async (req, res) => {
 /**
  * POST /api/bot/dars/:darId/emit
  * Body (opcional): { msisdn: "55..." }  -> valida a posse antes de emitir.
- * Dispara a emissão via SEFAZ e devolve os metadados da DAR recém emitida.
+ * Dispara a emissão (stub) e devolve metadados. O banco:
+ *   - marca status = 'Emitido'
+ *   - preenche linha_digitavel se estiver NULL
+ *   - NÃO sobrescreve numero_documento real (usa COALESCE)
  */
 router.post('/dars/:darId/emit', botAuthMiddleware, async (req, res) => {
   const darId = Number(req.params.darId);
@@ -341,10 +385,8 @@ router.post('/dars/:darId/emit', botAuthMiddleware, async (req, res) => {
       return res.status(404).json({ error: 'DAR não encontrada ou sem contexto.' });
     }
 
-    // >>>>>>>>>>>>>> AQUI VOCÊ PLUGA SUA EMISSÃO REAL VIA SEFAZ <<<<<<<<<<<<<<
-    const meta = await emitirDarViaSefaz(darId, contexto);
-    // meta esperado: { numero_documento, linha_digitavel, pdf_url }
-
+    // Emissão "stub" (mantém número real no banco; preenche se faltar)
+    const meta = await emitirDarViaSefaz(darId, { msisdn }); // retorna { numero_documento, linha_digitavel, pdf_url }
     return res.json({ ok: true, darId, ...meta });
   } catch (err) {
     console.error('[BOT][EMIT] erro ao emitir DAR:', err?.message || err);
@@ -353,41 +395,60 @@ router.post('/dars/:darId/emit', botAuthMiddleware, async (req, res) => {
 });
 
 /**
- * Implementação de fachada que deve chamar sua rotina real de emissão.
- * Substitua este bloco para reutilizar seu serviço existente (o mesmo do admin).
+ * Implementação de fachada que NÃO sobrescreve numero_documento real.
+ * - Se numero_documento for NULL, seta "DUMMY-{id}".
+ * - Se já existir número real (ex.: 151358231), mantém.
+ * - Preenche linha_digitavel se NULL.
+ * - Sempre marca status='Emitido'.
+ * - Gera um PDF base64 de retorno (não depende de persistência de arquivo).
  */
-// Substitua TUDO que está hoje por isto:
-async function emitirDarViaSefaz(darId, contexto) {
-  // reaproveita o pdf_url/link_pdf já existente (não grava em disco)
+async function emitirDarViaSefaz(darId, { msisdn }) {
+  // Busca dados atuais
   const row = await new Promise((resolve, reject) => {
     db.get(
-      `SELECT pdf_url, link_pdf FROM dars WHERE id = ?`,
+      `SELECT id, numero_documento, linha_digitavel, pdf_url FROM dars WHERE id = ?`,
       [darId],
       (e, r) => (e ? reject(e) : resolve(r || {}))
     );
   });
 
-  const num = `DUMMY-${darId}`;
-  const lin = `00000.00000 00000.000000 00000.000000 0 00000000000000`;
+  if (!row || !row.id) throw new Error('DAR não encontrada.');
 
-  // atualiza metadados sem tocar no pdf_url se ele já existe
+  const numero_documento =
+    row.numero_documento && !isDummyNumeroDocumento(row.numero_documento)
+      ? row.numero_documento
+      : `DUMMY-${darId}`;
+
+  const linha_digitavel =
+    row.linha_digitavel ||
+    '00000.00000 00000.000000 00000.000000 0 00000000000000';
+
+  // Atualiza status + completa campos sem sobrescrever número real
   await new Promise((resolve, reject) => {
     const sql = `
       UPDATE dars
-         SET numero_documento = COALESCE(numero_documento, ?),
-             linha_digitavel  = COALESCE(linha_digitavel,  ?),
-             status           = 'Emitido'
+         SET status          = 'Emitido',
+             linha_digitavel = COALESCE(linha_digitavel, ?),
+             numero_documento = COALESCE(numero_documento, ?)
        WHERE id = ?`;
-    db.run(sql, [num, lin, darId], function (e) {
+    db.run(sql, [linha_digitavel, numero_documento, darId], function (e) {
       if (e) return reject(e);
       resolve();
     });
   });
 
+  // Gera PDF de retorno (mesmo que não esteja salvo no banco)
+  const pdfBase64 = generateDarPdfBase64({
+    id: darId,
+    numero_documento,
+    linha_digitavel,
+    msisdn
+  });
+
   return {
-    numero_documento: num,
-    linha_digitavel: lin,
-    pdf_url: row?.pdf_url || row?.link_pdf || null
+    numero_documento,
+    linha_digitavel,
+    pdf_url: pdfBase64 // compat com seu cliente atual
   };
 }
 
