@@ -400,7 +400,7 @@ router.get('/dars', botAuthMiddleware, async (req, res) => {
 
     return res.json({ ok: true, contas });
   } catch (err) {
-    console.error('[BOT][dars] erro:', err);
+    console.error('[BOT][dars] erro:', err, err?.detail);
     return res.status(500).json({ error: 'Erro interno.' });
   }
 });
@@ -454,7 +454,7 @@ router.get('/dars/:darId/pdf', botAuthMiddleware, async (req, res) => {
     res.setHeader('Content-Disposition', `inline; filename="dar_${darId}.pdf"`);
     return fs.createReadStream(fsPath).pipe(res);
   } catch (err) {
-    console.error('[BOT][PDF] erro:', err);
+    console.error('[BOT][PDF] erro:', err, err?.detail);
     return res.status(500).json({ error: 'Erro interno.' });
   }
 });
@@ -548,7 +548,7 @@ router.post('/dars/:darId/emit', botAuthMiddleware, async (req, res) => {
       pdf_url: pdfOut
     });
   } catch (err) {
-    console.error('[BOT][EMIT] erro:', err);
+    console.error('[BOT][EMIT] erro:', err, err?.detail);
     const isUnavailable =
       /indispon[ií]vel|Load balancer|ECONNABORTED|ENOTFOUND|EAI_AGAIN|ECONNRESET|ETIMEDOUT|timeout/i.test(
         err.message || ''
@@ -645,7 +645,7 @@ router.post('/dars/:darId/reemit', botAuthMiddleware, async (req, res) => {
       pdf_url: pdfOut
     });
   } catch (err) {
-    console.error('[BOT][REEMIT] erro:', err);
+    console.error('[BOT][REEMIT] erro:', err, err?.detail);
     const isUnavailable =
       /indispon[ií]vel|Load balancer|ECONNABORTED|ENOTFOUND|EAI_AGAIN|ECONNRESET|ETIMEDOUT|timeout/i.test(
         err.message || ''
