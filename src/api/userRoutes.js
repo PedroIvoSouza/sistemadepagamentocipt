@@ -6,10 +6,30 @@ const authMiddleware = require('../middleware/authMiddleware');
 const router = express.Router();
 const db = new sqlite3.Database('./sistemacipt.db');
 
+// garante a coluna telefone_cobranca
+const dbAll = (sql, params=[]) => new Promise((resolve, reject) => {
+  db.all(sql, params, (err, rows) => err ? reject(err) : resolve(rows || []));
+});
+const dbRun = (sql, params=[]) => new Promise((resolve, reject) => {
+  db.run(sql, params, function(err){ err ? reject(err) : resolve(this); });
+});
+async function ensureColumn(table, column, type) {
+  try {
+    const rows = await dbAll(`PRAGMA table_info(${table})`);
+    if (!rows.some(r => r.name === column)) {
+      await dbRun(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+      console.log(`[DB] ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+    }
+  } catch (e) {
+    console.warn(`[DB] ensureColumn falhou ${table}.${column}:`, e.message || e);
+  }
+}
+ensureColumn('permissionarios', 'telefone_cobranca', 'TEXT').catch(()=>{});
+
 // Rota GET /me (agora busca também o email_notificacao)
 router.get('/me', authMiddleware, (req, res) => {
     const userId = req.user.id;
-    const sql = `SELECT id, nome_empresa, cnpj, email, telefone, email_financeiro, responsavel_financeiro, website, email_notificacao, numero_sala, valor_aluguel FROM permissionarios WHERE id = ?`;
+    const sql = `SELECT id, nome_empresa, cnpj, email, telefone, telefone_cobranca, email_financeiro, responsavel_financeiro, website, email_notificacao, numero_sala, valor_aluguel FROM permissionarios WHERE id = ?`;
     db.get(sql, [userId], (err, user) => {
         if (err) { return res.status(500).json({ error: 'Erro de banco de dados.' }); }
         if (!user) { return res.status(404).json({ error: 'Usuário não encontrado.' }); }
@@ -20,9 +40,9 @@ router.get('/me', authMiddleware, (req, res) => {
 // Rota PUT /me (agora salva também o email_notificacao)
 router.put('/me', authMiddleware, (req, res) => {
     const userId = req.user.id;
-    const { telefone, email_financeiro, responsavel_financeiro, website, email_notificacao } = req.body;
-    const sql = `UPDATE permissionarios SET telefone = ?, email_financeiro = ?, responsavel_financeiro = ?, website = ?, email_notificacao = ? WHERE id = ?`;
-    const params = [telefone, email_financeiro, responsavel_financeiro, website, email_notificacao, userId];
+    const { telefone, telefone_cobranca, email_financeiro, responsavel_financeiro, website, email_notificacao } = req.body;
+    const sql = `UPDATE permissionarios SET telefone = ?, telefone_cobranca = ?, email_financeiro = ?, responsavel_financeiro = ?, website = ?, email_notificacao = ? WHERE id = ?`;
+    const params = [telefone, telefone_cobranca, email_financeiro, responsavel_financeiro, website, email_notificacao, userId];
     db.run(sql, params, function(err) {
         if (err) {
             return res.status(500).json({ error: 'Não foi possível atualizar os dados no banco.' });

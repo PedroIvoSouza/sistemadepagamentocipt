@@ -65,6 +65,7 @@ async function ensureColumn(table, column, type) {
   await ensureColumn('dars', 'numero_documento', 'TEXT');
   await ensureColumn('dars', 'linha_digitavel', 'TEXT');
   await ensureColumn('dars', 'pdf_url', 'TEXT');
+  await ensureColumn('permissionarios', 'telefone_cobranca', 'TEXT');
 })().catch(()=>{});
 
 // -------------------- helpers --------------------
