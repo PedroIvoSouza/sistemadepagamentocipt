@@ -198,21 +198,25 @@ function isDummyNumeroDocumento(s) {
   return typeof s === 'string' && /^DUMMY-\d+$/i.test(s);
 }
 
+// substitua a sua generateDarPdfBase64 por esta versão
 function generateDarPdfBase64({ id, numero_documento, linha_digitavel, msisdn }) {
-  const doc = new PDFDocument({ size: 'A4', margin: 36 });
-  const chunks = [];
-  doc.on('data', c => chunks.push(c));
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ size: 'A4', margin: 36 });
+    const chunks = [];
+    doc.on('data', c => chunks.push(c));
+    doc.on('end', () => resolve(Buffer.concat(chunks).toString('base64')));
+    doc.on('error', reject);
 
-  doc.fontSize(16).text('DAR - Documento de Arrecadação', { align: 'left' }).moveDown();
-  doc.fontSize(12).text(`DAR ID: ${id}`);
-  doc.text(`Número do Documento: ${numero_documento || '-'}`);
-  doc.text(`Linha Digitável: ${linha_digitavel || '-'}`);
-  if (msisdn) doc.text(`MSISDN: ${msisdn}`);
-  doc.moveDown().text('*** Documento gerado para consulta via BOT ***');
-  doc.end();
-
-  return Buffer.concat(chunks).toString('base64');
+    doc.fontSize(16).text('DAR - Documento de Arrecadação', { align: 'left' }).moveDown();
+    doc.fontSize(12).text(`DAR ID: ${id}`);
+    doc.text(`Número do Documento: ${numero_documento || '-'}`);
+    doc.text(`Linha Digitável: ${linha_digitavel || '-'}`);
+    if (msisdn) doc.text(`MSISDN: ${msisdn}`);
+    doc.moveDown().text('*** Documento gerado para consulta via BOT ***');
+    doc.end();
+  });
 }
+
 
 // -------------------- ROTAS --------------------
 
@@ -445,32 +449,34 @@ async function emitirDarViaSefaz(darId, { msisdn }) {
     '00000.00000 00000.000000 00000.000000 0 00000000000000';
 
   // Atualiza status + completa campos sem sobrescrever número real
-  await new Promise((resolve, reject) => {
-    const sql = `
-      UPDATE dars
-         SET status           = 'Emitido',
-             linha_digitavel  = COALESCE(linha_digitavel, ?),
-             numero_documento = COALESCE(numero_documento, ?)
-       WHERE id = ?`;
-    db.run(sql, [linha_digitavel, numero_documento, darId], function (e) {
-      if (e) return reject(e);
-      resolve();
+    await new Promise((resolve, reject) => {
+      const sql = `
+        UPDATE dars
+           SET status           = 'Emitido',
+               linha_digitavel  = COALESCE(linha_digitavel, ?),
+               numero_documento = COALESCE(numero_documento, ?)
+         WHERE id = ?`;
+      db.run(sql, [linha_digitavel, numero_documento, darId], function (e) {
+        if (e) return reject(e);
+        resolve();
+      });
     });
-  });
+    
+    // Gera PDF de retorno (agora aguardando o stream terminar)
+    const pdfBase64 = await generateDarPdfBase64({
+      id: darId,
+      numero_documento,
+      linha_digitavel,
+      msisdn
+    });
+    
+    return {
+      numero_documento,
+      linha_digitavel,
+      pdf_url: pdfBase64   // pode manter sem prefixo; seu GET já detecta "JVBER"
+    };
+    }
 
-  // Gera PDF de retorno (mesmo que não esteja salvo no banco)
-  const pdfBase64 = generateDarPdfBase64({
-    id: darId,
-    numero_documento,
-    linha_digitavel,
-    msisdn
-  });
 
-  return {
-    numero_documento,
-    linha_digitavel,
-    pdf_url: pdfBase64 // compat com seu cliente atual
-  };
-}
 
 module.exports = router;
