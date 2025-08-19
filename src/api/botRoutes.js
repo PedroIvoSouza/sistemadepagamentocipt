@@ -355,17 +355,21 @@ router.post('/dars/:darId/emit', botAuthMiddleware, async (req, res) => {
  * Implementação de fachada que deve chamar sua rotina real de emissão.
  * Substitua este bloco para reutilizar seu serviço existente (o mesmo do admin).
  */
+// Substitua TUDO que está hoje por isto:
 async function emitirDarViaSefaz(darId, contexto) {
-  // Se já existir PDF (base64 ou URL), reaproveita
+  // reaproveita o pdf_url/link_pdf já existente (não grava em disco)
   const row = await new Promise((resolve, reject) => {
-    db.get(`SELECT pdf_url, link_pdf FROM dars WHERE id = ?`, [darId],
-      (e, r) => e ? reject(e) : resolve(r || {}));
+    db.get(
+      `SELECT pdf_url, link_pdf FROM dars WHERE id = ?`,
+      [darId],
+      (e, r) => (e ? reject(e) : resolve(r || {}))
+    );
   });
 
   const num = `DUMMY-${darId}`;
   const lin = `00000.00000 00000.000000 00000.000000 0 00000000000000`;
 
-  // Atualiza metadados; NÃO sobrescreve pdf_url existente
+  // atualiza metadados sem tocar no pdf_url se ele já existe
   await new Promise((resolve, reject) => {
     const sql = `
       UPDATE dars
@@ -385,5 +389,6 @@ async function emitirDarViaSefaz(darId, contexto) {
     pdf_url: row?.pdf_url || row?.link_pdf || null
   };
 }
+
 
 module.exports = router;
