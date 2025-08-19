@@ -463,6 +463,7 @@ router.get('/dars/:darId/pdf', botAuthMiddleware, async (req, res) => {
  * POST /api/bot/dars/:darId/emit
  * Body opcional: { msisdn: "55..." } — valida posse.
  * Emite na SEFAZ usando o mesmo builder do sistema.
+ * Retorna 409 se o DAR já estiver "Emitido" ou "Reemitido".
  */
 router.post('/dars/:darId/emit', botAuthMiddleware, async (req, res) => {
   const darId = Number(req.params.darId);
@@ -475,6 +476,14 @@ router.post('/dars/:darId/emit', botAuthMiddleware, async (req, res) => {
 
     if (msisdn && !phoneMatches(msisdn, ctx.tels)) {
       return res.status(403).json({ error: 'Este telefone não está autorizado a emitir este DAR.' });
+    }
+
+    if (['Emitido', 'Reemitido'].includes(ctx.dar.status)) {
+      return res.status(409).json({
+        error: `DAR já ${ctx.dar.status.toLowerCase()}.`,
+        status: ctx.dar.status,
+        hint: 'Se precisar gerar novamente, utilize /api/bot/dars/:darId/reemit.'
+      });
     }
 
     let payload;
