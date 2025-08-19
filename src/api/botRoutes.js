@@ -356,45 +356,34 @@ router.post('/dars/:darId/emit', botAuthMiddleware, async (req, res) => {
  * Substitua este bloco para reutilizar seu serviço existente (o mesmo do admin).
  */
 async function emitirDarViaSefaz(darId, contexto) {
-  // TODO: troque isso pela sua função real, por exemplo:
-  // const { emitirDarPermissionario, emitirDarEvento } = require('../services/sefazService');
-  //
-  // if (contexto.tipo === 'PERMISSIONARIO') {
-  //   const out = await emitirDarPermissionario(darId);
-  //   return { numero_documento: out.numero, linha_digitavel: out.linha, pdf_url: out.pdfUrl };
-  // } else {
-  //   const out = await emitirDarEvento(darId);
-  //   return { numero_documento: out.numero, linha_digitavel: out.linha, pdf_url: out.pdfUrl };
-  // }
+  // Se já existir PDF (base64 ou URL), reaproveita
+  const row = await new Promise((resolve, reject) => {
+    db.get(`SELECT pdf_url, link_pdf FROM dars WHERE id = ?`, [darId],
+      (e, r) => e ? reject(e) : resolve(r || {}));
+  });
 
-  // Fallback de teste: marca um PDF “fake” local
-  const fakePdf = `dars/${darId}.pdf`;
-  try {
-    const abs = path.join(__dirname, '..', '..', 'public', fakePdf);
-    if (!fs.existsSync(path.dirname(abs))) fs.mkdirSync(path.dirname(abs), { recursive: true });
-    if (!fs.existsSync(abs)) fs.writeFileSync(abs, '%PDF-1.4\n% Fake PDF\n');
+  const num = `DUMMY-${darId}`;
+  const lin = `00000.00000 00000.000000 00000.000000 0 00000000000000`;
 
-    await new Promise((resolve, reject) => {
-      const sql = `UPDATE dars SET numero_documento = COALESCE(numero_documento, ?),
-                                  linha_digitavel = COALESCE(linha_digitavel, ?),
-                                  pdf_url = ?
-                    WHERE id = ?`;
-      const num = `DUMMY-${darId}`;
-      const lin = `00000.00000 00000.000000 00000.000000 0 00000000000000`;
-      db.run(sql, [num, lin, fakePdf, darId], function (e) {
-        if (e) return reject(e);
-        resolve();
-      });
+  // Atualiza metadados; NÃO sobrescreve pdf_url existente
+  await new Promise((resolve, reject) => {
+    const sql = `
+      UPDATE dars
+         SET numero_documento = COALESCE(numero_documento, ?),
+             linha_digitavel  = COALESCE(linha_digitavel,  ?),
+             status           = 'Emitido'
+       WHERE id = ?`;
+    db.run(sql, [num, lin, darId], function (e) {
+      if (e) return reject(e);
+      resolve();
     });
+  });
 
-    return {
-      numero_documento: `DUMMY-${darId}`,
-      linha_digitavel: `00000.00000 00000.000000 00000.000000 0 00000000000000`,
-      pdf_url: fakePdf
-    };
-  } catch (e) {
-    throw e;
-  }
+  return {
+    numero_documento: num,
+    linha_digitavel: lin,
+    pdf_url: row?.pdf_url || row?.link_pdf || null
+  };
 }
 
 module.exports = router;
