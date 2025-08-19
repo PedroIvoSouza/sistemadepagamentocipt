@@ -378,4 +378,31 @@ async function emitirDarViaSefaz(darId, contexto) {
   }
 }
 
+router.get('/dars/:id/pdf', async (req, res) => {
+  try {
+    const botKey = req.header('x-bot-key');
+    if (botKey !== process.env.BOT_SHARED_KEY) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const { id } = req.params;
+    const { msisdn } = req.query;
+    if (!msisdn) return res.status(400).json({ error: 'msisdn é obrigatório' });
+
+    const dar = await dbGetAsync('SELECT * FROM dars WHERE id = ?', [id]);
+    if (!dar) return res.status(404).json({ error: 'DAR não encontrada' });
+
+    // TODO: implementar/verificar função que garanta o vínculo MSISDN ↔ DAR
+    // const ok = await verificarVinculoMsisdnComDar(msisdn, dar);
+    // if (!ok) return res.status(403).json({ error: 'Proibido' });
+
+    const pdf = dar.pdf_url || dar.link_pdf || '';
+    // ... mesmo tratamento de base64 / url / relativo do admin acima ...
+  } catch (err) {
+    console.error('[BotDARs] ERRO GET /api/bot/dars/:id/pdf:', err);
+    return res.status(500).json({ error: 'Erro interno.' });
+  }
+});
+
+
 module.exports = router;
