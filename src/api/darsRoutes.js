@@ -43,6 +43,7 @@ const dbRunAsync = (sql, params = []) =>
     if (!colsDars.includes('pdf_url')) missing.push('dars.pdf_url');
     if (!colsDars.includes('linha_digitavel')) missing.push('dars.linha_digitavel');
     if (!colsPerm.includes('numero_documento')) missing.push('permissionarios.numero_documento');
+    if (!colsPerm.includes('telefone_cobranca')) missing.push('permissionarios.telefone_cobranca');
 
     if (missing.length) {
       console.warn('⚠️  Colunas ausentes no DB atual:', missing.join(' | '));
@@ -75,6 +76,7 @@ async function ensureSchema() {
   await ensureColumn('dars', 'pdf_url', 'TEXT');
   await ensureColumn('dars', 'linha_digitavel', 'TEXT');
   await ensureColumn('permissionarios', 'numero_documento', 'TEXT');
+  await ensureColumn('permissionarios', 'telefone_cobranca', 'TEXT');
 }
 // dispara sem bloquear
 ensureSchema().catch(err => console.error('[MIGRATE] Falha garantindo schema:', err));

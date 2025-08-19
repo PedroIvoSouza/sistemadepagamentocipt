@@ -76,6 +76,7 @@
                                     
                                     <h5 class="card-title mt-4">CONTATO FINANCEIRO E NOTIFICAÇÕES</h5><hr>
                                     <div class="row mb-3"><label for="profileEmailFinanceiro" class="col-sm-4 col-form-label fw-bold">E-mail Financeiro</label><div class="col-sm-8"><input type="email" readonly class="form-control" id="profileEmailFinanceiro"></div></div>
+                                    <div class="row mb-3"><label for="profileTelefoneCobranca" class="col-sm-4 col-form-label fw-bold">Telefone de Cobrança</label><div class="col-sm-8"><input type="text" readonly class="form-control" id="profileTelefoneCobranca"></div></div>
                                     <div class="row mb-3"><div class="col-sm-8 offset-sm-4"><div class="form-check"><input class="form-check-input" type="checkbox" id="useDifferentEmailCheck" disabled><label class="form-check-label" for="useDifferentEmailCheck">Usar um e-mail diferente para notificações de DARs</label></div></div></div>
                                     <div class="row mb-3" id="notificationEmailRow" style="display: none;"><label for="profileEmailNotificacao" class="col-sm-4 col-form-label fw-bold">E-mail para DARs</label><div class="col-sm-8"><input type="email" readonly class="form-control" id="profileEmailNotificacao"></div></div>
                                     
@@ -115,7 +116,7 @@
             if (!token) { window.location.href = '/login.html'; return; }
             const headers = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
 
-            const editableFieldIds = ['profileResponsavelFinanceiro', 'profileTelefone', 'profileEmailFinanceiro', 'profileWebsite', 'profileEmailNotificacao'];
+            const editableFieldIds = ['profileResponsavelFinanceiro', 'profileTelefone', 'profileTelefoneCobranca', 'profileEmailFinanceiro', 'profileWebsite', 'profileEmailNotificacao'];
             const editButton = document.getElementById('editButton');
             const formActions = document.getElementById('formActions');
             const cancelButton = document.getElementById('cancelButton');
@@ -129,6 +130,9 @@
             let originalData = {};
 
             const phoneMask = IMask(document.getElementById('profileTelefone'), {
+                mask: [ { mask: '(00) 0000-0000' }, { mask: '(00) 0 0000-0000' } ]
+            });
+            const phoneCobMask = IMask(document.getElementById('profileTelefoneCobranca'), {
                 mask: [ { mask: '(00) 0000-0000' }, { mask: '(00) 0 0000-0000' } ]
             });
 
@@ -160,6 +164,7 @@
                     
                     document.getElementById('profileResponsavelFinanceiro').value = originalData.responsavel_financeiro || 'Não informado';
                     document.getElementById('profileTelefone').value = originalData.telefone || 'Não informado';
+                    document.getElementById('profileTelefoneCobranca').value = originalData.telefone_cobranca || 'Não informado';
                     document.getElementById('profileEmailFinanceiro').value = originalData.email_financeiro || 'Não informado';
                     document.getElementById('profileWebsite').value = originalData.website || 'Não informado';
                     
@@ -219,6 +224,7 @@
                 const dataToSave = {
                     responsavel_financeiro: document.getElementById('profileResponsavelFinanceiro').value,
                     telefone: phoneMask.unmaskedValue,
+                    telefone_cobranca: phoneCobMask.unmaskedValue,
                     email_financeiro: document.getElementById('profileEmailFinanceiro').value,
                     website: document.getElementById('profileWebsite').value,
                     email_notificacao: emailNotificacaoFinal

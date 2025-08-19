@@ -17,6 +17,7 @@ db.serialize(() => {
             senha_reset_token TEXT,
             senha_reset_expires INTEGER,
             telefone TEXT,
+            telefone_cobranca TEXT,
             email_financeiro TEXT,
             responsavel_financeiro TEXT,
             website TEXT,
