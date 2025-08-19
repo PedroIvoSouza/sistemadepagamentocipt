@@ -2,6 +2,8 @@
 
 require('dotenv').config();
 
+console.log('[BOT] BOT_SHARED_KEY len =', (process.env.BOT_SHARED_KEY||'').length);
+
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
