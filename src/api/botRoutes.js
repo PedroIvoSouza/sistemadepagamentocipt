@@ -117,4 +117,37 @@ router.get('/dars', botAuth, async (req, res) => {
   }
 });
 
+// src/api/botRoutes.js (adicione abaixo do GET /dars)
+router.get('/dars/:darId/pdf', botAuthMiddleware, async (req, res) => {
+  const darId = Number(req.params.darId);
+  const msisdn = String((req.query.msisdn || '')).replace(/\D/g, '');
+
+  if (!darId || !msisdn) return res.status(400).json({ error: 'Parâmetros inválidos.' });
+
+  const dar = await getAsync(`
+    SELECT d.id, d.permissionario_id, d.pdf_url
+      FROM dars d
+      JOIN permissionarios p ON p.id = d.permissionario_id
+     WHERE d.id = ?
+       AND REPLACE(IFNULL(p.telefone,''), '\\D', '') IN (?, ?, ?, ?)
+  `, [
+    darId,
+    msisdn,                      // e.g. 5582999992881
+    msisdn.replace(/^55/, ''),   // e.g. 82999992881
+    msisdn.slice(-11),           // e.g. 82999992881 (fallback)
+    msisdn.slice(-9)             // e.g. 99992881 (fallback emergência)
+  ]);
+
+  if (!dar) return res.status(404).json({ error: 'DAR não encontrada para este telefone.' });
+  if (!dar.pdf_url) return res.status(404).json({ error: 'DAR ainda não possui PDF gerado.' });
+
+  const abs = path.join(__dirname, '..', '..', 'public', dar.pdf_url);
+  if (!fs.existsSync(abs)) return res.status(404).json({ error: 'Arquivo PDF não encontrado no servidor.' });
+
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename="dar_${dar.id}.pdf"`);
+  fs.createReadStream(abs).pipe(res);
+});
+
+
 module.exports = router;
