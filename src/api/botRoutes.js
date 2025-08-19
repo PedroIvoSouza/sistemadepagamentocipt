@@ -11,6 +11,9 @@ const PDFDocument = require('pdfkit');
 const botAuthMiddleware = require('../middleware/botAuthMiddleware');
 
 const router = express.Router();
+// garante que req.body funcione mesmo se o app principal não tiver json/urlencoded
+router.use(express.json());
+router.use(express.urlencoded({ extended: true }));
 
 // -------------------- DB --------------------
 const defaultDbPath = path.resolve(__dirname, '..', '..', 'sistemacipt.db');
@@ -198,7 +201,7 @@ function isDummyNumeroDocumento(s) {
   return typeof s === 'string' && /^DUMMY-\d+$/i.test(s);
 }
 
-// substitua a sua generateDarPdfBase64 por esta versão
+// PDF gerado em memória (Promise)
 function generateDarPdfBase64({ id, numero_documento, linha_digitavel, msisdn }) {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: 'A4', margin: 36 });
@@ -216,7 +219,6 @@ function generateDarPdfBase64({ id, numero_documento, linha_digitavel, msisdn })
     doc.end();
   });
 }
-
 
 // -------------------- ROTAS --------------------
 
@@ -348,7 +350,7 @@ router.get('/dars/:darId/pdf', botAuthMiddleware, async (req, res) => {
       row.linha_digitavel ||
       '00000.00000 00000.000000 00000.000000 0 00000000000000';
 
-    const pdfBase64 = generateDarPdfBase64({
+    const pdfBase64 = await generateDarPdfBase64({
       id: row.dar_id,
       numero_documento,
       linha_digitavel,
@@ -375,7 +377,10 @@ router.get('/dars/:darId/pdf', botAuthMiddleware, async (req, res) => {
  */
 router.post('/dars/:darId/emit', botAuthMiddleware, async (req, res) => {
   const darId = Number(req.params.darId);
-  const msisdn = req.body?.msisdn ? digits(req.body.msisdn) : null;
+
+  // aceita no body, query ou header (x-msisdn)
+  const msisdnRaw = req.body?.msisdn ?? req.query?.msisdn ?? req.headers['x-msisdn'];
+  const msisdn = msisdnRaw ? digits(String(msisdnRaw)) : null;
 
   if (!darId) return res.status(400).json({ error: 'Parâmetro darId inválido.' });
 
@@ -449,34 +454,32 @@ async function emitirDarViaSefaz(darId, { msisdn }) {
     '00000.00000 00000.000000 00000.000000 0 00000000000000';
 
   // Atualiza status + completa campos sem sobrescrever número real
-    await new Promise((resolve, reject) => {
-      const sql = `
-        UPDATE dars
-           SET status           = 'Emitido',
-               linha_digitavel  = COALESCE(linha_digitavel, ?),
-               numero_documento = COALESCE(numero_documento, ?)
-         WHERE id = ?`;
-      db.run(sql, [linha_digitavel, numero_documento, darId], function (e) {
-        if (e) return reject(e);
-        resolve();
-      });
+  await new Promise((resolve, reject) => {
+    const sql = `
+      UPDATE dars
+         SET status           = 'Emitido',
+             linha_digitavel  = COALESCE(linha_digitavel, ?),
+             numero_documento = COALESCE(numero_documento, ?)
+       WHERE id = ?`;
+    db.run(sql, [linha_digitavel, numero_documento, darId], function (e) {
+      if (e) return reject(e);
+      resolve();
     });
-    
-    // Gera PDF de retorno (agora aguardando o stream terminar)
-    const pdfBase64 = await generateDarPdfBase64({
-      id: darId,
-      numero_documento,
-      linha_digitavel,
-      msisdn
-    });
-    
-    return {
-      numero_documento,
-      linha_digitavel,
-      pdf_url: pdfBase64   // pode manter sem prefixo; seu GET já detecta "JVBER"
-    };
-    }
+  });
 
+  // Gera PDF de retorno (aguardando o stream terminar)
+  const pdfBase64 = await generateDarPdfBase64({
+    id: darId,
+    numero_documento,
+    linha_digitavel,
+    msisdn
+  });
 
+  return {
+    numero_documento,
+    linha_digitavel,
+    pdf_url: pdfBase64 // seu GET já detecta base64 (JVBER…)
+  };
+}
 
 module.exports = router;
