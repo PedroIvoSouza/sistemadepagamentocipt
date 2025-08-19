@@ -623,7 +623,7 @@ router.post('/dars/:darId/reemit', botAuthMiddleware, async (req, res) => {
          SET numero_documento = ?,
              pdf_url = ?,
              linha_digitavel = COALESCE(?, linha_digitavel),
-             status = 'Emitido'
+             status = 'Reemitido'
        WHERE id = ?`,
       [sefazResp.numeroGuia, pdfOut, sefazResp.linhaDigitavel || null, darId]
     );
