@@ -320,7 +320,7 @@
                 const btn = isEmit
                   ? `<button class="btn btn-sm btn-success" data-dar-download="${d.dar_pdf}" data-evento="${eventoId}" data-parc="${d.parcela_num||''}"><i class="bi bi-download"></i> Baixar</button>`
                   : `<button class="btn btn-sm btn-outline-primary" data-dar-reemitir="${darId}" data-evento="${eventoId}"><i class="bi bi-printer"></i> Emitir 2ª Via</button>`;
-                const badge = status==='Pago' ? 'bg-success' : (status==='Emitido' ? 'bg-primary' : (status==='Vencido' ? 'bg-danger':'bg-warning text-dark'));
+                const badge = status==='Pago' ? 'bg-success' : (['Emitido','Reemitido'].includes(status) ? 'bg-primary' : (status==='Vencido' ? 'bg-danger':'bg-warning text-dark'));
                 return `<tr>
                   <td>${d.parcela_num || d.referencia || '-'}</td>
                   <td class="text-end">${formatBRL(valor)}</td>
@@ -418,9 +418,9 @@
             const evId  = ev.id || ev.evento_id || ev.id_evento || ev.eventoId;
             const lista = darsByEvento?.[evId] || [];
             const temPago    = lista.some(x=> normalizaStatus(x.status||x.dar_status)==='Pago');
-            const temEmitido = lista.some(x=> normalizaStatus(x.status||x.dar_status)==='Emitido');
+            const temEmitido = lista.some(x=> ['Emitido','Reemitido'].includes(normalizaStatus(x.status||x.dar_status)));
             const status     = temPago ? 'Pago' : (temEmitido ? 'Emitido' : 'Pendente');
-            const badge      = status==='Pago' ? 'success' : (status==='Emitido' ? 'primary' : 'warning text-dark');
+            const badge      = status==='Pago' ? 'success' : (['Emitido','Reemitido'].includes(status) ? 'primary' : 'warning text-dark');
             const valor = Number(typeof ev.valor_final==='number' ? ev.valor_final
                           : parseFloat(String(ev.valor_final||'0').replace(/\./g,'').replace(',','.')) || 0);
             const datasFmt = formatDatasEvento(ev.datas_evento || ev.data);

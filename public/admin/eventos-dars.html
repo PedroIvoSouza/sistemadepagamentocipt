@@ -556,7 +556,7 @@ async function carregarClientes(){
         const id = evIdOf(ev);
         const status = ev.status || 'Pendente';
         const badge = status==='Pago' ? 'bg-success'
-                    : status==='Emitido' ? 'bg-primary'
+                    : ['Emitido','Reemitido'].includes(status) ? 'bg-primary'
                     : 'bg-warning text-dark';
         const vfNum = typeof ev.valor_final==='number'
           ? ev.valor_final
@@ -600,7 +600,7 @@ async function carregarClientes(){
         const badge = tr.querySelector('td:nth-child(5) .badge');
         if (badge){
           badge.textContent = status;
-          badge.className = 'badge ' + (status==='Pago' ? 'bg-success' : status==='Emitido' ? 'bg-primary' : 'bg-warning text-dark');
+          badge.className = 'badge ' + (status==='Pago' ? 'bg-success' : ['Emitido','Reemitido'].includes(status) ? 'bg-primary' : 'bg-warning text-dark');
         }
       }
     });
@@ -745,7 +745,7 @@ async function carregarClientes(){
                        </button>
                      </div>`;
                 const badge = status==='Pago' ? 'bg-success'
-                             : status==='Emitido' ? 'bg-primary'
+                             : ['Emitido','Reemitido'].includes(status) ? 'bg-primary'
                              : status==='Vencido' ? 'bg-danger'
                              : 'bg-warning text-dark';
                 return `<tr>
@@ -762,7 +762,7 @@ async function carregarClientes(){
 
       // Atualiza o status consolidado do evento na tabela principal
       const temPago    = dars.some(x => (x.status||x.dar_status)==='Pago');
-      const temEmitido = dars.some(x => (x.status||x.dar_status)==='Emitido' || (x.dar_pdf && isPdfBase64(x.dar_pdf)));
+      const temEmitido = dars.some(x => ['Emitido','Reemitido'].includes(x.status||x.dar_status) || (x.dar_pdf && isPdfBase64(x.dar_pdf)));
       atualizarStatusNaTabelaEventos(eventoId, temPago ? 'Pago' : (temEmitido ? 'Emitido' : 'Pendente'));
     }catch(e){
       console.error(e);
