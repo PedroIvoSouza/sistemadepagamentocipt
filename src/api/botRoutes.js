@@ -6,26 +6,39 @@ const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const fs = require('fs');
-const PDFDocument = require('pdfkit');
 
 const botAuthMiddleware = require('../middleware/botAuthMiddleware');
 
+// === Integração SEFAZ (oficial do sistema) =========================
+const {
+  emitirGuiaSefaz,
+  buildSefazPayloadPermissionario,
+  buildSefazPayloadEvento,
+} = require('../services/sefazService');
+
+// === Reemissão (SELIC + 2%) ========================================
+let calcularEncargosAtraso = null;
+try {
+  ({ calcularEncargosAtraso } = require('../services/cobrancaService'));
+} catch (e) {
+  console.warn('[BOT] cobrancaService não disponível — reemissão sem recalcular encargos.');
+}
+
+// === Token opcional no PDF (mesma lógica do sistema web) ===========
+let gerarTokenDocumento = null, imprimirTokenEmPdf = null;
+try {
+  ({ gerarTokenDocumento, imprimirTokenEmPdf } = require('../utils/token'));
+} catch (e) {
+  console.warn('[BOT] utils/token não disponível — PDF sem marcação de token.');
+}
+
 const router = express.Router();
-// garante que req.body funcione mesmo se o app principal não tiver json/urlencoded
-router.use(express.json());
-router.use(express.urlencoded({ extended: true }));
 
 // -------------------- DB --------------------
 const defaultDbPath = path.resolve(__dirname, '..', '..', 'sistemacipt.db');
 const db = new sqlite3.Database(process.env.SQLITE_PATH || defaultDbPath);
 
-// Evita SQLITE_BUSY em picos (se disponível nesta versão do sqlite3)
 try { db.configure && db.configure('busyTimeout', 5000); } catch {}
-
-// Garante colunas mínimas sem alterar esquema existente
-db.serialize(() => {
-  ensureColumn('dars', 'status', 'TEXT');
-});
 
 function ensureColumn(table, column, type) {
   db.all(`PRAGMA table_info(${table})`, (err, rows = []) => {
@@ -37,6 +50,12 @@ function ensureColumn(table, column, type) {
     }
   });
 }
+db.serialize(() => {
+  ensureColumn('dars', 'status', 'TEXT');
+  ensureColumn('dars', 'numero_documento', 'TEXT');
+  ensureColumn('dars', 'linha_digitavel', 'TEXT');
+  ensureColumn('dars', 'pdf_url', 'TEXT');
+});
 
 // -------------------- helpers --------------------
 const digits = (s = '') => String(s).replace(/\D/g, '');
@@ -49,7 +68,7 @@ const last11 = (s = '') => {
 function phoneMatches(msisdn, phoneList = []) {
   const ms = digits(msisdn);
   const ms11 = last11(ms);
-  const alt11 = ms.startsWith('55') ? ms.slice(2) : ms; // 55XXXXXXXXXXX -> XXXXXXXXXXX
+  const alt11 = ms.startsWith('55') ? ms.slice(2) : ms;
 
   for (const raw of phoneList) {
     if (!raw) continue;
@@ -77,8 +96,8 @@ function detectTelCobranca() {
 async function findPermissionarioByMsisdn(msisdn) {
   const hasCobr = await detectTelCobranca();
   const cols = hasCobr
-    ? `id, nome_empresa, telefone, telefone_cobranca`
-    : `id, nome_empresa, telefone`;
+    ? `id, nome_empresa, cnpj, telefone, telefone_cobranca`
+    : `id, nome_empresa, cnpj, telefone`;
 
   return new Promise((resolve, reject) => {
     db.all(`SELECT ${cols} FROM permissionarios`, [], (e, rows = []) => {
@@ -87,7 +106,7 @@ async function findPermissionarioByMsisdn(msisdn) {
         const cand = [r.telefone];
         if (hasCobr) cand.push(r.telefone_cobranca);
         if (phoneMatches(msisdn, cand)) {
-          return resolve({ id: r.id, nome: r.nome_empresa, tipo: 'PERMISSIONARIO' });
+          return resolve({ id: r.id, nome: r.nome_empresa, cnpj: r.cnpj, tipo: 'PERMISSIONARIO' });
         }
       }
       resolve(null);
@@ -98,12 +117,12 @@ async function findPermissionarioByMsisdn(msisdn) {
 // Busca um cliente de eventos por telefone
 function findClienteEventoByMsisdn(msisdn) {
   return new Promise((resolve, reject) => {
-    const sql = `SELECT id, nome_razao_social, telefone FROM Clientes_Eventos`;
+    const sql = `SELECT id, nome_razao_social, documento as cnpj, telefone FROM Clientes_Eventos`;
     db.all(sql, [], (e, rows = []) => {
       if (e) return reject(e);
       for (const r of rows) {
         if (phoneMatches(msisdn, [r.telefone])) {
-          return resolve({ id: r.id, nome: r.nome_razao_social, tipo: 'CLIENTE_EVENTO' });
+          return resolve({ id: r.id, nome: r.nome_razao_social, cnpj: r.cnpj, tipo: 'CLIENTE_EVENTO' });
         }
       }
       resolve(null);
@@ -144,7 +163,8 @@ function listarDarsPermissionario(permissionarioId) {
 // Lista DARs pendentes para cliente de eventos (via join)
 function listarDarsClienteEvento(clienteId) {
   const base = `
-    SELECT d.id, d.valor, d.data_vencimento, d.status, d.numero_documento, d.linha_digitavel, d.pdf_url
+    SELECT d.id, d.valor, d.data_vencimento, d.status, d.numero_documento, d.linha_digitavel, d.pdf_url,
+           d.mes_referencia, d.ano_referencia
       FROM dars d
       JOIN DARs_Eventos de ON de.id_dar = d.id
       JOIN Eventos e ON e.id = de.id_evento
@@ -167,56 +187,45 @@ function listarDarsClienteEvento(clienteId) {
   });
 }
 
-// Decide se um DAR é de permissionário ou de evento
-function obterContextoDar(darId) {
+// Decide se um DAR é de permissionário ou de evento + dados do contribuinte
+async function obterContextoDar(darId) {
   return new Promise((resolve, reject) => {
     const sql = `
       SELECT
-        d.id,
-        d.permissionario_id,
-        e.id            AS evento_id,
-        e.id_cliente    AS cliente_evento_id
+        d.*,
+        p.id   AS perm_id, p.nome_empresa, p.cnpj AS perm_cnpj, p.telefone AS tel_perm, p.telefone_cobranca AS tel_cob,
+        e.id   AS evento_id, ce.id AS cliente_id, ce.nome_razao_social, ce.documento AS cli_doc, ce.telefone AS tel_cli
       FROM dars d
-      LEFT JOIN DARs_Eventos de ON de.id_dar = d.id
-      LEFT JOIN Eventos e ON e.id = de.id_evento
+      LEFT JOIN permissionarios p   ON p.id = d.permissionario_id
+      LEFT JOIN DARs_Eventos de     ON de.id_dar = d.id
+      LEFT JOIN Eventos e           ON e.id = de.id_evento
+      LEFT JOIN Clientes_Eventos ce ON ce.id = e.id_cliente
      WHERE d.id = ?
      LIMIT 1
     `;
     db.get(sql, [darId], (e, row) => {
       if (e) return reject(e);
       if (!row) return resolve(null);
-      if (row.cliente_evento_id) {
-        return resolve({ tipo: 'CLIENTE_EVENTO', cliente_evento_id: row.cliente_evento_id, permissionario_id: null });
+      if (row.cliente_id) {
+        return resolve({
+          tipo: 'CLIENTE_EVENTO',
+          dar: row,
+          contribuinte: { id: row.cliente_id, nome: row.nome_razao_social, cnpj: row.cli_doc },
+          tels: [row.tel_cli]
+        });
       }
-      if (row.permissionario_id) {
-        return resolve({ tipo: 'PERMISSIONARIO', permissionario_id: row.permissionario_id, cliente_evento_id: null });
+      if (row.perm_id) {
+        const tels = [row.tel_perm];
+        if (row.tel_cob) tels.push(row.tel_cob);
+        return resolve({
+          tipo: 'PERMISSIONARIO',
+          dar: row,
+          contribuinte: { id: row.perm_id, nome: row.nome_empresa, cnpj: row.perm_cnpj },
+          tels
+        });
       }
-      // Se não caiu em nenhum, trate como desconhecido
-      resolve({ tipo: 'DESCONHECIDO' });
+      resolve({ tipo: 'DESCONHECIDO', dar: row, contribuinte: null, tels: [] });
     });
-  });
-}
-
-function isDummyNumeroDocumento(s) {
-  return typeof s === 'string' && /^DUMMY-\d+$/i.test(s);
-}
-
-// PDF gerado em memória (Promise)
-function generateDarPdfBase64({ id, numero_documento, linha_digitavel, msisdn }) {
-  return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: 'A4', margin: 36 });
-    const chunks = [];
-    doc.on('data', c => chunks.push(c));
-    doc.on('end', () => resolve(Buffer.concat(chunks).toString('base64')));
-    doc.on('error', reject);
-
-    doc.fontSize(16).text('DAR - Documento de Arrecadação', { align: 'left' }).moveDown();
-    doc.fontSize(12).text(`DAR ID: ${id}`);
-    doc.text(`Número do Documento: ${numero_documento || '-'}`);
-    doc.text(`Linha Digitável: ${linha_digitavel || '-'}`);
-    if (msisdn) doc.text(`MSISDN: ${msisdn}`);
-    doc.moveDown().text('*** Documento gerado para consulta via BOT ***');
-    doc.end();
   });
 }
 
@@ -224,10 +233,8 @@ function generateDarPdfBase64({ id, numero_documento, linha_digitavel, msisdn })
 
 /**
  * GET /api/bot/dars?msisdn=55XXXXXXXXXXX
- * Se achar 1 conta, mantém resposta legada:
- *   { ok, permissionario: {id,nome_empresa}, dars:{vigente,vencidas} }
- * Se achar múltiplas contas (ex.: 1 perm + 1 evento), retorna:
- *   { ok, contas: [ { tipo:'PERMISSIONARIO'| 'CLIENTE_EVENTO', id, nome, dars:{...} }, ... ] }
+ * - Se 1 conta (permissionário), mantém resposta legada
+ * - Se múltiplas, retorna { contas:[ ... ] }
  */
 router.get('/dars', botAuthMiddleware, async (req, res) => {
   try {
@@ -236,14 +243,12 @@ router.get('/dars', botAuthMiddleware, async (req, res) => {
 
     const contas = [];
 
-    // 1) permissionário
     const perm = await findPermissionarioByMsisdn(msisdn);
     if (perm) {
       const dars = await listarDarsPermissionario(perm.id);
       contas.push({ tipo: 'PERMISSIONARIO', id: perm.id, nome: perm.nome, dars });
     }
 
-    // 2) cliente de eventos
     const cli = await findClienteEventoByMsisdn(msisdn);
     if (cli) {
       const dars = await listarDarsClienteEvento(cli.id);
@@ -254,25 +259,21 @@ router.get('/dars', botAuthMiddleware, async (req, res) => {
       return res.status(404).json({ error: 'Telefone não associado a nenhum permissionário/cliente.' });
     }
 
-    // Back-compat: se só tem 1 conta e ela for permissionário, mantém payload legado
     if (contas.length === 1 && contas[0].tipo === 'PERMISSIONARIO') {
       const { id, nome, dars } = contas[0];
       return res.json({ ok: true, permissionario: { id, nome_empresa: nome }, dars });
     }
 
-    // Caso geral (um ou mais perfis)
     return res.json({ ok: true, contas });
   } catch (err) {
-    console.error('[BOT][dars] erro inesperado:', err);
+    console.error('[BOT][dars] erro:', err);
     return res.status(500).json({ error: 'Erro interno.' });
   }
 });
 
 /**
  * GET /api/bot/dars/:darId/pdf?msisdn=55XXXXXXXXXXX
- * Retorna/encaminha o PDF, validando que o MSISDN é dono do DAR
- * (permissionário OU cliente de eventos).
- * Se não houver PDF salvo, gera um PDF simples "on-the-fly" (placeholder).
+ * Retorna o PDF gerado pela SEFAZ (base64) ou redireciona, validando posse por msisdn.
  */
 router.get('/dars/:darId/pdf', botAuthMiddleware, async (req, res) => {
   try {
@@ -280,87 +281,44 @@ router.get('/dars/:darId/pdf', botAuthMiddleware, async (req, res) => {
     const msisdn = String(req.query.msisdn || '').trim();
     if (!darId || !msisdn) return res.status(400).json({ error: 'Parâmetros inválidos.' });
 
-    const hasCobr = await detectTelCobranca();
-    const telCobrSelect = hasCobr ? ', p.telefone_cobranca AS tel_cob' : ', NULL AS tel_cob';
-
-    const sql = `
-      SELECT
-        d.id        AS dar_id,
-        d.pdf_url   AS pdf_url,
-        d.numero_documento AS numero_documento,
-        d.linha_digitavel  AS linha_digitavel,
-        p.telefone  AS tel_perm
-        ${telCobrSelect},
-        ce.telefone AS tel_cli
-      FROM dars d
-      LEFT JOIN permissionarios p   ON p.id = d.permissionario_id
-      LEFT JOIN DARs_Eventos de     ON de.id_dar = d.id
-      LEFT JOIN Eventos e           ON e.id = de.id_evento
-      LEFT JOIN Clientes_Eventos ce ON ce.id = e.id_cliente
-     WHERE d.id = ?
-     LIMIT 1
-    `;
-    const row = await new Promise((resolve, reject) =>
-      db.get(sql, [darId], (e, r) => (e ? reject(e) : resolve(r)))
-    );
-    if (!row) return res.status(404).json({ error: 'DAR não encontrada.' });
-
-    // Checagem de posse por telefone
-    if (!phoneMatches(msisdn, [row.tel_perm, row.tel_cob, row.tel_cli])) {
+    const ctx = await obterContextoDar(darId);
+    if (!ctx || !ctx.dar) return res.status(404).json({ error: 'DAR não encontrada.' });
+    if (!phoneMatches(msisdn, ctx.tels)) {
       return res.status(403).json({ error: 'Este telefone não está autorizado a acessar este DAR.' });
     }
 
-    // Se houver PDF salvo, devolve (base64/URL/arquivo)
-    const savedPdf = row.pdf_url || '';
-    if (savedPdf && String(savedPdf).length >= 20) {
-      // 1) Base64 embutido?
-      const isBase64 =
-        /^JVBER/i.test(savedPdf) || /^data:application\/pdf;base64,/i.test(savedPdf);
-      if (isBase64) {
-        const base64 = String(savedPdf).replace(/^data:application\/pdf;base64,/i, '');
-        const buf = Buffer.from(base64, 'base64');
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `inline; filename="dar_${row.dar_id}.pdf"`);
-        return res.send(buf);
-      }
-      // 2) URL absoluta?
-      if (/^https?:\/\//i.test(savedPdf)) {
-        return res.redirect(302, savedPdf);
-      }
-      // 3) Caminho relativo (tenta UPLOADS_DIR; fallback /public)
-      const rel = String(savedPdf).replace(/^\/+/, '');
-      const upDir = process.env.UPLOADS_DIR || path.join(__dirname, '..', '..', 'uploads');
-      const pubDir = path.join(__dirname, '..', '..', 'public');
-      const tryPaths = [path.join(upDir, rel), path.join(pubDir, rel)];
-      const fsPath = tryPaths.find(p => fs.existsSync(p));
-      if (!fsPath) {
-        return res.status(404).json({ error: 'Arquivo PDF não encontrado no servidor.' });
-      }
-      res.type('application/pdf');
-      res.setHeader('Content-Disposition', `inline; filename="dar_${row.dar_id}.pdf"`);
-      return fs.createReadStream(fsPath).pipe(res);
+    const savedPdf = ctx.dar.pdf_url || '';
+    if (!savedPdf || String(savedPdf).length < 20) {
+      return res.status(404).json({ error: 'PDF indisponível para este DAR.' });
     }
 
-    // Sem PDF salvo: gera placeholder on-the-fly
-    const numero_documento =
-      row.numero_documento && !isDummyNumeroDocumento(row.numero_documento)
-        ? row.numero_documento
-        : `DUMMY-${row.dar_id}`;
-    const linha_digitavel =
-      row.linha_digitavel ||
-      '00000.00000 00000.000000 00000.000000 0 00000000000000';
+    // base64 direto?
+    const isBase64 = /^JVBER/i.test(savedPdf) || /^data:application\/pdf;base64,/i.test(savedPdf);
+    if (isBase64) {
+      const base64 = String(savedPdf).replace(/^data:application\/pdf;base64,/i, '');
+      const buf = Buffer.from(base64, 'base64');
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename="dar_${darId}.pdf"`);
+      return res.send(buf);
+    }
 
-    const pdfBase64 = await generateDarPdfBase64({
-      id: row.dar_id,
-      numero_documento,
-      linha_digitavel,
-      msisdn
-    });
-    const buf = Buffer.from(pdfBase64, 'base64');
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Length', buf.length);
-    res.setHeader('Content-Disposition', `inline; filename="dar_${row.dar_id}.pdf"`);
-    return res.status(200).send(buf);
+    // URL absoluta?
+    if (/^https?:\/\//i.test(savedPdf)) {
+      return res.redirect(302, savedPdf);
+    }
+
+    // Caminho relativo
+    const rel = String(savedPdf).replace(/^\/+/, '');
+    const upDir = process.env.UPLOADS_DIR || path.join(__dirname, '..', '..', 'uploads');
+    const pubDir = path.join(__dirname, '..', '..', 'public');
+    const tryPaths = [path.join(upDir, rel), path.join(pubDir, rel)];
+    const fsPath = tryPaths.find(p => fs.existsSync(p));
+    if (!fsPath) {
+      return res.status(404).json({ error: 'Arquivo PDF não encontrado no servidor.' });
+    }
+    res.type('application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="dar_${darId}.pdf"`);
+    return fs.createReadStream(fsPath).pipe(res);
   } catch (err) {
     console.error('[BOT][PDF] erro:', err);
     return res.status(500).json({ error: 'Erro interno.' });
@@ -369,117 +327,199 @@ router.get('/dars/:darId/pdf', botAuthMiddleware, async (req, res) => {
 
 /**
  * POST /api/bot/dars/:darId/emit
- * Body (opcional): { msisdn: "55..." }  -> valida a posse antes de emitir.
- * Dispara a emissão (stub) e devolve metadados. O banco:
- *   - marca status = 'Emitido'
- *   - preenche linha_digitavel se estiver NULL
- *   - NÃO sobrescreve numero_documento real (usa COALESCE)
+ * Body opcional: { msisdn: "55..." } — valida posse.
+ * Emite na SEFAZ usando o mesmo builder do sistema.
  */
 router.post('/dars/:darId/emit', botAuthMiddleware, async (req, res) => {
   const darId = Number(req.params.darId);
-
-  // aceita no body, query ou header (x-msisdn)
-  const msisdnRaw = req.body?.msisdn ?? req.query?.msisdn ?? req.headers['x-msisdn'];
-  const msisdn = msisdnRaw ? digits(String(msisdnRaw)) : null;
-
+  const msisdn = req.body?.msisdn ? digits(req.body.msisdn) : null;
   if (!darId) return res.status(400).json({ error: 'Parâmetro darId inválido.' });
 
   try {
-    // Se informaram msisdn, valida a posse
-    if (msisdn) {
-      const hasCobr = await detectTelCobranca();
-      const checkSql = `
-        SELECT
-          p.telefone AS tel_perm,
-          ${hasCobr ? 'p.telefone_cobranca AS tel_cob,' : 'NULL AS tel_cob,'}
-          ce.telefone AS tel_cli
-        FROM dars d
-        LEFT JOIN permissionarios p ON p.id = d.permissionario_id
-        LEFT JOIN DARs_Eventos de   ON de.id_dar = d.id
-        LEFT JOIN Eventos e         ON e.id = de.id_evento
-        LEFT JOIN Clientes_Eventos ce ON ce.id = e.id_cliente
-       WHERE d.id = ?
-       LIMIT 1
-      `;
-      const row = await new Promise((resolve, reject) => {
-        db.get(checkSql, [darId], (e, r) => e ? reject(e) : resolve(r));
+    const ctx = await obterContextoDar(darId);
+    if (!ctx || !ctx.dar) return res.status(404).json({ error: 'DAR não encontrada.' });
+
+    if (msisdn && !phoneMatches(msisdn, ctx.tels)) {
+      return res.status(403).json({ error: 'Este telefone não está autorizado a emitir este DAR.' });
+    }
+
+    // Ajuste simples: se vencida, deixa a reemissão para a rota /reemit
+    // Aqui emitimos como está — a SEFAZ clampa dataLimite >= hoje com nosso builder.
+
+    let payload;
+    if (ctx.tipo === 'PERMISSIONARIO') {
+      payload = buildSefazPayloadPermissionario({
+        perm: { cnpj: ctx.contribuinte.cnpj, nome_empresa: ctx.contribuinte.nome },
+        darLike: {
+          id: ctx.dar.id,
+          valor: ctx.dar.valor,
+          data_vencimento: ctx.dar.data_vencimento,
+          mes_referencia: ctx.dar.mes_referencia,
+          ano_referencia: ctx.dar.ano_referencia,
+          numero_documento: ctx.dar.numero_documento
+        }
       });
-      if (!row) return res.status(404).json({ error: 'DAR não encontrada.' });
-      if (!phoneMatches(msisdn, [row.tel_perm, row.tel_cob, row.tel_cli])) {
-        return res.status(403).json({ error: 'Este telefone não está autorizado a emitir este DAR.' });
+    } else if (ctx.tipo === 'CLIENTE_EVENTO') {
+      payload = buildSefazPayloadEvento({
+        cliente: { cnpj: ctx.contribuinte.cnpj, nome_razao_social: ctx.contribuinte.nome },
+        parcela: {
+          id: ctx.dar.id,
+          valor: ctx.dar.valor,
+          vencimento: ctx.dar.data_vencimento,
+          competenciaMes: ctx.dar.mes_referencia,
+          competenciaAno: ctx.dar.ano_referencia
+        }
+      });
+    } else {
+      return res.status(404).json({ error: 'DAR sem contexto de emissão.' });
+    }
+
+    const sefazResp = await emitirGuiaSefaz(payload);
+    if (!sefazResp || !sefazResp.numeroGuia || !sefazResp.pdfBase64) {
+      throw new Error('Retorno da SEFAZ incompleto (numeroGuia/pdfBase64).');
+    }
+
+    // Token opcional no PDF
+    let pdfOut = sefazResp.pdfBase64;
+    if (gerarTokenDocumento && imprimirTokenEmPdf) {
+      try {
+        const tokenDoc = await gerarTokenDocumento('DAR', ctx.contribuinte.id, db);
+        pdfOut = await imprimirTokenEmPdf(pdfOut, tokenDoc);
+      } catch (e) {
+        console.warn('[BOT] Falha ao imprimir token no PDF (seguindo sem token):', e?.message || e);
       }
     }
 
-    const contexto = await obterContextoDar(darId);
-    if (!contexto || contexto.tipo === 'DESCONHECIDO') {
-      return res.status(404).json({ error: 'DAR não encontrada ou sem contexto.' });
-    }
+    await new Promise((resolve, reject) => {
+      const sql = `
+        UPDATE dars
+           SET numero_documento = ?,
+               pdf_url = ?,
+               linha_digitavel = COALESCE(?, linha_digitavel),
+               status = 'Emitido'
+         WHERE id = ?`;
+      db.run(sql, [sefazResp.numeroGuia, pdfOut, sefazResp.linhaDigitavel || null, darId], function (e) {
+        if (e) return reject(e);
+        resolve();
+      });
+    });
 
-    // Emissão "stub" (mantém número real no banco; preenche se faltar)
-    const meta = await emitirDarViaSefaz(darId, { msisdn }); // retorna { numero_documento, linha_digitavel, pdf_url }
-    return res.json({ ok: true, darId, ...meta });
+    return res.json({
+      ok: true,
+      darId,
+      numero_documento: sefazResp.numeroGuia,
+      linha_digitavel: sefazResp.linhaDigitavel || null,
+      pdf_url: pdfOut
+    });
   } catch (err) {
-    console.error('[BOT][EMIT] erro ao emitir DAR:', err?.message || err);
-    return res.status(500).json({ error: 'Falha ao emitir a DAR.' });
+    console.error('[BOT][EMIT] erro:', err);
+    const isUnavailable =
+      /indispon[ií]vel|Load balancer|ECONNABORTED|ENOTFOUND|EAI_AGAIN|ECONNRESET|ETIMEDOUT|timeout/i.test(
+        err.message || ''
+      );
+    return res.status(isUnavailable ? 503 : 500).json({ error: err.message || 'Falha ao emitir a DAR.' });
   }
 });
 
 /**
- * Implementação de fachada que NÃO sobrescreve numero_documento real.
- * - Se numero_documento for NULL, seta "DUMMY-{id}".
- * - Se já existir número real (ex.: 151358231), mantém.
- * - Preenche linha_digitavel se NULL.
- * - Sempre marca status='Emitido'.
- * - Gera um PDF base64 de retorno (não depende de persistência de arquivo).
+ * POST /api/bot/dars/:darId/reemit
+ * Reemite DAR aplicando SELIC + 2% (via cobrancaService) e emitindo na SEFAZ.
+ * Body obrigatório: { msisdn: "55..." }
  */
-async function emitirDarViaSefaz(darId, { msisdn }) {
-  // Busca dados atuais
-  const row = await new Promise((resolve, reject) => {
-    db.get(
-      `SELECT id, numero_documento, linha_digitavel, pdf_url FROM dars WHERE id = ?`,
-      [darId],
-      (e, r) => (e ? reject(e) : resolve(r || {}))
-    );
-  });
+router.post('/dars/:darId/reemit', botAuthMiddleware, async (req, res) => {
+  const darId = Number(req.params.darId);
+  const msisdn = req.body?.msisdn ? digits(req.body.msisdn) : null;
+  if (!darId || !msisdn) return res.status(400).json({ error: 'Parâmetros inválidos (darId/msisdn).' });
 
-  if (!row || !row.id) throw new Error('DAR não encontrada.');
+  try {
+    const ctx = await obterContextoDar(darId);
+    if (!ctx || !ctx.dar) return res.status(404).json({ error: 'DAR não encontrada.' });
+    if (!phoneMatches(msisdn, ctx.tels)) {
+      return res.status(403).json({ error: 'Este telefone não está autorizado a reemitir este DAR.' });
+    }
 
-  const numero_documento =
-    row.numero_documento && !isDummyNumeroDocumento(row.numero_documento)
-      ? row.numero_documento
-      : `DUMMY-${darId}`;
+    // Recalcular encargos se serviço estiver disponível
+    let valorParaEmitir = ctx.dar.valor;
+    let novoVencimentoISO = ctx.dar.data_vencimento;
 
-  const linha_digitavel =
-    row.linha_digitavel ||
-    '00000.00000 00000.000000 00000.000000 0 00000000000000';
+    if (calcularEncargosAtraso) {
+      const calc = await calcularEncargosAtraso(ctx.dar);
+      // Esperado do serviço: { valorAtualizado, novaDataVencimento?, atrasoDias, multa, juros }
+      valorParaEmitir = calc?.valorAtualizado || ctx.dar.valor;
+      novoVencimentoISO = calc?.novaDataVencimento || ctx.dar.data_vencimento;
+    }
 
-  // Atualiza status + completa campos sem sobrescrever número real
-  await new Promise((resolve, reject) => {
-    const sql = `
-      UPDATE dars
-         SET status           = 'Emitido',
-             linha_digitavel  = COALESCE(linha_digitavel, ?),
-             numero_documento = COALESCE(numero_documento, ?)
-       WHERE id = ?`;
-    db.run(sql, [linha_digitavel, numero_documento, darId], function (e) {
-      if (e) return reject(e);
-      resolve();
+    let payload;
+    if (ctx.tipo === 'PERMISSIONARIO') {
+      payload = buildSefazPayloadPermissionario({
+        perm: { cnpj: ctx.contribuinte.cnpj, nome_empresa: ctx.contribuinte.nome },
+        darLike: {
+          id: ctx.dar.id,
+          valor: valorParaEmitir,
+          data_vencimento: novoVencimentoISO,
+          mes_referencia: ctx.dar.mes_referencia,
+          ano_referencia: ctx.dar.ano_referencia,
+          numero_documento: ctx.dar.numero_documento
+        }
+      });
+    } else if (ctx.tipo === 'CLIENTE_EVENTO') {
+      payload = buildSefazPayloadEvento({
+        cliente: { cnpj: ctx.contribuinte.cnpj, nome_razao_social: ctx.contribuinte.nome },
+        parcela: {
+          id: ctx.dar.id,
+          valor: valorParaEmitir,
+          vencimento: novoVencimentoISO,
+          competenciaMes: ctx.dar.mes_referencia,
+          competenciaAno: ctx.dar.ano_referencia
+        }
+      });
+    } else {
+      return res.status(404).json({ error: 'DAR sem contexto de emissão.' });
+    }
+
+    const sefazResp = await emitirGuiaSefaz(payload);
+    if (!sefazResp || !sefazResp.numeroGuia || !sefazResp.pdfBase64) {
+      throw new Error('Retorno da SEFAZ incompleto (numeroGuia/pdfBase64).');
+    }
+
+    // Token opcional
+    let pdfOut = sefazResp.pdfBase64;
+    if (gerarTokenDocumento && imprimirTokenEmPdf) {
+      try {
+        const tokenDoc = await gerarTokenDocumento('DAR', ctx.contribuinte.id, db);
+        pdfOut = await imprimirTokenEmPdf(pdfOut, tokenDoc);
+      } catch {}
+    }
+
+    await new Promise((resolve, reject) => {
+      const sql = `
+        UPDATE dars
+           SET numero_documento = ?,
+               pdf_url = ?,
+               linha_digitavel = COALESCE(?, linha_digitavel),
+               status = 'Emitido'
+         WHERE id = ?`;
+      db.run(sql, [sefazResp.numeroGuia, pdfOut, sefazResp.linhaDigitavel || null, darId], function (e) {
+        if (e) return reject(e);
+        resolve();
+      });
     });
-  });
 
-  // Gera PDF de retorno (aguardando o stream terminar)
-  const pdfBase64 = await generateDarPdfBase64({
-    id: darId,
-    numero_documento,
-    linha_digitavel,
-    msisdn
-  });
-
-  return {
-    numero_documento,
-    linha_digitavel,
-    pdf_url: pdfBase64 // seu GET já detecta base64 (JVBER…)
-  };
-}
+    return res.json({
+      ok: true,
+      darId,
+      numero_documento: sefazResp.numeroGuia,
+      linha_digitavel: sefazResp.linhaDigitavel || null,
+      pdf_url: pdfOut
+    });
+  } catch (err) {
+    console.error('[BOT][REEMIT] erro:', err);
+    const isUnavailable =
+      /indispon[ií]vel|Load balancer|ECONNABORTED|ENOTFOUND|EAI_AGAIN|ECONNRESET|ETIMEDOUT|timeout/i.test(
+        err.message || ''
+      );
+    return res.status(isUnavailable ? 503 : 500).json({ error: err.message || 'Falha ao reemitir a DAR.' });
+  }
+});
 
 module.exports = router;
