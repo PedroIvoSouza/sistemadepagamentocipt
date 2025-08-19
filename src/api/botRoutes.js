@@ -553,7 +553,10 @@ router.post('/dars/:darId/emit', botAuthMiddleware, async (req, res) => {
       /indispon[ií]vel|Load balancer|ECONNABORTED|ENOTFOUND|EAI_AGAIN|ECONNRESET|ETIMEDOUT|timeout/i.test(
         err.message || ''
       );
-    return res.status(isUnavailable ? 503 : 500).json({ error: err.message || 'Falha ao emitir a DAR.' });
+    const status = err.status || (isUnavailable ? 503 : 500);
+    const body = { error: err.message || 'Falha ao emitir a DAR.' };
+    if (err.detail) body.detail = err.detail;
+    return res.status(status).json(body);
   }
 });
 
@@ -650,7 +653,10 @@ router.post('/dars/:darId/reemit', botAuthMiddleware, async (req, res) => {
       /indispon[ií]vel|Load balancer|ECONNABORTED|ENOTFOUND|EAI_AGAIN|ECONNRESET|ETIMEDOUT|timeout/i.test(
         err.message || ''
       );
-    return res.status(isUnavailable ? 503 : 500).json({ error: err.message || 'Falha ao reemitir a DAR.' });
+    const status = err.status || (isUnavailable ? 503 : 500);
+    const body = { error: err.message || 'Falha ao reemitir a DAR.' };
+    if (err.detail) body.detail = err.detail;
+    return res.status(status).json(body);
   }
 });
 
