@@ -212,8 +212,10 @@ function pickReceitaEventoByDoc(docDigits, receitaOverride) {
  *   darLike: { valor, data_vencimento, mes_referencia, ano_referencia, id? }
  */
 function buildSefazPayloadPermissionario({ perm, darLike, receitaCodigo = RECEITA_CODIGO_PERMISSIONARIO }) {
-  const cnpj = onlyDigits(perm?.cnpj || '');
-  const nome = perm?.nome_empresa || 'Contribuinte';
+  // antes usávamos "cnpj" direto; agora padronizamos como "documento" (pode ser CPF/CNPJ)
+  const documento = onlyDigits(perm?.cnpj || perm?.documento || '');
+  const nome = perm?.nome_empresa || perm?.nome || 'Contribuinte';
+
   const valor = Number(darLike?.valor || 0);
   const dataVencISO = toISO(darLike?.data_vencimento);
   const mes = Number(darLike?.mes_referencia || 0);
@@ -224,15 +226,15 @@ function buildSefazPayloadPermissionario({ perm, darLike, receitaCodigo = RECEIT
     : null;
 
   return buildSefazPayload({
-    cnpj,
+    documento,                                // 👈 agora definido
     nome,
     codIbgeMunicipio: COD_IBGE_MUNICIPIO,
-    receitaCodigo: pickReceitaEventoByDoc(doc, receitaCodigo),
+    receitaCodigo: receitaCodigo || RECEITA_CODIGO_PERMISSIONARIO,
     competenciaMes: mes,
     competenciaAno: ano,
     valorPrincipal: valor,
     dataVencimentoISO: dataVencISO,
-    dataLimiteISO: dataVencISO, // será clampado para >= hoje
+    dataLimiteISO: dataVencISO,               // será clampado >= hoje
     observacao: `Aluguel CIPT - ${nome}`,
     docOrigem,
   });
