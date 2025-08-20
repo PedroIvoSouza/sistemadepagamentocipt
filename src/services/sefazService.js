@@ -252,7 +252,7 @@ async function _postEmitir(payload) {
           'Content-Type': 'application/json',
         },
         // se você usa httpsAgent/tls aqui, mantenha:
-        // httpsAgent,
+        httpsAgent,
         timeout: 15000,
       }),
       'guia/emitir'
