@@ -25,7 +25,7 @@ const permissionariosRoutes       = require('./api/permissionariosRoutes');
 const botRoutes                   = require('./api/botRoutes');
 const termoEventosRoutes          = require('./api/termoEventosRoutes');
 
-
+const adminTermoEventosPDFRoutes = require('./api/adminTermoEventosPDFRoutes');
 
 const adminTermoEventosRoutes     = require('./api/adminTermoEventosRoutes');
 
@@ -75,6 +75,8 @@ app.use('/api/admin/dars',        adminDarsRoutes);
 app.use('/api/admins',            adminManagementRoutes);
 app.use('/api/admin',             adminRoutes); // Rota para permissionários no painel admin
 app.use('/api/admin',             adminOficiosRoutes); 
+app.use('/api/admin', adminTermoEventosPDFRoutes);
+
 
 // --- CORREÇÃO APLICADA AQUI ---
 // Cada router de eventos agora tem um prefixo de URL único.
