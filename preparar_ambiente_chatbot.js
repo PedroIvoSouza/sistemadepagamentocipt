@@ -1,8 +1,9 @@
 // preparar_ambiente_chatbot.js
 'use strict';
-require('dotenv').config({ path: require('path').resolve(__dirname, '../../.env') });
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
+require('dotenv').config({ path: require('path').resolve(__dirname, '../../.env') });
+
 const { emitirGuiaSefaz } = require('./src/services/sefazService');
 
 // ---------- Config ----------
