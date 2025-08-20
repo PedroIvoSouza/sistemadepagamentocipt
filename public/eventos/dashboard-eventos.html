@@ -146,6 +146,15 @@
                 <thead>
                   <tr>
                     <th>Evento</th>
+                    <th>Ofício SEI</th>
+                    <th>Processo</th>
+                    <th>Termo</th>
+                    <th>Espaço</th>
+                    <th>Área (m²)</th>
+                    <th>Montagem</th>
+                    <th>Início</th>
+                    <th>Fim</th>
+                    <th>Desmontagem</th>
                     <th>Data(s)</th>
                     <th>Vigência Final</th>
                     <th class="text-end">Valor (R$)</th>
@@ -154,7 +163,7 @@
                   </tr>
                 </thead>
                 <tbody id="tabela-eventos">
-                  <tr><td colspan="6" class="text-center text-muted">Carregando...</td></tr>
+                  <tr><td colspan="15" class="text-center text-muted">Carregando...</td></tr>
                 </tbody>
               </table>
             </div>
@@ -427,6 +436,15 @@
             const datasFmt = formatDatasEvento(ev.datas_evento || ev.data);
             return `<tr>
               <td>${ev.nome_evento || 'Evento'}</td>
+              <td>${ev.numero_oficio_sei || ''}</td>
+              <td>${ev.numero_processo || ''}</td>
+              <td>${ev.numero_termo || ''}</td>
+              <td>${ev.espaco_utilizado || ''}</td>
+              <td>${ev.area_m2 != null ? ev.area_m2 : ''}</td>
+              <td>${ev.hora_montagem || ''}</td>
+              <td>${ev.hora_inicio || ''}</td>
+              <td>${ev.hora_fim || ''}</td>
+              <td>${ev.hora_desmontagem || ''}</td>
               <td>${datasFmt}</td>
               <td>${formatDateBR(ev.data_vigencia_final)}</td>
               <td class="text-end">${formatBRL(valor)}</td>

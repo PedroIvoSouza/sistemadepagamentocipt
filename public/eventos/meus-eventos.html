@@ -371,6 +371,15 @@
               <div id="col${i}" class="accordion-collapse collapse" data-bs-parent="#eventosAccordion">
                 <div class="accordion-body">
                   <div class="mb-2"><strong>Vigência final:</strong> ${vigFinal}</div>
+                  <div class="mb-2"><strong>Ofício SEI:</strong> ${ev.numero_oficio_sei || '-'}</div>
+                  <div class="mb-2"><strong>Processo:</strong> ${ev.numero_processo || '-'}</div>
+                  <div class="mb-2"><strong>Termo:</strong> ${ev.numero_termo || '-'}</div>
+                  <div class="mb-2"><strong>Espaço:</strong> ${ev.espaco_utilizado || '-'}</div>
+                  <div class="mb-2"><strong>Área (m²):</strong> ${ev.area_m2 != null ? ev.area_m2 : '-'}</div>
+                  <div class="mb-2"><strong>Montagem:</strong> ${ev.hora_montagem || '-'}</div>
+                  <div class="mb-2"><strong>Início:</strong> ${ev.hora_inicio || '-'}</div>
+                  <div class="mb-2"><strong>Fim:</strong> ${ev.hora_fim || '-'}</div>
+                  <div class="mb-3"><strong>Desmontagem:</strong> ${ev.hora_desmontagem || '-'}</div>
                   <button class="btn btn-sm btn-outline-primary" data-ver-dars="${evId}" data-nome="${ev.nome_evento||''}">
                     <i class="bi bi-file-earmark-arrow-down"></i> Ver / Baixar DARs
                   </button>

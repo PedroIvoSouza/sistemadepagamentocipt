@@ -17,6 +17,8 @@ router.get('/', (req, res) => {
         SELECT
             e.id,
             e.nome_evento,
+            e.espaco_utilizado,
+            e.area_m2,
             e.status,
             e.valor_final,
             e.total_diarias,

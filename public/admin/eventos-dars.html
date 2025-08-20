@@ -90,7 +90,15 @@
                     <th>ID</th>
                     <th>Nome do Evento</th>
                     <th>Nº Ofício SEI</th>
+                    <th>Nº Processo</th>
+                    <th>Nº Termo</th>
                     <th>Cliente</th>
+                    <th>Espaço</th>
+                    <th>Área (m²)</th>
+                    <th>Montagem</th>
+                    <th>Início</th>
+                    <th>Fim</th>
+                    <th>Desmontagem</th>
                     <th>Vigência Final</th>
                     <th class="text-end">Valor Final</th>
                     <th class="text-center">Status</th>
@@ -612,7 +620,15 @@ async function carregarClientes(){
           <td>${id}</td>
           <td>${ev.nome_evento || ''}</td>
           <td>${ev.numero_oficio_sei || ''}</td>
+          <td>${ev.numero_processo || ''}</td>
+          <td>${ev.numero_termo || ''}</td>
           <td>${ev.nome_cliente || ''}</td>
+          <td>${ev.espaco_utilizado || ''}</td>
+          <td>${ev.area_m2 != null ? ev.area_m2 : ''}</td>
+          <td>${ev.hora_montagem || ''}</td>
+          <td>${ev.hora_inicio || ''}</td>
+          <td>${ev.hora_fim || ''}</td>
+          <td>${ev.hora_desmontagem || ''}</td>
           <td>${ev.data_vigencia_final ? new Date(ev.data_vigencia_final+ 'T00:00:00').toLocaleDateString('pt-BR') : '-'}</td>
           <td class="text-end">${fmtBRL(vfNum)}</td>
           <td class="text-center"><span class="badge ${badge}">${status}</span></td>
