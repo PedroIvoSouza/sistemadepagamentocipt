@@ -406,6 +406,45 @@ router.get('/dars', botAuthMiddleware, async (req, res) => {
 });
 
 /**
+ * GET /api/bot/dars/:darId?msisdn=55XXXXXXXXXXX
+ * Retorna informações básicas do DAR, validando a posse via msisdn.
+ */
+router.get('/dars/:darId', botAuthMiddleware, async (req, res) => {
+  try {
+    const darId = Number(req.params.darId);
+    const msisdn = String(req.query.msisdn || '').trim();
+    if (!darId || !msisdn) {
+      return res.status(400).json({ error: 'Parâmetros inválidos.' });
+    }
+
+    const ctx = await obterContextoDar(darId);
+    if (!ctx || !ctx.dar) {
+      return res.status(404).json({ error: 'DAR não encontrada.' });
+    }
+    if (!phoneMatches(msisdn, ctx.tels)) {
+      return res.status(403).json({ error: 'Este telefone não está autorizado a acessar este DAR.' });
+    }
+
+    const { linha_digitavel, valor, data_vencimento, mes_referencia, ano_referencia } = ctx.dar;
+    const competencia = `${String(mes_referencia).padStart(2, '0')}/${ano_referencia}`;
+
+    return res.json({
+      ok: true,
+      dar: {
+        id: ctx.dar.id,
+        linha_digitavel: linha_digitavel || null,
+        competencia,
+        vencimento: data_vencimento,
+        valor
+      }
+    });
+  } catch (err) {
+    console.error('[BOT][DAR] erro:', err, err?.detail);
+    return res.status(500).json({ error: 'Erro interno.' });
+  }
+});
+
+/**
  * GET /api/bot/dars/:darId/pdf?msisdn=55XXXXXXXXXXX
  * Retorna o PDF gerado pela SEFAZ (base64) ou redireciona, validando posse por msisdn.
  */
