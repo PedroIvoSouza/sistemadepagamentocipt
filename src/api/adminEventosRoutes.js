@@ -90,15 +90,14 @@ router.post('/', async (req, res) => {
   try {
     await dbRun('BEGIN TRANSACTION', [], 'criar-evento/BEGIN');
 
-    // FIX: remover "INSERT INTO Eventos (...)" (placeholders inválidos) e listar colunas reais
     const eventoStmt = await dbRun(
-      `INSERT INTO Eventos
-         (id_cliente, nome_evento, datas_evento, total_diarias, data_vigencia_final, valor_bruto,
-          tipo_desconto, desconto_manual, valor_final, numero_oficio_sei, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          tipo_desconto, desconto_manual, valor_final, status, numero_processo
-          hora_inicio, hora_fim, hora_montagem, hora_desmontagem)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO Eventos (
+         id_cliente, nome_evento, espaco_utilizado, area_m2, datas_evento,
+         data_vigencia_final, total_diarias, valor_bruto,
+         tipo_desconto, desconto_manual, valor_final, numero_oficio_sei,
+         hora_inicio, hora_fim, hora_montagem, hora_desmontagem,
+         numero_processo, numero_termo, status
+       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
         idCliente,
         nomeEvento,
@@ -112,11 +111,10 @@ router.post('/', async (req, res) => {
         Number(descontoManualPercent || 0),
         Number(valorFinal || 0),
         numeroOficioSei || null,
-        'Pendente',
         horaInicio || null,
         horaFim || null,
         horaMontagem || null,
-        horaDesmontagem || null
+        horaDesmontagem || null,
         numeroProcesso || null,
         numeroTermo || null,
         'Pendente'
@@ -223,7 +221,7 @@ router.get('/', async (req, res) => {
   try {
     const sql = `
       SELECT e.id, e.nome_evento, e.valor_final, e.status, e.data_vigencia_final,
-             e.numero_oficio_sei,
+             e.numero_oficio_sei, e.numero_processo, e.numero_termo,
              c.nome_razao_social AS nome_cliente
         FROM Eventos e
         JOIN Clientes_Eventos c ON e.id_cliente = c.id
@@ -406,11 +404,10 @@ router.put('/:id', async (req, res) => {
               desconto_manual = ?,
               valor_final = ?,
               numero_oficio_sei = ?,
-              status = ?,
               hora_inicio = ?,
               hora_fim = ?,
               hora_montagem = ?,
-              hora_desmontagem = ?
+              hora_desmontagem = ?,
               numero_processo = ?,
               numero_termo = ?,
               status = ?
@@ -420,21 +417,21 @@ router.put('/:id', async (req, res) => {
         nomeEvento,
         espacoUtilizado || null,
         areaM2 != null ? Number(areaM2) : null,
-        JSON.stringify(datasEvento),
+        JSON.stringify(datasEvento || []),
         dataVigenciaFinal,
         Number(totalDiarias || 0),
         Number(valorBruto || 0),
-        tipoDescontoAuto,
+        String(tipoDescontoAuto || 'Geral'),
         Number(descontoManualPercent || 0),
         Number(valorFinal || 0),
         numeroOficioSei || null,
-        numeroProcesso || null,
-        numeroTermo || null,
-        'Pendente',
         horaInicio || null,
         horaFim || null,
         horaMontagem || null,
         horaDesmontagem || null,
+        numeroProcesso || null,
+        numeroTermo || null,
+        'Pendente',
         id
       ],
       'update-evento/UPDATE-Eventos'
