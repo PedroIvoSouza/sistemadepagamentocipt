@@ -17,7 +17,7 @@ const {
   RECEITA_CODIGO_EVENTO_PF,
   RECEITA_CODIGO_EVENTO_PJ,
   DOC_ORIGEM_COD,            // opcional (se sua receita exigir documento de origem)
-  SEFAZ_TLS_INSECURE = 'false',
+  SEFAZ_TLS_INSECURE = 'true',
   SEFAZ_TIMEOUT_MS = '120000',  // 120s
   SEFAZ_RETRIES = '5',          // 1 tentativa + 5 retries
 } = process.env;
