@@ -54,7 +54,7 @@ function sanitizeForFilename(s) {
     .replace(/^_+|_+$/g, '');
 }
 
-// --------- MIGRA: tabela `documentos` (garante colunas) ---------
+// --------- MIGRA: tabela `documentos` (garante colunas/índice) ---------
 async function ensureDocumentosSchema() {
   await dbRun(`CREATE TABLE IF NOT EXISTS documentos (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -87,7 +87,7 @@ async function ensureDocumentosSchema() {
 
 // ---------- Template HTML ----------
 function compileHtmlTemplate(payload) {
-  const templatePath = path.resolve(process.cwd(), 'public', 'termo-permisao.html'); // nome do seu HTML
+  const templatePath = path.resolve(process.cwd(), 'public', 'termo-permisao.html'); // seu HTML
   if (!fs.existsSync(templatePath)) {
     throw new Error(`Template não encontrado: ${templatePath}`);
   }
@@ -102,52 +102,36 @@ function injectLetterheadAndMargins(html) {
   let bgBlock = '';
   if (fs.existsSync(imgPath)) {
     const b64 = fs.readFileSync(imgPath).toString('base64');
-    bgBlock = `
-      <div class="__bg-letterhead"><img src="data:image/png;base64,${b64}" alt=""></div>
-    `;
+    bgBlock = `<div class="__bg-letterhead"><img src="data:image/png;base64,${b64}" alt=""></div>`;
   } else {
     console.warn('[termoEvento] Timbrado não encontrado em:', imgPath);
   }
 
   const styles = `
     <style>
-      /* Sem margens do PDF: usamos padding para recriar as ABNT (~2,5cm) */
       :root { --m: 2.5cm; }
       @page { size: A4; margin: 0; }
       html, body { margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       .__bg-letterhead {
-        position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-        z-index: 0; pointer-events: none;
+        position: fixed; inset: 0; z-index: 0; pointer-events: none;
       }
-      .__bg-letterhead img {
-        width: 100%; height: 100%; object-fit: cover;
-      }
-      .__page-wrap {
-        position: relative; z-index: 1;
-        padding: var(--m);
-      }
+      .__bg-letterhead img { width: 100%; height: 100%; object-fit: cover; }
+      .__page-wrap { position: relative; z-index: 1; padding: var(--m); }
     </style>
   `;
 
-  // garante wrapper do conteúdo
   if (/<body[^>]*>/i.test(html)) {
     html = html.replace(/<body([^>]*)>/i, '<body$1><div class="__page-wrap">');
     html = html.replace(/<\/body>/i, `</div></body>`);
   } else {
     html = `<div class="__page-wrap">${html}</div>`;
   }
+  if (/<\/head>/i.test(html)) html = html.replace(/<\/head>/i, `${styles}</head>`);
+  else html = `${styles}${html}`;
 
-  // injeta CSS e o background antes de fechar o body
-  if (/<\/head>/i.test(html)) {
-    html = html.replace(/<\/head>/i, `${styles}</head>`);
-  } else {
-    html = `${styles}${html}`;
-  }
-  if (/<\/body>/i.test(html)) {
-    html = html.replace(/<\/body>/i, `${bgBlock}</body>`);
-  } else {
-    html = `${html}${bgBlock}`;
-  }
+  if (/<\/body>/i.test(html)) html = html.replace(/<\/body>/i, `${bgBlock}</body>`);
+  else html = `${html}${bgBlock}`;
+
   return html;
 }
 
@@ -155,16 +139,14 @@ function injectLetterheadAndMargins(html) {
 async function htmlToPdfBuffer(html) {
   const browser = await puppeteer.launch({ args: ['--no-sandbox'] });
   const page = await browser.newPage();
-
-  // injeta timbrado e margens por CSS (PDF sem header/footer do Chrome)
   const htmlFinal = injectLetterheadAndMargins(html);
   await page.setContent(htmlFinal, { waitUntil: 'networkidle0' });
 
   const pdf = await page.pdf({
     format: 'A4',
     printBackground: true,
-    displayHeaderFooter: false, // importante!
-    margin: { top: 0, right: 0, bottom: 0, left: 0 } // sem margens no PDF
+    displayHeaderFooter: false,
+    margin: { top: 0, right: 0, bottom: 0, left: 0 }
   });
 
   await browser.close();
@@ -190,7 +172,6 @@ async function buildPayloadFromEvento(eventoId) {
       ORDER BY de.numero_parcela ASC`, [eventoId]
   );
 
-  // Datas
   const rawDatas = String(ev.datas_evento || '').trim();
   let datasArr;
   try {
@@ -200,7 +181,6 @@ async function buildPayloadFromEvento(eventoId) {
   }
   const primeiraData = datasArr[0] || null;
 
-  // Defaults / .env
   const cidadeUfDefault = process.env.CIDADE_UF || 'Maceió/AL';
   const fundoNome = process.env.FUNDO_NOME || 'FUNDENTES';
   const imovelNome = process.env.IMOVEL_NOME || 'CENTRO DE INOVAÇÃO DO JARAGUÁ';
@@ -209,18 +189,16 @@ async function buildPayloadFromEvento(eventoId) {
   const sinal = parcelas[0]?.data_vencimento || null;
   const saldo = parcelas[1]?.data_vencimento || parcelas[0]?.data_vencimento || null;
 
-  // Permitente (.env)
-  const permitenteRazao = process.env.PERMITENTE_RAZAO || 'SECRETARIA DE ESTADO DA CIÊNCIA, DA TECNOLOGIA E DA INOVAÇÃO DE ALAGOAS - SECTI';
-  const permitenteCnpj = process.env.PERMITENTE_CNPJ || '04.007.216/0001-30';
-  const permitenteEnd = process.env.PERMITENTE_ENDERECO || 'R. BARÃO DE JARAGUÁ, Nº 590, JARAGUÁ, MACEIÓ - ALAGOAS - CEP: 57022-140';
-  const permitenteRepNm = process.env.PERMITENTE_REP_NOME || 'SÍLVIO ROMERO BULHÕES AZEVEDO';
-  const permitenteRepCg = process.env.PERMITENTE_REP_CARGO || 'SECRETÁRIO';
-  const permitenteRepCpf = process.env.PERMITENTE_REP_CPF || '053.549.204-93';
+  const permitenteRazao  = process.env.PERMITENTE_RAZAO     || 'SECRETARIA DE ESTADO DA CIÊNCIA, DA TECNOLOGIA E DA INOVAÇÃO DE ALAGOAS - SECTI';
+  const permitenteCnpj   = process.env.PERMITENTE_CNPJ      || '04.007.216/0001-30';
+  const permitenteEnd    = process.env.PERMITENTE_ENDERECO  || 'R. BARÃO DE JARAGUÁ, Nº 590, JARAGUÁ, MACEIÓ - ALAGOAS - CEP: 57022-140';
+  const permitenteRepNm  = process.env.PERMITENTE_REP_NOME  || 'SÍLVIO ROMERO BULHÕES AZEVEDO';
+  const permitenteRepCg  = process.env.PERMITENTE_REP_CARGO || 'SECRETÁRIO';
+  const permitenteRepCpf = process.env.PERMITENTE_REP_CPF   || '053.549.204-93';
 
-  // Órgão (cabeçalho)
-  const orgUF = process.env.ORG_UF || 'ESTADO DE ALAGOAS';
+  const orgUF  = process.env.ORG_UF         || 'ESTADO DE ALAGOAS';
   const orgSec = process.env.ORG_SECRETARIA || 'SECRETARIA DA CIÊNCIA, TECNOLOGIA E INOVAÇÃO';
-  const orgUni = process.env.ORG_UNIDADE || 'CENTRO DE INOVAÇÃO DO JARAGUÁ';
+  const orgUni = process.env.ORG_UNIDADE    || 'CENTRO DE INOVAÇÃO DO JARAGUÁ';
 
   const payloadTermo = {
     org_uf: orgUF,
@@ -279,7 +257,7 @@ async function buildPayloadFromEvento(eventoId) {
     testemunha2_cpf: ''
   };
 
-  // compat com placeholders simples do template curto
+  // compat simples
   const payloadCompat = {
     processo: ev.numero_processo || '',
     evento: ev.nome_evento || '',
@@ -292,7 +270,6 @@ async function buildPayloadFromEvento(eventoId) {
 // ---------- Nome do arquivo ----------
 function nomeArquivo(evRow, idDoc) {
   const razao = sanitizeForFilename(evRow?.nome_razao_social || 'Cliente');
-  // primeira data robusta
   const raw = String(evRow?.datas_evento || '').trim();
   let primeira = '';
   try {
@@ -304,30 +281,66 @@ function nomeArquivo(evRow, idDoc) {
   return `TermoPermissao_${termo}_${razao}_Data-${dataPart}_${idDoc}.pdf`;
 }
 
-// ---------- Persistência do PDF ----------
+/**
+ * Persiste/atualiza registro em 'documentos' para (evento_id, tipo) — evita UNIQUE constraint.
+ * - Se já existir: REUSA o id/token e só sobrescreve o PDF/URLs/estado.
+ * - Se não existir: cria um novo e então grava o PDF.
+ */
 async function salvarDocumentoRegistro(buffer, tipo, permissionarioId, eventoId, evRow) {
   await ensureDocumentosSchema();
 
+  // 1) Verifica se já existe documento desse tipo para o evento
+  const existente = await dbGet(
+    `SELECT id, token FROM documentos WHERE evento_id = ? AND tipo = ?`,
+    [eventoId || null, tipo]
+  );
+
+  let documentoId, token;
+
+  if (existente && existente.id) {
+    // Reusa id/token existentes
+    documentoId = existente.id;
+    token = existente.token || (Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2));
+
+    // Garante que existe created_at (para bases antigas)
+    await dbRun(
+      `UPDATE documentos
+          SET created_at = COALESCE(created_at, ?)
+        WHERE id = ?`,
+      [new Date().toISOString(), documentoId]
+    );
+  } else {
+    // 2) Cria um novo
+    token = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+    const createdAt = new Date().toISOString();
+    const ins = await dbRun(
+      `INSERT INTO documentos (tipo, token, permissionario_id, evento_id, status, created_at)
+       VALUES (?, ?, ?, ?, 'gerado', ?)`,
+      [tipo, token, permissionarioId || null, eventoId || null, createdAt]
+    );
+    documentoId = ins.lastID;
+  }
+
+  // 3) Caminho/arquivo (id estável => mesmo nome em reemissões)
   const dir = path.resolve(process.cwd(), 'public', 'documentos');
   fs.mkdirSync(dir, { recursive: true });
-
-  const token = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
-  const createdAt = new Date().toISOString();
-
-  const ins = await dbRun(
-    `INSERT INTO documentos (tipo, token, permissionario_id, evento_id, status, created_at)
-     VALUES (?, ?, ?, ?, 'gerado', ?)`,
-    [tipo, token, permissionarioId || null, eventoId || null, createdAt]
-  );
-  const documentoId = ins.lastID;
-
   const fileName = nomeArquivo(evRow, documentoId);
   const filePath = path.join(dir, fileName);
+
+  // 4) Grava o PDF (sobrescreve se já existir)
   fs.writeFileSync(filePath, buffer);
 
+  // 5) Atualiza URLs e limpa campos de assinatura (se houver)
   const publicUrl = `/documentos/${fileName}`;
   await dbRun(
-    `UPDATE documentos SET pdf_url = ?, pdf_public_url = ? WHERE id = ?`,
+    `UPDATE documentos
+        SET pdf_url = ?,
+            pdf_public_url = ?,
+            status = 'gerado',
+            signed_pdf_public_url = NULL,
+            signed_at = NULL,
+            signer = NULL
+      WHERE id = ?`,
     [filePath, publicUrl, documentoId]
   );
 
