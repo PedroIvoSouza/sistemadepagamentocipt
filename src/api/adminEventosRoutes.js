@@ -374,7 +374,8 @@ router.get('/:id/termo', async (req, res) => {
     const pdfBytes = await gerarTermoPermissao(ev, parcelas);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="termo_evento_${id}.pdf"`);
-    res.send(Buffer.from(pdfBytes));
+    res.setHeader('Content-Length', pdfBytes.length);
+    res.end(Buffer.from(pdfBytes));
   } catch (err) {
     console.error('[admin/eventos] termo erro:', err.message);
     res.status(500).json({ error: 'Falha ao gerar termo.' });
