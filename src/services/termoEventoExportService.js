@@ -13,6 +13,34 @@ const dbGet = (sql, params=[]) => new Promise((res, rej)=> db.get(sql, params, (
 const dbAll = (sql, params=[]) => new Promise((res, rej)=> db.all(sql, params, (e, rows)=> e?rej(e):res(rows)));
 const dbRun = (sql, params=[]) => new Promise((res, rej)=> db.run(sql, params, function(e){ e?rej(e):res(this); }));
 
+
+// --- helpers para o nome de arquivo (adicione junto com os outros utils) ---
+function safeFilePart(s) {
+  return String(s || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // sem acentos
+    .replace(/[\/\\]+/g, '-')                         // evita subpastas
+    .replace(/[^\w.\-]+/g, '_')                       // só [A-Za-z0-9_.-]
+    .replace(/_{2,}/g, '_')                           // compacta '__'
+    .replace(/^_+|_+$/g, '');                         // tira '_' das pontas
+}
+
+function primeiraDataISO(datas_evento) {
+  if (!datas_evento) return '';
+  let raw = String(datas_evento).trim();
+  // se vier como '["2025-09-15"]', pega o primeiro item
+  try {
+    const arr = JSON.parse(raw);
+    if (Array.isArray(arr) && arr.length) raw = String(arr[0]);
+  } catch {
+    // se não for JSON, segue o fluxo
+  }
+  // se vier '2025-09-15,2025-09-16', pega a primeira
+  raw = raw.split(',')[0].trim();
+  // remove aspas e colchetes residuais, por via das dúvidas
+  raw = raw.replace(/^\[?["']?|["']?\]?$/g, '');
+  return raw;
+}
+
 // ---------- utils ----------
 const onlyDigits = (v='') => String(v).replace(/\D/g,'');
 const fmtMoeda = (n) => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(n||0));
@@ -236,10 +264,11 @@ async function buildPayloadFromEvento(eventoId) {
 
 // --- nome do arquivo ---
 function nomeArquivo(ev, idDoc) {
-  const razao = (ev?.nome_razao_social || 'Cliente')
-    .normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^\w]+/g,'_');
-  const dataPrimeira = (String(ev?.datas_evento||'').split(',')[0]||'').trim();
-  return `TermoPermissao_${ev?.numero_termo || 's-n'}_${razao}_Data-${dataPrimeira || 's-d'}_${idDoc}.pdf`;
+  const razao        = safeFilePart(ev?.nome_razao_social || 'Cliente');
+  const termoSan     = safeFilePart(ev?.numero_termo || 's-n');      // "042/2025" -> "042-2025"
+  const dataPrimeira = safeFilePart(primeiraDataISO(ev?.datas_evento) || 's-d'); // '["2025-09-15"]' -> '2025-09-15'
+
+  return `TermoPermissao_${termoSan}_${razao}_Data-${dataPrimeira}_${idDoc}.pdf`;
 }
 
 // --- salva (com UPSERT de verdade p/ não estourar UNIQUE) ---
