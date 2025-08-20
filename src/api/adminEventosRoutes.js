@@ -58,8 +58,16 @@ router.post('/', async (req, res) => {
   console.log('[DEBUG] Recebido no backend /api/admin/eventos:', JSON.stringify(req.body, null, 2));
 
   const {
-    idCliente, nomeEvento, datasEvento, totalDiarias, valorBruto,
-    tipoDescontoAuto, descontoManualPercent, valorFinal, parcelas
+    idCliente,
+    nomeEvento,
+    numeroOficioSei,
+    datasEvento,
+    totalDiarias,
+    valorBruto,
+    tipoDescontoAuto,
+    descontoManualPercent,
+    valorFinal,
+    parcelas
   } = req.body;
 
   if (!idCliente || !nomeEvento || !Array.isArray(parcelas) || parcelas.length === 0) {
@@ -79,8 +87,8 @@ router.post('/', async (req, res) => {
     const eventoStmt = await dbRun(
       `INSERT INTO Eventos
          (id_cliente, nome_evento, datas_evento, total_diarias, valor_bruto,
-          tipo_desconto, desconto_manual, valor_final, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          tipo_desconto, desconto_manual, valor_final, numero_oficio_sei, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         idCliente,
         nomeEvento,
@@ -90,6 +98,7 @@ router.post('/', async (req, res) => {
         String(tipoDescontoAuto || 'Geral'),
         Number(descontoManualPercent || 0),
         Number(valorFinal || 0),
+        numeroOficioSei || null,
         'Pendente'
       ],
       'criar-evento/insert-Eventos'
@@ -194,6 +203,7 @@ router.get('/', async (req, res) => {
   try {
     const sql = `
       SELECT e.id, e.nome_evento, e.valor_final, e.status,
+             e.numero_oficio_sei,
              c.nome_razao_social AS nome_cliente
         FROM Eventos e
         JOIN Clientes_Eventos c ON e.id_cliente = c.id
@@ -319,6 +329,7 @@ router.put('/:id', async (req, res) => {
   const {
     idCliente,             // obrigatório
     nomeEvento,            // obrigatório
+    numeroOficioSei,
     datasEvento = [],      // array ISO YYYY-MM-DD
     totalDiarias = 0,
     valorBruto = 0,
@@ -353,6 +364,7 @@ router.put('/:id', async (req, res) => {
               tipo_desconto = ?,
               desconto_manual = ?,
               valor_final = ?,
+              numero_oficio_sei = ?,
               status = ?
         WHERE id = ?`,
       [
@@ -364,6 +376,7 @@ router.put('/:id', async (req, res) => {
         tipoDescontoAuto,
         Number(descontoManualPercent || 0),
         Number(valorFinal || 0),
+        numeroOficioSei || null,
         'Pendente',
         id
       ],

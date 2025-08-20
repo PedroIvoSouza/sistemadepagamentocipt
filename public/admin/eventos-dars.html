@@ -89,6 +89,7 @@
                   <tr>
                     <th>ID</th>
                     <th>Nome do Evento</th>
+                    <th>Nº Ofício SEI</th>
                     <th>Cliente</th>
                     <th class="text-end">Valor Final</th>
                     <th class="text-center">Status</th>
@@ -121,6 +122,10 @@
           <div class="mb-3">
             <label for="nome-evento" class="form-label">Nome do Evento *</label>
             <input type="text" class="form-control" id="nome-evento" required>
+          </div>
+          <div class="mb-3">
+            <label for="numero-oficio-sei" class="form-label">Número do Ofício SEI</label>
+            <input type="text" class="form-control" id="numero-oficio-sei">
           </div>
         </fieldset>
 
@@ -311,6 +316,7 @@ window.onload = () => {
   const tipoDescontoAutoDisplay = document.getElementById('tipo-desconto-auto');
   const descontoManualInput = document.getElementById('desconto-manual');
   const valorFinalDisplay = document.getElementById('valor-final');
+  const numeroOficioSeiInput = document.getElementById('numero-oficio-sei');
 
   const parcelasContainer = document.getElementById('parcelas-container');
   const addParcelaBtn = document.getElementById('add-parcela-btn');
@@ -565,6 +571,7 @@ async function carregarClientes(){
         tr.innerHTML = `
           <td>${id}</td>
           <td>${ev.nome_evento || ''}</td>
+          <td>${ev.numero_oficio_sei || ''}</td>
           <td>${ev.nome_cliente || ''}</td>
           <td class="text-end">${fmtBRL(vfNum)}</td>
           <td class="text-center"><span class="badge ${badge}">${status}</span></td>
@@ -588,7 +595,7 @@ async function carregarClientes(){
       });
     }catch(e){
       console.error(e);
-      eventosTableBody.innerHTML = '<tr><td colspan="7" class="text-center text-danger">Erro ao carregar eventos.</td></tr>';
+      eventosTableBody.innerHTML = '<tr><td colspan="8" class="text-center text-danger">Erro ao carregar eventos.</td></tr>';
     }
   }
 
@@ -597,7 +604,7 @@ async function carregarClientes(){
     trs.forEach(tr=>{
       const id = tr.children?.[0]?.textContent?.trim();
       if (String(id)===String(eventoId)){
-        const badge = tr.querySelector('td:nth-child(5) .badge');
+        const badge = tr.querySelector('td:nth-child(6) .badge');
         if (badge){
           badge.textContent = status;
           badge.className = 'badge ' + (status==='Pago' ? 'bg-success' : ['Emitido','Reemitido'].includes(status) ? 'bg-primary' : 'bg-warning text-dark');
@@ -634,7 +641,8 @@ async function carregarClientes(){
     const parcelas = Array.isArray(ev.parcelas) ? ev.parcelas
                   : Array.isArray(ev.DARs) ? ev.DARs
                   : [];
-    return { id_cliente, nome_evento, tipo_desconto_auto, desconto_manual_percent, datas_evento, parcelas };
+    const numero_oficio_sei = ev.numero_oficio_sei ?? ev.numeroOficioSei ?? '';
+    return { id_cliente, nome_evento, tipo_desconto_auto, desconto_manual_percent, datas_evento, parcelas, numero_oficio_sei };
   }
 
   async function editarEvento(eventoId){
@@ -654,6 +662,7 @@ async function carregarClientes(){
     // preencher
     clienteSelect.value = ev.id_cliente || '';
     document.getElementById('nome-evento').value = ev.nome_evento || '';
+    numeroOficioSeiInput.value = ev.numero_oficio_sei || '';
     if (Array.isArray(ev.datas_evento) && ev.datas_evento.length) fp.setDate(ev.datas_evento, true);
     tipoDescontoAutoDisplay.value = ev.tipo_desconto_auto || (clienteSelect.selectedOptions[0]?.dataset.tipo || '');
     descontoManualInput.value = ev.desconto_manual_percent || 0;
@@ -895,6 +904,7 @@ async function carregarClientes(){
     const body = {
       idCliente: clienteSelect.value,
       nomeEvento: document.getElementById('nome-evento').value,
+      numeroOficioSei: numeroOficioSeiInput.value.trim(),
       datasEvento: fp.selectedDates.map(d=> d.toISOString().split('T')[0]),
       tipoDescontoAuto: tipoDescontoAutoDisplay.value,
       descontoManualPercent: dm,

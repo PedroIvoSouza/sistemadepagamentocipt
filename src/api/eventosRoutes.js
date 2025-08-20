@@ -13,8 +13,9 @@ const db = new sqlite3.Database(dbPath);
 // Rota para LISTAR todos os eventos (visão geral para o admin)
 router.get('/', (req, res) => {
     const sql = `
-        SELECT 
+        SELECT
             e.id, e.nome_evento, e.status, e.valor_final, e.total_diarias,
+            e.numero_oficio_sei,
             c.nome_razao_social as nome_cliente
         FROM Eventos e
         JOIN Clientes_Eventos c ON e.id_cliente = c.id
@@ -35,6 +36,7 @@ router.post('/', async (req, res) => {
     const {
         idCliente,
         nomeEvento,
+        numeroOficioSei,
         datasEvento, // Espera um array de strings de data: ["2025-10-20", "2025-10-21"]
         tipoDescontoAuto, // 'Geral', 'Governo', 'Permissionario'
         descontoManualPercent,
@@ -71,8 +73,8 @@ router.post('/', async (req, res) => {
 
         try {
             // 1. Insere o evento principal na tabela Eventos
-            const eventoSql = `INSERT INTO Eventos (id_cliente, nome_evento, datas_evento, total_diarias, valor_bruto, tipo_desconto_auto, percentual_desconto_manual, valor_final) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
-            const eventoParams = [idCliente, nomeEvento, datasEvento.join(','), totalDiarias, valorBruto, tipoDescontoAuto, descontoManualPercent, valorFinal];
+            const eventoSql = `INSERT INTO Eventos (id_cliente, nome_evento, datas_evento, total_diarias, valor_bruto, tipo_desconto_auto, percentual_desconto_manual, valor_final, numero_oficio_sei) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+            const eventoParams = [idCliente, nomeEvento, datasEvento.join(','), totalDiarias, valorBruto, tipoDescontoAuto, descontoManualPercent, valorFinal, numeroOficioSei];
             
             const eventoId = await new Promise((resolve, reject) => {
                 db.run(eventoSql, eventoParams, function(err) {
