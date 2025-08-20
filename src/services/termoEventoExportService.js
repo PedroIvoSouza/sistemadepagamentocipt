@@ -12,61 +12,34 @@ const dbGet = (sql, params=[]) => new Promise((res, rej)=> db.get(sql, params, (
 const dbAll = (sql, params=[]) => new Promise((res, rej)=> db.all(sql, params, (e, rows)=> e?rej(e):res(rows)));
 const dbRun = (sql, params=[]) => new Promise((res, rej)=> db.run(sql, params, function(e){ e?rej(e):res(this); }));
 
-// ---------- utils de formatação ----------
+// ---------- utils ----------
+const onlyDigits = (v='') => String(v).replace(/\D/g,'');
 const fmtMoeda = (n) => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(n||0));
+const fmtArea = (n) => {
+  const num = Number(n || 0);
+  return num ? `${num.toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2})} m²` : '-';
+};
 const fmtDataExtenso = (iso) => {
   if (!iso) return '';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
   return d.toLocaleDateString('pt-BR', { day:'2-digit', month:'long', year:'numeric' });
 };
-
-// Monta string de período a partir de datas_evento (se vier como "YYYY-MM-DD,YYYY-MM-DD,...")
-function periodoEvento(datas_evento) {
+const mkPeriodo = (datas_evento) => {
   if (!datas_evento) return '';
   const arr = String(datas_evento).split(',').map(s=>s.trim()).filter(Boolean);
   if (!arr.length) return '';
   const ext = arr.map(fmtDataExtenso);
   return ext.length === 1 ? ext[0] : `${ext[0]} a ${ext[ext.length-1]}`;
-}
+};
 
-// Garante tabela 'documentos' com campos necessários
-async function ensureDocumentosTable() {
-  await dbRun(`CREATE TABLE IF NOT EXISTS documentos (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    tipo TEXT NOT NULL,                 -- 'termo_evento'
-    token TEXT UNIQUE,
-    permissionario_id INTEGER,
-    evento_id INTEGER,
-    pdf_url TEXT,                       -- caminho físico no servidor
-    pdf_public_url TEXT,                -- URL pública (ex: /documentos/xxx.pdf)
-    assinafy_id TEXT,
-    status TEXT DEFAULT 'gerado',       -- 'gerado' | 'enviado' | 'assinado'
-    signed_pdf_public_url TEXT,         -- URL pública do PDF assinado
-    signed_at TEXT,
-    signer TEXT,
-    created_at TEXT
-  )`);
-  await dbRun(`CREATE UNIQUE INDEX IF NOT EXISTS ux_documentos_evento_tipo
-               ON documentos(evento_id, tipo)`);
-}
-
-// Lê o template HTML público e ajusta assets para caminho absoluto file://
+// carrega HTML do template público
 function compileHtmlTemplate(payload) {
-  // OBS: seu arquivo está como "public/termo-permisao.html" (sem o segundo 's').
   const templatePath = path.resolve(process.cwd(), 'public', 'termo-permisao.html');
   if (!fs.existsSync(templatePath)) {
     throw new Error(`Template não encontrado: ${templatePath}`);
   }
-  let html = fs.readFileSync(templatePath, 'utf8');
-
-  // Corrige caminho do timbrado para caminho absoluto (Chromium no server)
-  const imgRel = /src=["']images\/papel-timbrado-secti\.png["']/i;
-  const imgAbs = path.resolve(process.cwd(), 'public', 'images', 'papel-timbrado-secti.png')
-    .replace(/\\/g, '/');
-  html = html.replace(imgRel, `src="file://${imgAbs}"`);
-
-  // Compila com Handlebars
+  const html = fs.readFileSync(templatePath, 'utf8');
   const tpl = Handlebars.compile(html, { noEscape: true });
   return tpl(payload);
 }
@@ -84,8 +57,9 @@ async function htmlToPdfBuffer(html) {
   return pdf;
 }
 
-// Monta payload a partir das tabelas Eventos + Clientes_Eventos + parcelas (DARs)
+// monta o payload completo para o template
 async function buildPayloadFromEvento(eventoId) {
+  // Evento + Cliente
   const ev = await dbGet(
     `SELECT e.*, c.nome_razao_social, c.tipo_pessoa, c.documento, c.email, c.telefone, c.endereco,
             c.nome_responsavel, c.documento_responsavel
@@ -95,6 +69,7 @@ async function buildPayloadFromEvento(eventoId) {
   );
   if (!ev) throw new Error('Evento não encontrado');
 
+  // Parcelas
   const parcelas = await dbAll(
     `SELECT de.numero_parcela, de.valor_parcela, de.data_vencimento, d.status
        FROM DARs_Eventos de
@@ -103,35 +78,96 @@ async function buildPayloadFromEvento(eventoId) {
       ORDER BY de.numero_parcela ASC`, [eventoId]
   );
 
-  const periodo = periodoEvento(ev.datas_evento);
-  const cronograma = parcelas.map(p =>
-    `${p.numero_parcela}ª parcela em ${fmtDataExtenso(p.data_vencimento)} - ${fmtMoeda(p.valor_parcela)}`
-  ).join('; ');
+  // Derivações
+  const periodo = mkPeriodo(ev.datas_evento);
+  const datasArr = String(ev.datas_evento||'').split(',').map(s=>s.trim()).filter(Boolean);
+  const primeiraData = datasArr[0] || null;
+  const cidadeUfDefault = process.env.CIDADE_UF || 'Maceió/AL';
+  const fundoNome = process.env.FUNDO_NOME || 'FUNDENTES';
+  const imovelNome = process.env.IMOVEL_NOME || 'CENTRO DE INOVAÇÃO DO JARAGUÁ';
+  const capDefault = process.env.CAPACIDADE_PADRAO ? Number(process.env.CAPACIDADE_PADRAO) : 313;
 
-  // Placeholders do seu HTML
-  const payloadBasico = {
+  const sinal = parcelas[0]?.data_vencimento || null;
+  const saldo = parcelas[1]?.data_vencimento || parcelas[0]?.data_vencimento || null;
+
+  // Permintente (da .env para não “engessar” no código)
+  const permitenteRazao = process.env.PERMITENTE_RAZAO || 'SECRETARIA DE ESTADO DA CIÊNCIA, DA TECNOLOGIA E DA INOVAÇÃO DE ALAGOAS - SECTI';
+  const permitenteCnpj  = process.env.PERMITENTE_CNPJ  || '04.007.216/0001-30';
+  const permitenteEnd   = process.env.PERMITENTE_ENDERECO || 'R. BARÃO DE JARAGUÁ, Nº 590, JARAGUÁ, MACEIÓ - ALAGOAS - CEP: 57022-140';
+  const permitenteRepNm = process.env.PERMITENTE_REP_NOME || 'SÍLVIO ROMERO BULHÕES AZEVEDO';
+  const permitenteRepCg = process.env.PERMITENTE_REP_CARGO || 'SECRETÁRIO';
+  const permitenteRepCpf= process.env.PERMITENTE_REP_CPF || '053.549.204-93';
+
+  // Órgão (cabeçalho)
+  const orgUF  = process.env.ORG_UF || 'ESTADO DE ALAGOAS';
+  const orgSec = process.env.ORG_SECRETARIA || 'SECRETARIA DA CIÊNCIA, TECNOLOGIA E INOVAÇÃO';
+  const orgUni = process.env.ORG_UNIDADE || 'CENTRO DE INOVAÇÃO DO JARAGUÁ';
+
+  // Placeholders NOVOS (seu template)
+  const payloadTermo = {
+    org_uf: orgUF,
+    org_secretaria: orgSec,
+    org_unidade: orgUni,
+
+    processo_numero: ev.numero_processo || '',
+    termo_numero: ev.numero_termo || '',
+
+    permitente_razao: permitenteRazao,
+    permitente_cnpj: permitenteCnpj,
+    permitente_endereco: permitenteEnd,
+    permitente_representante_nome: permitenteRepNm,
+    permitente_representante_cargo: permitenteRepCg,
+    permitente_representante_cpf: permitenteRepCpf,
+
+    permissionario_razao: ev.nome_razao_social || '',
+    permissionario_cnpj: onlyDigits(ev.documento || ''),
+    permissionario_endereco: ev.endereco || '',
+    permissionario_representante_nome: ev.nome_responsavel || '',
+    permissionario_representante_cpf: onlyDigits(ev.documento_responsavel || ''),
+
+    evento_titulo: ev.nome_evento || '',
+    local_espaco: ev.espaco_utilizado || 'AUDITÓRIO',
+    imovel_nome: imovelNome,
+
+    data_evento: fmtDataExtenso(primeiraData),
+    hora_inicio: ev.hora_inicio || '-',
+    hora_fim: ev.hora_fim || '-',
+    data_montagem: fmtDataExtenso(primeiraData),
+    data_desmontagem: fmtDataExtenso(primeiraData),
+
+    area_m2: ev.area_m2 || null,
+    area_m2_fmt: fmtArea(ev.area_m2),
+    capacidade_pessoas: capDefault,
+
+    numero_dias: ev.total_diarias || (datasArr.length || 1),
+    valor_total: ev.valor_final || 0,
+    valor_total_fmt: fmtMoeda(ev.valor_final || 0),
+
+    vigencia_fim_datahora: ev.data_vigencia_final ? `${new Date(ev.data_vigencia_final+'T12:00:00').toLocaleDateString('pt-BR')} às 12h` : '',
+
+    pagto_sinal_data: fmtDataExtenso(sinal),
+    pagto_saldo_data: fmtDataExtenso(saldo),
+
+    fundo_nome: fundoNome,
+
+    cidade_uf: cidadeUfDefault,
+    data_assinatura: fmtDataExtenso(new Date().toISOString()),
+
+    assinante_permitente_rotulo: 'PERMITENTE',
+    assinante_permissionaria_rotulo: 'PERMISSIONÁRIA',
+    testemunha1_cpf: '',
+    testemunha2_cpf: ''
+  };
+
+  // (Compat) placeholders antigos usados no seu html minimalista
+  const payloadCompat = {
     processo: ev.numero_processo || '',
     evento: ev.nome_evento || '',
-    periodo: periodo || fmtDataExtenso((String(ev.datas_evento||'').split(',')[0] || '').trim()),
+    periodo: periodo || fmtDataExtenso(primeiraData)
   };
 
-  // Campos extras para caso evolua o template
-  const payloadEstendido = {
-    numero_processo: ev.numero_processo || '',
-    numero_termo: ev.numero_termo || '',
-    permissionario_nome: ev.nome_razao_social || '',
-    permissionario_documento: ev.documento || '',
-    clausula1: `Área: ${ev.area_m2 || '-'} m², Evento: ${ev.nome_evento || '-'}, Período: ${periodo || '-'},
-                Horário: ${ev.hora_inicio || '-'}-${ev.hora_fim || '-'}, Ofício SEI: ${ev.numero_oficio_sei || '-'}`,
-    tabela_linha: `${ev.area_m2 || '-'};${ev.total_diarias || '-'};${fmtMoeda(ev.valor_final)}`,
-    pagamentos: cronograma,
-    vigencia_fim_datahora: fmtDataExtenso(ev.data_vigencia_final),
-    pagto_sinal_data: '',
-    pagto_saldo_data: '',
-    assinatura_data: fmtDataExtenso(new Date().toISOString()),
-  };
-
-  return { ...payloadEstendido, ...payloadBasico };
+  // Retorna ambos (o template usará o que existir)
+  return { ...payloadTermo, ...payloadCompat };
 }
 
 function nomeArquivo(ev, idDoc) {
@@ -142,13 +178,30 @@ function nomeArquivo(ev, idDoc) {
 }
 
 async function salvarDocumentoRegistro(buffer, tipo, permissionarioId, eventoId, evRow) {
-  await ensureDocumentosTable();
+  // tabela documentos (com colunas novas)
+  await dbRun(`CREATE TABLE IF NOT EXISTS documentos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tipo TEXT NOT NULL,
+    token TEXT UNIQUE,
+    permissionario_id INTEGER,
+    evento_id INTEGER,
+    pdf_url TEXT,
+    pdf_public_url TEXT,
+    assinafy_id TEXT,
+    status TEXT DEFAULT 'gerado',
+    signed_pdf_public_url TEXT,
+    signed_at TEXT,
+    signer TEXT,
+    created_at TEXT
+  )`);
+  await dbRun(`CREATE UNIQUE INDEX IF NOT EXISTS ux_documentos_evento_tipo
+               ON documentos(evento_id, tipo)`);
 
-  // diretório público para servir estático
+  // diretório público
   const dir = path.resolve(process.cwd(), 'public', 'documentos');
   fs.mkdirSync(dir, { recursive: true });
 
-  // cria entrada na tabela para obter id e token
+  // cria entrada para obter id
   const token = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
   const createdAt = new Date().toISOString();
   const ins = await dbRun(
@@ -158,7 +211,6 @@ async function salvarDocumentoRegistro(buffer, tipo, permissionarioId, eventoId,
   );
   const documentoId = ins.lastID;
 
-  // salva PDF e registra URLs
   const fileName = nomeArquivo(evRow, documentoId);
   const filePath = path.join(dir, fileName);
   fs.writeFileSync(filePath, buffer);
@@ -187,12 +239,12 @@ async function gerarTermoEventoEIndexar(eventoId) {
   const doc = await salvarDocumentoRegistro(
     pdfBuf,
     'termo_evento',
-    null,      // permissionario_id (não se aplica aqui)
+    null,
     eventoId,
     ev
   );
 
-  // página pública de assinatura que você já tem
+  // página pública para o cliente ler/assinar
   const urlTermoPublic = `/eventos/termo.html?id=${doc.documentoId}`;
 
   return { ...doc, pdf_public_url: doc.publicUrl, urlTermoPublic };
