@@ -36,6 +36,8 @@ router.post('/', async (req, res) => {
     const {
         idCliente,
         nomeEvento,
+        espacoUtilizado,
+        areaM2,
         datasEvento, // Espera um array de strings de data: ["2025-10-20", "2025-10-21"]
         tipoDescontoAuto, // 'Geral', 'Governo', 'Permissionario'
         descontoManualPercent,
@@ -79,9 +81,8 @@ router.post('/', async (req, res) => {
 
         try {
             // 1. Insere o evento principal na tabela Eventos
-            const eventoSql = `INSERT INTO Eventos (id_cliente, nome_evento, datas_evento, total_diarias, valor_bruto, tipo_desconto_auto, percentual_desconto_manual, valor_final, hora_inicio, hora_fim, hora_montagem, hora_desmontagem) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-            const eventoParams = [idCliente, nomeEvento, datasEvento.join(','), totalDiarias, valorBruto, tipoDescontoAuto, descontoManualPercent, valorFinal, horaInicio || null, horaFim || null, horaMontagem || null, horaDesmontagem || null];
-            
+            const eventoSql = `INSERT INTO Eventos (id_cliente, nome_evento, espaco_utilizado, area_m2, datas_evento, total_diarias, valor_bruto, tipo_desconto_auto, percentual_desconto_manual, valor_final) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+            const eventoParams = [idCliente, nomeEvento, espacoUtilizado || null, areaM2 || null, datasEvento.join(','), totalDiarias, valorBruto, tipoDescontoAuto, descontoManualPercent, valorFinal];
             const eventoId = await new Promise((resolve, reject) => {
                 db.run(eventoSql, eventoParams, function(err) {
                     if (err) reject(err);

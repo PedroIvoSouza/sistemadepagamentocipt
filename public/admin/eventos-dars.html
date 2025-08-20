@@ -122,6 +122,13 @@
             <label for="nome-evento" class="form-label">Nome do Evento *</label>
             <input type="text" class="form-control" id="nome-evento" required>
           </div>
+          <div class="mb-3">
+            <label for="espaco-utilizado" class="form-label">Espaço Utilizado</label>
+            <input type="text" class="form-control" id="espaco-utilizado">
+          </div>
+          <div class="mb-3">
+            <label for="area-m2" class="form-label">Área (m²)</label>
+            <input type="number" step="0.01" class="form-control" id="area-m2">
           <div class="row">
             <div class="col-md-6 mb-3">
               <label for="hora-inicio" class="form-label">Hora de Início</label>
@@ -335,6 +342,8 @@ window.onload = () => {
   const tipoDescontoAutoDisplay = document.getElementById('tipo-desconto-auto');
   const descontoManualInput = document.getElementById('desconto-manual');
   const valorFinalDisplay = document.getElementById('valor-final');
+  const espacoUtilizadoInput = document.getElementById('espaco-utilizado');
+  const areaM2Input = document.getElementById('area-m2');
 
   const parcelasContainer = document.getElementById('parcelas-container');
   const addParcelaBtn = document.getElementById('add-parcela-btn');
@@ -652,6 +661,8 @@ async function carregarClientes(){
     const nome_evento = ev.nome_evento ?? ev.nome ?? ev.titulo ?? '';
     const tipo_desconto_auto = ev.tipo_desconto_auto ?? ev.tipoDescontoAuto ?? ev.tipo_cliente ?? 'Geral';
     const desconto_manual_percent = ev.desconto_manual_percent ?? ev.descontoManualPercent ?? ev.desconto ?? 0;
+    const espaco_utilizado = ev.espaco_utilizado ?? ev.espacoUtilizado ?? '';
+    const area_m2 = ev.area_m2 ?? ev.areaM2 ?? null;
     const numero_processo = ev.numero_processo ?? ev.numeroProcesso ?? '';
     const numero_termo = ev.numero_termo ?? ev.numeroTermo ?? '';
     let datas_evento = ev.datas_evento ?? ev.datas ?? ev.datasEvento ?? [];
@@ -660,6 +671,7 @@ async function carregarClientes(){
     const parcelas = Array.isArray(ev.parcelas) ? ev.parcelas
                   : Array.isArray(ev.DARs) ? ev.DARs
                   : [];
+    return { id_cliente, nome_evento, tipo_desconto_auto, desconto_manual_percent, datas_evento, parcelas, espaco_utilizado, area_m2 };
     const hora_inicio = ev.hora_inicio ?? ev.horaInicio ?? null;
     const hora_fim = ev.hora_fim ?? ev.horaFim ?? null;
     const hora_montagem = ev.hora_montagem ?? ev.horaMontagem ?? null;
@@ -684,6 +696,8 @@ async function carregarClientes(){
     // preencher
     clienteSelect.value = ev.id_cliente || '';
     document.getElementById('nome-evento').value = ev.nome_evento || '';
+    espacoUtilizadoInput.value = ev.espaco_utilizado || '';
+    areaM2Input.value = ev.area_m2 != null ? ev.area_m2 : '';
     horaInicioInput.value = ev.hora_inicio || '';
     horaFimInput.value = ev.hora_fim || '';
     horaMontagemInput.value = ev.hora_montagem || '';
@@ -937,6 +951,8 @@ async function carregarClientes(){
       totalDiarias: n,
       valorBruto: vb,
       valorFinal: vf,
+      espacoUtilizado: espacoUtilizadoInput.value,
+      areaM2: parseFloat(areaM2Input.value) || null,
       horaInicio: horaInicioInput.value || null,
       horaFim: horaFimInput.value || null,
       horaMontagem: horaMontagemInput.value || null,
