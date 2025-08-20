@@ -60,7 +60,8 @@ router.post('/', async (req, res) => {
   const {
     idCliente, nomeEvento, datasEvento, totalDiarias, valorBruto,
     tipoDescontoAuto, descontoManualPercent, valorFinal, parcelas,
-    horaInicio, horaFim, horaMontagem, horaDesmontagem
+    horaInicio, horaFim, horaMontagem, horaDesmontagem,
+    numeroProcesso, numeroTermo
   } = req.body;
 
   if (!idCliente || !nomeEvento || !Array.isArray(parcelas) || parcelas.length === 0) {
@@ -83,6 +84,8 @@ router.post('/', async (req, res) => {
           tipo_desconto, desconto_manual, valor_final, status,
           hora_inicio, hora_fim, hora_montagem, hora_desmontagem)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          tipo_desconto, desconto_manual, valor_final, numero_processo, numero_termo, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         idCliente,
         nomeEvento,
@@ -97,6 +100,9 @@ router.post('/', async (req, res) => {
         horaFim || null,
         horaMontagem || null,
         horaDesmontagem || null
+        numeroProcesso || null,
+        numeroTermo || null,
+        'Pendente'
       ],
       'criar-evento/insert-Eventos'
     );
@@ -297,6 +303,8 @@ router.get('/:id', async (req, res) => {
         tipo_desconto_auto: ev.tipo_desconto,
         desconto_manual_percent: ev.desconto_manual,
         valor_final: ev.valor_final,
+        numero_processo: ev.numero_processo,
+        numero_termo: ev.numero_termo,
         status: ev.status,
         nome_cliente: ev.nome_cliente,
         tipo_cliente: ev.tipo_cliente,
@@ -340,6 +348,8 @@ router.put('/:id', async (req, res) => {
     horaFim,
     horaMontagem,
     horaDesmontagem
+    numeroProcesso,
+    numeroTermo
   } = req.body || {};
 
   if (!idCliente || !nomeEvento || !Array.isArray(parcelas) || parcelas.length === 0) {
@@ -372,6 +382,9 @@ router.put('/:id', async (req, res) => {
               hora_fim = ?,
               hora_montagem = ?,
               hora_desmontagem = ?
+              numero_processo = ?,
+              numero_termo = ?,
+              status = ?
         WHERE id = ?`,
       [
         idCliente,
@@ -382,6 +395,8 @@ router.put('/:id', async (req, res) => {
         tipoDescontoAuto,
         Number(descontoManualPercent || 0),
         Number(valorFinal || 0),
+        numeroProcesso || null,
+        numeroTermo || null,
         'Pendente',
         horaInicio || null,
         horaFim || null,

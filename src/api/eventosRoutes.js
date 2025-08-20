@@ -44,6 +44,9 @@ router.post('/', async (req, res) => {
         horaFim,
         horaMontagem,
         horaDesmontagem
+
+        numeroProcesso,
+        numeroTermo
     } = req.body;
 
     // --- Validações Iniciais ---
