@@ -10,10 +10,25 @@ function getApiKey() {
   return key;
 }
 
-async function uploadPdf(pdfBuffer, filename = 'documento.pdf') {
+async function uploadPdf(pdfBuffer, filename = 'documento.pdf', config = {}) {
   const apiKey = getApiKey();
   const form = new FormData();
   form.append('file', pdfBuffer, { filename, contentType: 'application/pdf' });
+
+  const {
+    callbackUrl = process.env.ASSINAFY_CALLBACK_URL,
+    ...flags
+  } = config || {};
+
+  if (callbackUrl) {
+    form.append('callbackUrl', callbackUrl);
+  }
+
+  Object.entries(flags).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) {
+      form.append(key, typeof value === 'boolean' ? String(value) : value);
+    }
+  });
 
   const resp = await axios.post(`${BASE_URL}/documents`, form, {
     headers: {
