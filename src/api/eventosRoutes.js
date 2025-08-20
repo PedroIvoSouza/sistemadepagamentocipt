@@ -22,6 +22,12 @@ router.get('/', (req, res) => {
             e.total_diarias,
             e.data_vigencia_final,
             e.numero_oficio_sei,
+            e.numero_processo,
+            e.numero_termo,
+            e.hora_inicio,
+            e.hora_fim,
+            e.hora_montagem,
+            e.hora_desmontagem,
             c.nome_razao_social AS nome_cliente
         FROM Eventos e
         JOIN Clientes_Eventos c ON e.id_cliente = c.id
@@ -90,8 +96,27 @@ router.post('/', async (req, res) => {
         try {
             // 1. Insere o evento principal na tabela Eventos
 
-            const eventoSql = `INSERT INTO Eventos (id_cliente, nome_evento, espaco_utilizado, area_m2, datas_evento, data_vigencia_final, total_diarias, valor_bruto, tipo_desconto_auto, percentual_desconto_manual, valor_final, numero_oficio_sei) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-            const eventoParams = [idCliente, nomeEvento, espacoUtilizado || null, areaM2 || null, datasEvento.join(','), dataVigenciaFinal, totalDiarias, valorBruto, tipoDescontoAuto, descontoManualPercent, valorFinal, numeroOficioSei];
+            const eventoSql = `INSERT INTO Eventos (id_cliente, nome_evento, espaco_utilizado, area_m2, datas_evento, data_vigencia_final, total_diarias, valor_bruto, tipo_desconto, desconto_manual, valor_final, numero_oficio_sei, hora_inicio, hora_fim, hora_montagem, hora_desmontagem, numero_processo, numero_termo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+            const eventoParams = [
+                idCliente,
+                nomeEvento,
+                espacoUtilizado || null,
+                areaM2 || null,
+                datasEvento.join(','),
+                dataVigenciaFinal,
+                totalDiarias,
+                valorBruto,
+                tipoDescontoAuto,
+                descontoManualPercent,
+                valorFinal,
+                numeroOficioSei,
+                horaInicio || null,
+                horaFim || null,
+                horaMontagem || null,
+                horaDesmontagem || null,
+                numeroProcesso || null,
+                numeroTermo || null
+            ];
             const eventoId = await new Promise((resolve, reject) => {
                 db.run(eventoSql, eventoParams, function(err) {
                     if (err) reject(err);

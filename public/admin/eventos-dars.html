@@ -153,6 +153,14 @@
               <input type="time" class="form-control" id="hora-desmontagem">
             </div>
           </div>
+          <div class="mb-3">
+            <label for="numero-processo" class="form-label">Número do Processo</label>
+            <input type="text" class="form-control" id="numero-processo">
+          </div>
+          <div class="mb-3">
+            <label for="numero-termo" class="form-label">Número do Termo</label>
+            <input type="text" class="form-control" id="numero-termo">
+          </div>
         </fieldset>
 
         <fieldset>
@@ -679,13 +687,27 @@ async function carregarClientes(){
                   : Array.isArray(ev.DARs) ? ev.DARs
                   : [];
     const numero_oficio_sei = ev.numero_oficio_sei ?? ev.numeroOficioSei ?? '';
-  
-    return { id_cliente, nome_evento, tipo_desconto_auto, desconto_manual_percent, datas_evento, parcelas, espaco_utilizado, area_m2, numero_oficio_sei};
     const hora_inicio = ev.hora_inicio ?? ev.horaInicio ?? null;
     const hora_fim = ev.hora_fim ?? ev.horaFim ?? null;
     const hora_montagem = ev.hora_montagem ?? ev.horaMontagem ?? null;
     const hora_desmontagem = ev.hora_desmontagem ?? ev.horaDesmontagem ?? null;
-    return { id_cliente, nome_evento, tipo_desconto_auto, desconto_manual_percent, datas_evento, parcelas, hora_inicio, hora_fim, hora_montagem, hora_desmontagem };
+    return {
+      id_cliente,
+      nome_evento,
+      tipo_desconto_auto,
+      desconto_manual_percent,
+      datas_evento,
+      parcelas,
+      espaco_utilizado,
+      area_m2,
+      numero_oficio_sei,
+      hora_inicio,
+      hora_fim,
+      hora_montagem,
+      hora_desmontagem,
+      numero_processo,
+      numero_termo
+    };
   }
 
   async function editarEvento(eventoId){
@@ -968,11 +990,9 @@ async function carregarClientes(){
       horaFim: horaFimInput.value || null,
       horaMontagem: horaMontagemInput.value || null,
       horaDesmontagem: horaDesmontagemInput.value || null,
-      parcelas
-      parcelas,
       numeroProcesso: document.getElementById('numero-processo').value,
-      numeroTermo: document.getElementById('numero-termo').value
-       master
+      numeroTermo: document.getElementById('numero-termo').value,
+      parcelas
     };
 
     const btn = form.querySelector('button[type="submit"]');
