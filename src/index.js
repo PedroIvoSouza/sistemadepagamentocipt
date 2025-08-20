@@ -23,6 +23,7 @@ const adminDarsRoutes             = require('./api/adminDarsRoutes');
 const adminOficiosRoutes          = require('./api/adminOficiosRoutes');
 const permissionariosRoutes       = require('./api/permissionariosRoutes');
 const botRoutes                   = require('./api/botRoutes');
+const termoEventosRoutes          = require('./src/api/termoEventosRoutes');
 
 
 
@@ -93,6 +94,8 @@ app.use('/api/eventos',           eventosRoutes);
 app.use('/api/documentos',       documentosRoutes);
 
 app.use('/api/bot', botRoutes);
+
+app.use('/api/termo-eventos', termoEventosRoutes);
 
 
 // Catch-all para servir a página de login do admin quando uma rota /admin/... não for encontrada
