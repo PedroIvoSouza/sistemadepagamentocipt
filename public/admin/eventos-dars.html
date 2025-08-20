@@ -122,6 +122,14 @@
             <label for="nome-evento" class="form-label">Nome do Evento *</label>
             <input type="text" class="form-control" id="nome-evento" required>
           </div>
+          <div class="mb-3">
+            <label for="espaco-utilizado" class="form-label">Espaço Utilizado</label>
+            <input type="text" class="form-control" id="espaco-utilizado">
+          </div>
+          <div class="mb-3">
+            <label for="area-m2" class="form-label">Área (m²)</label>
+            <input type="number" step="0.01" class="form-control" id="area-m2">
+          </div>
         </fieldset>
 
         <fieldset>
@@ -311,6 +319,8 @@ window.onload = () => {
   const tipoDescontoAutoDisplay = document.getElementById('tipo-desconto-auto');
   const descontoManualInput = document.getElementById('desconto-manual');
   const valorFinalDisplay = document.getElementById('valor-final');
+  const espacoUtilizadoInput = document.getElementById('espaco-utilizado');
+  const areaM2Input = document.getElementById('area-m2');
 
   const parcelasContainer = document.getElementById('parcelas-container');
   const addParcelaBtn = document.getElementById('add-parcela-btn');
@@ -628,13 +638,15 @@ async function carregarClientes(){
     const nome_evento = ev.nome_evento ?? ev.nome ?? ev.titulo ?? '';
     const tipo_desconto_auto = ev.tipo_desconto_auto ?? ev.tipoDescontoAuto ?? ev.tipo_cliente ?? 'Geral';
     const desconto_manual_percent = ev.desconto_manual_percent ?? ev.descontoManualPercent ?? ev.desconto ?? 0;
+    const espaco_utilizado = ev.espaco_utilizado ?? ev.espacoUtilizado ?? '';
+    const area_m2 = ev.area_m2 ?? ev.areaM2 ?? null;
     let datas_evento = ev.datas_evento ?? ev.datas ?? ev.datasEvento ?? [];
     if (typeof datas_evento === 'string') datas_evento = datas_evento.split(',').map(s=>s.trim()).filter(Boolean);
     if (!Array.isArray(datas_evento)) datas_evento = [];
     const parcelas = Array.isArray(ev.parcelas) ? ev.parcelas
                   : Array.isArray(ev.DARs) ? ev.DARs
                   : [];
-    return { id_cliente, nome_evento, tipo_desconto_auto, desconto_manual_percent, datas_evento, parcelas };
+    return { id_cliente, nome_evento, tipo_desconto_auto, desconto_manual_percent, datas_evento, parcelas, espaco_utilizado, area_m2 };
   }
 
   async function editarEvento(eventoId){
@@ -654,6 +666,8 @@ async function carregarClientes(){
     // preencher
     clienteSelect.value = ev.id_cliente || '';
     document.getElementById('nome-evento').value = ev.nome_evento || '';
+    espacoUtilizadoInput.value = ev.espaco_utilizado || '';
+    areaM2Input.value = ev.area_m2 != null ? ev.area_m2 : '';
     if (Array.isArray(ev.datas_evento) && ev.datas_evento.length) fp.setDate(ev.datas_evento, true);
     tipoDescontoAutoDisplay.value = ev.tipo_desconto_auto || (clienteSelect.selectedOptions[0]?.dataset.tipo || '');
     descontoManualInput.value = ev.desconto_manual_percent || 0;
@@ -901,6 +915,8 @@ async function carregarClientes(){
       totalDiarias: n,
       valorBruto: vb,
       valorFinal: vf,
+      espacoUtilizado: espacoUtilizadoInput.value,
+      areaM2: parseFloat(areaM2Input.value) || null,
       parcelas
     };
 

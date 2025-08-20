@@ -59,7 +59,8 @@ router.post('/', async (req, res) => {
 
   const {
     idCliente, nomeEvento, datasEvento, totalDiarias, valorBruto,
-    tipoDescontoAuto, descontoManualPercent, valorFinal, parcelas
+    tipoDescontoAuto, descontoManualPercent, valorFinal, parcelas,
+    espacoUtilizado, areaM2
   } = req.body;
 
   if (!idCliente || !nomeEvento || !Array.isArray(parcelas) || parcelas.length === 0) {
@@ -78,12 +79,14 @@ router.post('/', async (req, res) => {
     // FIX: remover "INSERT INTO Eventos (...)" (placeholders inválidos) e listar colunas reais
     const eventoStmt = await dbRun(
       `INSERT INTO Eventos
-         (id_cliente, nome_evento, datas_evento, total_diarias, valor_bruto,
+         (id_cliente, nome_evento, espaco_utilizado, area_m2, datas_evento, total_diarias, valor_bruto,
           tipo_desconto, desconto_manual, valor_final, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         idCliente,
         nomeEvento,
+        espacoUtilizado || null,
+        areaM2 != null ? Number(areaM2) : null,
         JSON.stringify(datasEvento || []),
         Number(totalDiarias || 0),
         Number(valorBruto || 0),
@@ -285,6 +288,8 @@ router.get('/:id', async (req, res) => {
         id: ev.id,
         id_cliente: ev.id_cliente,
         nome_evento: ev.nome_evento,
+        espaco_utilizado: ev.espaco_utilizado,
+        area_m2: ev.area_m2,
         datas_evento: datas,
         total_diarias: ev.total_diarias,
         valor_bruto: ev.valor_bruto,
@@ -319,6 +324,8 @@ router.put('/:id', async (req, res) => {
   const {
     idCliente,             // obrigatório
     nomeEvento,            // obrigatório
+    espacoUtilizado = null,
+    areaM2 = null,
     datasEvento = [],      // array ISO YYYY-MM-DD
     totalDiarias = 0,
     valorBruto = 0,
@@ -347,6 +354,8 @@ router.put('/:id', async (req, res) => {
       `UPDATE Eventos
           SET id_cliente = ?,
               nome_evento = ?,
+              espaco_utilizado = ?,
+              area_m2 = ?,
               datas_evento = ?,
               total_diarias = ?,
               valor_bruto = ?,
@@ -358,6 +367,8 @@ router.put('/:id', async (req, res) => {
       [
         idCliente,
         nomeEvento,
+        espacoUtilizado || null,
+        areaM2 != null ? Number(areaM2) : null,
         JSON.stringify(datasEvento),
         Number(totalDiarias || 0),
         Number(valorBruto || 0),
