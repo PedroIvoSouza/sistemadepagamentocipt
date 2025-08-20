@@ -899,7 +899,19 @@ async function carregarClientes(){
         abrirModalDARs(eventoId, eventoNome);
       }
       if (btnTermo){
-        const eventoId = btnTermo.dataset.eventoId;
+  const eventoId = btnTermo.dataset.eventoId;
+
+  // evita múltiplos cliques
+        if (btnTermo.dataset.loading === '1') return;
+        const original = btnTermo.innerHTML;
+        btnTermo.dataset.loading = '1';
+        btnTermo.disabled = true;
+        btnTermo.setAttribute('aria-busy', 'true');
+        btnTermo.innerHTML = `
+          <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+          Gerando...
+        `;
+      
         try{
           const r = await fetch(`/api/admin/eventos/${eventoId}/termo`, { headers: AUTH_HEADERS });
           if(!r.ok) throw new Error('Falha ao gerar termo');
@@ -914,6 +926,12 @@ async function carregarClientes(){
           URL.revokeObjectURL(url);
         }catch(err){
           alert(`Erro ao gerar termo: ${err.message}`);
+        }finally{
+          // restaura o botão
+          btnTermo.disabled = false;
+          btnTermo.dataset.loading = '0';
+          btnTermo.removeAttribute('aria-busy');
+          btnTermo.innerHTML = original;
         }
       }
       if (btnApagar){
