@@ -63,6 +63,7 @@ async function ensureColumn(table, column, type) {
 
 (async () => {
   await ensureColumn('dars', 'status', 'TEXT');
+  await ensureColumn('dars', 'codigo_barras', 'TEXT');
   await ensureColumn('dars', 'numero_documento', 'TEXT');
   await ensureColumn('dars', 'linha_digitavel', 'TEXT');
   await ensureColumn('dars', 'pdf_url', 'TEXT');
@@ -426,10 +427,21 @@ router.get('/dars/:darId', botAuthMiddleware, async (req, res) => {
       return res.status(403).json({ error: 'Este telefone não está autorizado a acessar este DAR.' });
     }
 
-    const { linha_digitavel, valor, data_vencimento, mes_referencia, ano_referencia, codigo_barras } = ctx.dar;
+    const {
+      linha_digitavel,
+      valor,
+      data_vencimento,
+      mes_referencia,
+      ano_referencia,
+      codigo_barras,
+      numero_documento
+    } = ctx.dar;
     let ld = linha_digitavel;
-    if (!ld && codigo_barras) {
-      ld = codigoBarrasParaLinhaDigitavel(codigo_barras);
+    if (!ld) {
+      const cb = codigo_barras || numero_documento;
+      if (cb) {
+        ld = codigoBarrasParaLinhaDigitavel(cb);
+      }
     }
     const competencia = `${String(mes_referencia).padStart(2, '0')}/${ano_referencia}`;
 
@@ -585,10 +597,11 @@ router.post('/dars/:darId/emit', botAuthMiddleware, async (req, res) => {
       `UPDATE dars
          SET numero_documento = ?,
              pdf_url = ?,
+             codigo_barras = COALESCE(?, codigo_barras),
              linha_digitavel = COALESCE(?, linha_digitavel),
              status = 'Emitido'
        WHERE id = ?`,
-      [sefazResp.numeroGuia, pdfOut, linhaDigitavel, darId]
+      [sefazResp.numeroGuia, pdfOut, sefazResp.codigoBarras, linhaDigitavel, darId]
     );
 
     return res.json({
@@ -692,10 +705,11 @@ router.post('/dars/:darId/reemit', botAuthMiddleware, async (req, res) => {
       `UPDATE dars
          SET numero_documento = ?,
              pdf_url = ?,
+             codigo_barras = COALESCE(?, codigo_barras),
              linha_digitavel = COALESCE(?, linha_digitavel),
              status = 'Reemitido'
        WHERE id = ?`,
-      [sefazResp.numeroGuia, pdfOut, linhaDigitavel, darId]
+      [sefazResp.numeroGuia, pdfOut, sefazResp.codigoBarras, linhaDigitavel, darId]
     );
 
     return res.json({
