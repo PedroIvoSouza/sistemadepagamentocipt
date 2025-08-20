@@ -59,7 +59,8 @@ router.post('/', async (req, res) => {
 
   const {
     idCliente, nomeEvento, datasEvento, totalDiarias, valorBruto,
-    tipoDescontoAuto, descontoManualPercent, valorFinal, parcelas
+    tipoDescontoAuto, descontoManualPercent, valorFinal, parcelas,
+    numeroProcesso, numeroTermo
   } = req.body;
 
   if (!idCliente || !nomeEvento || !Array.isArray(parcelas) || parcelas.length === 0) {
@@ -79,8 +80,8 @@ router.post('/', async (req, res) => {
     const eventoStmt = await dbRun(
       `INSERT INTO Eventos
          (id_cliente, nome_evento, datas_evento, total_diarias, valor_bruto,
-          tipo_desconto, desconto_manual, valor_final, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          tipo_desconto, desconto_manual, valor_final, numero_processo, numero_termo, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         idCliente,
         nomeEvento,
@@ -90,6 +91,8 @@ router.post('/', async (req, res) => {
         String(tipoDescontoAuto || 'Geral'),
         Number(descontoManualPercent || 0),
         Number(valorFinal || 0),
+        numeroProcesso || null,
+        numeroTermo || null,
         'Pendente'
       ],
       'criar-evento/insert-Eventos'
@@ -291,6 +294,8 @@ router.get('/:id', async (req, res) => {
         tipo_desconto_auto: ev.tipo_desconto,
         desconto_manual_percent: ev.desconto_manual,
         valor_final: ev.valor_final,
+        numero_processo: ev.numero_processo,
+        numero_termo: ev.numero_termo,
         status: ev.status,
         nome_cliente: ev.nome_cliente,
         tipo_cliente: ev.tipo_cliente
@@ -325,7 +330,9 @@ router.put('/:id', async (req, res) => {
     tipoDescontoAuto = null,
     descontoManualPercent = 0,
     valorFinal = 0,
-    parcelas = []          // [{ valor, vencimento(YYYY-MM-DD) }, ...]
+    parcelas = [],         // [{ valor, vencimento(YYYY-MM-DD) }, ...]
+    numeroProcesso,
+    numeroTermo
   } = req.body || {};
 
   if (!idCliente || !nomeEvento || !Array.isArray(parcelas) || parcelas.length === 0) {
@@ -353,6 +360,8 @@ router.put('/:id', async (req, res) => {
               tipo_desconto = ?,
               desconto_manual = ?,
               valor_final = ?,
+              numero_processo = ?,
+              numero_termo = ?,
               status = ?
         WHERE id = ?`,
       [
@@ -364,6 +373,8 @@ router.put('/:id', async (req, res) => {
         tipoDescontoAuto,
         Number(descontoManualPercent || 0),
         Number(valorFinal || 0),
+        numeroProcesso || null,
+        numeroTermo || null,
         'Pendente',
         id
       ],
