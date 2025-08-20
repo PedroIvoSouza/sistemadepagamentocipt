@@ -62,11 +62,12 @@ router.post('/:id/sign-assinafy', async (req, res) => {
     }
     if (!pdfBuffer) return res.status(404).json({ error: 'PDF não encontrado.' });
 
-    const resp = await assinafyService.uploadPdf(pdfBuffer, `documento_${id}.pdf`);
+    const options = req.body || {};
+    const resp = await assinafyService.uploadPdf(pdfBuffer, `documento_${id}.pdf`, options);
     if (resp?.id) {
       await dbRun('UPDATE documentos SET assinafy_id = ? WHERE id = ?', [resp.id, id]);
     }
-    res.json({ url: resp?.url || resp?.signUrl || resp?.redirectUrl || null, assinafyId: resp?.id });
+    res.json({ url: resp?.embedUrl || resp?.url || resp?.signUrl || resp?.redirectUrl || null, assinafyId: resp?.id });
   } catch (err) {
     console.error('[documentos] sign-assinafy erro:', err);
     res.status(500).json({ error: 'Falha ao enviar para assinatura.' });
