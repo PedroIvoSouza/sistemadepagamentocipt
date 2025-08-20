@@ -14,6 +14,8 @@ const {
   COD_IBGE_MUNICIPIO,
   RECEITA_CODIGO_PERMISSIONARIO,
   RECEITA_CODIGO_EVENTO,
+  RECEITA_CODIGO_EVENTO_PF,
+  RECEITA_CODIGO_EVENTO_PJ,
   DOC_ORIGEM_COD,            // opcional (se sua receita exigir documento de origem)
   SEFAZ_TLS_INSECURE = 'false',
   SEFAZ_TIMEOUT_MS = '120000',  // 120s
@@ -220,7 +222,7 @@ function buildSefazPayloadPermissionario({ perm, darLike, receitaCodigo = RECEIT
  *   cliente: { cnpj, nome_razao_social }
  *   parcela: { valor, vencimento, competenciaMes, competenciaAno, id? }
  */
-function buildSefazPayloadEvento({ cliente, parcela, receitaCodigo = RECEITA_CODIGO_EVENTO }) {
+function buildSefazPayloadEvento({ cliente, parcela, receitaCodigo }) {
   const doc = onlyDigits(cliente?.cnpj || cliente?.documento || '');
   const nome = cliente?.nome_razao_social || cliente?.nome || 'Contribuinte';
   const valor = Number(parcela?.valor || parcela?.valorPrincipal || 0);
@@ -228,15 +230,32 @@ function buildSefazPayloadEvento({ cliente, parcela, receitaCodigo = RECEITA_COD
   const mes = Number(parcela?.competenciaMes || parcela?.mes || 0);
   const ano = Number(parcela?.competenciaAno || parcela?.ano || 0);
 
+  // Escolha automática da receita por tipo de inscrição:
+  let receitaPorTipo = receitaCodigo; // permite override explícito
+  if (!receitaPorTipo) {
+    if (doc.length === 11) {
+      receitaPorTipo = RECEITA_CODIGO_EVENTO_PF || RECEITA_CODIGO_EVENTO;
+    } else if (doc.length === 14) {
+      receitaPorTipo = RECEITA_CODIGO_EVENTO_PJ || RECEITA_CODIGO_EVENTO || RECEITA_CODIGO_PERMISSIONARIO;
+    }
+  }
+
+  if (!receitaPorTipo) {
+    throw new Error(
+      `Código de receita de evento não configurado para o tipo de inscrição (${doc.length===11?'CPF':'CNPJ'}). ` +
+      `Defina RECEITA_CODIGO_EVENTO_${doc.length===11?'PF':'PJ'} no .env.`
+    );
+  }
+
   const docOrigem = DOC_ORIGEM_COD
     ? { codigo: Number(DOC_ORIGEM_COD), numero: String(parcela?.id || parcela?.referencia || '') || String(Date.now()) }
     : null;
 
   return buildSefazPayload({
-    documento: doc,               // <<<<<< trocar cnpj por documento
+    documento: doc,
     nome,
     codIbgeMunicipio: COD_IBGE_MUNICIPIO,
-    receitaCodigo,
+    receitaCodigo: receitaPorTipo,      // << usa a receita compatível
     competenciaMes: mes,
     competenciaAno: ano,
     valorPrincipal: valor,
@@ -246,6 +265,7 @@ function buildSefazPayloadEvento({ cliente, parcela, receitaCodigo = RECEITA_COD
     docOrigem,
   });
 }
+
 
 // ==========================
 // Emissão de Guia
