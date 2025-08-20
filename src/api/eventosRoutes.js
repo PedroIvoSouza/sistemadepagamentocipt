@@ -14,11 +14,15 @@ const onlyDigits = (v = '') => String(v).replace(/\D/g, '');
 // Rota para LISTAR todos os eventos (visão geral para o admin)
 router.get('/', (req, res) => {
     const sql = `
-        SELECT 
-            e.id, e.nome_evento, e.status, e.valor_final, e.total_diarias, 
-            e.id, e.nome_evento, e.status, e.valor_final, e.total_diarias, e.data_vigencia_final,
+        SELECT
+            e.id,
+            e.nome_evento,
+            e.status,
+            e.valor_final,
+            e.total_diarias,
+            e.data_vigencia_final,
             e.numero_oficio_sei,
-            c.nome_razao_social as nome_cliente
+            c.nome_razao_social AS nome_cliente
         FROM Eventos e
         JOIN Clientes_Eventos c ON e.id_cliente = c.id
         ORDER BY e.id DESC
