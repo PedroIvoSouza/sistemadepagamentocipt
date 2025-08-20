@@ -8,7 +8,6 @@ const db = require('../database/db');
 const fs = require('fs');
 const path = require('path');
 const { criarEventoComDars, atualizarEventoComDars } = require('../services/eventoDarService');
-const { gerarTermoEventoEIndexar } = require('../services/termoEventoExportService');
 
 
 const router = express.Router();
