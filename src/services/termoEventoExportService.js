@@ -27,6 +27,9 @@ const dbRun = (sql, params = []) =>
 // ------------------------------
 const onlyDigits = (v = '') => String(v).replace(/\D/g, '');
 
+const genToken = () =>
+  Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+
 function sanitizeForFilename(s) {
   return String(s || '')
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // remove acentos
@@ -115,7 +118,6 @@ async function ensureDocumentosSchema() {
   await addIfMissing('created_at', 'TEXT');
 
   // Índice único por (evento_id, tipo) — garante 1 termo por evento/tipo.
-  // Se precisar permitir múltiplos termos, mude para INDEX sem UNIQUE.
   await dbRun(
     `CREATE UNIQUE INDEX IF NOT EXISTS ux_documentos_evento_tipo ON documentos(evento_id, tipo)`
   ).catch(() => {});
@@ -299,17 +301,50 @@ function nomeArquivo(ev, idDoc) {
 }
 
 // ------------------------------------------------------
-// Salva o PDF no disco e registra em `documentos`
+// Salva/Atualiza o PDF no disco e registra em `documentos` (UPSERT)
 // ------------------------------------------------------
-async function salvarDocumentoRegistro(buffer, tipo, permissionarioId, eventoId, evRow) {
+async function salvarOuAtualizarDocumento(buffer, tipo, permissionarioId, eventoId, evRow) {
   await ensureDocumentosSchema();
 
   const dir = path.resolve(process.cwd(), 'public', 'documentos');
   fs.mkdirSync(dir, { recursive: true });
 
-  const token = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
-  const createdAt = new Date().toISOString();
+  // Existe um termo para este evento/tipo?
+  const existing = await dbGet(
+    `SELECT * FROM documentos WHERE evento_id = ? AND tipo = ?`,
+    [eventoId, tipo]
+  );
 
+  if (existing) {
+    // Reaproveita id/token, regrava PDF e atualiza caminhos.
+    const documentoId = existing.id;
+    const token = existing.token || genToken();
+    const fileName = nomeArquivo(evRow, documentoId);
+    const filePath = path.join(dir, fileName);
+
+    // Remove o arquivo antigo se mudou o nome/caminho
+    try {
+      if (existing.pdf_url && existing.pdf_url !== filePath && fs.existsSync(existing.pdf_url)) {
+        fs.unlinkSync(existing.pdf_url);
+      }
+    } catch {}
+
+    fs.writeFileSync(filePath, buffer);
+    const publicUrl = `/documentos/${fileName}`;
+
+    await dbRun(
+      `UPDATE documentos
+         SET token = ?, pdf_url = ?, pdf_public_url = ?, status = 'gerado'
+       WHERE id = ?`,
+      [token, filePath, publicUrl, documentoId]
+    );
+
+    return { documentoId, token, filePath, fileName, publicUrl, updated: true };
+  }
+
+  // Não existe ainda: cria novo registro
+  const token = genToken();
+  const createdAt = new Date().toISOString();
   const ins = await dbRun(
     `INSERT INTO documentos (tipo, token, permissionario_id, evento_id, status, created_at)
      VALUES (?, ?, ?, ?, 'gerado', ?)`,
@@ -328,7 +363,7 @@ async function salvarDocumentoRegistro(buffer, tipo, permissionarioId, eventoId,
     documentoId
   ]);
 
-  return { documentoId, token, filePath, fileName, publicUrl };
+  return { documentoId, token, filePath, fileName, publicUrl, created: true };
 }
 
 // ------------------------------------------------------
@@ -348,7 +383,7 @@ async function gerarTermoEventoEIndexar(eventoId) {
   const html = compileHtmlTemplate(payload);
   const pdfBuf = await htmlToPdfBuffer(html);
 
-  const doc = await salvarDocumentoRegistro(pdfBuf, 'termo_evento', null, eventoId, ev);
+  const doc = await salvarOuAtualizarDocumento(pdfBuf, 'termo_evento', null, eventoId, ev);
 
   // Página pública (com botão de assinatura via Assinafy embed)
   const urlTermoPublic = `/eventos/termo.html?id=${doc.documentoId}`;
