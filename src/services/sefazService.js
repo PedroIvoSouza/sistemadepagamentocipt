@@ -87,6 +87,14 @@ function clampDataLimitePagamento(dataVencimentoISO, dataLimiteISO) {
   return lim < hojeISO ? hojeISO : lim;
 }
 
+const cleanHeaderValue = (s) => (s ?? '').toString().replace(/[\r\n]/g, '').trim();
+function getAppTokenStrict() {
+  const v = cleanHeaderValue(process.env.SEFAZ_APP_TOKEN);
+  if (!v) throw new Error('SEFAZ_APP_TOKEN não configurado no .env.');
+  if (/[\u0000-\u001F\u007F]/.test(v)) throw new Error('SEFAZ_APP_TOKEN contém caracteres de controle');
+  return v;
+}
+
 /**
  * Normaliza código da receita (remove DV e não-dígitos).
  * Ex.: "20165-0" => 20165  |  "201650" (5+DV) => 20165
@@ -233,34 +241,42 @@ function buildSefazPayloadEvento({ cliente, parcela, receitaCodigo = RECEITA_COD
 // Emissão de Guia
 // ==========================
 async function _postEmitir(payload) {
-  if (!SEFAZ_APP_TOKEN) {
-    throw new Error('SEFAZ_APP_TOKEN não configurado no .env.');
-  }
+  const APP_TOKEN = getAppTokenStrict(); // ← sanitiza só aqui
+
   try {
     const { data } = await reqWithRetry(
-      () => sefaz.post('/api/public/guia/emitir', payload),
+      () => sefaz.post('/api/public/guia/emitir', payload, {
+        headers: {
+          // override só nesta request (não altera instância global)
+          'appToken': APP_TOKEN,
+          'Content-Type': 'application/json',
+        },
+        // se você usa httpsAgent/tls aqui, mantenha:
+        // httpsAgent,
+        timeout: 15000,
+      }),
       'guia/emitir'
     );
+
     if (!data || !data.numeroGuia || !data.pdfBase64) {
       throw new Error('Retorno da SEFAZ incompleto (sem numeroGuia/pdfBase64).');
     }
     return data;
+
   } catch (err) {
     if (err.response) {
       const status = err.response.status;
       const body = err.response.data;
-      // log status and raw body for troubleshooting
       console.error('[SEFAZ][EMIT] response error:', status, body);
       const msg = (body && (body.message || body.detail || body.title)) || `Erro HTTP ${status}`;
+
       if (/Data Limite Pagamento.*menor que a data atual/i.test(JSON.stringify(body))) {
         const e = new Error('Data Limite Pagamento não pode ser menor que hoje. (Ajuste automático recomendado no payload)');
-        e.status = status;
-        e.detail = body;
+        e.status = status; e.detail = body;
         throw e;
       }
       const e = new Error(msg);
-      e.status = status;
-      e.detail = body;
+      e.status = status; e.detail = body;
       throw e;
     }
     if (err.request) {
