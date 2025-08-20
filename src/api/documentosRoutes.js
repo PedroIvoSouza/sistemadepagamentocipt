@@ -10,8 +10,12 @@ const router = express.Router();
 const DB_PATH = path.resolve(process.cwd(), process.env.SQLITE_STORAGE || './sistemacipt.db');
 const db = new sqlite3.Database(DB_PATH);
 
+// helpers
 const dbGet = (sql, params = []) =>
   new Promise((resolve, reject) => db.get(sql, params, (err, row) => (err ? reject(err) : resolve(row))));
+
+const dbAll = (sql, params = []) =>
+  new Promise((resolve, reject) => db.all(sql, params, (err, rows) => (err ? reject(err) : resolve(rows))));
 
 const dbRun = (sql, params = []) =>
   new Promise((resolve, reject) => db.run(sql, params, function (err) {
@@ -19,6 +23,25 @@ const dbRun = (sql, params = []) =>
     resolve(this);
   }));
 
+// --- endpoints ---
+
+// Recupera metadados do documento (inclui URL pública)
+router.get('/:id', async (req, res) => {
+  try {
+    const row = await dbGet(
+      `SELECT id, tipo, evento_id, pdf_public_url, status, assinafy_id, signed_pdf_public_url, signed_at
+         FROM documentos WHERE id = ?`,
+      [req.params.id]
+    );
+    if (!row) return res.status(404).json({ error: 'Documento não encontrado.' });
+    return res.json(row);
+  } catch (err) {
+    console.error('[documentos] GET /:id erro:', err);
+    return res.status(500).json({ error: 'Erro ao consultar documento.' });
+  }
+});
+
+// Verifica token (legado / ofícios)
 router.get('/verify/:token', async (req, res) => {
   try {
     const token = req.params.token;
@@ -27,6 +50,7 @@ router.get('/verify/:token', async (req, res) => {
       [token]
     );
     if (!row) return res.status(404).json({ error: 'Token inválido.' });
+
     if (row.tipo === 'oficio') {
       const audit = await dbGet(`SELECT pdf_path FROM oficios_audit WHERE documento_id = ?`, [row.id]);
       if (audit && audit.pdf_path) row.pdf_url = audit.pdf_path;
@@ -38,11 +62,13 @@ router.get('/verify/:token', async (req, res) => {
   }
 });
 
+// Envia para assinatura no Assinafy e retorna URL de embed
 router.post('/:id/sign-assinafy', async (req, res) => {
   try {
     const id = req.params.id;
     const doc = await dbGet('SELECT id, pdf_url FROM documentos WHERE id = ?', [id]);
     if (!doc) return res.status(404).json({ error: 'Documento não encontrado.' });
+
     let pdfBuffer;
 
     if (doc.pdf_url) {
@@ -55,6 +81,7 @@ router.post('/:id/sign-assinafy', async (req, res) => {
       }
     }
     if (!pdfBuffer) {
+      // tentativa de fallback (ofícios/audit, se aplicar)
       const audit = await dbGet('SELECT pdf_path FROM oficios_audit WHERE documento_id = ?', [id]);
       if (audit?.pdf_path && fs.existsSync(audit.pdf_path)) {
         pdfBuffer = fs.readFileSync(audit.pdf_path);
@@ -62,18 +89,28 @@ router.post('/:id/sign-assinafy', async (req, res) => {
     }
     if (!pdfBuffer) return res.status(404).json({ error: 'PDF não encontrado.' });
 
-    const options = req.body || {};
+    // monta callback com documentoId
+    const callbackUrl = `${req.protocol}://${req.get('host')}/api/documentos/assinafy/callback?documentoId=${id}`;
+
+    const options = { callbackUrl, ...(req.body || {}) };
     const resp = await assinafyService.uploadPdf(pdfBuffer, `documento_${id}.pdf`, options);
+
     if (resp?.id) {
-      await dbRun('UPDATE documentos SET assinafy_id = ? WHERE id = ?', [resp.id, id]);
+      await dbRun('UPDATE documentos SET assinafy_id = ?, status = ? WHERE id = ?',
+                  [resp.id, 'enviado', id]);
     }
-    res.json({ url: resp?.embedUrl || resp?.url || resp?.signUrl || resp?.redirectUrl || null, assinafyId: resp?.id });
+
+    res.json({
+      url: resp?.embedUrl || resp?.url || resp?.signUrl || resp?.redirectUrl || null,
+      assinafyId: resp?.id
+    });
   } catch (err) {
     console.error('[documentos] sign-assinafy erro:', err);
     res.status(500).json({ error: 'Falha ao enviar para assinatura.' });
   }
 });
 
+// Callback do Assinafy: baixa PDF assinado, audita e atualiza a tabela documentos
 router.get('/assinafy/callback', async (req, res) => {
   const assinafyId = req.query.id || req.query.documentId;
   const documentoId = req.query.documentoId || req.query.localId || null;
@@ -87,11 +124,14 @@ router.get('/assinafy/callback', async (req, res) => {
     const signer = info?.signer?.name || (info?.signatures && info.signatures[0]?.signer) || '';
     const signedAt = info?.signedAt || new Date().toISOString();
 
+    // salva o PDF assinado em /public/assinados
     const dir = path.resolve(process.cwd(), 'public', 'assinados');
     fs.mkdirSync(dir, { recursive: true });
     const filePath = path.join(dir, `documento_${assinafyId}.pdf`);
     fs.writeFileSync(filePath, pdfBuffer);
+    const publicUrl = `/assinados/documento_${assinafyId}.pdf`;
 
+    // tabela de auditoria
     await dbRun(`CREATE TABLE IF NOT EXISTS assinafy_audit (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       documento_id INTEGER,
@@ -108,6 +148,16 @@ router.get('/assinafy/callback', async (req, res) => {
       [documentoId, assinafyId, hash, signer, signedAt, filePath]
     );
 
+    // atualiza o registro principal em 'documentos'
+    await dbRun(`
+      UPDATE documentos
+         SET status = 'assinado',
+             signed_pdf_public_url = ?,
+             signed_at = ?,
+             signer = ?
+       WHERE assinafy_id = ?
+          OR id = ?`, [publicUrl, signedAt, signer, assinafyId, documentoId || null]);
+
     res.json({ ok: true });
   } catch (err) {
     console.error('[assinafy callback] erro:', err);
@@ -115,9 +165,9 @@ router.get('/assinafy/callback', async (req, res) => {
   }
 });
 
+// Status simples (lê auditoria). Opcional: poderia checar também a coluna "status" de documentos.
 router.get('/:id/sign-assinafy-status', async (req, res) => {
   try {
-    const id = req.params.id;
     await dbRun(`CREATE TABLE IF NOT EXISTS assinafy_audit (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       documento_id INTEGER,
@@ -129,7 +179,7 @@ router.get('/:id/sign-assinafy-status', async (req, res) => {
     )`);
     const row = await dbGet(
       'SELECT hash, signer, signed_at, pdf_path FROM assinafy_audit WHERE documento_id = ? ORDER BY id DESC LIMIT 1',
-      [id]
+      [req.params.id]
     );
     if (!row) return res.json({ status: 'pending' });
     res.json({ status: 'signed', ...row });
@@ -140,4 +190,3 @@ router.get('/:id/sign-assinafy-status', async (req, res) => {
 });
 
 module.exports = router;
-
