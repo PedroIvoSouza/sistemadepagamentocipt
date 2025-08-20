@@ -23,7 +23,7 @@ const adminDarsRoutes             = require('./api/adminDarsRoutes');
 const adminOficiosRoutes          = require('./api/adminOficiosRoutes');
 const permissionariosRoutes       = require('./api/permissionariosRoutes');
 const botRoutes                   = require('./api/botRoutes');
-const termoEventosRoutes          = require('./src/api/termoEventosRoutes');
+const termoEventosRoutes          = require('./api/termoEventosRoutes');
 
 
 
