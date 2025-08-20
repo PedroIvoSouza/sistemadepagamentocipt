@@ -122,13 +122,25 @@
             <label for="nome-evento" class="form-label">Nome do Evento *</label>
             <input type="text" class="form-control" id="nome-evento" required>
           </div>
-          <div class="mb-3">
-            <label for="numero-processo" class="form-label">Número do Processo</label>
-            <input type="text" class="form-control" id="numero-processo">
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label for="hora-inicio" class="form-label">Hora de Início</label>
+              <input type="time" class="form-control" id="hora-inicio">
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="hora-fim" class="form-label">Hora de Fim</label>
+              <input type="time" class="form-control" id="hora-fim">
+            </div>
           </div>
-          <div class="mb-3">
-            <label for="numero-termo" class="form-label">Número do Termo</label>
-            <input type="text" class="form-control" id="numero-termo">
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label for="hora-montagem" class="form-label">Hora de Montagem</label>
+              <input type="time" class="form-control" id="hora-montagem">
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="hora-desmontagem" class="form-label">Hora de Desmontagem</label>
+              <input type="time" class="form-control" id="hora-desmontagem">
+            </div>
           </div>
         </fieldset>
 
@@ -314,6 +326,10 @@ window.onload = () => {
 
   const clienteSelect = document.getElementById('cliente-select');
   const datasEventoInput = document.getElementById('datas-evento');
+  const horaInicioInput = document.getElementById('hora-inicio');
+  const horaFimInput = document.getElementById('hora-fim');
+  const horaMontagemInput = document.getElementById('hora-montagem');
+  const horaDesmontagemInput = document.getElementById('hora-desmontagem');
   const totalDiariasDisplay = document.getElementById('total-diarias');
   const valorBrutoDisplay = document.getElementById('valor-bruto');
   const tipoDescontoAutoDisplay = document.getElementById('tipo-desconto-auto');
@@ -644,7 +660,11 @@ async function carregarClientes(){
     const parcelas = Array.isArray(ev.parcelas) ? ev.parcelas
                   : Array.isArray(ev.DARs) ? ev.DARs
                   : [];
-    return { id_cliente, nome_evento, tipo_desconto_auto, desconto_manual_percent, numero_processo, numero_termo, datas_evento, parcelas };
+    const hora_inicio = ev.hora_inicio ?? ev.horaInicio ?? null;
+    const hora_fim = ev.hora_fim ?? ev.horaFim ?? null;
+    const hora_montagem = ev.hora_montagem ?? ev.horaMontagem ?? null;
+    const hora_desmontagem = ev.hora_desmontagem ?? ev.horaDesmontagem ?? null;
+    return { id_cliente, nome_evento, tipo_desconto_auto, desconto_manual_percent, datas_evento, parcelas, hora_inicio, hora_fim, hora_montagem, hora_desmontagem };
   }
 
   async function editarEvento(eventoId){
@@ -664,6 +684,10 @@ async function carregarClientes(){
     // preencher
     clienteSelect.value = ev.id_cliente || '';
     document.getElementById('nome-evento').value = ev.nome_evento || '';
+    horaInicioInput.value = ev.hora_inicio || '';
+    horaFimInput.value = ev.hora_fim || '';
+    horaMontagemInput.value = ev.hora_montagem || '';
+    horaDesmontagemInput.value = ev.hora_desmontagem || '';
     document.getElementById('numero-processo').value = ev.numero_processo || '';
     document.getElementById('numero-termo').value = ev.numero_termo || '';
     if (Array.isArray(ev.datas_evento) && ev.datas_evento.length) fp.setDate(ev.datas_evento, true);
@@ -913,9 +937,15 @@ async function carregarClientes(){
       totalDiarias: n,
       valorBruto: vb,
       valorFinal: vf,
+      horaInicio: horaInicioInput.value || null,
+      horaFim: horaFimInput.value || null,
+      horaMontagem: horaMontagemInput.value || null,
+      horaDesmontagem: horaDesmontagemInput.value || null,
+      parcelas
       parcelas,
       numeroProcesso: document.getElementById('numero-processo').value,
       numeroTermo: document.getElementById('numero-termo').value
+       master
     };
 
     const btn = form.querySelector('button[type="submit"]');

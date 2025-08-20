@@ -27,10 +27,16 @@ function buildSefazPayloadFromDarEvento({ darRow, eventoRow, clienteRow, receita
   const dataVencimento = darRow?.data_vencimento || darRow?.dar_venc; // colunas que você usa nos SELECTs
   const { mes, ano } = competenciaFromDate(dataVencimento);
 
+  const extras = [
+    eventoRow?.hora_montagem ? `Montagem ${eventoRow.hora_montagem}` : null,
+    eventoRow?.hora_inicio && eventoRow?.hora_fim ? `Evento ${eventoRow.hora_inicio}-${eventoRow.hora_fim}` : null,
+    eventoRow?.hora_desmontagem ? `Desmontagem ${eventoRow.hora_desmontagem}` : null
+  ].filter(Boolean).join(' | ');
+
   return {
     versao: VERSAO_GUIA,
     dataLimitePagamento: dataLimite || dataVencimento, // regra simples: igual ao vencimento da parcela
-    observacao: `Pagamento referente ao evento: ${eventoRow?.nome_evento || 'Evento'}`,
+    observacao: `Pagamento referente ao evento: ${eventoRow?.nome_evento || 'Evento'}${extras ? ' (' + extras + ')' : ''}`,
     contribuinteEmitente: {
       codigoTipoInscricao: docType(clienteRow?.documento), // 3=CPF, 4=CNPJ
       numeroInscricao: digits(clienteRow?.documento),
