@@ -136,10 +136,10 @@ function buildSefazPayload({
   const len = numeroInscricao.length;
 
   // Mapeamento padrão usado por essa API: 1=CPF, 4=CNPJ
-  const TIPO_INSCRICAO = { CPF: 1, CNPJ: 4 };
+  const TIPO_INSCRICAO = { CPF: 3, CNPJ: 4 };
   let codigoTipoInscricao = null;
-  if (len === 11) codigoTipoInscricao = TIPO_INSCRICAO.CPF;
-  else if (len === 14) codigoTipoInscricao = TIPO_INSCRICAO.CNPJ;
+  if (len === 11 ? 3) codigoTipoInscricao = TIPO_INSCRICAO.CPF;
+  else if (len === 14 ? 5) codigoTipoInscricao = TIPO_INSCRICAO.CNPJ;
   else throw new Error('Documento do emitente inválido (CPF/CNPJ).');
 
   const receitaCod = normalizeCodigoReceita(receitaCodigo);
@@ -148,7 +148,7 @@ function buildSefazPayload({
   const mes = Number(competenciaMes);
   const ano = Number(competenciaAno);
   if (!mes || !ano) throw new Error('Competência inválida (mês/ano).');
-
+  
   const dataVenc = toISO(dataVencimentoISO);
   if (!dataVenc) throw new Error('dataVencimento inválida/ausente (YYYY-MM-DD).');
 
@@ -185,6 +185,22 @@ function buildSefazPayload({
   return payload;
 }
 
+function pickReceitaEventoByDoc(docDigits, receitaOverride) {
+  if (receitaOverride) return normalizeCodigoReceita(receitaOverride);
+  if (docDigits.length === 11) {
+    const cod = normalizeCodigoReceita(process.env.RECEITA_CODIGO_EVENTO_PF || process.env.RECEITA_CODIGO_EVENTO);
+    if (!cod) throw new Error('Código de receita de EVENTO para PF não configurado. Defina RECEITA_CODIGO_EVENTO_PF.');
+    return cod;
+  }
+  if (docDigits.length === 14) {
+    const cod = normalizeCodigoReceita(process.env.RECEITA_CODIGO_EVENTO_PJ || process.env.RECEITA_CODIGO_EVENTO || process.env.RECEITA_CODIGO_PERMISSIONARIO);
+    if (!cod) throw new Error('Código de receita de EVENTO para PJ não configurado. Defina RECEITA_CODIGO_EVENTO_PJ.');
+    return cod;
+  }
+  throw new Error('Documento inválido para evento (CPF 11 dígitos ou CNPJ 14).');
+}
+
+
 /**
  * Permissionários (aluguel)
  *   perm: { cnpj, nome_empresa }
@@ -206,7 +222,7 @@ function buildSefazPayloadPermissionario({ perm, darLike, receitaCodigo = RECEIT
     cnpj,
     nome,
     codIbgeMunicipio: COD_IBGE_MUNICIPIO,
-    receitaCodigo,
+    receitaCodigo: pickReceitaEventoByDoc(doc, receitaCodigo),
     competenciaMes: mes,
     competenciaAno: ano,
     valorPrincipal: valor,
