@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { PDFDocument } = require('pdf-lib');
 
 function formatCurrency(valor) {
   return Number(valor || 0).toLocaleString('pt-BR', {
@@ -21,14 +22,14 @@ function formatDate(data) {
   return formatadorData.format(d);
 }
 
-function gerarTermoPermissao(evento = {}, parcelas = []) {
+async function gerarTermoPermissao(evento = {}, parcelas = []) {
   const templatePath = path.join(
     __dirname,
     '..',
     'assets',
     'termo_permissao_modelo.pdf'
   );
-  let template = fs.readFileSync(templatePath, 'utf8');
+  let template = fs.readFileSync(templatePath, 'binary');
 
   const datas = Array.isArray(evento.datas_evento)
     ? evento.datas_evento.join(', ')
@@ -68,13 +69,20 @@ function gerarTermoPermissao(evento = {}, parcelas = []) {
     assinatura_data: formatDate(new Date())
   };
 
-  template = template.replace(/{{\s*([\w_]+)\s*}}/g, (_, key) => {
-    return Object.prototype.hasOwnProperty.call(replacements, key)
+  template = template.replace(/{{\s*([\w_]+)\s*}}/g, (match, key) => {
+    const value = Object.prototype.hasOwnProperty.call(replacements, key)
       ? String(replacements[key])
       : '';
+    return value.padEnd(match.length, ' ');
   });
-
-  return Buffer.from(template, 'utf8');
+  const pdfBuffer = Buffer.from(template, 'binary');
+  try {
+    const pdfDoc = await PDFDocument.load(pdfBuffer);
+    const pdfBytes = await pdfDoc.save({ useObjectStreams: false });
+    return pdfBytes;
+  } catch (err) {
+    return pdfBuffer;
+  }
 }
 
 module.exports = { gerarTermoPermissao, formatCurrency, formatDate };
