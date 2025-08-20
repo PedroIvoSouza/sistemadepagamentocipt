@@ -122,6 +122,14 @@
             <label for="nome-evento" class="form-label">Nome do Evento *</label>
             <input type="text" class="form-control" id="nome-evento" required>
           </div>
+          <div class="mb-3">
+            <label for="numero-processo" class="form-label">Número do Processo</label>
+            <input type="text" class="form-control" id="numero-processo">
+          </div>
+          <div class="mb-3">
+            <label for="numero-termo" class="form-label">Número do Termo</label>
+            <input type="text" class="form-control" id="numero-termo">
+          </div>
         </fieldset>
 
         <fieldset>
@@ -628,13 +636,15 @@ async function carregarClientes(){
     const nome_evento = ev.nome_evento ?? ev.nome ?? ev.titulo ?? '';
     const tipo_desconto_auto = ev.tipo_desconto_auto ?? ev.tipoDescontoAuto ?? ev.tipo_cliente ?? 'Geral';
     const desconto_manual_percent = ev.desconto_manual_percent ?? ev.descontoManualPercent ?? ev.desconto ?? 0;
+    const numero_processo = ev.numero_processo ?? ev.numeroProcesso ?? '';
+    const numero_termo = ev.numero_termo ?? ev.numeroTermo ?? '';
     let datas_evento = ev.datas_evento ?? ev.datas ?? ev.datasEvento ?? [];
     if (typeof datas_evento === 'string') datas_evento = datas_evento.split(',').map(s=>s.trim()).filter(Boolean);
     if (!Array.isArray(datas_evento)) datas_evento = [];
     const parcelas = Array.isArray(ev.parcelas) ? ev.parcelas
                   : Array.isArray(ev.DARs) ? ev.DARs
                   : [];
-    return { id_cliente, nome_evento, tipo_desconto_auto, desconto_manual_percent, datas_evento, parcelas };
+    return { id_cliente, nome_evento, tipo_desconto_auto, desconto_manual_percent, numero_processo, numero_termo, datas_evento, parcelas };
   }
 
   async function editarEvento(eventoId){
@@ -654,6 +664,8 @@ async function carregarClientes(){
     // preencher
     clienteSelect.value = ev.id_cliente || '';
     document.getElementById('nome-evento').value = ev.nome_evento || '';
+    document.getElementById('numero-processo').value = ev.numero_processo || '';
+    document.getElementById('numero-termo').value = ev.numero_termo || '';
     if (Array.isArray(ev.datas_evento) && ev.datas_evento.length) fp.setDate(ev.datas_evento, true);
     tipoDescontoAutoDisplay.value = ev.tipo_desconto_auto || (clienteSelect.selectedOptions[0]?.dataset.tipo || '');
     descontoManualInput.value = ev.desconto_manual_percent || 0;
@@ -901,7 +913,9 @@ async function carregarClientes(){
       totalDiarias: n,
       valorBruto: vb,
       valorFinal: vf,
-      parcelas
+      parcelas,
+      numeroProcesso: document.getElementById('numero-processo').value,
+      numeroTermo: document.getElementById('numero-termo').value
     };
 
     const btn = form.querySelector('button[type="submit"]');
