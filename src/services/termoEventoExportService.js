@@ -127,61 +127,51 @@ async function ensureDocumentosSchema() {
 // Carrega e compila o HTML do template público
 // + injeta/normaliza timbrado e margens
 // ---------------------------------------------
+// src/services/termoEventoExportService.js
 function compileHtmlTemplate(payload) {
-  // Nome do template (usa o seu arquivo atual, sem o segundo "s")
   const templatePath = path.resolve(process.cwd(), 'public', 'termo-permisao.html');
   if (!fs.existsSync(templatePath)) {
     throw new Error(`Template não encontrado: ${templatePath}`);
   }
 
-  let html = fs.readFileSync(templatePath, 'utf8');
+  const raw = fs.readFileSync(templatePath, 'utf8');
+  const tpl = Handlebars.compile(raw, { noEscape: true });
+  let html = tpl(payload);
 
-  // 1) Normaliza caminho do timbrado para file:// (caso já exista no HTML)
-  const timbradoAbs = path
+  // Caminho absoluto do timbrado
+  const absTimbrado = path
     .resolve(process.cwd(), 'public', 'images', 'papel-timbrado-secti.png')
     .replace(/\\/g, '/');
 
-  // corrige tanto "images/..." quanto "/images/..."
-  const reTimbrado = /src=["']\/?images\/papel-timbrado-secti\.png["']/i;
-  if (reTimbrado.test(html)) {
-    html = html.replace(reTimbrado, `src="file://${timbradoAbs}"`);
+  // 1) Corrige <img src="..."> relativos -> file:// absoluto
+  html = html.replace(
+    /(<img[^>]+src=["'])(\/?images\/papel-timbrado-secti\.png)(["'][^>]*>)/ig,
+    (_, a, _rel, c) => `${a}file://${absTimbrado}${c}`
+  );
+
+  // 2) Corrige url(...) em CSS inline -> file:// absoluto
+  html = html.replace(
+    /(url\((["']?))(\/?images\/papel-timbrado-secti\.png)(\2\))/ig,
+    (_, a, q, _rel, d) => `${a}file://${absTimbrado}${d}`
+  );
+
+  // 3) Se o template não tiver o timbrado, injeta uma camada fixa sob o conteúdo
+  if (!/papel-timbrado-secti\.png/i.test(html)) {
+    const style = `<style>
+      html,body{background:transparent !important; -webkit-print-color-adjust:exact; print-color-adjust:exact;}
+      .__letterhead{position:fixed; inset:0; z-index:0; pointer-events:none;
+        background:url('file://${absTimbrado}') no-repeat center 1cm; background-size:contain;}
+      .__content{position:relative; z-index:1;}
+      :where(.page,#page,main){background:transparent !important;}
+    </style>`;
+    html = html.replace(/<\/head>/i, `${style}</head>`);
+    html = html.replace(/<body([^>]*)>/i, `<body$1><div class="__letterhead"></div><div class="__content">`);
+    html = html.replace(/<\/body>/i, `</div></body>`);
   }
 
-  // 2) Injeta timbrado caso NÃO exista referência no HTML
-  if (!/papel-timbrado-secti\.png/i.test(html) && fs.existsSync(timbradoAbs)) {
-    // injeta logo após a abertura do <body>
-    html = html.replace(
-      /<body([^>]*)>/i,
-      (m, attrs) =>
-        `<body${attrs}>\n<img src="file://${timbradoAbs}" class="__timbrado" alt="" />`
-    );
-  }
-
-  // 3) Injeta CSS para timbrado (atrás do conteúdo) e margens menores
-  const cssInject = `
-    <style>
-      /* Usa CSS pra controlar margens do PDF (Puppeteer com preferCSSPageSize=true) */
-      @page { size: A4; margin: 2cm 1.2cm; } /* top/bottom 2.0cm; laterais 1.2cm */
-      body { margin: 0 !important; } /* zera margens no body do template, se houver */
-      /* Timbrado em página inteira, atrás do texto */
-      img.__timbrado {
-        position: fixed;
-        top: 0; left: 0;
-        width: 100%;
-        height: 100%;
-        z-index: -1;
-      }
-    </style>
-  `;
-  if (/<\/head>/i.test(html)) {
-    html = html.replace(/<\/head>/i, `${cssInject}\n</head>`);
-  } else {
-    html = cssInject + html;
-  }
-
-  const tpl = Handlebars.compile(html, { noEscape: true });
-  return tpl(payload);
+  return html;
 }
+
 
 // ----------------------
 // Gera PDF com Puppeteer
