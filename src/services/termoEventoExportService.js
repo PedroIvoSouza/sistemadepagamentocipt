@@ -174,7 +174,15 @@ async function buildPayloadFromEvento(eventoId) {
 
     // Evento
     evento_titulo: ev.nome_evento || '',
-    local_espaco: ev.espaco_utilizado || 'AUDITÓRIO',
+    local_espaco: (() => {
+      let esp = ev.espaco_utilizado;
+      if (typeof esp === 'string') {
+        try { esp = JSON.parse(esp); }
+        catch { esp = esp.split(',').map(s=>s.trim()).filter(Boolean); }
+      }
+      if (Array.isArray(esp)) esp = esp.join(', ');
+      return esp || 'AUDITÓRIO';
+    })(),
     imovel_nome: imovelNome,
 
     data_evento: fmtDataExtenso(primeiraData),

@@ -354,6 +354,14 @@
                           : parseFloat(String(ev.valor_final||'0').replace(/\./g,'').replace(',','.')) || 0);
             const datasFmt = formatDatasEvento(ev.datas_evento || ev.data);
             const vigFinal = ev.data_vigencia_final ? formatDateBR(ev.data_vigencia_final) : '-';
+            let esp = ev.espaco_utilizado;
+            if (typeof esp === 'string') {
+              try { esp = JSON.parse(esp); }
+              catch {
+                esp = esp.split(',').map(s=>s.trim()).filter(Boolean);
+              }
+            }
+            if (Array.isArray(esp)) esp = esp.join(', ');
 
             return `
             <div class="accordion-item">
@@ -374,7 +382,7 @@
                   <div class="mb-2"><strong>Ofício SEI:</strong> ${ev.numero_oficio_sei || '-'}</div>
                   <div class="mb-2"><strong>Processo:</strong> ${ev.numero_processo || '-'}</div>
                   <div class="mb-2"><strong>Termo:</strong> ${ev.numero_termo || '-'}</div>
-                  <div class="mb-2"><strong>Espaço:</strong> ${ev.espaco_utilizado || '-'}</div>
+                  <div class="mb-2"><strong>Espaço:</strong> ${esp || '-'}</div>
                   <div class="mb-2"><strong>Área (m²):</strong> ${ev.area_m2 != null ? ev.area_m2 : '-'}</div>
                   <div class="mb-2"><strong>Montagem:</strong> ${ev.hora_montagem || '-'}</div>
                   <div class="mb-2"><strong>Início:</strong> ${ev.hora_inicio || '-'}</div>

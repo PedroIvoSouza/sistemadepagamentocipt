@@ -434,12 +434,18 @@
             const valor = Number(typeof ev.valor_final==='number' ? ev.valor_final
                           : parseFloat(String(ev.valor_final||'0').replace(/\./g,'').replace(',','.')) || 0);
             const datasFmt = formatDatasEvento(ev.datas_evento || ev.data);
+            let esp = ev.espaco_utilizado;
+            if (typeof esp === 'string') {
+              try { esp = JSON.parse(esp); }
+              catch { esp = esp.split(',').map(s=>s.trim()).filter(Boolean); }
+            }
+            if (Array.isArray(esp)) esp = esp.join(', ');
             return `<tr>
               <td>${ev.nome_evento || 'Evento'}</td>
               <td>${ev.numero_oficio_sei || ''}</td>
               <td>${ev.numero_processo || ''}</td>
               <td>${ev.numero_termo || ''}</td>
-              <td>${ev.espaco_utilizado || ''}</td>
+              <td>${esp || ''}</td>
               <td>${ev.area_m2 != null ? ev.area_m2 : ''}</td>
               <td>${ev.hora_montagem || ''}</td>
               <td>${ev.hora_inicio || ''}</td>
