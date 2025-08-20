@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Termo de Permissão de Uso</title>
+  <style>
+    body{font-family:"Times New Roman",serif;font-size:12pt;line-height:1.15;margin:2.5cm;}
+    h1,h2,h3{font-weight:bold;text-align:center;text-transform:uppercase;margin:0}
+    .cab{text-align:center;text-transform:uppercase}
+    .titulo{font-weight:bold;text-transform:uppercase;margin-top:10pt;text-align:center}
+    .clausula{font-weight:bold;text-transform:uppercase;margin-top:12pt}
+    table{width:100%;border-collapse:collapse;margin:8pt 0}
+    th,td{border:1px solid #000;padding:6pt;vertical-align:top}
+    th{font-weight:bold;text-align:left}
+    .assin{margin-top:40pt;text-align:center}
+    .linha{margin-top:40pt;border-top:1px solid #000;padding-top:4pt}
+    .right{ text-align:right }
+    .just{ text-align:justify }
+  </style>
+</head>
+<body>
+  <!-- Cabeçalho -->
+  <div class="cab">
+    {{org_uf}}<br>{{org_secretaria}}<br>{{org_unidade}}
+  </div>
+
+  <p class="titulo">
+    Termo de Permissão de Uso que celebram entre si de um lado a {{permitente_razao}} e do outro a empresa {{permissionario_razao}}.
+  </p>
+
+  <p>
+    <strong>Processo n°:</strong> {{processo_numero}}<br>
+    <strong>Termo n°:</strong> {{termo_numero}}
+  </p>
+
+  <p class="just">
+    <strong>PERMITENTE:</strong> {{permitente_razao}}, inscrita no CNPJ/MF sob o nº {{permitente_cnpj}} e estabelecido(a) no(a) {{permitente_endereco}},
+    de acordo com a representação legal que lhe é outorgada por portaria e representado pelo responsável: {{permitente_representante_cargo}},
+    Sr.(a) {{permitente_representante_nome}}, inscrito(a) no CPF sob o nº {{permitente_representante_cpf}}.
+  </p>
+
+  <p class="just">
+    <strong>PERMISSIONÁRIO(A):</strong> {{permissionario_razao}}, inscrito(a) no CNPJ/MF sob o nº {{permissionario_cnpj}} e estabelecido(a) no(a) {{permissionario_endereco}},
+    representado(a) por {{permissionario_representante_nome}}, inscrito(a) no CPF sob o nº {{permissionario_representante_cpf}}.
+  </p>
+
+  <p class="clausula">CLÁUSULA PRIMEIRA – DO OBJETO</p>
+  <p class="just">
+    1.1 - O presente instrumento tem como objeto o uso pelo(a) PERMISSIONÁRIO(A) de área do {{local_espaco}} do imóvel denominado {{imovel_nome}},
+    para realização de “{{evento_titulo}}”, a ser realizada em {{data_evento}}, das {{hora_inicio}} às {{hora_fim}},
+    devendo a montagem ser realizada no mesmo dia do evento e a desmontagem ao final, conforme proposta em anexo, estando disponível o uso do seguinte espaço:
+  </p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Discriminação / Área utilizada</th>
+        <th>Área (m²) / Capacidade</th>
+        <th>Nº de dias</th>
+        <th class="right">Valor total</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>{{local_espaco}} do {{imovel_nome}}<br>
+            Realização: {{data_evento}}<br>
+            Montagem: {{data_montagem}}<br>
+            Desmontagem: {{data_desmontagem}}</td>
+        <td>{{area_m2_fmt}} (capacidade para {{capacidade_pessoas}} pessoas)</td>
+        <td>{{numero_dias}}</td>
+        <td class="right">{{valor_total_fmt}}</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p class="clausula">CLÁUSULA SEGUNDA – DA VIGÊNCIA</p>
+  <p class="just">
+    2.1 - O prazo de vigência se inicia na data de assinatura do presente termo até {{vigencia_fim_datahora}}.
+  </p>
+
+  <p class="clausula">CLÁUSULA TERCEIRA – DO PAGAMENTO</p>
+  <p class="just">
+    3.1 - O(A) PERMISSIONÁRIO(A) pagará pela utilização do espaço o valor total de {{valor_total_fmt}}, através de Documento de Arrecadação – DAR,
+    efetuado em favor da conta do Fundo Estadual de Desenvolvimento Científico, Tecnológico e de Educação Superior ({{fundo_nome}}),
+    devendo ser pago o valor de 50% até {{pagto_sinal_data}} e o restante até {{pagto_saldo_data}}.
+  </p>
+  <p class="just">3.1.1. Fica incluso ao valor estabelecido o pagamento relativo somente ao consumo de água, esgoto e energia elétrica.</p>
+  <p class="just">3.1.2. Após o pagamento a data estará reservada, de modo que não haverá devolução de qualquer valor pago em caso de desistência.</p>
+  <p class="just">3.1.3. No caso de não haver a quitação total do valor, a reserva estará desfeita.</p>
+
+  <p class="clausula">CLÁUSULA QUARTA – DAS OBRIGAÇÕES DO PERMITENTE</p>
+  <p class="just">4.1 - Ceder o espaço, na data e hora acordadas, entregando o local em perfeitas condições de higiene, limpeza e conservação.</p>
+  <p class="just">4.2 - Fiscalizar, por meio do gestor indicado pela SECTI, a utilização do espaço objeto deste termo de permissão, podendo impedir a utilização inadequada do espaço cedido evitando assim danos ao patrimônio.</p>
+  <p class="just"><em>Parágrafo único</em> - Os espaços físicos disponíveis são as áreas do auditório do {{imovel_nome}} destinada à realização de eventos, compreendido o espaço de {{area_m2_fmt}} (banheiro masculino e feminino, 02 salas de tradução, 09 espaços destinados a cadeirantes, palco - com acesso externo -, 02 coxias, 02 camarins, 01 copa e 01 área técnica), do espaço aberto em frente ao auditório, não incluindo as baias e nem o coworking público, não sendo permitida apresentação musical fora do auditório, bem como não é permitido servir alimentos/bebidas dentro do auditório, de modo que qualquer violação destas será cobrada uma multa no valor de 10% do valor de locação.</p>
+
+  <p class="clausula">CLÁUSULA QUINTA – DAS OBRIGAÇÕES DA PERMISSIONÁRIA</p>
+  <p class="just">5.1 - Utilizar o espaço destinado no imóvel em questão para o fim específico do evento descrito na cláusula primeira.</p>
+  <p class="just">5.2 - Conservar o imóvel como se lhe pertencesse, fazendo com que seu uso e gozo sejam pacíficos e harmônicos.</p>
+  <p class="just">5.3 - A montagem e desmontagem de materiais e equipamentos do(a) PERMISSIONÁRIO(A) ou de terceiros, dentro do período de vigência, conforme reserva.</p>
+  <p class="just">5.4 - A indenização pelos danos causados que, por si, seus empregados, prepostos e participantes do evento causarem ao mobiliário, equipamentos e acessórios das áreas locadas, independente de qualquer vistoria judicial prévia.</p>
+  <p class="just">5.5 - A indenização por danos causados a terceiros no imóvel utilizado.</p>
+  <p class="just">5.6 - A retirada do material e equipamentos utilizados dentro do período de vigência.</p>
+  <p class="just">5.7 - Respeitar a lotação da área utilizada, sob pena do PERMITENTE providenciar a retirada do público excedente.</p>
+  <p class="just">5.8 - Responsabilizar-se pelas despesas realizadas com a segurança, manutenção e conservação do bem permitido.</p>
+  <p class="just">5.9 - Responsabilizar-se pela limpeza e manutenção da área locada durante a montagem, realização e desmontagem do evento, inclusive a compra dos materiais de limpeza.</p>
+  <p class="just">5.10 - Responsabilizar-se pela locação de container e contratação de remoção de lixo durante a montagem, realização e desmontagem do evento.</p>
+  <p class="just">5.11 - Restituir o espaço permitido em perfeito estado e condições, conforme Termo de Vistoria.</p>
+  <p class="just">5.12 - O espaço locado deverá ser utilizado para o fim específico do evento descrito na cláusula primeira.</p>
+  <p class="just">5.13 - Participar de check list de vistoria (montagem) e entregar o espaço nas mesmas condições (desmontagem), sob pena de multa no valor de locação do espaço.</p>
+  <p class="just">5.14 - Apresentar projeto do evento com layout; caso necessário, arcar com aluguel de gerador externo.</p>
+  <p class="just">5.15 - Estrutura não retirada no dia da desmontagem será destinada a outros fins; multa de 10% da locação.</p>
+  <p class="just">5.16 - Vedado uso da porta de emergência para movimentação de estruturas; multa em caso de desobediência.</p>
+  <p class="just">5.17 - Proibido consumo de comidas/bebidas dentro do auditório; multa de 10% da locação e reparação de danos.</p>
+  <p class="just">5.18 - Proibido som e/ou apresentação musical fora do auditório; multa aplicável.</p>
+
+  <p class="clausula">CLÁUSULA SEXTA – DAS PENALIDADES</p>
+  <p class="just">6.1 - Descumprimento: multa de 10% do valor da permissão em favor da parte inocente.</p>
+  <p class="just">6.2 - Correção pelo IPCA e juros de 1% a.m., pro rata die.</p>
+  <p class="just">6.3 - Rescisão por desistência até 30 dias: perda da taxa de reserva + multa de 20% do valor.</p>
+  <p class="just">6.4 - Em caso de violação e inadimplemento, o permissionário poderá ser impedido de reservar espaços por até 2 anos.</p>
+
+  <p class="clausula">CLÁUSULA SÉTIMA – DA RESCISÃO</p>
+  <p class="just">7.1 - Inexecução total ou parcial: sanções administrativas (Lei nº 14.133/2021).</p>
+  <p class="just">7.2 - Rescisão pelo(a) PERMISSIONÁRIO(A) a qualquer tempo, com notificação prévia mínima de 30 dias (eventos particulares) e 90 dias (eventos públicos).</p>
+  <p class="just">7.2.1 - Não cumprir o prazo impede alteração de data (desistência definitiva), sujeita às penalidades previstas.</p>
+  <p class="just">7.2.2 - Direito a nova data em até 1 ano, uma única alteração, condicionada à disponibilidade de pauta; ausência de disponibilidade ou não realização: perda dos valores pagos.</p>
+  <p class="just">7.3 - Rescisão automática sem indenização havendo sinistro/incêndio/impossibilidade de posse do espaço.</p>
+  <p class="just">7.4 - Casos de rescisão devem ser formalmente motivados nos autos, com contraditório e ampla defesa.</p>
+
+  <p class="clausula">CLÁUSULA OITAVA – OMISSÕES CONTRATUAIS</p>
+  <p class="just">8.1 - Casos omissos: decisão pela PERMITENTE, conforme Lei nº 14.133/2021 e demais normas, subsidiariamente o CDC.</p>
+
+  <p class="clausula">CLÁUSULA NONA – DO FORO</p>
+  <p class="just">9.1 - Foro de Maceió – AL.</p>
+
+  <p style="margin-top:18pt">{{cidade_uf}}, {{data_assinatura}}.</p>
+
+  <div class="assin">
+    <div class="linha">PERMITENTE</div>
+    <div class="linha">PERMISSIONÁRIA</div>
+    <div class="linha">TESTEMUNHA – CPF {{testemunha1_cpf}}</div>
+    <div class="linha">TESTEMUNHA – CPF {{testemunha2_cpf}}</div>
+  </div>
+</body>
+</html>
