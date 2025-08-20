@@ -102,6 +102,7 @@ app.use('/admin', (req, res) => {
 
 // Conexão com o Banco de Dados (SQLite)
 ensureClientesEventosColumns(db);
+ensureEventosColumns(db);
 
 // Função para garantir colunas que seu update precisa
 function ensureClientesEventosColumns(db){
@@ -128,6 +129,19 @@ function ensureClientesEventosColumns(db){
     })();
   });
 }
+function ensureEventosColumns(db){
+  db.all(`PRAGMA table_info(Eventos)`, [], (err, cols)=>{
+    if (err) { console.error('[DB] PRAGMA table_info Eventos falhou:', err.message); return; }
+    const names = new Set((cols||[]).map(c=> c.name.toLowerCase()));
+    if (!names.has('data_vigencia_final')) {
+      db.run(`ALTER TABLE Eventos ADD COLUMN data_vigencia_final TEXT`, [], e=>{
+        if (e) console.warn('[DB] Migração ignorada/erro:', e.message);
+        else console.log('[DB] Eventos.data_vigencia_final adicionada.');
+      });
+    }
+  });
+}
+
 // Inicia o servidor e o agendador de tarefas
 const server = app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}.`);

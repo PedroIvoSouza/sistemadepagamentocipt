@@ -353,6 +353,7 @@
             const valor = Number(typeof ev.valor_final==='number' ? ev.valor_final
                           : parseFloat(String(ev.valor_final||'0').replace(/\./g,'').replace(',','.')) || 0);
             const datasFmt = formatDatasEvento(ev.datas_evento || ev.data);
+            const vigFinal = ev.data_vigencia_final ? formatDateBR(ev.data_vigencia_final) : '-';
 
             return `
             <div class="accordion-item">
@@ -369,6 +370,7 @@
               </h2>
               <div id="col${i}" class="accordion-collapse collapse" data-bs-parent="#eventosAccordion">
                 <div class="accordion-body">
+                  <div class="mb-2"><strong>Vigência final:</strong> ${vigFinal}</div>
                   <button class="btn btn-sm btn-outline-primary" data-ver-dars="${evId}" data-nome="${ev.nome_evento||''}">
                     <i class="bi bi-file-earmark-arrow-down"></i> Ver / Baixar DARs
                   </button>

@@ -91,6 +91,7 @@
                     <th>Nome do Evento</th>
                     <th>Nº Ofício SEI</th>
                     <th>Cliente</th>
+                    <th>Vigência Final</th>
                     <th class="text-end">Valor Final</th>
                     <th class="text-center">Status</th>
                     <th class="text-center">DAR</th>
@@ -604,6 +605,7 @@ async function carregarClientes(){
           <td>${ev.nome_evento || ''}</td>
           <td>${ev.numero_oficio_sei || ''}</td>
           <td>${ev.nome_cliente || ''}</td>
+          <td>${ev.data_vigencia_final ? new Date(ev.data_vigencia_final+ 'T00:00:00').toLocaleDateString('pt-BR') : '-'}</td>
           <td class="text-end">${fmtBRL(vfNum)}</td>
           <td class="text-center"><span class="badge ${badge}">${status}</span></td>
           <td class="text-center">

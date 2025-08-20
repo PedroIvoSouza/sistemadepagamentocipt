@@ -84,6 +84,8 @@ router.post('/', async (req, res) => {
     const errorMsg = `A soma das parcelas (R$ ${somaParcelas.toFixed(2)}) não corresponde ao Valor Final (R$ ${Number(valorFinal||0).toFixed(2)}).`;
     return res.status(400).json({ error: errorMsg });
   }
+  const datasOrdenadas = Array.isArray(datasEvento) ? [...datasEvento].sort((a,b)=> new Date(a)-new Date(b)) : [];
+  const dataVigenciaFinal = datasOrdenadas.length ? datasOrdenadas[datasOrdenadas.length-1] : null;
 
   try {
     await dbRun('BEGIN TRANSACTION', [], 'criar-evento/BEGIN');
@@ -91,7 +93,7 @@ router.post('/', async (req, res) => {
     // FIX: remover "INSERT INTO Eventos (...)" (placeholders inválidos) e listar colunas reais
     const eventoStmt = await dbRun(
       `INSERT INTO Eventos
-         (id_cliente, nome_evento, datas_evento, total_diarias, valor_bruto,
+         (id_cliente, nome_evento, datas_evento, total_diarias, data_vigencia_final, valor_bruto,
           tipo_desconto, desconto_manual, valor_final, numero_oficio_sei, status)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           tipo_desconto, desconto_manual, valor_final, status, numero_processo
@@ -103,6 +105,7 @@ router.post('/', async (req, res) => {
         espacoUtilizado || null,
         areaM2 != null ? Number(areaM2) : null,
         JSON.stringify(datasEvento || []),
+        dataVigenciaFinal,
         Number(totalDiarias || 0),
         Number(valorBruto || 0),
         String(tipoDescontoAuto || 'Geral'),
@@ -219,7 +222,7 @@ router.post('/', async (req, res) => {
 router.get('/', async (req, res) => {
   try {
     const sql = `
-      SELECT e.id, e.nome_evento, e.valor_final, e.status,
+      SELECT e.id, e.nome_evento, e.valor_final, e.status, e.data_vigencia_final,
              e.numero_oficio_sei,
              c.nome_razao_social AS nome_cliente
         FROM Eventos e
@@ -382,6 +385,8 @@ router.put('/:id', async (req, res) => {
       error: `A soma das parcelas (R$ ${somaParcelas.toFixed(2)}) não corresponde ao Valor Final (R$ ${Number(valorFinal||0).toFixed(2)}).`
     });
   }
+  const datasOrdenadas = Array.isArray(datasEvento) ? [...datasEvento].sort((a,b)=> new Date(a)-new Date(b)) : [];
+  const dataVigenciaFinal = datasOrdenadas.length ? datasOrdenadas[datasOrdenadas.length-1] : null;
 
   try {
     await dbRun('BEGIN TRANSACTION', [], 'update-evento/BEGIN');
@@ -394,6 +399,7 @@ router.put('/:id', async (req, res) => {
               espaco_utilizado = ?,
               area_m2 = ?,
               datas_evento = ?,
+              data_vigencia_final = ?,
               total_diarias = ?,
               valor_bruto = ?,
               tipo_desconto = ?,
@@ -415,6 +421,7 @@ router.put('/:id', async (req, res) => {
         espacoUtilizado || null,
         areaM2 != null ? Number(areaM2) : null,
         JSON.stringify(datasEvento),
+        dataVigenciaFinal,
         Number(totalDiarias || 0),
         Number(valorBruto || 0),
         tipoDescontoAuto,
