@@ -1,4 +1,3 @@
-// src/services/termoEventoExportService.js
 const fs = require('fs');
 const path = require('path');
 const Handlebars = require('handlebars');
@@ -31,31 +30,37 @@ function periodoEvento(datas_evento) {
   return ext.length === 1 ? ext[0] : `${ext[0]} a ${ext[ext.length-1]}`;
 }
 
-// Garante tabela 'documentos' (usada pelos teus /api/documentos/*)
+// Garante tabela 'documentos' com campos necessários
 async function ensureDocumentosTable() {
   await dbRun(`CREATE TABLE IF NOT EXISTS documentos (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    tipo TEXT NOT NULL,
+    tipo TEXT NOT NULL,                 -- 'termo_evento'
     token TEXT UNIQUE,
     permissionario_id INTEGER,
     evento_id INTEGER,
-    pdf_url TEXT,
+    pdf_url TEXT,                       -- caminho físico no servidor
+    pdf_public_url TEXT,                -- URL pública (ex: /documentos/xxx.pdf)
     assinafy_id TEXT,
+    status TEXT DEFAULT 'gerado',       -- 'gerado' | 'enviado' | 'assinado'
+    signed_pdf_public_url TEXT,         -- URL pública do PDF assinado
+    signed_at TEXT,
+    signer TEXT,
     created_at TEXT
   )`);
+  await dbRun(`CREATE UNIQUE INDEX IF NOT EXISTS ux_documentos_evento_tipo
+               ON documentos(evento_id, tipo)`);
 }
 
-// Lê o teu template HTML público e prepara assets com caminho absoluto (file://)
+// Lê o template HTML público e ajusta assets para caminho absoluto file://
 function compileHtmlTemplate(payload) {
-  // ATENÇÃO: seu arquivo está como "public/termo-permisao.html" (sem o segundo 's').
-  // Se renomear para "termo-permissao.html", ajuste este caminho:
+  // OBS: seu arquivo está como "public/termo-permisao.html" (sem o segundo 's').
   const templatePath = path.resolve(process.cwd(), 'public', 'termo-permisao.html');
   if (!fs.existsSync(templatePath)) {
     throw new Error(`Template não encontrado: ${templatePath}`);
   }
   let html = fs.readFileSync(templatePath, 'utf8');
 
-  // Corrige caminho do timbrado para FILE:// absoluto (para o Chromium carregar no server)
+  // Corrige caminho do timbrado para caminho absoluto (Chromium no server)
   const imgRel = /src=["']images\/papel-timbrado-secti\.png["']/i;
   const imgAbs = path.resolve(process.cwd(), 'public', 'images', 'papel-timbrado-secti.png')
     .replace(/\\/g, '/');
@@ -79,9 +84,8 @@ async function htmlToPdfBuffer(html) {
   return pdf;
 }
 
-// Monta payload a partir das tabelas Eventos + Clientes_Eventos + (opcional) parcelas de DARs
+// Monta payload a partir das tabelas Eventos + Clientes_Eventos + parcelas (DARs)
 async function buildPayloadFromEvento(eventoId) {
-  // Evento + Cliente
   const ev = await dbGet(
     `SELECT e.*, c.nome_razao_social, c.tipo_pessoa, c.documento, c.email, c.telefone, c.endereco,
             c.nome_responsavel, c.documento_responsavel
@@ -91,7 +95,6 @@ async function buildPayloadFromEvento(eventoId) {
   );
   if (!ev) throw new Error('Evento não encontrado');
 
-  // Parcelas (DARs vinculadas)
   const parcelas = await dbAll(
     `SELECT de.numero_parcela, de.valor_parcela, de.data_vencimento, d.status
        FROM DARs_Eventos de
@@ -105,14 +108,14 @@ async function buildPayloadFromEvento(eventoId) {
     `${p.numero_parcela}ª parcela em ${fmtDataExtenso(p.data_vencimento)} - ${fmtMoeda(p.valor_parcela)}`
   ).join('; ');
 
-  // Mapeia placeholders do seu HTML público
+  // Placeholders do seu HTML
   const payloadBasico = {
     processo: ev.numero_processo || '',
     evento: ev.nome_evento || '',
     periodo: periodo || fmtDataExtenso((String(ev.datas_evento||'').split(',')[0] || '').trim()),
   };
 
-  // Payload estendido que você pode querer usar se ampliar o template
+  // Campos extras para caso evolua o template
   const payloadEstendido = {
     numero_processo: ev.numero_processo || '',
     numero_termo: ev.numero_termo || '',
@@ -123,12 +126,11 @@ async function buildPayloadFromEvento(eventoId) {
     tabela_linha: `${ev.area_m2 || '-'};${ev.total_diarias || '-'};${fmtMoeda(ev.valor_final)}`,
     pagamentos: cronograma,
     vigencia_fim_datahora: fmtDataExtenso(ev.data_vigencia_final),
-    pagto_sinal_data: '', // se você tiver campos específicos, preencha aqui
+    pagto_sinal_data: '',
     pagto_saldo_data: '',
     assinatura_data: fmtDataExtenso(new Date().toISOString()),
   };
 
-  // Une ambos (teu HTML simples usa só processo/evento/período)
   return { ...payloadEstendido, ...payloadBasico };
 }
 
@@ -142,7 +144,7 @@ function nomeArquivo(ev, idDoc) {
 async function salvarDocumentoRegistro(buffer, tipo, permissionarioId, eventoId, evRow) {
   await ensureDocumentosTable();
 
-  // diretório público
+  // diretório público para servir estático
   const dir = path.resolve(process.cwd(), 'public', 'documentos');
   fs.mkdirSync(dir, { recursive: true });
 
@@ -150,24 +152,27 @@ async function salvarDocumentoRegistro(buffer, tipo, permissionarioId, eventoId,
   const token = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
   const createdAt = new Date().toISOString();
   const ins = await dbRun(
-    `INSERT INTO documentos (tipo, token, permissionario_id, evento_id, created_at)
-     VALUES (?, ?, ?, ?, ?)`,
+    `INSERT INTO documentos (tipo, token, permissionario_id, evento_id, status, created_at)
+     VALUES (?, ?, ?, ?, 'gerado', ?)`,
      [tipo, token, permissionarioId || null, eventoId || null, createdAt]
   );
   const documentoId = ins.lastID;
 
+  // salva PDF e registra URLs
   const fileName = nomeArquivo(evRow, documentoId);
   const filePath = path.join(dir, fileName);
   fs.writeFileSync(filePath, buffer);
 
-  await dbRun(`UPDATE documentos SET pdf_url = ? WHERE id = ?`, [filePath, documentoId]);
+  const publicUrl = `/documentos/${fileName}`;
+  await dbRun(`UPDATE documentos SET pdf_url = ?, pdf_public_url = ? WHERE id = ?`,
+              [filePath, publicUrl, documentoId]);
 
-  return { documentoId, token, filePath, fileName };
+  return { documentoId, token, filePath, fileName, publicUrl };
 }
 
 /**
  * Gera o PDF do termo para um Evento e indexa em 'documentos'.
- * Retorna { documentoId, urlPublica, urlAssinar } para o front.
+ * Retorna { documentoId, token, filePath, fileName, pdf_public_url, urlTermoPublic }.
  */
 async function gerarTermoEventoEIndexar(eventoId) {
   const ev = await dbGet(`SELECT e.*, c.nome_razao_social
@@ -182,15 +187,15 @@ async function gerarTermoEventoEIndexar(eventoId) {
   const doc = await salvarDocumentoRegistro(
     pdfBuf,
     'termo_evento',
-    null,           // permissionario_id (não se aplica aqui)
+    null,      // permissionario_id (não se aplica aqui)
     eventoId,
     ev
   );
 
-  // página que você já criou para embutir o Assinafy:
+  // página pública de assinatura que você já tem
   const urlTermoPublic = `/eventos/termo.html?id=${doc.documentoId}`;
 
-  return { ...doc, urlTermoPublic };
+  return { ...doc, pdf_public_url: doc.publicUrl, urlTermoPublic };
 }
 
 module.exports = { gerarTermoEventoEIndexar };
