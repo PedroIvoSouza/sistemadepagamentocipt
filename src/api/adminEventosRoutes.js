@@ -1,8 +1,11 @@
 // Em: src/api/adminEventosRoutes.js
 const express = require('express');
+const PDFDocument = require('pdfkit');
+const path = require('path');
 const adminAuthMiddleware = require('../middleware/adminAuthMiddleware');
 const { emitirGuiaSefaz } = require('../services/sefazService');
 const { gerarTokenDocumento, imprimirTokenEmPdf } = require('../utils/token');
+const { applyLetterhead, abntMargins } = require('../utils/pdfLetterhead');
 const db = require('../database/db');
 
 const router = express.Router();
@@ -50,6 +53,18 @@ const dbRun = (sql, p = [], ctx = '') =>
   });
 
 router.use(adminAuthMiddleware);
+
+function printToken(doc, token) {
+  if (!token) return;
+  const prevX = doc.x, prevY = doc.y;
+  doc.save();
+  const x = doc.page.margins.left;
+  const y = doc.page.height - doc.page.margins.bottom - 10;
+  doc.fontSize(8).fillColor('#222').text(`Token: ${token}`, x, y, { lineBreak: false });
+  doc.restore();
+  doc.x = prevX;
+  doc.y = prevY;
+}
 
 /**
  * Criar evento + emitir DARs
@@ -222,8 +237,10 @@ router.post('/', async (req, res) => {
 router.get('/', async (req, res) => {
   try {
     const sql = `
-      SELECT e.id, e.nome_evento, e.valor_final, e.status, e.data_vigencia_final,
+      SELECT e.id, e.nome_evento, e.espaco_utilizado, e.area_m2,
+             e.valor_final, e.status, e.data_vigencia_final,
              e.numero_oficio_sei, e.numero_processo, e.numero_termo,
+             e.hora_inicio, e.hora_fim, e.hora_montagem, e.hora_desmontagem,
              c.nome_razao_social AS nome_cliente
         FROM Eventos e
         JOIN Clientes_Eventos c ON e.id_cliente = c.id
@@ -670,6 +687,60 @@ router.delete('/:eventoId', async (req, res) => {
     try { await dbRun('ROLLBACK', [], 'apagar/ROLLBACK'); } catch {}
     console.error(`[ERRO] Ao apagar evento ID ${eventoId}:`, err.message);
     res.status(500).json({ error: 'Falha ao apagar o evento.' });
+  }
+});
+
+router.get('/:id/termo', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const ev = await dbGet(
+      `SELECT e.*, c.nome_razao_social AS nome_cliente
+         FROM Eventos e
+         JOIN Clientes_Eventos c ON c.id = e.id_cliente
+        WHERE e.id = ?`,
+      [id],
+      'termo/buscar-evento'
+    );
+    if (!ev) return res.status(404).json({ error: 'Evento não encontrado.' });
+
+    const tokenDoc = await gerarTokenDocumento('TERMO_EVENTO', null, db);
+    const doc = new PDFDocument({ size: 'A4', margins: abntMargins(0.5, 0.5) });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="termo_evento_${id}.pdf"`);
+    res.setHeader('X-Document-Token', tokenDoc);
+    doc.pipe(res);
+
+    applyLetterhead(doc, { imagePath: path.join(__dirname, '..', 'assets', 'papel-timbrado-secti.png') });
+    doc.x = doc.page.margins.left;
+    doc.y = doc.page.margins.top;
+    printToken(doc, tokenDoc);
+    doc.on('pageAdded', () => printToken(doc, tokenDoc));
+
+    doc.fontSize(14).fillColor('#333').text('TERMO DE RESPONSABILIDADE', { align: 'center' });
+    doc.moveDown();
+
+    const datas = Array.isArray(ev.datas_evento)
+      ? ev.datas_evento
+      : String(ev.datas_evento || '')
+          .split(',')
+          .map(s => s.trim())
+          .filter(Boolean);
+    const datasFmt = datas.join(', ');
+
+    const corpo = `Pelo presente termo, o cliente ${ev.nome_cliente} responsabiliza-se pelo evento "${ev.nome_evento}", ` +
+      `a ser realizado nas datas ${datasFmt || '-'} no espaço ${ev.espaco_utilizado || '-'} ` +
+      `(área ${ev.area_m2 || '-'} m²). Processo nº ${ev.numero_processo || '-'}, Termo nº ${ev.numero_termo || '-'}. ` +
+      `Montagem: ${ev.hora_montagem || '-'} | Início: ${ev.hora_inicio || '-'} | Fim: ${ev.hora_fim || '-'} | Desmontagem: ${ev.hora_desmontagem || '-'}.`;
+    doc.fontSize(12).text(corpo, { align: 'justify', lineGap: 2 });
+
+    doc.moveDown(2);
+    doc.text('____________________________________________', { align: 'center' });
+    doc.text('Assinatura', { align: 'center' });
+
+    doc.end();
+  } catch (err) {
+    console.error('[admin/eventos] termo erro:', err.message);
+    res.status(500).json({ error: 'Falha ao gerar termo.' });
   }
 });
 
