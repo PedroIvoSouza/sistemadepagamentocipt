@@ -67,12 +67,15 @@ router.post('/', async (req, res) => {
     tipoDescontoAuto,
     descontoManualPercent,
     valorFinal,
-    parcelas
-    idCliente, nomeEvento, datasEvento, totalDiarias, valorBruto,
-    tipoDescontoAuto, descontoManualPercent, valorFinal, parcelas,
-    espacoUtilizado, areaM2,
-    horaInicio, horaFim, horaMontagem, horaDesmontagem,
-    numeroProcesso, numeroTermo
+    parcelas,
+    espacoUtilizado,
+    areaM2,
+    horaInicio,
+    horaFim,
+    horaMontagem,
+    horaDesmontagem,
+    numeroProcesso,
+    numeroTermo,
   } = req.body;
 
   if (!idCliente || !nomeEvento || !Array.isArray(parcelas) || parcelas.length === 0) {
@@ -97,7 +100,13 @@ router.post('/', async (req, res) => {
          tipo_desconto, desconto_manual, valor_final, numero_oficio_sei,
          hora_inicio, hora_fim, hora_montagem, hora_desmontagem,
          numero_processo, numero_termo, status
-       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+       ) VALUES (
+         ?, ?, ?, ?, ?,
+         ?, ?, ?,
+         ?, ?, ?, ?,
+         ?, ?, ?, ?,
+         ?, ?, ?
+       )`,
       [
         idCliente,
         nomeEvento,
@@ -137,9 +146,7 @@ router.post('/', async (req, res) => {
     const tipoInscricao = documentoLimpo.length === 11 ? 3 : 4;
 
     // Loop de parcelas
-    let ano, mes;
-    for (let i = 0; i < parcelas.length; i++) {
-      const p = parcelas[i];
+    for (const [i, p] of parcelas.entries()) {
       const valorParcela = Number(p.valor) || 0;
       const vencimentoISO = p.vencimento; // yyyy-mm-dd
 
@@ -150,10 +157,8 @@ router.post('/', async (req, res) => {
         throw new Error(`O valor da parcela ${i + 1} deve ser maior que zero.`);
       }
 
-      // FIX: pegar mes/ano corretamente
-      [ano, mes] = vencimentoISO.split('-');
+      const [ano, mes] = vencimentoISO.split('-');
 
-      // Cria DAR
       const darStmt = await dbRun(
         `INSERT INTO dars (valor, data_vencimento, status, mes_referencia, ano_referencia)
          VALUES (?, ?, ?, ?, ?)`,
@@ -162,7 +167,6 @@ router.post('/', async (req, res) => {
       );
       const darId = darStmt.lastID;
 
-      // Vincula DAR ao evento
       await dbRun(
         `INSERT INTO DARs_Eventos (id_dar, id_evento, numero_parcela, valor_parcela, data_vencimento)
          VALUES (?, ?, ?, ?, ?)`,
@@ -170,7 +174,6 @@ router.post('/', async (req, res) => {
         `criar-evento/insert-join#${i + 1}`
       );
 
-      // Emite guia na SEFAZ
       const payloadSefaz = {
         versao: '1.0',
         contribuinteEmitente: {
@@ -190,13 +193,12 @@ router.post('/', async (req, res) => {
         }],
         dataLimitePagamento: vencimentoISO,
         observacao: `CIPT Evento: ${nomeEvento} (Montagem ${horaMontagem || '-'}; Evento ${horaInicio || '-'}-${horaFim || '-'}; Desmontagem ${horaDesmontagem || '-'}) | Parcela ${i + 1} de ${parcelas.length}`
-      }; 
+      };
 
       const retornoSefaz = await emitirGuiaSefaz(payloadSefaz);
       const tokenDoc = await gerarTokenDocumento('DAR_EVENTO', null, db);
       retornoSefaz.pdfBase64 = await imprimirTokenEmPdf(retornoSefaz.pdfBase64, tokenDoc);
 
-      // Atualiza DAR com dados da emissão
       await dbRun(
         `UPDATE dars SET numero_documento = ?, pdf_url = ?, status = 'Emitido' WHERE id = ?`,
         [retornoSefaz.numeroGuia, retornoSefaz.pdfBase64, darId],
@@ -367,11 +369,11 @@ router.put('/:id', async (req, res) => {
     parcelas = [],         // [{ valor, vencimento(YYYY-MM-DD) }, ...]
     horaInicio,
     horaFim,
-    horaMontagem,
-    horaDesmontagem
-    numeroProcesso,
-    numeroTermo
-  } = req.body || {};
+      horaMontagem,
+      horaDesmontagem,
+      numeroProcesso,
+      numeroTermo
+    } = req.body || {};
 
   if (!idCliente || !nomeEvento || !Array.isArray(parcelas) || parcelas.length === 0) {
     return res.status(400).json({ error: 'Campos obrigatórios estão faltando.' });
