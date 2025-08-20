@@ -27,6 +27,7 @@ const termoEventosRoutes          = require('./api/termoEventosRoutes');
 
 
 
+const adminTermoEventosRoutes     = require('./api/adminTermoEventosRoutes');
 
 // CORREÇÃO: Desestruturando os routers de eventos
 const {
@@ -51,6 +52,8 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+
+app.use('/api/admin', adminTermoEventosRoutes);
 
 // Servir arquivos estáticos da pasta 'public'
 const publicPath = path.join(__dirname, '..', 'public');
