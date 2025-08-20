@@ -129,9 +129,9 @@ function buildSefazPayloadPermissionario({ perm, darLike }) {
   }
 
   const codigoIbge = Number(process.env.COD_IBGE_MUNICIPIO || 0);
-  const receitaCod = Number(process.env.RECEITA_CODIGO_PERMISSIONARIO || 0);
+  const receitaCod = Number(String(process.env.RECEITA_CODIGO_PERMISSIONARIO).replace(/\D/g, ''));
   if (!codigoIbge) throw new Error('COD_IBGE_MUNICIPIO não configurado (.env).');
-  if (!receitaCod) throw new Error('RECEITA_CODIGO_PERMISSIONARIO não configurado (.env).');
+  if (!receitaCod) throw new Error('RECEITA_CODIGO_PERMISSIONARIO inválido.');
 
   // Sem depender de colunas endereco/cep (usa fallbacks .env)
   const descricaoEndereco = (process.env.ENDERECO_PADRAO || 'R. Barão de Jaraguá, 590 - Jaraguá, Maceió/AL');

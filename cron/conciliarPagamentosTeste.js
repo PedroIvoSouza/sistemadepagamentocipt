@@ -32,10 +32,16 @@ function toDateTimeISO(date, hh, mm, ss) {
 
 function receitasAtivas() {
   const set = new Set();
-  const r1 = Number(process.env.RECEITA_CODIGO_PERMISSIONARIO || 0);
-  const r2 = Number(process.env.RECEITA_CODIGO_EVENTO || 0);
-  if (r1 > 0) set.add(r1);
-  if (r2 > 0) set.add(r2);
+  const r1 = Number(String(process.env.RECEITA_CODIGO_PERMISSIONARIO).replace(/\D/g, ''));
+  if (process.env.RECEITA_CODIGO_PERMISSIONARIO && !r1) {
+    throw new Error('RECEITA_CODIGO_PERMISSIONARIO inválido.');
+  }
+  const r2 = Number(String(process.env.RECEITA_CODIGO_EVENTO).replace(/\D/g, ''));
+  if (process.env.RECEITA_CODIGO_EVENTO && !r2) {
+    throw new Error('RECEITA_CODIGO_EVENTO inválido.');
+  }
+  if (r1) set.add(r1);
+  if (r2) set.add(r2);
   return Array.from(set);
 }
 

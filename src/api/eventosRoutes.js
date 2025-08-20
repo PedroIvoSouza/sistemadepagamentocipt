@@ -149,6 +149,8 @@ router.post('/', async (req, res) => {
                 };
                 
                 // 3. Chama a API da SEFAZ
+                const receitaCod = Number(String(process.env.RECEITA_CODIGO_EVENTO).replace(/\D/g, ''));
+                if (!receitaCod) throw new Error('RECEITA_CODIGO_EVENTO inválido.');
                 const payloadSefaz = {
                     versao: '1.0',
                     contribuinteEmitente: {
@@ -160,7 +162,7 @@ router.post('/', async (req, res) => {
                         numeroCep: onlyDigits(cliente.cep)
                     },
                     receitas: [{
-                        codigo: Number(process.env.RECEITA_CODIGO_EVENTO),
+                        codigo: receitaCod,
                         competencia: { mes: dadosDar.mes_referencia, ano: dadosDar.ano_referencia },
                         valorPrincipal: dadosDar.valor,
                         valorDesconto: 0.00,

@@ -296,9 +296,18 @@ function buildSefazPayloadEvento({ cliente, parcela, receitaCodigo }) {
 async function _postEmitir(payload) {
   const APP_TOKEN = getAppTokenStrict(); // ← sanitiza só aqui
 
+  const receitas = Array.isArray(payload?.receitas)
+    ? payload.receitas.map((r, i) => {
+        const codigo = Number(String(r?.codigo).replace(/\D/g, ''));
+        if (!codigo) throw new Error(`Código de receita inválido em receitas[${i}].`);
+        return { ...r, codigo };
+      })
+    : (() => { throw new Error('Payload sem receitas.'); })();
+  const payloadLimpo = { ...payload, receitas };
+
   try {
     const { data } = await reqWithRetry(
-      () => sefaz.post('/api/public/guia/emitir', payload, {
+      () => sefaz.post('/api/public/guia/emitir', payloadLimpo, {
         headers: {
           // override só nesta request (não altera instância global)
           'appToken': APP_TOKEN,
