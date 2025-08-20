@@ -103,6 +103,7 @@
                     <th class="text-end">Valor Final</th>
                     <th class="text-center">Status</th>
                     <th class="text-center">DAR</th>
+                    <th class="text-center">Termo</th>
                     <th class="text-center">Ações</th>
                   </tr>
                 </thead>
@@ -639,6 +640,12 @@ async function carregarClientes(){
             </button>
           </td>
           <td class="text-center">
+            <button class="btn btn-sm btn-outline-success btn-termo" title="Emitir Termo"
+                    data-evento-id="${id}">
+              <i class="bi bi-file-earmark-text"></i>
+            </button>
+          </td>
+          <td class="text-center">
             <button class="btn btn-sm btn-outline-secondary btn-editar" title="Editar"
                     data-evento-id="${id}">
               <i class="bi bi-pencil"></i>
@@ -889,6 +896,7 @@ async function carregarClientes(){
     // Tabela principal
     eventosTableBody.addEventListener('click', async (e)=>{
       const btnDars   = e.target.closest('.btn-dars');
+      const btnTermo  = e.target.closest('.btn-termo');
       const btnApagar = e.target.closest('.btn-apagar');
       const btnEditar = e.target.closest('.btn-editar');
 
@@ -896,6 +904,24 @@ async function carregarClientes(){
         const eventoId = btnDars.dataset.eventoId;
         const eventoNome = btnDars.dataset.eventoNome || `#${eventoId}`;
         abrirModalDARs(eventoId, eventoNome);
+      }
+      if (btnTermo){
+        const eventoId = btnTermo.dataset.eventoId;
+        try{
+          const r = await fetch(`/api/admin/eventos/${eventoId}/termo`, { headers: AUTH_HEADERS });
+          if(!r.ok) throw new Error('Falha ao gerar termo');
+          const blob = await r.blob();
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `termo_evento_${eventoId}.pdf`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(url);
+        }catch(err){
+          alert(`Erro ao gerar termo: ${err.message}`);
+        }
       }
       if (btnApagar){
         const eventoId = btnApagar.dataset.eventoId;
