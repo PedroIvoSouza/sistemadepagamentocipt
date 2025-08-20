@@ -1,59 +1,80 @@
 const fs = require('fs');
 const path = require('path');
-const { PDFDocument, StandardFonts } = require('pdf-lib');
 
-async function gerarTermoPermissao(evento, parcelas = []) {
-  const templatePath = path.join(__dirname, '..', 'assets', 'termo_permissao_modelo.pdf');
-  const templateBytes = fs.readFileSync(templatePath);
-  const pdfDoc = await PDFDocument.load(templateBytes);
-  const page = pdfDoc.getPages()[0];
-  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+function formatCurrency(valor) {
+  return Number(valor || 0).toLocaleString('pt-BR', {
+    style: 'currency',
+    currency: 'BRL'
+  });
+}
 
-  const draw = (text, x, y, options = {}) => {
-    page.drawText(text ?? '', { x, y, size: 12, font, ...options });
-  };
+const formatadorData = new Intl.DateTimeFormat('pt-BR', {
+  day: '2-digit',
+  month: 'long',
+  year: 'numeric'
+});
 
-  draw(`Processo: ${evento.numero_processo || ''}`, 50, 750);
-  draw(`Termo: ${evento.numero_termo || ''}`, 350, 750);
+function formatDate(data) {
+  if (!data) return '';
+  const d = new Date(data);
+  if (isNaN(d)) return '';
+  return formatadorData.format(d);
+}
 
-  const cliente = `${evento.nome_razao_social || ''} - ${evento.documento || ''}`;
-  draw(cliente, 50, 730);
+function gerarTermoPermissao(evento = {}, parcelas = []) {
+  const templatePath = path.join(
+    __dirname,
+    '..',
+    'assets',
+    'termo_permissao_modelo.pdf'
+  );
+  let template = fs.readFileSync(templatePath, 'utf8');
 
   const datas = Array.isArray(evento.datas_evento)
     ? evento.datas_evento.join(', ')
     : String(evento.datas_evento || '');
 
-  const clausula1 =
-    `Área: ${evento.area_m2 || '-'} m², Evento: ${evento.nome_evento || '-'}, Datas: ${datas}, ` +
-    `Horário: ${evento.hora_inicio || '-'}-${evento.hora_fim || '-'}, Ofício SEI: ${evento.numero_oficio_sei || '-'}`;
-  draw(clausula1, 50, 700, { maxWidth: 500, lineHeight: 14 });
+  const tabelaLinha = `${evento.area_m2 || '-'};${
+    evento.total_diarias || '-'
+  };${formatCurrency(evento.valor_final)}`;
 
-  draw('Área', 60, 640);
-  draw(String(evento.area_m2 || '-'), 200, 640);
-  draw(String(evento.total_diarias || '-'), 300, 640);
-  const valorFmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
-    Number(evento.valor_final) || 0
-  );
-  draw(valorFmt, 400, 640);
+  const cronograma = parcelas
+    .map(
+      p =>
+        `${p.numero_parcela}ª parcela em ${formatDate(p.data_vencimento)} - ${formatCurrency(
+          p.valor_parcela
+        )}`
+    )
+    .join('; ');
 
-  const vigencia = evento.data_vigencia_final
-    ? new Date(evento.data_vigencia_final + 'T00:00:00').toLocaleDateString('pt-BR')
-    : '-';
-  draw(`Vigência até ${vigencia}`, 50, 610, { maxWidth: 500, lineHeight: 14 });
+  const replacements = {
+    numero_processo: evento.numero_processo || '',
+    numero_termo: evento.numero_termo || '',
+    permissionario_nome: evento.nome_razao_social || '',
+    permissionario_documento: evento.documento || '',
+    clausula1:
+      `Área: ${evento.area_m2 || '-'} m², Evento: ${
+        evento.nome_evento || '-'
+      }, Datas: ${datas}, Horário: ${evento.hora_inicio || '-'}-${
+        evento.hora_fim || '-'
+      }, Ofício SEI: ${evento.numero_oficio_sei || '-'}`,
+    tabela_linha: tabelaLinha,
+    pagamentos: cronograma,
+    vigencia_fim_datahora: formatDate(
+      evento.vigencia_fim_datahora || evento.data_vigencia_final
+    ),
+    pagto_sinal_data: formatDate(evento.pagto_sinal_data),
+    pagto_saldo_data: formatDate(evento.pagto_saldo_data),
+    assinatura_data: formatDate(new Date())
+  };
 
-  if (parcelas.length) {
-    const partes = parcelas.map(
-      p => `${p.numero_parcela}ª parcela em ${new Date(p.data_vencimento + 'T00:00:00').toLocaleDateString('pt-BR')} - ` +
-      new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(p.valor_parcela) || 0)
-    );
-    draw('Pagamentos: ' + partes.join('; '), 50, 580, { maxWidth: 500, lineHeight: 14 });
-  }
+  template = template.replace(/{{\s*([\w_]+)\s*}}/g, (_, key) => {
+    return Object.prototype.hasOwnProperty.call(replacements, key)
+      ? String(replacements[key])
+      : '';
+  });
 
-  const dataDoc = new Date().toLocaleDateString('pt-BR');
-  draw(`Maceió, ${dataDoc}`, 50, 520);
-
-  const pdfBytes = await pdfDoc.save();
-  return pdfBytes;
+  return Buffer.from(template, 'utf8');
 }
 
-module.exports = { gerarTermoPermissao };
+module.exports = { gerarTermoPermissao, formatCurrency, formatDate };
