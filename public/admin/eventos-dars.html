@@ -366,8 +366,30 @@ window.onload = () => {
   const descontoManualInput = document.getElementById('desconto-manual');
   const valorFinalDisplay = document.getElementById('valor-final');
   const numeroOficioSeiInput = document.getElementById('numero-oficio-sei');
+  const numeroProcessoInput = document.getElementById('numero-processo');
+  const numeroTermoInput = document.getElementById('numero-termo');
   const espacoUtilizadoInput = document.getElementById('espaco-utilizado');
   const areaM2Input = document.getElementById('area-m2');
+
+  const numeroOficioSeiMask = IMask(numeroOficioSeiInput, { mask: '00000.000000/0000-00' });
+  const numeroProcessoMask  = IMask(numeroProcessoInput, {
+    mask: [
+      { mask: '0.0000/0000' },
+      { mask: '00.0000/0000' },
+      { mask: '000.0000/0000' },
+      { mask: '0000.0000/0000' },
+      { mask: '00000.0000/0000' }
+    ]
+  });
+  const numeroTermoMask     = IMask(numeroTermoInput, {
+    mask: [
+      { mask: '0/0000' },
+      { mask: '00/0000' },
+      { mask: '000/0000' },
+      { mask: '0000/0000' },
+      { mask: '00000/0000' }
+    ]
+  });
 
   const parcelasContainer = document.getElementById('parcelas-container');
   const addParcelaBtn = document.getElementById('add-parcela-btn');
@@ -743,15 +765,15 @@ async function carregarClientes(){
     // preencher
     clienteSelect.value = ev.id_cliente || '';
     document.getElementById('nome-evento').value = ev.nome_evento || '';
-    numeroOficioSeiInput.value = ev.numero_oficio_sei || '';
+    numeroOficioSeiMask.value = ev.numero_oficio_sei || '';
     espacoUtilizadoInput.value = ev.espaco_utilizado || '';
     areaM2Input.value = ev.area_m2 != null ? ev.area_m2 : '';
     horaInicioInput.value = ev.hora_inicio || '';
     horaFimInput.value = ev.hora_fim || '';
     horaMontagemInput.value = ev.hora_montagem || '';
     horaDesmontagemInput.value = ev.hora_desmontagem || '';
-    document.getElementById('numero-processo').value = ev.numero_processo || '';
-    document.getElementById('numero-termo').value = ev.numero_termo || '';
+    numeroProcessoMask.value = ev.numero_processo || '';
+    numeroTermoMask.value = ev.numero_termo || '';
     if (Array.isArray(ev.datas_evento) && ev.datas_evento.length) fp.setDate(ev.datas_evento, true);
     tipoDescontoAutoDisplay.value = ev.tipo_desconto_auto || (clienteSelect.selectedOptions[0]?.dataset.tipo || '');
     descontoManualInput.value = ev.desconto_manual_percent || 0;
@@ -1030,7 +1052,7 @@ async function carregarClientes(){
     const body = {
       idCliente: clienteSelect.value,
       nomeEvento: document.getElementById('nome-evento').value,
-      numeroOficioSei: numeroOficioSeiInput.value.trim(),
+      numeroOficioSei: numeroOficioSeiMask.value.trim(),
       datasEvento: fp.selectedDates.map(d=> d.toISOString().split('T')[0]),
       tipoDescontoAuto: tipoDescontoAutoDisplay.value,
       descontoManualPercent: dm,
@@ -1043,8 +1065,8 @@ async function carregarClientes(){
       horaFim: horaFimInput.value || null,
       horaMontagem: horaMontagemInput.value || null,
       horaDesmontagem: horaDesmontagemInput.value || null,
-      numeroProcesso: document.getElementById('numero-processo').value,
-      numeroTermo: document.getElementById('numero-termo').value,
+      numeroProcesso: numeroProcessoMask.value.trim(),
+      numeroTermo: numeroTermoMask.value.trim(),
       parcelas
     };
 
@@ -1091,6 +1113,9 @@ async function carregarClientes(){
     parcelasMasks.forEach(({ valorMask, picker }) => { valorMask.destroy(); picker.destroy(); });
   }
   parcelasMasks = [];
+  numeroOficioSeiMask.value = '';
+  numeroProcessoMask.value  = '';
+  numeroTermoMask.value     = '';
   adicionarParcela();
   atualizarCalculos();
 
