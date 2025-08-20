@@ -33,6 +33,43 @@ const mkPeriodo = (datas_evento) => {
   return ext.length === 1 ? ext[0] : `${ext[0]} a ${ext[ext.length-1]}`;
 };
 
+// --------- MIGRAÇÃO DA TABELA `documentos` (auto) ---------
+async function ensureDocumentosSchema() {
+  // base mínima
+  await dbRun(`CREATE TABLE IF NOT EXISTS documentos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tipo TEXT NOT NULL,
+    token TEXT UNIQUE
+  )`);
+
+  const cols = await dbAll(`PRAGMA table_info(documentos)`);
+  const names = new Set(cols.map(c => c.name));
+  const addIfMissing = async (name, def) => {
+    if (!names.has(name)) {
+      await dbRun(`ALTER TABLE documentos ADD COLUMN ${name} ${def}`);
+      names.add(name);
+    }
+  };
+
+  await addIfMissing('permissionario_id', 'INTEGER');
+  await addIfMissing('evento_id', 'INTEGER');
+  await addIfMissing('pdf_url', 'TEXT');
+  await addIfMissing('pdf_public_url', 'TEXT');
+  await addIfMissing('assinafy_id', 'TEXT');
+  await addIfMissing('status', "TEXT DEFAULT 'gerado'");
+  await addIfMissing('signed_pdf_public_url', 'TEXT');
+  await addIfMissing('signed_at', 'TEXT');
+  await addIfMissing('signer', 'TEXT');
+  await addIfMissing('created_at', 'TEXT');
+
+  // índice (só tenta criar; se a coluna acabou de ser criada, ok)
+  try {
+    await dbRun(`CREATE UNIQUE INDEX IF NOT EXISTS ux_documentos_evento_tipo ON documentos(evento_id, tipo)`);
+  } catch (e) {
+    // ignora
+  }
+}
+
 // carrega HTML do template público
 function compileHtmlTemplate(payload) {
   const templatePath = path.resolve(process.cwd(), 'public', 'termo-permisao.html');
@@ -90,7 +127,7 @@ async function buildPayloadFromEvento(eventoId) {
   const sinal = parcelas[0]?.data_vencimento || null;
   const saldo = parcelas[1]?.data_vencimento || parcelas[0]?.data_vencimento || null;
 
-  // Permintente (da .env para não “engessar” no código)
+  // Permitente (via .env)
   const permitenteRazao = process.env.PERMITENTE_RAZAO || 'SECRETARIA DE ESTADO DA CIÊNCIA, DA TECNOLOGIA E DA INOVAÇÃO DE ALAGOAS - SECTI';
   const permitenteCnpj  = process.env.PERMITENTE_CNPJ  || '04.007.216/0001-30';
   const permitenteEnd   = process.env.PERMITENTE_ENDERECO || 'R. BARÃO DE JARAGUÁ, Nº 590, JARAGUÁ, MACEIÓ - ALAGOAS - CEP: 57022-140';
@@ -103,7 +140,7 @@ async function buildPayloadFromEvento(eventoId) {
   const orgSec = process.env.ORG_SECRETARIA || 'SECRETARIA DA CIÊNCIA, TECNOLOGIA E INOVAÇÃO';
   const orgUni = process.env.ORG_UNIDADE || 'CENTRO DE INOVAÇÃO DO JARAGUÁ';
 
-  // Placeholders NOVOS (seu template)
+  // Placeholders do template
   const payloadTermo = {
     org_uf: orgUF,
     org_secretaria: orgSec,
@@ -159,14 +196,13 @@ async function buildPayloadFromEvento(eventoId) {
     testemunha2_cpf: ''
   };
 
-  // (Compat) placeholders antigos usados no seu html minimalista
+  // (Compat) placeholders antigos
   const payloadCompat = {
     processo: ev.numero_processo || '',
     evento: ev.nome_evento || '',
-    periodo: periodo || fmtDataExtenso(primeiraData)
+    periodo: mkPeriodo(ev.datas_evento) || fmtDataExtenso(primeiraData)
   };
 
-  // Retorna ambos (o template usará o que existir)
   return { ...payloadTermo, ...payloadCompat };
 }
 
@@ -178,32 +214,14 @@ function nomeArquivo(ev, idDoc) {
 }
 
 async function salvarDocumentoRegistro(buffer, tipo, permissionarioId, eventoId, evRow) {
-  // tabela documentos (com colunas novas)
-  await dbRun(`CREATE TABLE IF NOT EXISTS documentos (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    tipo TEXT NOT NULL,
-    token TEXT UNIQUE,
-    permissionario_id INTEGER,
-    evento_id INTEGER,
-    pdf_url TEXT,
-    pdf_public_url TEXT,
-    assinafy_id TEXT,
-    status TEXT DEFAULT 'gerado',
-    signed_pdf_public_url TEXT,
-    signed_at TEXT,
-    signer TEXT,
-    created_at TEXT
-  )`);
-  await dbRun(`CREATE UNIQUE INDEX IF NOT EXISTS ux_documentos_evento_tipo
-               ON documentos(evento_id, tipo)`);
+  await ensureDocumentosSchema();
 
-  // diretório público
   const dir = path.resolve(process.cwd(), 'public', 'documentos');
   fs.mkdirSync(dir, { recursive: true });
 
-  // cria entrada para obter id
   const token = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
   const createdAt = new Date().toISOString();
+
   const ins = await dbRun(
     `INSERT INTO documentos (tipo, token, permissionario_id, evento_id, status, created_at)
      VALUES (?, ?, ?, ?, 'gerado', ?)`,
@@ -244,9 +262,7 @@ async function gerarTermoEventoEIndexar(eventoId) {
     ev
   );
 
-  // página pública para o cliente ler/assinar
   const urlTermoPublic = `/eventos/termo.html?id=${doc.documentoId}`;
-
   return { ...doc, pdf_public_url: doc.publicUrl, urlTermoPublic };
 }
 
