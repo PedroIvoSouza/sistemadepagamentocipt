@@ -2,22 +2,31 @@
 
 module.exports = {
   async up(queryInterface, Sequelize) {
-    await queryInterface.addColumn('Eventos', 'hora_inicio', {
-      type: Sequelize.STRING,
-      allowNull: true,
-    });
-    await queryInterface.addColumn('Eventos', 'hora_fim', {
-      type: Sequelize.STRING,
-      allowNull: true,
-    });
-    await queryInterface.addColumn('Eventos', 'hora_montagem', {
-      type: Sequelize.STRING,
-      allowNull: true,
-    });
-    await queryInterface.addColumn('Eventos', 'hora_desmontagem', {
-      type: Sequelize.STRING,
-      allowNull: true,
-    });
+    const table = await queryInterface.describeTable('Eventos');
+    if (!table['hora_inicio']) {
+      await queryInterface.addColumn('Eventos', 'hora_inicio', {
+        type: Sequelize.STRING,
+        allowNull: true,
+      });
+    }
+    if (!table['hora_fim']) {
+      await queryInterface.addColumn('Eventos', 'hora_fim', {
+        type: Sequelize.STRING,
+        allowNull: true,
+      });
+    }
+    if (!table['hora_montagem']) {
+      await queryInterface.addColumn('Eventos', 'hora_montagem', {
+        type: Sequelize.STRING,
+        allowNull: true,
+      });
+    }
+    if (!table['hora_desmontagem']) {
+      await queryInterface.addColumn('Eventos', 'hora_desmontagem', {
+        type: Sequelize.STRING,
+        allowNull: true,
+      });
+    }
   },
 
   async down(queryInterface) {
