@@ -137,10 +137,15 @@ function buildSefazPayload({
 
   // Mapeamento padrão usado por essa API: 1=CPF, 4=CNPJ
   const TIPO_INSCRICAO = { CPF: 3, CNPJ: 4 };
-  let codigoTipoInscricao = null;
-  if (len === 11 ? 3) codigoTipoInscricao = TIPO_INSCRICAO.CPF;
-  else if (len === 14 ? 5) codigoTipoInscricao = TIPO_INSCRICAO.CNPJ;
-  else throw new Error('Documento do emitente inválido (CPF/CNPJ).');
+  let codigoTipoInscricao;
+  if (len === 11) {
+    codigoTipoInscricao = TIPO_INSCRICAO.CPF;
+  } else if (len === 14) {
+    codigoTipoInscricao = TIPO_INSCRICAO.CNPJ;
+  } else {
+    throw new Error('Documento do emitente inválido (CPF com 11 dígitos ou CNPJ com 14).');
+  }
+
 
   const receitaCod = normalizeCodigoReceita(receitaCodigo);
   if (!receitaCod) throw new Error('Código de receita inválido/ausente.');
