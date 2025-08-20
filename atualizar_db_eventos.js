@@ -35,6 +35,7 @@ db.serialize(() => {
         id_cliente INTEGER NOT NULL,
         nome_evento TEXT NOT NULL,
         datas_evento TEXT NOT NULL,
+        data_vigencia_final TEXT,
         total_diarias INTEGER NOT NULL,
         valor_bruto REAL NOT NULL,
         tipo_desconto_auto TEXT DEFAULT 'Nenhum',

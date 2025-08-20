@@ -14,7 +14,7 @@ const db = new sqlite3.Database(dbPath);
 router.get('/', (req, res) => {
     const sql = `
         SELECT 
-            e.id, e.nome_evento, e.status, e.valor_final, e.total_diarias,
+            e.id, e.nome_evento, e.status, e.valor_final, e.total_diarias, e.data_vigencia_final,
             c.nome_razao_social as nome_cliente
         FROM Eventos e
         JOIN Clientes_Eventos c ON e.id_cliente = c.id
@@ -57,6 +57,7 @@ router.post('/', async (req, res) => {
 
     // Ordena as datas para garantir que a primeira é a correta
     const datasOrdenadas = datasEvento.sort((a, b) => new Date(a) - new Date(b));
+    const dataVigenciaFinal = datasOrdenadas[datasOrdenadas.length - 1];
     const primeiraDataEvento = new Date(datasOrdenadas[0]);
     
     const ultimaDataVencimento = new Date(parcelas.sort((a, b) => new Date(b.vencimento) - new Date(a.vencimento))[0].vencimento);
@@ -71,8 +72,8 @@ router.post('/', async (req, res) => {
 
         try {
             // 1. Insere o evento principal na tabela Eventos
-            const eventoSql = `INSERT INTO Eventos (id_cliente, nome_evento, datas_evento, total_diarias, valor_bruto, tipo_desconto_auto, percentual_desconto_manual, valor_final) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
-            const eventoParams = [idCliente, nomeEvento, datasEvento.join(','), totalDiarias, valorBruto, tipoDescontoAuto, descontoManualPercent, valorFinal];
+            const eventoSql = `INSERT INTO Eventos (id_cliente, nome_evento, datas_evento, data_vigencia_final, total_diarias, valor_bruto, tipo_desconto_auto, percentual_desconto_manual, valor_final) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+            const eventoParams = [idCliente, nomeEvento, datasEvento.join(','), dataVigenciaFinal, totalDiarias, valorBruto, tipoDescontoAuto, descontoManualPercent, valorFinal];
             
             const eventoId = await new Promise((resolve, reject) => {
                 db.run(eventoSql, eventoParams, function(err) {

@@ -147,13 +147,14 @@
                   <tr>
                     <th>Evento</th>
                     <th>Data(s)</th>
+                    <th>Vigência Final</th>
                     <th class="text-end">Valor (R$)</th>
                     <th class="text-center">Status</th>
                     <th class="text-center">Ações</th>
                   </tr>
                 </thead>
                 <tbody id="tabela-eventos">
-                  <tr><td colspan="5" class="text-center text-muted">Carregando...</td></tr>
+                  <tr><td colspan="6" class="text-center text-muted">Carregando...</td></tr>
                 </tbody>
               </table>
             </div>
@@ -411,7 +412,7 @@
         // tabela últimos eventos
         const tabela = document.getElementById('tabela-eventos');
         if (!evs.length){
-          tabela.innerHTML = `<tr><td colspan="5" class="text-center text-muted">Nenhum evento encontrado.</td></tr>`;
+          tabela.innerHTML = `<tr><td colspan="6" class="text-center text-muted">Nenhum evento encontrado.</td></tr>`;
         } else {
           const darsByEvento = ds.reduce((m,d)=>{ const k=d.evento_id||d.id_evento||d.eventoId; if(!k) return m; (m[k]=m[k]||[]).push(d); return m; }, {});
           tabela.innerHTML = evs.slice(0,5).map(ev=>{
@@ -427,6 +428,7 @@
             return `<tr>
               <td>${ev.nome_evento || 'Evento'}</td>
               <td>${datasFmt}</td>
+              <td>${formatDateBR(ev.data_vigencia_final)}</td>
               <td class="text-end">${formatBRL(valor)}</td>
               <td class="text-center"><span class="badge bg-${badge}">${status}</span></td>
               <td class="text-center">

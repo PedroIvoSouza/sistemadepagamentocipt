@@ -90,6 +90,7 @@
                     <th>ID</th>
                     <th>Nome do Evento</th>
                     <th>Cliente</th>
+                    <th>Vigência Final</th>
                     <th class="text-end">Valor Final</th>
                     <th class="text-center">Status</th>
                     <th class="text-center">DAR</th>
@@ -566,6 +567,7 @@ async function carregarClientes(){
           <td>${id}</td>
           <td>${ev.nome_evento || ''}</td>
           <td>${ev.nome_cliente || ''}</td>
+          <td>${ev.data_vigencia_final ? new Date(ev.data_vigencia_final+ 'T00:00:00').toLocaleDateString('pt-BR') : '-'}</td>
           <td class="text-end">${fmtBRL(vfNum)}</td>
           <td class="text-center"><span class="badge ${badge}">${status}</span></td>
           <td class="text-center">
@@ -588,7 +590,7 @@ async function carregarClientes(){
       });
     }catch(e){
       console.error(e);
-      eventosTableBody.innerHTML = '<tr><td colspan="7" class="text-center text-danger">Erro ao carregar eventos.</td></tr>';
+      eventosTableBody.innerHTML = '<tr><td colspan="8" class="text-center text-danger">Erro ao carregar eventos.</td></tr>';
     }
   }
 
@@ -597,7 +599,7 @@ async function carregarClientes(){
     trs.forEach(tr=>{
       const id = tr.children?.[0]?.textContent?.trim();
       if (String(id)===String(eventoId)){
-        const badge = tr.querySelector('td:nth-child(5) .badge');
+        const badge = tr.querySelector('td:nth-child(6) .badge');
         if (badge){
           badge.textContent = status;
           badge.className = 'badge ' + (status==='Pago' ? 'bg-success' : ['Emitido','Reemitido'].includes(status) ? 'bg-primary' : 'bg-warning text-dark');

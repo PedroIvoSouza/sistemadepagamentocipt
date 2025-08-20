@@ -222,9 +222,9 @@ async function gerarDarsDeTeste(permissionario, clienteEvento) {
 
       const evPast = await run(
         `INSERT INTO Eventos
-           (id_cliente, nome_evento, datas_evento, total_diarias, valor_bruto, valor_final, status)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [clienteEvento.id, 'Evento Passado (Teste Chatbot)', darVencidaEvento.data_vencimento, 1,
+           (id_cliente, nome_evento, datas_evento, data_vigencia_final, total_diarias, valor_bruto, valor_final, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [clienteEvento.id, 'Evento Passado (Teste Chatbot)', darVencidaEvento.data_vencimento, darVencidaEvento.data_vencimento, 1,
          darVencidaEvento.valor, darVencidaEvento.valor, 'Pendente']
       );
 
@@ -262,9 +262,9 @@ async function gerarDarsDeTeste(permissionario, clienteEvento) {
 
       const evFut = await run(
         `INSERT INTO Eventos
-           (id_cliente, nome_evento, datas_evento, total_diarias, valor_bruto, valor_final, status)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [clienteEvento.id, 'Evento Futuro (Teste Chatbot)', darVigenteEvento.data_vencimento, 1,
+           (id_cliente, nome_evento, datas_evento, data_vigencia_final, total_diarias, valor_bruto, valor_final, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [clienteEvento.id, 'Evento Futuro (Teste Chatbot)', darVigenteEvento.data_vencimento, darVigenteEvento.data_vencimento, 1,
          darVigenteEvento.valor, darVigenteEvento.valor, 'Pendente']
       );
 
