@@ -201,9 +201,17 @@
           <div class="summary-row final-value">
             <span>Valor Final a Pagar:</span> <strong id="valor-final">R$ 0,00</strong>
           </div>
+          <div class="form-check mt-3">
+            <input class="form-check-input" type="checkbox" id="evento-gratuito">
+            <label class="form-check-label" for="evento-gratuito">Evento gratuito</label>
+          </div>
+          <div class="mb-3 d-none" id="justificativa-gratuito-wrapper">
+            <label for="justificativa-gratuito" class="form-label">Justificativa</label>
+            <textarea id="justificativa-gratuito" class="form-control"></textarea>
+          </div>
         </fieldset>
 
-        <fieldset>
+        <fieldset id="parcelamento-fieldset">
           <legend>4. Parcelamento</legend>
           <div id="parcelas-container" class="mb-3"></div>
           <button type="button" id="add-parcela-btn" class="btn btn-sm btn-outline-secondary">Adicionar Parcela</button>
@@ -377,6 +385,9 @@ window.onload = () => {
   const espacoUtilizadoSelect = document.getElementById('espaco-utilizado');
   const capacidadeEspacoDisplay = document.getElementById('capacidade-espaco');
   const areaM2Input = document.getElementById('area-m2');
+  const eventoGratuitoInput = document.getElementById('evento-gratuito');
+  const justificativaGratuitoTextarea = document.getElementById('justificativa-gratuito');
+  const justificativaGratuitoWrapper = document.getElementById('justificativa-gratuito-wrapper');
 
   const ESPACOS_INFO = {
     'Auditório':   { area: 429.68, capacidade: 313 },
@@ -419,10 +430,16 @@ window.onload = () => {
     capacidadeEspacoDisplay.textContent = totais.capacidade ? `Capacidade total: ${totais.capacidade} pessoas` : '';
   });
 
+  eventoGratuitoInput.addEventListener('change', () => {
+    justificativaGratuitoWrapper.classList.toggle('d-none', !eventoGratuitoInput.checked);
+    atualizarCalculos();
+  });
+
   const parcelasContainer = document.getElementById('parcelas-container');
   const addParcelaBtn = document.getElementById('add-parcela-btn');
   const totalParceladoDisplay = document.getElementById('total-parcelado');
   const formError = document.getElementById('form-error');
+  const parcelamentoFieldset = document.getElementById('parcelamento-fieldset');
 
   const eventosTableBody = document.getElementById('eventos-table-body');
 
@@ -493,14 +510,20 @@ window.onload = () => {
     const vb = calcularValorBruto(n);
     const tipo = clienteSelect.selectedOptions[0]?.dataset?.tipo || 'Geral';
     const dm  = parseFloat(descontoManualInput.value) || 0;
-    const vf  = calcularValorFinal(vb, tipo, dm);
+    const gratis = eventoGratuitoInput.checked;
+    const vf  = gratis ? 0 : calcularValorFinal(vb, tipo, dm);
 
     totalDiariasDisplay.textContent = n;
     valorBrutoDisplay.textContent   = fmtBRL(vb);
     tipoDescontoAutoDisplay.value   = tipo;
     valorFinalDisplay.textContent   = fmtBRL(vf);
 
-    gerenciarEstadoParcelamento();
+    parcelamentoFieldset.disabled = gratis;
+    if (gratis){
+      totalParceladoDisplay.textContent = fmtBRL(0);
+    } else {
+      gerenciarEstadoParcelamento();
+    }
     validarFormularioCompleto();
   }
 
@@ -614,7 +637,18 @@ window.onload = () => {
     const vb = calcularValorBruto(n);
     const tipo = clienteSelect.selectedOptions[0]?.dataset?.tipo || 'Geral';
     const dm = parseFloat(descontoManualInput.value)||0;
-    const vf = calcularValorFinal(vb, tipo, dm);
+    const gratis = eventoGratuitoInput.checked;
+    const vf = gratis ? 0 : calcularValorFinal(vb, tipo, dm);
+
+    if (gratis){
+      totalParceladoDisplay.textContent = fmtBRL(0);
+      if (!justificativaGratuitoTextarea.value.trim()){
+        formError.textContent = 'Justificativa obrigatória para evento gratuito.';
+        formError.classList.remove('d-none'); formError.style.display='block';
+        return false;
+      }
+      return true;
+    }
 
     const totalParcelas = [...parcelasContainer.querySelectorAll('.parcela-valor')]
       .reduce((s,inp)=> s + parseCurrency(inp.value), 0);
@@ -769,6 +803,8 @@ async function carregarClientes(){
     const hora_fim = ev.hora_fim ?? ev.horaFim ?? null;
     const hora_montagem = ev.hora_montagem ?? ev.horaMontagem ?? null;
     const hora_desmontagem = ev.hora_desmontagem ?? ev.horaDesmontagem ?? null;
+    const evento_gratuito = ev.evento_gratuito ?? ev.eventoGratuito ?? false;
+    const justificativa_gratuito = ev.justificativa_gratuito ?? ev.justificativaGratuito ?? '';
     return {
       id_cliente,
       nome_evento,
@@ -785,7 +821,9 @@ async function carregarClientes(){
       hora_montagem,
       hora_desmontagem,
       numero_processo,
-      numero_termo
+      numero_termo,
+      evento_gratuito,
+      justificativa_gratuito
     };
   }
 
@@ -817,6 +855,10 @@ async function carregarClientes(){
     horaDesmontagemInput.value = ev.hora_desmontagem || '';
     numeroProcessoMask.value = ev.numero_processo || '';
     numeroTermoMask.value = ev.numero_termo || '';
+    eventoGratuitoInput.checked = !!ev.evento_gratuito;
+    justificativaGratuitoTextarea.value = ev.justificativa_gratuito || '';
+    justificativaGratuitoWrapper.classList.toggle('d-none', !eventoGratuitoInput.checked);
+    parcelamentoFieldset.disabled = eventoGratuitoInput.checked;
     if (Array.isArray(ev.datas_evento) && ev.datas_evento.length) fp.setDate(ev.datas_evento, true);
     tipoDescontoAutoDisplay.value = ev.tipo_desconto_auto || (clienteSelect.selectedOptions[0]?.dataset.tipo || '');
     descontoManualInput.value = ev.desconto_manual_percent || 0;
@@ -830,7 +872,7 @@ async function carregarClientes(){
         const venc = p.vencimento ?? p.data_vencimento ?? p.dar_venc ?? null;
         if (venc) m.picker.setDate(venc, true);
       });
-    }else{
+    }else if (!ev.evento_gratuito){
       adicionarParcela();
     }
 
@@ -1078,7 +1120,8 @@ async function carregarClientes(){
       alert('Corrija os erros antes de salvar.'); return;
     }
 
-    const parcelas = parcelasMasks.map(({valorMask,picker})=>{
+    const gratis = eventoGratuitoInput.checked;
+    const parcelas = gratis ? [] : parcelasMasks.map(({valorMask,picker})=>{
       const [d,m,a] = (picker.input.value||'').split('/');
       return {
         valor: parseCurrency(valorMask.el.value),
@@ -1090,7 +1133,7 @@ async function carregarClientes(){
     const vb = calcularValorBruto(n);
     const tipo = clienteSelect.selectedOptions[0]?.dataset?.tipo || 'Geral';
     const dm = parseFloat(descontoManualInput.value)||0;
-    const vf = calcularValorFinal(vb, tipo, dm);
+    const vf = gratis ? 0 : calcularValorFinal(vb, tipo, dm);
 
     const body = {
       idCliente: clienteSelect.value,
@@ -1110,6 +1153,8 @@ async function carregarClientes(){
       horaDesmontagem: horaDesmontagemInput.value || null,
       numeroProcesso: numeroProcessoMask.value.trim(),
       numeroTermo: numeroTermoMask.value.trim(),
+      eventoGratuito: gratis,
+      justificativaGratuito: justificativaGratuitoTextarea.value.trim(),
       parcelas
     };
 
@@ -1161,6 +1206,10 @@ async function carregarClientes(){
   numeroOficioSeiMask.value = '';
   numeroProcessoMask.value  = '';
   numeroTermoMask.value     = '';
+  eventoGratuitoInput.checked = false;
+  justificativaGratuitoTextarea.value = '';
+  justificativaGratuitoWrapper.classList.add('d-none');
+  parcelamentoFieldset.disabled = false;
   adicionarParcela();
   atualizarCalculos();
 
