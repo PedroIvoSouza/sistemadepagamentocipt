@@ -8,6 +8,7 @@ const path = require('path');
 const fs = require('fs');
 
 const botAuthMiddleware = require('../middleware/botAuthMiddleware');
+const { codigoBarrasParaLinhaDigitavel } = require('../utils/boleto');
 
 // === Integração SEFAZ (oficial do sistema) =========================
 const {
@@ -425,14 +426,18 @@ router.get('/dars/:darId', botAuthMiddleware, async (req, res) => {
       return res.status(403).json({ error: 'Este telefone não está autorizado a acessar este DAR.' });
     }
 
-    const { linha_digitavel, valor, data_vencimento, mes_referencia, ano_referencia } = ctx.dar;
+    const { linha_digitavel, valor, data_vencimento, mes_referencia, ano_referencia, codigo_barras } = ctx.dar;
+    let ld = linha_digitavel;
+    if (!ld && codigo_barras) {
+      ld = codigoBarrasParaLinhaDigitavel(codigo_barras);
+    }
     const competencia = `${String(mes_referencia).padStart(2, '0')}/${ano_referencia}`;
 
     return res.json({
       ok: true,
       dar: {
         id: ctx.dar.id,
-        linha_digitavel: linha_digitavel || null,
+        linha_digitavel: ld || null,
         competencia,
         vencimento: data_vencimento,
         valor
@@ -561,6 +566,10 @@ router.post('/dars/:darId/emit', botAuthMiddleware, async (req, res) => {
       throw new Error('Retorno da SEFAZ incompleto (numeroGuia/pdfBase64).');
     }
 
+    const linhaDigitavel =
+      (sefazResp.linhaDigitavel && sefazResp.linhaDigitavel.trim()) ||
+      (sefazResp.codigoBarras ? codigoBarrasParaLinhaDigitavel(sefazResp.codigoBarras) : null);
+
     // Token opcional no PDF
     let pdfOut = sefazResp.pdfBase64;
     if (gerarTokenDocumento && imprimirTokenEmPdf) {
@@ -579,14 +588,14 @@ router.post('/dars/:darId/emit', botAuthMiddleware, async (req, res) => {
              linha_digitavel = COALESCE(?, linha_digitavel),
              status = 'Emitido'
        WHERE id = ?`,
-      [sefazResp.numeroGuia, pdfOut, sefazResp.linhaDigitavel || null, darId]
+      [sefazResp.numeroGuia, pdfOut, linhaDigitavel, darId]
     );
 
     return res.json({
       ok: true,
       darId,
       numero_documento: sefazResp.numeroGuia,
-      linha_digitavel: sefazResp.linhaDigitavel || null,
+      linha_digitavel: linhaDigitavel,
       pdf_url: pdfOut
     });
   } catch (err) {
@@ -666,6 +675,10 @@ router.post('/dars/:darId/reemit', botAuthMiddleware, async (req, res) => {
       throw new Error('Retorno da SEFAZ incompleto (numeroGuia/pdfBase64).');
     }
 
+    const linhaDigitavel =
+      (sefazResp.linhaDigitavel && sefazResp.linhaDigitavel.trim()) ||
+      (sefazResp.codigoBarras ? codigoBarrasParaLinhaDigitavel(sefazResp.codigoBarras) : null);
+
     // Token opcional
     let pdfOut = sefazResp.pdfBase64;
     if (gerarTokenDocumento && imprimirTokenEmPdf) {
@@ -682,14 +695,14 @@ router.post('/dars/:darId/reemit', botAuthMiddleware, async (req, res) => {
              linha_digitavel = COALESCE(?, linha_digitavel),
              status = 'Reemitido'
        WHERE id = ?`,
-      [sefazResp.numeroGuia, pdfOut, sefazResp.linhaDigitavel || null, darId]
+      [sefazResp.numeroGuia, pdfOut, linhaDigitavel, darId]
     );
 
     return res.json({
       ok: true,
       darId,
       numero_documento: sefazResp.numeroGuia,
-      linha_digitavel: sefazResp.linhaDigitavel || null,
+      linha_digitavel: linhaDigitavel,
       pdf_url: pdfOut
     });
   } catch (err) {
