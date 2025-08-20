@@ -323,17 +323,15 @@ async function _postEmitir(payload) {
  * Compat: emitirGuiaSefaz(contribuinte, guiaLike) → monta payload perm.
  */
 async function emitirGuiaSefaz(arg1, arg2) {
-  // payload pronto?
-  if (arg1 && typeof arg1 === 'object' && arg1.versao && arg1.contribuinteEmitente && arg1.receitas) {
-    return _postEmitir(arg1);
-  }
-
-  // Compat (contribuinte, guiaLike)
-  if (arg1 && arg2) {
-    const contrib = arg1 || {};
-    const guia = arg2 || {};
+   // payload pronto?
+   if (arg1 && typeof arg1 === 'object' && arg1.versao && arg1.contribuinteEmitente && arg1.receitas) {
+     return _postEmitir(arg1);
+   }
+   // Compat (contribuinte, guiaLike)
+   if (arg1 && arg2) {
+     const contrib = arg1 || {};
+     const guia = arg2 || {};
     const doc = onlyDigits(contrib.documento || contrib.cnpj || contrib.cpf || '');
-
     const fakeDarLike = {
       valor: guia.valor || guia.valorPrincipal || 0,
       data_vencimento: guia.data_vencimento || guia.vencimento || guia.dataVencimento,
@@ -342,7 +340,6 @@ async function emitirGuiaSefaz(arg1, arg2) {
       id: guia.id || guia.referencia || null,
       numero_documento: guia.numero_documento || null,
     };
-
     if (doc.length === 14) {
       const payload = buildSefazPayloadPermissionario({
         perm: { cnpj: doc, nome_empresa: contrib.nomeRazaoSocial || contrib.nome },
@@ -351,7 +348,6 @@ async function emitirGuiaSefaz(arg1, arg2) {
       });
       return _postEmitir(payload);
     }
-
     if (doc.length === 11) {
       const payload = buildSefazPayloadEvento({
         cliente: { documento: doc, nome_razao_social: contrib.nomeRazaoSocial || contrib.nome },
@@ -362,16 +358,14 @@ async function emitirGuiaSefaz(arg1, arg2) {
           competenciaAno: fakeDarLike.ano_referencia,
           id: fakeDarLike.id,
         },
-        receitaCodigo: RECEITA_CODIGO_EVENTO || RECEITA_CODIGO_PERMISSIONARIO, // fallback se necessário
+        // receitaCodigo opcional; pickReceitaEventoByDoc decide
       });
       return _postEmitir(payload);
     }
-
-    throw new Error('Documento inválido (esperado CPF com 11 dígitos ou CNPJ com 14).');
-  }
-
-  throw new Error('emitirGuiaSefaz: chame com payload pronto ou (contribuinte, guiaLike).');
-}
+    throw new Error('Documento inválido (CPF 11 dígitos ou CNPJ 14).');
+   }
+   throw new Error('emitirGuiaSefaz: chame com payload pronto ou (contribuinte, guiaLike).');
+ }
 
 
 // ==========================
