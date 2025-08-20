@@ -1,7 +1,17 @@
 const assert = require('assert');
 const TermoService = require('../src/services/TermoService');
 
-const template = 'Evento em {{data}} com valor de {{valor}}. Vigência: {{vigenciaInicio}} a {{vigenciaFim}}. Saldo: {{saldoPagamento}}. Cláusulas: {{clausulas}}.';
+const template = `
+<html>
+  <head>
+    <style>
+      body { font-family: Arial; }
+    </style>
+  </head>
+  <body>
+    <p>Evento em {{data}} com valor de {{valor}}. Vigência: {{vigenciaInicio}} a {{vigenciaFim}}. Saldo: {{saldoPagamento}}. Cláusulas: {{clausulas}}.</p>
+  </body>
+</html>`;
 const dados = {
   data: '2025-08-12',
   valor: 2495,

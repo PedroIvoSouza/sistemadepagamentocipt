@@ -6,6 +6,6 @@
     "test": "node test/TermoService.test.js"
   },
   "dependencies": {
-    "pdfkit": "^0.13.0"
+    "puppeteer": "^22.15.0"
   }
 }

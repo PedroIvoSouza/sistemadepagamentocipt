@@ -42,17 +42,24 @@ class TermoService {
 
     const content = this.populateTemplate(template, data);
 
-    const PDFDocument = require('pdfkit');
-    const doc = new PDFDocument();
-    const chunks = [];
-
-    return await new Promise((resolve, reject) => {
-      doc.on('data', (chunk) => chunks.push(chunk));
-      doc.on('end', () => resolve(Buffer.concat(chunks)));
-      doc.on('error', reject);
-      doc.text(content);
-      doc.end();
-    });
+    const puppeteer = require('puppeteer');
+    const browser = await puppeteer.launch({ args: ['--no-sandbox'] });
+    try {
+      const page = await browser.newPage();
+      await page.setContent(content, { waitUntil: 'networkidle0' });
+      const buffer = await page.pdf({
+        format: 'A4',
+        margin: {
+          top: '1cm',
+          right: '1cm',
+          bottom: '1cm',
+          left: '1cm'
+        }
+      });
+      return buffer;
+    } finally {
+      await browser.close();
+    }
   }
 }
 
