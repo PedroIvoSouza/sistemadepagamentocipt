@@ -53,9 +53,9 @@ function buildSefazPayloadPermissionario({ perm, darLike }) {
   }
 
   const codigoIbge = Number(process.env.COD_IBGE_MUNICIPIO || 0);
-  const receitaCod = Number(process.env.RECEITA_CODIGO_PERMISSIONARIO || 0);
+  const receitaCod = Number(String(process.env.RECEITA_CODIGO_PERMISSIONARIO).replace(/\D/g, ''));
   if (!codigoIbge) throw new Error('COD_IBGE_MUNICIPIO não configurado (.env).');
-  if (!receitaCod) throw new Error('RECEITA_CODIGO_PERMISSIONARIO não configurado (.env).');
+  if (!receitaCod) throw new Error('RECEITA_CODIGO_PERMISSIONARIO inválido.');
 
   // Endereço/CEP — fallbacks
   const descricaoEndereco =

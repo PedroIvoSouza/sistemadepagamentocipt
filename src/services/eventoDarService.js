@@ -115,6 +115,8 @@ async function criarEventoComDars(db, data, helpers) {
 
     const documentoLimpo = onlyDigits(cliente.documento);
     const tipoInscricao = documentoLimpo.length === 11 ? 3 : 4;
+    const receitaCod = Number(String(process.env.RECEITA_CODIGO_EVENTO).replace(/\D/g, ''));
+    if (!receitaCod) throw new Error('RECEITA_CODIGO_EVENTO inválido.');
 
     for (const [i, p] of parcelas.entries()) {
       const valorParcela = Number(p.valor) || 0;
@@ -152,7 +154,7 @@ async function criarEventoComDars(db, data, helpers) {
           numeroCep: onlyDigits(cliente.cep)
         },
         receitas: [{
-          codigo: Number(process.env.RECEITA_CODIGO_EVENTO),
+          codigo: receitaCod,
           competencia: { mes: Number(mes), ano: Number(ano) },
           valorPrincipal: valorParcela,
           valorDesconto: 0.00,
@@ -296,6 +298,8 @@ async function atualizarEventoComDars(db, id, data, helpers) {
 
     const docLimpo = onlyDigits(cliente.documento);
     const tipoInscricao = docLimpo.length === 11 ? 3 : 4;
+    const receitaCod = Number(String(process.env.RECEITA_CODIGO_EVENTO).replace(/\D/g, ''));
+    if (!receitaCod) throw new Error('RECEITA_CODIGO_EVENTO inválido.');
 
     for (let i = 0; i < parcelas.length; i++) {
       const p = parcelas[i];
@@ -333,7 +337,7 @@ async function atualizarEventoComDars(db, id, data, helpers) {
           numeroCep: onlyDigits(cliente.cep)
         },
         receitas: [{
-          codigo: Number(process.env.RECEITA_CODIGO_EVENTO),
+          codigo: receitaCod,
           competencia: { mes: Number(mes), ano: Number(ano) },
           valorPrincipal: valorParcela,
           valorDesconto: 0.00,
