@@ -126,6 +126,31 @@
           <div class="mb-3">
             <label for="numero-oficio-sei" class="form-label">Número do Ofício SEI</label>
             <input type="text" class="form-control" id="numero-oficio-sei">
+            <label for="espaco-utilizado" class="form-label">Espaço Utilizado</label>
+            <input type="text" class="form-control" id="espaco-utilizado">
+          </div>
+          <div class="mb-3">
+            <label for="area-m2" class="form-label">Área (m²)</label>
+            <input type="number" step="0.01" class="form-control" id="area-m2">
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label for="hora-inicio" class="form-label">Hora de Início</label>
+              <input type="time" class="form-control" id="hora-inicio">
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="hora-fim" class="form-label">Hora de Fim</label>
+              <input type="time" class="form-control" id="hora-fim">
+            </div>
+          </div>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label for="hora-montagem" class="form-label">Hora de Montagem</label>
+              <input type="time" class="form-control" id="hora-montagem">
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="hora-desmontagem" class="form-label">Hora de Desmontagem</label>
+              <input type="time" class="form-control" id="hora-desmontagem">
+            </div>
           </div>
         </fieldset>
 
@@ -311,12 +336,18 @@ window.onload = () => {
 
   const clienteSelect = document.getElementById('cliente-select');
   const datasEventoInput = document.getElementById('datas-evento');
+  const horaInicioInput = document.getElementById('hora-inicio');
+  const horaFimInput = document.getElementById('hora-fim');
+  const horaMontagemInput = document.getElementById('hora-montagem');
+  const horaDesmontagemInput = document.getElementById('hora-desmontagem');
   const totalDiariasDisplay = document.getElementById('total-diarias');
   const valorBrutoDisplay = document.getElementById('valor-bruto');
   const tipoDescontoAutoDisplay = document.getElementById('tipo-desconto-auto');
   const descontoManualInput = document.getElementById('desconto-manual');
   const valorFinalDisplay = document.getElementById('valor-final');
   const numeroOficioSeiInput = document.getElementById('numero-oficio-sei');
+  const espacoUtilizadoInput = document.getElementById('espaco-utilizado');
+  const areaM2Input = document.getElementById('area-m2');
 
   const parcelasContainer = document.getElementById('parcelas-container');
   const addParcelaBtn = document.getElementById('add-parcela-btn');
@@ -635,6 +666,10 @@ async function carregarClientes(){
     const nome_evento = ev.nome_evento ?? ev.nome ?? ev.titulo ?? '';
     const tipo_desconto_auto = ev.tipo_desconto_auto ?? ev.tipoDescontoAuto ?? ev.tipo_cliente ?? 'Geral';
     const desconto_manual_percent = ev.desconto_manual_percent ?? ev.descontoManualPercent ?? ev.desconto ?? 0;
+    const espaco_utilizado = ev.espaco_utilizado ?? ev.espacoUtilizado ?? '';
+    const area_m2 = ev.area_m2 ?? ev.areaM2 ?? null;
+    const numero_processo = ev.numero_processo ?? ev.numeroProcesso ?? '';
+    const numero_termo = ev.numero_termo ?? ev.numeroTermo ?? '';
     let datas_evento = ev.datas_evento ?? ev.datas ?? ev.datasEvento ?? [];
     if (typeof datas_evento === 'string') datas_evento = datas_evento.split(',').map(s=>s.trim()).filter(Boolean);
     if (!Array.isArray(datas_evento)) datas_evento = [];
@@ -642,7 +677,13 @@ async function carregarClientes(){
                   : Array.isArray(ev.DARs) ? ev.DARs
                   : [];
     const numero_oficio_sei = ev.numero_oficio_sei ?? ev.numeroOficioSei ?? '';
-    return { id_cliente, nome_evento, tipo_desconto_auto, desconto_manual_percent, datas_evento, parcelas, numero_oficio_sei };
+  
+    return { id_cliente, nome_evento, tipo_desconto_auto, desconto_manual_percent, datas_evento, parcelas, espaco_utilizado, area_m2, numero_oficio_sei};
+    const hora_inicio = ev.hora_inicio ?? ev.horaInicio ?? null;
+    const hora_fim = ev.hora_fim ?? ev.horaFim ?? null;
+    const hora_montagem = ev.hora_montagem ?? ev.horaMontagem ?? null;
+    const hora_desmontagem = ev.hora_desmontagem ?? ev.horaDesmontagem ?? null;
+    return { id_cliente, nome_evento, tipo_desconto_auto, desconto_manual_percent, datas_evento, parcelas, hora_inicio, hora_fim, hora_montagem, hora_desmontagem };
   }
 
   async function editarEvento(eventoId){
@@ -663,6 +704,14 @@ async function carregarClientes(){
     clienteSelect.value = ev.id_cliente || '';
     document.getElementById('nome-evento').value = ev.nome_evento || '';
     numeroOficioSeiInput.value = ev.numero_oficio_sei || '';
+    espacoUtilizadoInput.value = ev.espaco_utilizado || '';
+    areaM2Input.value = ev.area_m2 != null ? ev.area_m2 : '';
+    horaInicioInput.value = ev.hora_inicio || '';
+    horaFimInput.value = ev.hora_fim || '';
+    horaMontagemInput.value = ev.hora_montagem || '';
+    horaDesmontagemInput.value = ev.hora_desmontagem || '';
+    document.getElementById('numero-processo').value = ev.numero_processo || '';
+    document.getElementById('numero-termo').value = ev.numero_termo || '';
     if (Array.isArray(ev.datas_evento) && ev.datas_evento.length) fp.setDate(ev.datas_evento, true);
     tipoDescontoAutoDisplay.value = ev.tipo_desconto_auto || (clienteSelect.selectedOptions[0]?.dataset.tipo || '');
     descontoManualInput.value = ev.desconto_manual_percent || 0;
@@ -911,7 +960,17 @@ async function carregarClientes(){
       totalDiarias: n,
       valorBruto: vb,
       valorFinal: vf,
+      espacoUtilizado: espacoUtilizadoInput.value,
+      areaM2: parseFloat(areaM2Input.value) || null,
+      horaInicio: horaInicioInput.value || null,
+      horaFim: horaFimInput.value || null,
+      horaMontagem: horaMontagemInput.value || null,
+      horaDesmontagem: horaDesmontagemInput.value || null,
       parcelas
+      parcelas,
+      numeroProcesso: document.getElementById('numero-processo').value,
+      numeroTermo: document.getElementById('numero-termo').value
+       master
     };
 
     const btn = form.querySelector('button[type="submit"]');

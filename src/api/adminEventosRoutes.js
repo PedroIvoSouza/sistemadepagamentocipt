@@ -68,6 +68,11 @@ router.post('/', async (req, res) => {
     descontoManualPercent,
     valorFinal,
     parcelas
+    idCliente, nomeEvento, datasEvento, totalDiarias, valorBruto,
+    tipoDescontoAuto, descontoManualPercent, valorFinal, parcelas,
+    espacoUtilizado, areaM2,
+    horaInicio, horaFim, horaMontagem, horaDesmontagem,
+    numeroProcesso, numeroTermo
   } = req.body;
 
   if (!idCliente || !nomeEvento || !Array.isArray(parcelas) || parcelas.length === 0) {
@@ -89,9 +94,14 @@ router.post('/', async (req, res) => {
          (id_cliente, nome_evento, datas_evento, total_diarias, valor_bruto,
           tipo_desconto, desconto_manual, valor_final, numero_oficio_sei, status)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          tipo_desconto, desconto_manual, valor_final, status, numero_processo
+          hora_inicio, hora_fim, hora_montagem, hora_desmontagem)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         idCliente,
         nomeEvento,
+        espacoUtilizado || null,
+        areaM2 != null ? Number(areaM2) : null,
         JSON.stringify(datasEvento || []),
         Number(totalDiarias || 0),
         Number(valorBruto || 0),
@@ -99,6 +109,13 @@ router.post('/', async (req, res) => {
         Number(descontoManualPercent || 0),
         Number(valorFinal || 0),
         numeroOficioSei || null,
+        'Pendente',
+        horaInicio || null,
+        horaFim || null,
+        horaMontagem || null,
+        horaDesmontagem || null
+        numeroProcesso || null,
+        numeroTermo || null,
         'Pendente'
       ],
       'criar-evento/insert-Eventos'
@@ -171,7 +188,7 @@ router.post('/', async (req, res) => {
           dataVencimento: vencimentoISO
         }],
         dataLimitePagamento: vencimentoISO,
-        observacao: `CIPT Evento: ${nomeEvento} | Parcela ${i + 1} de ${parcelas.length}`
+        observacao: `CIPT Evento: ${nomeEvento} (Montagem ${horaMontagem || '-'}; Evento ${horaInicio || '-'}-${horaFim || '-'}; Desmontagem ${horaDesmontagem || '-'}) | Parcela ${i + 1} de ${parcelas.length}`
       }; 
 
       const retornoSefaz = await emitirGuiaSefaz(payloadSefaz);
@@ -295,15 +312,23 @@ router.get('/:id', async (req, res) => {
         id: ev.id,
         id_cliente: ev.id_cliente,
         nome_evento: ev.nome_evento,
+        espaco_utilizado: ev.espaco_utilizado,
+        area_m2: ev.area_m2,
         datas_evento: datas,
         total_diarias: ev.total_diarias,
         valor_bruto: ev.valor_bruto,
         tipo_desconto_auto: ev.tipo_desconto,
         desconto_manual_percent: ev.desconto_manual,
         valor_final: ev.valor_final,
+        numero_processo: ev.numero_processo,
+        numero_termo: ev.numero_termo,
         status: ev.status,
         nome_cliente: ev.nome_cliente,
-        tipo_cliente: ev.tipo_cliente
+        tipo_cliente: ev.tipo_cliente,
+        hora_inicio: ev.hora_inicio,
+        hora_fim: ev.hora_fim,
+        hora_montagem: ev.hora_montagem,
+        hora_desmontagem: ev.hora_desmontagem
       },
       parcelas: parcelas
     };
@@ -330,13 +355,21 @@ router.put('/:id', async (req, res) => {
     idCliente,             // obrigatório
     nomeEvento,            // obrigatório
     numeroOficioSei,
+    espacoUtilizado = null,
+    areaM2 = null,
     datasEvento = [],      // array ISO YYYY-MM-DD
     totalDiarias = 0,
     valorBruto = 0,
     tipoDescontoAuto = null,
     descontoManualPercent = 0,
     valorFinal = 0,
-    parcelas = []          // [{ valor, vencimento(YYYY-MM-DD) }, ...]
+    parcelas = [],         // [{ valor, vencimento(YYYY-MM-DD) }, ...]
+    horaInicio,
+    horaFim,
+    horaMontagem,
+    horaDesmontagem
+    numeroProcesso,
+    numeroTermo
   } = req.body || {};
 
   if (!idCliente || !nomeEvento || !Array.isArray(parcelas) || parcelas.length === 0) {
@@ -358,6 +391,8 @@ router.put('/:id', async (req, res) => {
       `UPDATE Eventos
           SET id_cliente = ?,
               nome_evento = ?,
+              espaco_utilizado = ?,
+              area_m2 = ?,
               datas_evento = ?,
               total_diarias = ?,
               valor_bruto = ?,
@@ -365,11 +400,20 @@ router.put('/:id', async (req, res) => {
               desconto_manual = ?,
               valor_final = ?,
               numero_oficio_sei = ?,
+              status = ?,
+              hora_inicio = ?,
+              hora_fim = ?,
+              hora_montagem = ?,
+              hora_desmontagem = ?
+              numero_processo = ?,
+              numero_termo = ?,
               status = ?
         WHERE id = ?`,
       [
         idCliente,
         nomeEvento,
+        espacoUtilizado || null,
+        areaM2 != null ? Number(areaM2) : null,
         JSON.stringify(datasEvento),
         Number(totalDiarias || 0),
         Number(valorBruto || 0),
@@ -377,7 +421,13 @@ router.put('/:id', async (req, res) => {
         Number(descontoManualPercent || 0),
         Number(valorFinal || 0),
         numeroOficioSei || null,
+        numeroProcesso || null,
+        numeroTermo || null,
         'Pendente',
+        horaInicio || null,
+        horaFim || null,
+        horaMontagem || null,
+        horaDesmontagem || null,
         id
       ],
       'update-evento/UPDATE-Eventos'
@@ -471,7 +521,7 @@ router.put('/:id', async (req, res) => {
           dataVencimento: vencimentoISO
         }],
         dataLimitePagamento: vencimentoISO,
-        observacao: `CIPT Evento: ${nomeEvento} | Parcela ${i + 1} de ${parcelas.length} (Atualização)`
+        observacao: `CIPT Evento: ${nomeEvento} (Montagem ${horaMontagem || '-'}; Evento ${horaInicio || '-'}-${horaFim || '-'}; Desmontagem ${horaDesmontagem || '-'}) | Parcela ${i + 1} de ${parcelas.length} (Atualização)`
       };
 
       const retorno = await emitirGuiaSefaz(payloadSefaz);
@@ -505,6 +555,7 @@ router.post('/:eventoId/dars/:darId/reemitir', async (req, res) => {
     const row = await dbGet(
       `
       SELECT e.nome_evento,
+             e.hora_inicio, e.hora_fim, e.hora_montagem, e.hora_desmontagem,
              de.numero_parcela,
              (SELECT COUNT(*) FROM DARs_Eventos WHERE id_evento = e.id) AS total_parcelas,
              d.valor, d.data_vencimento,
@@ -543,7 +594,7 @@ router.post('/:eventoId/dars/:darId/reemitir', async (req, res) => {
         dataVencimento: row.data_vencimento
       }],
       dataLimitePagamento: row.data_vencimento,
-      observacao: `CIPT Evento: ${row.nome_evento} | Parcela ${row.numero_parcela}/${row.total_parcelas} (Reemissão)`
+      observacao: `CIPT Evento: ${row.nome_evento} (Montagem ${row.hora_montagem || '-'}; Evento ${row.hora_inicio || '-'}-${row.hora_fim || '-'}; Desmontagem ${row.hora_desmontagem || '-'}) | Parcela ${row.numero_parcela}/${row.total_parcelas} (Reemissão)`
     };
 
     const retornoSefaz = await emitirGuiaSefaz(payloadSefaz);
