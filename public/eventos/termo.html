@@ -10,11 +10,13 @@
   <p>Leia atentamente o termo e assine digitalmente.</p>
   <button id="btnAssinar" class="btn btn-primary">Assinar com Assinafy</button>
   <div id="status" class="mt-3"></div>
+  <div id="assinafyFrameContainer" class="mt-3"></div>
 
   <script>
     const params = new URLSearchParams(location.search);
     const documentoId = params.get('id');
     const statusEl = document.getElementById('status');
+    const frameContainer = document.getElementById('assinafyFrameContainer');
 
     document.getElementById('btnAssinar').addEventListener('click', async () => {
       if (!documentoId) {
@@ -26,7 +28,17 @@
         const resp = await fetch(`/api/documentos/${documentoId}/sign-assinafy`, { method: 'POST' });
         const data = await resp.json();
         if (data.url) {
-          window.location.href = data.url;
+          let iframe = document.getElementById('assinafyFrame');
+          if (!iframe) {
+            iframe = document.createElement('iframe');
+            iframe.id = 'assinafyFrame';
+            iframe.width = '100%';
+            iframe.height = '600';
+          }
+          iframe.src = data.url;
+          frameContainer.style.display = 'block';
+          frameContainer.innerHTML = '';
+          frameContainer.appendChild(iframe);
         } else {
           statusEl.textContent = 'Falha ao iniciar assinatura.';
         }
@@ -43,6 +55,8 @@
         const j = await r.json();
         if (j.status === 'signed') {
           statusEl.textContent = 'Documento assinado com sucesso.';
+          frameContainer.innerHTML = '';
+          frameContainer.style.display = 'none';
           return;
         }
       } catch (e) {}
