@@ -112,7 +112,9 @@ function normalizeCodigoReceita(cod) {
 // ==========================
 // Builders de Payload
 // ==========================
+// Aceita documento (CPF ou CNPJ). Mantém cnpj para retrocompat.
 function buildSefazPayload({
+  documento,
   cnpj,
   nome,
   codIbgeMunicipio,
@@ -125,10 +127,18 @@ function buildSefazPayload({
   observacao,
   docOrigem,             // opcional: { codigo: <int>, numero: <string> }
 }) {
-  if (!SEFAZ_APP_TOKEN) throw new Error('SEFAZ_APP_TOKEN não configurado no .env.');
+  // valida o token em runtime
+  getAppTokenStrict();
 
-  const numeroInscricao = onlyDigits(cnpj || '');
-  if (numeroInscricao.length !== 14) throw new Error('CNPJ do emitente inválido.');
+  const numeroInscricao = onlyDigits(documento || cnpj || '');
+  const len = numeroInscricao.length;
+
+  // Mapeamento padrão usado por essa API: 1=CPF, 4=CNPJ
+  const TIPO_INSCRICAO = { CPF: 1, CNPJ: 4 };
+  let codigoTipoInscricao = null;
+  if (len === 11) codigoTipoInscricao = TIPO_INSCRICAO.CPF;
+  else if (len === 14) codigoTipoInscricao = TIPO_INSCRICAO.CNPJ;
+  else throw new Error('Documento do emitente inválido (CPF/CNPJ).');
 
   const receitaCod = normalizeCodigoReceita(receitaCodigo);
   if (!receitaCod) throw new Error('Código de receita inválido/ausente.');
@@ -145,11 +155,10 @@ function buildSefazPayload({
   const payload = {
     versao: '1.0',
     contribuinteEmitente: {
-      codigoTipoInscricao: 4, // 4 = CNPJ
+      codigoTipoInscricao,     // agora dinâmico
       numeroInscricao,
       nome: nome || 'Contribuinte',
       codigoIbgeMunicipio: Number(codIbgeMunicipio || COD_IBGE_MUNICIPIO || 0),
-      // descricaoEndereco / numeroCep são opcionais na maioria das UGs
     },
     receitas: [{
       codigo: receitaCod,
@@ -212,7 +221,7 @@ function buildSefazPayloadPermissionario({ perm, darLike, receitaCodigo = RECEIT
  *   parcela: { valor, vencimento, competenciaMes, competenciaAno, id? }
  */
 function buildSefazPayloadEvento({ cliente, parcela, receitaCodigo = RECEITA_CODIGO_EVENTO }) {
-  const cnpj = onlyDigits(cliente?.cnpj || cliente?.documento || '');
+  const doc = onlyDigits(cliente?.cnpj || cliente?.documento || '');
   const nome = cliente?.nome_razao_social || cliente?.nome || 'Contribuinte';
   const valor = Number(parcela?.valor || parcela?.valorPrincipal || 0);
   const dataVencISO = toISO(parcela?.vencimento || parcela?.data_vencimento);
@@ -224,7 +233,7 @@ function buildSefazPayloadEvento({ cliente, parcela, receitaCodigo = RECEITA_COD
     : null;
 
   return buildSefazPayload({
-    cnpj,
+    documento: doc,               // <<<<<< trocar cnpj por documento
     nome,
     codIbgeMunicipio: COD_IBGE_MUNICIPIO,
     receitaCodigo,
@@ -294,14 +303,16 @@ async function _postEmitir(payload) {
  * Compat: emitirGuiaSefaz(contribuinte, guiaLike) → monta payload perm.
  */
 async function emitirGuiaSefaz(arg1, arg2) {
-  // payload já no formato do manual?
+  // payload pronto?
   if (arg1 && typeof arg1 === 'object' && arg1.versao && arg1.contribuinteEmitente && arg1.receitas) {
     return _postEmitir(arg1);
   }
+
   // Compat (contribuinte, guiaLike)
   if (arg1 && arg2) {
     const contrib = arg1 || {};
     const guia = arg2 || {};
+    const doc = onlyDigits(contrib.documento || contrib.cnpj || contrib.cpf || '');
 
     const fakeDarLike = {
       valor: guia.valor || guia.valorPrincipal || 0,
@@ -312,16 +323,36 @@ async function emitirGuiaSefaz(arg1, arg2) {
       numero_documento: guia.numero_documento || null,
     };
 
-    const payload = buildSefazPayloadPermissionario({
-      perm: { cnpj: contrib.documento || contrib.cnpj, nome_empresa: contrib.nomeRazaoSocial || contrib.nome },
-      darLike: fakeDarLike,
-      receitaCodigo: RECEITA_CODIGO_PERMISSIONARIO,
-    });
+    if (doc.length === 14) {
+      const payload = buildSefazPayloadPermissionario({
+        perm: { cnpj: doc, nome_empresa: contrib.nomeRazaoSocial || contrib.nome },
+        darLike: fakeDarLike,
+        receitaCodigo: RECEITA_CODIGO_PERMISSIONARIO,
+      });
+      return _postEmitir(payload);
+    }
 
-    return _postEmitir(payload);
+    if (doc.length === 11) {
+      const payload = buildSefazPayloadEvento({
+        cliente: { documento: doc, nome_razao_social: contrib.nomeRazaoSocial || contrib.nome },
+        parcela: {
+          valor: fakeDarLike.valor,
+          vencimento: fakeDarLike.data_vencimento,
+          competenciaMes: fakeDarLike.mes_referencia,
+          competenciaAno: fakeDarLike.ano_referencia,
+          id: fakeDarLike.id,
+        },
+        receitaCodigo: RECEITA_CODIGO_EVENTO || RECEITA_CODIGO_PERMISSIONARIO, // fallback se necessário
+      });
+      return _postEmitir(payload);
+    }
+
+    throw new Error('Documento inválido (esperado CPF com 11 dígitos ou CNPJ com 14).');
   }
+
   throw new Error('emitirGuiaSefaz: chame com payload pronto ou (contribuinte, guiaLike).');
 }
+
 
 // ==========================
 // Consultas
