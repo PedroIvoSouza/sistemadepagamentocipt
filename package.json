@@ -1,0 +1,11 @@
+{
+  "name": "sistemadepagamentocipt",
+  "version": "1.0.0",
+  "type": "commonjs",
+  "scripts": {
+    "test": "node test/TermoService.test.js"
+  },
+  "dependencies": {
+    "pdfkit": "^0.13.0"
+  }
+}
