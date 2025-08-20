@@ -8,97 +8,62 @@ const sqlite3 = require('sqlite3').verbose();
 const DB_PATH = path.resolve(process.cwd(), process.env.SQLITE_STORAGE || './sistemacipt.db');
 const db = new sqlite3.Database(DB_PATH);
 
-// ------------------------------
-// Helpers Promissificados (DB)
-// ------------------------------
-const dbGet = (sql, params = []) =>
-  new Promise((res, rej) => db.get(sql, params, (e, row) => (e ? rej(e) : res(row))));
-const dbAll = (sql, params = []) =>
-  new Promise((res, rej) => db.all(sql, params, (e, rows) => (e ? rej(e) : res(rows))));
-const dbRun = (sql, params = []) =>
-  new Promise((res, rej) =>
-    db.run(sql, params, function (e) {
-      return e ? rej(e) : res(this);
-    })
-  );
+// ---------- SQLite helpers ----------
+const dbGet = (sql, params = []) => new Promise((res, rej) =>
+  db.get(sql, params, (e, row) => e ? rej(e) : res(row)));
+const dbAll = (sql, params = []) => new Promise((res, rej) =>
+  db.all(sql, params, (e, rows) => e ? rej(e) : res(rows)));
+const dbRun = (sql, params = []) => new Promise((res, rej) =>
+  db.run(sql, params, function (e) { e ? rej(e) : res(this); })
+);
 
-// ------------------------------
-// Formatadores / utils
-// ------------------------------
+// ---------- utils ----------
 const onlyDigits = (v = '') => String(v).replace(/\D/g, '');
-
-const genToken = () =>
-  Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
-
-function sanitizeForFilename(s) {
-  return String(s || '')
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // remove acentos
-    .replace(/["'`]/g, '')                           // remove aspas
-    .replace(/[\/\\]+/g, '-')                        // barras -> hífen
-    .replace(/[^\w.\-]+/g, '_')                      // demais não-alfanum -> _
-    .replace(/_{2,}/g, '_')                          // compacta __
-    .replace(/^_+|_+$/g, '');                        // tira _ das pontas
-}
-
-function firstDateFromDatas(datas) {
-  if (!datas) return 's-d';
-  const raw = String(datas).trim();
-  let first = '';
-  // tenta JSON: ["2025-09-15", ...]
-  try {
-    if (raw.startsWith('[')) {
-      const arr = JSON.parse(raw);
-      if (Array.isArray(arr) && arr.length) first = arr[0];
-    }
-  } catch {}
-  // fallback CSV: 2025-09-15,2025-09-16
-  if (!first) first = raw.split(',')[0] || '';
-  return String(first).replace(/[^\d\-]/g, ''); // mantém só YYYY-MM-DD
-}
-
-const fmtMoeda = (n) =>
-  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(n || 0));
-
+const fmtMoeda = (n) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(n || 0));
 const fmtArea = (n) => {
   const num = Number(n || 0);
-  return num
-    ? `${num.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} m²`
-    : '-';
+  return num ? `${num.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} m²` : '-';
 };
-
 const fmtDataExtenso = (iso) => {
   if (!iso) return '';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
   return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
 };
-
 const mkPeriodo = (datas_evento) => {
   if (!datas_evento) return '';
-  const arr = String(datas_evento)
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
+  const raw = String(datas_evento).trim();
+  let arr;
+  try {
+    arr = raw.startsWith('[') ? JSON.parse(raw) : raw.split(',').map(s => s.trim()).filter(Boolean);
+  } catch {
+    arr = raw.split(',').map(s => s.trim()).filter(Boolean);
+  }
   if (!arr.length) return '';
   const ext = arr.map(fmtDataExtenso);
   return ext.length === 1 ? ext[0] : `${ext[0]} a ${ext[ext.length - 1]}`;
 };
 
-// -------------------------------------------------
-// MIGRAÇÃO/garantia do schema da tabela `documentos`
-// -------------------------------------------------
+function sanitizeForFilename(s) {
+  return String(s || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/["'`]/g, '')
+    .replace(/[\/\\]+/g, '-')
+    .replace(/[^\w.\-]+/g, '_')
+    .replace(/_{2,}/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+// --------- MIGRA: tabela `documentos` (garante colunas) ---------
 async function ensureDocumentosSchema() {
-  // base mínima
-  await dbRun(
-    `CREATE TABLE IF NOT EXISTS documentos (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      tipo TEXT NOT NULL,
-      token TEXT UNIQUE
-    )`
-  );
+  await dbRun(`CREATE TABLE IF NOT EXISTS documentos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tipo TEXT NOT NULL,
+    token TEXT UNIQUE
+  )`);
 
   const cols = await dbAll(`PRAGMA table_info(documentos)`);
-  const names = new Set(cols.map((c) => c.name));
+  const names = new Set(cols.map(c => c.name));
   const addIfMissing = async (name, def) => {
     if (!names.has(name)) {
       await dbRun(`ALTER TABLE documentos ADD COLUMN ${name} ${def}`);
@@ -117,113 +82,125 @@ async function ensureDocumentosSchema() {
   await addIfMissing('signer', 'TEXT');
   await addIfMissing('created_at', 'TEXT');
 
-  // Índice único por (evento_id, tipo) — garante 1 termo por evento/tipo.
-  await dbRun(
-    `CREATE UNIQUE INDEX IF NOT EXISTS ux_documentos_evento_tipo ON documentos(evento_id, tipo)`
-  ).catch(() => {});
+  await dbRun(`CREATE UNIQUE INDEX IF NOT EXISTS ux_documentos_evento_tipo ON documentos(evento_id, tipo)`);
 }
 
-// ---------------------------------------------
-// Carrega e compila o HTML do template público
-// + injeta/normaliza timbrado e margens
-// ---------------------------------------------
-// src/services/termoEventoExportService.js
+// ---------- Template HTML ----------
 function compileHtmlTemplate(payload) {
-  const templatePath = path.resolve(process.cwd(), 'public', 'termo-permisao.html');
+  const templatePath = path.resolve(process.cwd(), 'public', 'termo-permisao.html'); // nome do seu HTML
   if (!fs.existsSync(templatePath)) {
     throw new Error(`Template não encontrado: ${templatePath}`);
   }
+  const html = fs.readFileSync(templatePath, 'utf8');
+  const tpl = Handlebars.compile(html, { noEscape: true });
+  return tpl(payload);
+}
 
-  const raw = fs.readFileSync(templatePath, 'utf8');
-  const tpl = Handlebars.compile(raw, { noEscape: true });
-  let html = tpl(payload);
-
-  // Caminho absoluto do timbrado
-  const absTimbrado = path
-    .resolve(process.cwd(), 'public', 'images', 'papel-timbrado-secti.png')
-    .replace(/\\/g, '/');
-
-  // 1) Corrige <img src="..."> relativos -> file:// absoluto
-  html = html.replace(
-    /(<img[^>]+src=["'])(\/?images\/papel-timbrado-secti\.png)(["'][^>]*>)/ig,
-    (_, a, _rel, c) => `${a}file://${absTimbrado}${c}`
-  );
-
-  // 2) Corrige url(...) em CSS inline -> file:// absoluto
-  html = html.replace(
-    /(url\((["']?))(\/?images\/papel-timbrado-secti\.png)(\2\))/ig,
-    (_, a, q, _rel, d) => `${a}file://${absTimbrado}${d}`
-  );
-
-  // 3) Se o template não tiver o timbrado, injeta uma camada fixa sob o conteúdo
-  if (!/papel-timbrado-secti\.png/i.test(html)) {
-    const style = `<style>
-      html,body{background:transparent !important; -webkit-print-color-adjust:exact; print-color-adjust:exact;}
-      .__letterhead{position:fixed; inset:0; z-index:0; pointer-events:none;
-        background:url('file://${absTimbrado}') no-repeat center 1cm; background-size:contain;}
-      .__content{position:relative; z-index:1;}
-      :where(.page,#page,main){background:transparent !important;}
-    </style>`;
-    html = html.replace(/<\/head>/i, `${style}</head>`);
-    html = html.replace(/<body([^>]*)>/i, `<body$1><div class="__letterhead"></div><div class="__content">`);
-    html = html.replace(/<\/body>/i, `</div></body>`);
+// Injeta timbrado como background full-page e aplica margens via padding
+function injectLetterheadAndMargins(html) {
+  const imgPath = path.resolve(process.cwd(), 'public', 'images', 'papel-timbrado-secti.png');
+  let bgBlock = '';
+  if (fs.existsSync(imgPath)) {
+    const b64 = fs.readFileSync(imgPath).toString('base64');
+    bgBlock = `
+      <div class="__bg-letterhead"><img src="data:image/png;base64,${b64}" alt=""></div>
+    `;
+  } else {
+    console.warn('[termoEvento] Timbrado não encontrado em:', imgPath);
   }
 
+  const styles = `
+    <style>
+      /* Sem margens do PDF: usamos padding para recriar as ABNT (~2,5cm) */
+      :root { --m: 2.5cm; }
+      @page { size: A4; margin: 0; }
+      html, body { margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .__bg-letterhead {
+        position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+        z-index: 0; pointer-events: none;
+      }
+      .__bg-letterhead img {
+        width: 100%; height: 100%; object-fit: cover;
+      }
+      .__page-wrap {
+        position: relative; z-index: 1;
+        padding: var(--m);
+      }
+    </style>
+  `;
+
+  // garante wrapper do conteúdo
+  if (/<body[^>]*>/i.test(html)) {
+    html = html.replace(/<body([^>]*)>/i, '<body$1><div class="__page-wrap">');
+    html = html.replace(/<\/body>/i, `</div></body>`);
+  } else {
+    html = `<div class="__page-wrap">${html}</div>`;
+  }
+
+  // injeta CSS e o background antes de fechar o body
+  if (/<\/head>/i.test(html)) {
+    html = html.replace(/<\/head>/i, `${styles}</head>`);
+  } else {
+    html = `${styles}${html}`;
+  }
+  if (/<\/body>/i.test(html)) {
+    html = html.replace(/<\/body>/i, `${bgBlock}</body>`);
+  } else {
+    html = `${html}${bgBlock}`;
+  }
   return html;
 }
 
-
-// ----------------------
-// Gera PDF com Puppeteer
-// ----------------------
+// ---------- HTML -> PDF ----------
 async function htmlToPdfBuffer(html) {
   const browser = await puppeteer.launch({ args: ['--no-sandbox'] });
   const page = await browser.newPage();
-  await page.setContent(html, { waitUntil: 'networkidle0' });
+
+  // injeta timbrado e margens por CSS (PDF sem header/footer do Chrome)
+  const htmlFinal = injectLetterheadAndMargins(html);
+  await page.setContent(htmlFinal, { waitUntil: 'networkidle0' });
+
   const pdf = await page.pdf({
     format: 'A4',
     printBackground: true,
-    // Deixa as margens do Puppeteer em zero para não somar com o CSS:
-    margin: { top: '0', right: '0', bottom: '0', left: '0' },
-    preferCSSPageSize: true
+    displayHeaderFooter: false, // importante!
+    margin: { top: 0, right: 0, bottom: 0, left: 0 } // sem margens no PDF
   });
+
   await browser.close();
   return pdf;
 }
 
-// --------------------------------------------
-// Monta o payload completo a partir do Evento
-// --------------------------------------------
+// ---------- Payload (placeholders) ----------
 async function buildPayloadFromEvento(eventoId) {
-  // Evento + Cliente
   const ev = await dbGet(
     `SELECT e.*, c.nome_razao_social, c.tipo_pessoa, c.documento, c.email, c.telefone, c.endereco,
             c.nome_responsavel, c.documento_responsavel
        FROM Eventos e
        JOIN Clientes_Eventos c ON c.id = e.id_cliente
-      WHERE e.id = ?`,
-    [eventoId]
+      WHERE e.id = ?`, [eventoId]
   );
   if (!ev) throw new Error('Evento não encontrado');
 
-  // Parcelas (DARs vinculadas)
   const parcelas = await dbAll(
     `SELECT de.numero_parcela, de.valor_parcela, de.data_vencimento, d.status
        FROM DARs_Eventos de
        JOIN dars d ON d.id = de.id_dar
       WHERE de.id_evento = ?
-      ORDER BY de.numero_parcela ASC`,
-    [eventoId]
+      ORDER BY de.numero_parcela ASC`, [eventoId]
   );
 
-  // Derivações
-  const periodo = mkPeriodo(ev.datas_evento);
-  const datasArr = String(ev.datas_evento || '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
+  // Datas
+  const rawDatas = String(ev.datas_evento || '').trim();
+  let datasArr;
+  try {
+    datasArr = rawDatas.startsWith('[') ? JSON.parse(rawDatas) : rawDatas.split(',').map(s => s.trim()).filter(Boolean);
+  } catch {
+    datasArr = rawDatas.split(',').map(s => s.trim()).filter(Boolean);
+  }
   const primeiraData = datasArr[0] || null;
 
+  // Defaults / .env
   const cidadeUfDefault = process.env.CIDADE_UF || 'Maceió/AL';
   const fundoNome = process.env.FUNDO_NOME || 'FUNDENTES';
   const imovelNome = process.env.IMOVEL_NOME || 'CENTRO DE INOVAÇÃO DO JARAGUÁ';
@@ -232,13 +209,10 @@ async function buildPayloadFromEvento(eventoId) {
   const sinal = parcelas[0]?.data_vencimento || null;
   const saldo = parcelas[1]?.data_vencimento || parcelas[0]?.data_vencimento || null;
 
-  // Permitente (via .env)
-  const permitenteRazao = process.env.PERMITENTE_RAZAO ||
-    'SECRETARIA DE ESTADO DA CIÊNCIA, DA TECNOLOGIA E DA INOVAÇÃO DE ALAGOAS - SECTI';
+  // Permitente (.env)
+  const permitenteRazao = process.env.PERMITENTE_RAZAO || 'SECRETARIA DE ESTADO DA CIÊNCIA, DA TECNOLOGIA E DA INOVAÇÃO DE ALAGOAS - SECTI';
   const permitenteCnpj = process.env.PERMITENTE_CNPJ || '04.007.216/0001-30';
-  const permitenteEnd =
-    process.env.PERMITENTE_ENDERECO ||
-    'R. BARÃO DE JARAGUÁ, Nº 590, JARAGUÁ, MACEIÓ - ALAGOAS - CEP: 57022-140';
+  const permitenteEnd = process.env.PERMITENTE_ENDERECO || 'R. BARÃO DE JARAGUÁ, Nº 590, JARAGUÁ, MACEIÓ - ALAGOAS - CEP: 57022-140';
   const permitenteRepNm = process.env.PERMITENTE_REP_NOME || 'SÍLVIO ROMERO BULHÕES AZEVEDO';
   const permitenteRepCg = process.env.PERMITENTE_REP_CARGO || 'SECRETÁRIO';
   const permitenteRepCpf = process.env.PERMITENTE_REP_CPF || '053.549.204-93';
@@ -248,7 +222,6 @@ async function buildPayloadFromEvento(eventoId) {
   const orgSec = process.env.ORG_SECRETARIA || 'SECRETARIA DA CIÊNCIA, TECNOLOGIA E INOVAÇÃO';
   const orgUni = process.env.ORG_UNIDADE || 'CENTRO DE INOVAÇÃO DO JARAGUÁ';
 
-  // Placeholders do template
   const payloadTermo = {
     org_uf: orgUF,
     org_secretaria: orgSec,
@@ -271,7 +244,7 @@ async function buildPayloadFromEvento(eventoId) {
     permissionario_representante_cpf: onlyDigits(ev.documento_responsavel || ''),
 
     evento_titulo: ev.nome_evento || '',
-    local_espaco: ev.espaco_utilizado || 'AUDITÓRIO',
+    local_espaco: ev.espaco_utilizado || 'Auditório',
     imovel_nome: imovelNome,
 
     data_evento: fmtDataExtenso(primeiraData),
@@ -306,71 +279,41 @@ async function buildPayloadFromEvento(eventoId) {
     testemunha2_cpf: ''
   };
 
-  // (Compat) placeholders antigos usados no HTML simplificado
+  // compat com placeholders simples do template curto
   const payloadCompat = {
     processo: ev.numero_processo || '',
     evento: ev.nome_evento || '',
-    periodo: periodo || fmtDataExtenso(primeiraData)
+    periodo: mkPeriodo(ev.datas_evento) || fmtDataExtenso(primeiraData)
   };
 
   return { ...payloadTermo, ...payloadCompat };
 }
 
-// --------------------------------------
-// Nome do arquivo (sanitizado e robusto)
-// --------------------------------------
-function nomeArquivo(ev, idDoc) {
-  const razao = sanitizeForFilename(ev?.nome_razao_social || 'Cliente');
-  const termo = sanitizeForFilename(ev?.numero_termo || 's-n'); // ex.: 042-2025 (sem '/')
-  const dataPrimeira = firstDateFromDatas(ev?.datas_evento);    // ex.: 2025-09-15
-  return `TermoPermissao_${termo}_${razao}_Data-${dataPrimeira || 's-d'}_${idDoc}.pdf`;
+// ---------- Nome do arquivo ----------
+function nomeArquivo(evRow, idDoc) {
+  const razao = sanitizeForFilename(evRow?.nome_razao_social || 'Cliente');
+  // primeira data robusta
+  const raw = String(evRow?.datas_evento || '').trim();
+  let primeira = '';
+  try {
+    const arr = raw.startsWith('[') ? JSON.parse(raw) : raw.split(',').map(s => s.trim()).filter(Boolean);
+    primeira = arr[0] || '';
+  } catch { primeira = (raw.split(',')[0] || '').trim(); }
+  const dataPart = primeira || 's-d';
+  const termo = sanitizeForFilename(evRow?.numero_termo || 's-n');
+  return `TermoPermissao_${termo}_${razao}_Data-${dataPart}_${idDoc}.pdf`;
 }
 
-// ------------------------------------------------------
-// Salva/Atualiza o PDF no disco e registra em `documentos` (UPSERT)
-// ------------------------------------------------------
-async function salvarOuAtualizarDocumento(buffer, tipo, permissionarioId, eventoId, evRow) {
+// ---------- Persistência do PDF ----------
+async function salvarDocumentoRegistro(buffer, tipo, permissionarioId, eventoId, evRow) {
   await ensureDocumentosSchema();
 
   const dir = path.resolve(process.cwd(), 'public', 'documentos');
   fs.mkdirSync(dir, { recursive: true });
 
-  // Existe um termo para este evento/tipo?
-  const existing = await dbGet(
-    `SELECT * FROM documentos WHERE evento_id = ? AND tipo = ?`,
-    [eventoId, tipo]
-  );
-
-  if (existing) {
-    // Reaproveita id/token, regrava PDF e atualiza caminhos.
-    const documentoId = existing.id;
-    const token = existing.token || genToken();
-    const fileName = nomeArquivo(evRow, documentoId);
-    const filePath = path.join(dir, fileName);
-
-    // Remove o arquivo antigo se mudou o nome/caminho
-    try {
-      if (existing.pdf_url && existing.pdf_url !== filePath && fs.existsSync(existing.pdf_url)) {
-        fs.unlinkSync(existing.pdf_url);
-      }
-    } catch {}
-
-    fs.writeFileSync(filePath, buffer);
-    const publicUrl = `/documentos/${fileName}`;
-
-    await dbRun(
-      `UPDATE documentos
-         SET token = ?, pdf_url = ?, pdf_public_url = ?, status = 'gerado'
-       WHERE id = ?`,
-      [token, filePath, publicUrl, documentoId]
-    );
-
-    return { documentoId, token, filePath, fileName, publicUrl, updated: true };
-  }
-
-  // Não existe ainda: cria novo registro
-  const token = genToken();
+  const token = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
   const createdAt = new Date().toISOString();
+
   const ins = await dbRun(
     `INSERT INTO documentos (tipo, token, permissionario_id, evento_id, status, created_at)
      VALUES (?, ?, ?, ?, 'gerado', ?)`,
@@ -383,23 +326,19 @@ async function salvarOuAtualizarDocumento(buffer, tipo, permissionarioId, evento
   fs.writeFileSync(filePath, buffer);
 
   const publicUrl = `/documentos/${fileName}`;
-  await dbRun(`UPDATE documentos SET pdf_url = ?, pdf_public_url = ? WHERE id = ?`, [
-    filePath,
-    publicUrl,
-    documentoId
-  ]);
+  await dbRun(
+    `UPDATE documentos SET pdf_url = ?, pdf_public_url = ? WHERE id = ?`,
+    [filePath, publicUrl, documentoId]
+  );
 
-  return { documentoId, token, filePath, fileName, publicUrl, created: true };
+  return { documentoId, token, filePath, fileName, publicUrl };
 }
 
-// ------------------------------------------------------
-// API principal: gera termo e indexa em `documentos`
-// ------------------------------------------------------
+// ---------- Orquestração ----------
 async function gerarTermoEventoEIndexar(eventoId) {
   const ev = await dbGet(
     `SELECT e.*, c.nome_razao_social
-       FROM Eventos e
-       JOIN Clientes_Eventos c ON c.id = e.id_cliente
+       FROM Eventos e JOIN Clientes_Eventos c ON c.id = e.id_cliente
       WHERE e.id = ?`,
     [eventoId]
   );
@@ -409,11 +348,15 @@ async function gerarTermoEventoEIndexar(eventoId) {
   const html = compileHtmlTemplate(payload);
   const pdfBuf = await htmlToPdfBuffer(html);
 
-  const doc = await salvarOuAtualizarDocumento(pdfBuf, 'termo_evento', null, eventoId, ev);
+  const doc = await salvarDocumentoRegistro(
+    pdfBuf,
+    'termo_evento',
+    null,
+    eventoId,
+    ev
+  );
 
-  // Página pública (com botão de assinatura via Assinafy embed)
   const urlTermoPublic = `/eventos/termo.html?id=${doc.documentoId}`;
-
   return { ...doc, pdf_public_url: doc.publicUrl, urlTermoPublic };
 }
 
