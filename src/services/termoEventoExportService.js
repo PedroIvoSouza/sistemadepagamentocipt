@@ -125,9 +125,10 @@ async function ensureDocumentosSchema() {
 
 // ---------------------------------------------
 // Carrega e compila o HTML do template público
+// + injeta/normaliza timbrado e margens
 // ---------------------------------------------
 function compileHtmlTemplate(payload) {
-  // ATENÇÃO: o arquivo foi passado como "termo-permisao.html" (sem o segundo 's')
+  // Nome do template (usa o seu arquivo atual, sem o segundo "s")
   const templatePath = path.resolve(process.cwd(), 'public', 'termo-permisao.html');
   if (!fs.existsSync(templatePath)) {
     throw new Error(`Template não encontrado: ${templatePath}`);
@@ -135,14 +136,47 @@ function compileHtmlTemplate(payload) {
 
   let html = fs.readFileSync(templatePath, 'utf8');
 
-  // Se o template usa <img src="images/papel-timbrado-secti.png">,
-  // converte para caminho absoluto file:// para o Chromium carregar
-  const imgRel = /src=["']images\/papel-timbrado-secti\.png["']/i;
-  if (imgRel.test(html)) {
-    const imgAbs = path
-      .resolve(process.cwd(), 'public', 'images', 'papel-timbrado-secti.png')
-      .replace(/\\/g, '/');
-    html = html.replace(imgRel, `src="file://${imgAbs}"`);
+  // 1) Normaliza caminho do timbrado para file:// (caso já exista no HTML)
+  const timbradoAbs = path
+    .resolve(process.cwd(), 'public', 'images', 'papel-timbrado-secti.png')
+    .replace(/\\/g, '/');
+
+  // corrige tanto "images/..." quanto "/images/..."
+  const reTimbrado = /src=["']\/?images\/papel-timbrado-secti\.png["']/i;
+  if (reTimbrado.test(html)) {
+    html = html.replace(reTimbrado, `src="file://${timbradoAbs}"`);
+  }
+
+  // 2) Injeta timbrado caso NÃO exista referência no HTML
+  if (!/papel-timbrado-secti\.png/i.test(html) && fs.existsSync(timbradoAbs)) {
+    // injeta logo após a abertura do <body>
+    html = html.replace(
+      /<body([^>]*)>/i,
+      (m, attrs) =>
+        `<body${attrs}>\n<img src="file://${timbradoAbs}" class="__timbrado" alt="" />`
+    );
+  }
+
+  // 3) Injeta CSS para timbrado (atrás do conteúdo) e margens menores
+  const cssInject = `
+    <style>
+      /* Usa CSS pra controlar margens do PDF (Puppeteer com preferCSSPageSize=true) */
+      @page { size: A4; margin: 2cm 1.2cm; } /* top/bottom 2.0cm; laterais 1.2cm */
+      body { margin: 0 !important; } /* zera margens no body do template, se houver */
+      /* Timbrado em página inteira, atrás do texto */
+      img.__timbrado {
+        position: fixed;
+        top: 0; left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: -1;
+      }
+    </style>
+  `;
+  if (/<\/head>/i.test(html)) {
+    html = html.replace(/<\/head>/i, `${cssInject}\n</head>`);
+  } else {
+    html = cssInject + html;
   }
 
   const tpl = Handlebars.compile(html, { noEscape: true });
@@ -159,7 +193,9 @@ async function htmlToPdfBuffer(html) {
   const pdf = await page.pdf({
     format: 'A4',
     printBackground: true,
-    margin: { top: '1in', right: '1in', bottom: '1in', left: '1in' }
+    // Deixa as margens do Puppeteer em zero para não somar com o CSS:
+    margin: { top: '0', right: '0', bottom: '0', left: '0' },
+    preferCSSPageSize: true
   });
   await browser.close();
   return pdf;
