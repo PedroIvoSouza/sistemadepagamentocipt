@@ -1,10 +1,12 @@
-// Em: src/api/adminEventosRoutes.js
 const express = require('express');
 const adminAuthMiddleware = require('../middleware/adminAuthMiddleware');
 const { emitirGuiaSefaz } = require('../services/sefazService');
 const { gerarTokenDocumento, imprimirTokenEmPdf } = require('../utils/token');
-const { gerarTermoPermissao } = require('../services/termoService');
+const { gerarTermoPermissao } = require('../services/termoService'); // (mantido para compat)
+const { gerarTermoEventoEIndexar } = require('../services/termoEventoExportService');
 const db = require('../database/db');
+const fs = require('fs');
+const path = require('path');
 const { criarEventoComDars, atualizarEventoComDars } = require('../services/eventoDarService');
 
 const router = express.Router();
@@ -202,9 +204,8 @@ router.get('/:id', async (req, res) => {
 
 // GET /api/admin/eventos/:id/detalhes  -> alias para o mesmo payload
 router.get('/:id/detalhes', async (req, res) => {
-  // reaproveita a rota acima chamando a própria lógica
-  req.url = `/${req.params.id}`; // “redireciona” internamente
-  return router.handle(req, res); // delega
+  req.url = `/${req.params.id}`;
+  return router.handle(req, res);
 });
 
 // PUT /api/admin/eventos/:id  -> atualiza evento e recria/remeite DARs
@@ -312,7 +313,7 @@ router.delete('/:eventoId', async (req, res) => {
       'apagar/listar-vinculos'
     );
 
-    const darIds = darsRows.map(r => r.id_dar); // FIX: variável existia sem definição
+    const darIds = darsRows.map(r => r.id_dar);
 
     await dbRun(
       'DELETE FROM DARs_Eventos WHERE id_evento = ?',
@@ -348,34 +349,53 @@ router.delete('/:eventoId', async (req, res) => {
   }
 });
 
+/**
+ * NOVO: disponibiliza o termo do evento (gera PDF + indexa + retorna URL pública/visualização)
+ */
+router.post('/:eventoId/termo/disponibilizar', async (req, res) => {
+  try {
+    const { eventoId } = req.params;
+
+    const out = await gerarTermoEventoEIndexar(eventoId);
+
+    // garante status 'gerado' (idempotente)
+    await dbRun(`UPDATE documentos SET status = 'gerado' WHERE id = ?`, [out.documentoId], 'termo/status-gerado');
+
+    return res.json({
+      ok: true,
+      documentoId: out.documentoId,
+      pdf_url: out.pdf_public_url,
+      url_visualizacao: out.urlTermoPublic
+    });
+  } catch (err) {
+    console.error('[admin disponibilizar termo] erro:', err);
+    return res.status(500).json({ ok:false, error: 'Falha ao disponibilizar termo.' });
+  }
+});
+
+/**
+ * (Opcional/Compat) Gera e BAIXA o termo imediatamente.
+ * Agora redireciona para o pipeline novo: gera, salva em /public/documentos e devolve o arquivo.
+ */
 router.get('/:id/termo', async (req, res) => {
   const { id } = req.params;
   try {
-    const ev = await dbGet(
-      `SELECT e.*, c.nome_razao_social, c.documento, c.endereco, c.cep
-         FROM Eventos e
-         JOIN Clientes_Eventos c ON c.id = e.id_cliente
-        WHERE e.id = ?`,
-      [id],
-      'termo/buscar-evento'
-    );
-    if (!ev) return res.status(404).json({ error: 'Evento não encontrado.' });
+    // usa o serviço novo para garantir consistência e timbrado do HTML público
+    const out = await gerarTermoEventoEIndexar(id);
 
-    const parcelas = await dbAll(
-      `SELECT de.numero_parcela, de.valor_parcela, d.data_vencimento
-         FROM DARs_Eventos de
-         JOIN dars d ON d.id = de.id_dar
-        WHERE de.id_evento = ?
-        ORDER BY de.numero_parcela ASC`,
-      [id],
-      'termo/listar-parcelas'
-    );
+    const filePath = out.filePath && fs.existsSync(out.filePath)
+      ? out.filePath
+      : path.resolve(process.cwd(), 'public', '.' + out.pdf_public_url);
 
-    const pdfBytes = await gerarTermoPermissao(ev, parcelas);
+    if (!filePath || !fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'Termo não encontrado.' });
+    }
+
+    const stat = fs.statSync(filePath);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="termo_evento_${id}.pdf"`);
-    res.setHeader('Content-Length', pdfBytes.length);
-    res.end(Buffer.from(pdfBytes));
+    res.setHeader('Content-Length', stat.size);
+    fs.createReadStream(filePath).pipe(res);
   } catch (err) {
     console.error('[admin/eventos] termo erro:', err.message);
     res.status(500).json({ error: 'Falha ao gerar termo.' });
