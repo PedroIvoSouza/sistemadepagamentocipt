@@ -467,7 +467,10 @@ router.get('/dars/:darId/pdf', botAuthMiddleware, async (req, res) => {
  */
 router.post('/dars/:darId/emit', botAuthMiddleware, async (req, res) => {
   const darId = Number(req.params.darId);
-  const msisdn = req.body?.msisdn ? digits(req.body.msisdn) : null;
+  // msisdn agora vem preferencialmente no corpo, mas aceitamos query como fallback
+  const msisdn = req.body?.msisdn
+    ? digits(req.body.msisdn)
+    : (req.query?.msisdn ? digits(req.query.msisdn) : null);
   if (!darId) return res.status(400).json({ error: 'Parâmetro darId inválido.' });
 
   try {
@@ -567,7 +570,10 @@ router.post('/dars/:darId/emit', botAuthMiddleware, async (req, res) => {
  */
 router.post('/dars/:darId/reemit', botAuthMiddleware, async (req, res) => {
   const darId = Number(req.params.darId);
-  const msisdn = req.body?.msisdn ? digits(req.body.msisdn) : null;
+  // Preferimos msisdn no corpo, mas aceitamos query como compatibilidade
+  const msisdn = req.body?.msisdn
+    ? digits(req.body.msisdn)
+    : (req.query?.msisdn ? digits(req.query.msisdn) : null);
   if (!darId || !msisdn) return res.status(400).json({ error: 'Parâmetros inválidos (darId/msisdn).' });
 
   try {
