@@ -34,14 +34,14 @@ const httpsAgent = new https.Agent({
 // AXIOS (instância oficial SEFAZ)
 // ==========================
 const sefaz = axios.create({
-  baseURL: BASE_URL,
-  timeout: Number(SEFAZ_TIMEOUT_MS || 120000),
-  httpsAgent,
-  headers: {
-    appToken: SEFAZ_APP_TOKEN || '',
-    'Content-Type': 'application/json',
-    Accept: 'application/json',
-  },
+   baseURL: BASE_URL,
+   timeout: Number(SEFAZ_TIMEOUT_MS || 120000),
+   httpsAgent,
+   proxy: false, // <<< ignora HTTP(S)_PROXY do ambiente para SEFAZ
+   headers: {
+     'Content-Type': 'application/json',
+     Accept: 'application/json',
+   },
 });
 
 // ==========================
@@ -306,6 +306,7 @@ async function _postEmitir(payload) {
         },
         // se você usa httpsAgent/tls aqui, mantenha:
         httpsAgent,
+        proxy: false,
         timeout: 15000,
       }),
       'guia/emitir'

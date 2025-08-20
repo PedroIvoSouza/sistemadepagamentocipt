@@ -9,12 +9,15 @@ const { emitirGuiaSefaz } = require('../services/sefazService'); // Reutilizamos
 const router = express.Router();
 const dbPath = path.resolve(__dirname, '..', '..', 'sistemacipt.db');
 const db = new sqlite3.Database(dbPath);
+const onlyDigits = (v = '') => String(v).replace(/\D/g, '');
 
 // Rota para LISTAR todos os eventos (visão geral para o admin)
 router.get('/', (req, res) => {
     const sql = `
         SELECT 
+            e.id, e.nome_evento, e.status, e.valor_final, e.total_diarias, 
             e.id, e.nome_evento, e.status, e.valor_final, e.total_diarias, e.data_vigencia_final,
+            e.numero_oficio_sei,
             c.nome_razao_social as nome_cliente
         FROM Eventos e
         JOIN Clientes_Eventos c ON e.id_cliente = c.id
@@ -35,10 +38,20 @@ router.post('/', async (req, res) => {
     const {
         idCliente,
         nomeEvento,
+        numeroOficioSei,
+        espacoUtilizado,
+        areaM2,
         datasEvento, // Espera um array de strings de data: ["2025-10-20", "2025-10-21"]
         tipoDescontoAuto, // 'Geral', 'Governo', 'Permissionario'
         descontoManualPercent,
-        parcelas // Espera um array de objetos: [{ valor: 500.50, vencimento: "2025-09-30" }]
+        parcelas, // Espera um array de objetos: [{ valor: 500.50, vencimento: "2025-09-30" }]
+        horaInicio,
+        horaFim,
+        horaMontagem,
+        horaDesmontagem
+
+        numeroProcesso,
+        numeroTermo
     } = req.body;
 
     // --- Validações Iniciais ---
@@ -72,9 +85,9 @@ router.post('/', async (req, res) => {
 
         try {
             // 1. Insere o evento principal na tabela Eventos
-            const eventoSql = `INSERT INTO Eventos (id_cliente, nome_evento, datas_evento, data_vigencia_final, total_diarias, valor_bruto, tipo_desconto_auto, percentual_desconto_manual, valor_final) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-            const eventoParams = [idCliente, nomeEvento, datasEvento.join(','), dataVigenciaFinal, totalDiarias, valorBruto, tipoDescontoAuto, descontoManualPercent, valorFinal];
-            
+
+            const eventoSql = `INSERT INTO Eventos (id_cliente, nome_evento, espaco_utilizado, area_m2, datas_evento, data_vigencia_final, total_diarias, valor_bruto, tipo_desconto_auto, percentual_desconto_manual, valor_final, numero_oficio_sei) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+            const eventoParams = [idCliente, nomeEvento, espacoUtilizado || null, areaM2 || null, datasEvento.join(','), dataVigenciaFinal,totalDiarias, valorBruto, tipoDescontoAuto, descontoManualPercent, valorFinal, numeroOficioSei];
             const eventoId = await new Promise((resolve, reject) => {
                 db.run(eventoSql, eventoParams, function(err) {
                     if (err) reject(err);
@@ -84,7 +97,7 @@ router.post('/', async (req, res) => {
 
             // Busca os dados do cliente para a SEFAZ (apenas uma vez)
             const cliente = await new Promise((resolve, reject) => {
-                db.get('SELECT documento, nome_razao_social FROM Clientes_Eventos WHERE id = ?', [idCliente], (err, row) => {
+                db.get('SELECT documento, nome_razao_social, endereco, cep FROM Clientes_Eventos WHERE id = ?', [idCliente], (err, row) => {
                     if (err) reject(err);
                     else if (!row) reject(new Error('Cliente não encontrado.'));
                     else resolve(row);
@@ -105,13 +118,27 @@ router.post('/', async (req, res) => {
                 };
                 
                 // 3. Chama a API da SEFAZ
-                const respostaSefaz = await emitirGuiaSefaz(
-                    { 
-                        documento: cliente.documento, 
-                        nome_empresa: cliente.nome_razao_social 
+                const payloadSefaz = {
+                    versao: '1.0',
+                    contribuinteEmitente: {
+                        codigoTipoInscricao: onlyDigits(cliente.documento).length === 11 ? 3 : 4,
+                        numeroInscricao: onlyDigits(cliente.documento),
+                        nome: cliente.nome_razao_social,
+                        codigoIbgeMunicipio: Number(process.env.COD_IBGE_MUNICIPIO),
+                        descricaoEndereco: cliente.endereco,
+                        numeroCep: onlyDigits(cliente.cep)
                     },
-                    dadosDar
-                    );
+                    receitas: [{
+                        codigo: Number(process.env.RECEITA_CODIGO_EVENTO),
+                        competencia: { mes: dadosDar.mes_referencia, ano: dadosDar.ano_referencia },
+                        valorPrincipal: dadosDar.valor,
+                        valorDesconto: 0.00,
+                        dataVencimento: dadosDar.data_vencimento
+                    }],
+                    dataLimitePagamento: dadosDar.data_vencimento,
+                    observacao: `CIPT Evento: ${nomeEvento} (Montagem ${horaMontagem || '-'}; Evento ${horaInicio || '-'}-${horaFim || '-'}; Desmontagem ${horaDesmontagem || '-'}) | Parcela ${i + 1} de ${parcelas.length}`
+                };
+                const respostaSefaz = await emitirGuiaSefaz(payloadSefaz);
                 
                 // 4. Salva a DAR no nosso banco de dados
                 const darSql = `INSERT INTO dars (id_permissionario, tipo_permissionario, valor, mes_referencia, ano_referencia, data_vencimento, status, numero_documento, linha_digitavel, codigo_barras, pdf_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
