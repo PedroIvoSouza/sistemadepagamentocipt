@@ -8,6 +8,8 @@ const db = require('../database/db');
 const fs = require('fs');
 const path = require('path');
 const { criarEventoComDars, atualizarEventoComDars } = require('../services/eventoDarService');
+const { gerarTermoEventoEIndexar } = require('../services/termoEventoExportService');
+
 
 const router = express.Router();
 
@@ -380,25 +382,18 @@ router.post('/:eventoId/termo/disponibilizar', async (req, res) => {
 router.get('/:id/termo', async (req, res) => {
   const { id } = req.params;
   try {
-    // usa o serviço novo para garantir consistência e timbrado do HTML público
+    // Gera, salva em /public/documentos e indexa na tabela `documentos`
     const out = await gerarTermoEventoEIndexar(id);
 
-    const filePath = out.filePath && fs.existsSync(out.filePath)
-      ? out.filePath
-      : path.resolve(process.cwd(), 'public', '.' + out.pdf_public_url);
-
-    if (!filePath || !fs.existsSync(filePath)) {
-      return res.status(404).json({ error: 'Termo não encontrado.' });
-    }
-
-    const stat = fs.statSync(filePath);
+    // Faz o download do PDF para o ADM
+    const stat = fs.statSync(out.filePath);
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="termo_evento_${id}.pdf"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${out.fileName}"`);
     res.setHeader('Content-Length', stat.size);
-    fs.createReadStream(filePath).pipe(res);
+    fs.createReadStream(out.filePath).pipe(res);
   } catch (err) {
     console.error('[admin/eventos] termo erro:', err.message);
-    res.status(500).json({ error: 'Falha ao gerar termo.' });
+    res.status(500).json({ error: 'Falha ao gerar termo' });
   }
 });
 
