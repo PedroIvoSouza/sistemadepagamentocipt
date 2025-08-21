@@ -9,7 +9,7 @@ const DEBUG   = String(process.env.ASSINAFY_DEBUG || '') === '1';
 const TIMEOUT = Number(process.env.ASSINAFY_TIMEOUT_MS || 90000);
 
 const API_KEY     = (process.env.ASSINAFY_API_KEY || '').trim();
-the ACCESS_TOKEN= (process.env.ASSINAFY_ACCESS_TOKEN || '').trim();
+const ACCESS_TOKEN = (process.env.ASSINAFY_ACCESS_TOKEN || '').trim();
 const ACCOUNT_ID  = (process.env.ASSINAFY_ACCOUNT_ID || '').trim();
 const BASE        = (process.env.ASSINAFY_API_BASE || 'https://api.assinafy.com.br/v1').replace(/\/+$/, '');
 const INSECURE    = String(process.env.ASSINAFY_INSECURE || '') === '1';

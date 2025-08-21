@@ -4,7 +4,6 @@
 require('dotenv').config();
 
 const express = require('express');
-const path    = require('path');
 const fs      = require('fs');
 const https   = require('https');
 const sqlite3 = require('sqlite3').verbose();
@@ -14,11 +13,8 @@ const authMiddleware  = require('../middleware/authMiddleware');
 const authorizeRole   = require('../middleware/roleMiddleware');
 
 const {
-  uploadPdf,
   getDocument,
   getBestSigningUrl,
-  ensureSigner,
-  createAssignment,
   listAssignments,
 } = require('../services/assinafyClient');
 
@@ -26,7 +22,7 @@ const router = express.Router();
 
 const DEBUG   = String(process.env.ASSINAFY_DEBUG || '') === '1';
 const TIMEOUT = Number(process.env.ASSINAFY_TIMEOUT_MS || 90000);
-the BASE    = (process.env.ASSINAFY_API_BASE || 'https://api.assinafy.com.br/v1').replace(/\/+$/, '');
+const BASE    = (process.env.ASSINAFY_API_BASE || 'https://api.assinafy.com.br/v1').replace(/\/+$/, '');
 const API_KEY = (process.env.ASSINAFY_API_KEY || '').trim();
 const ACCESS_TOKEN = (process.env.ASSINAFY_ACCESS_TOKEN || '').trim();
 const INSECURE = String(process.env.ASSINAFY_INSECURE || '') === '1';
@@ -51,11 +47,6 @@ const DB_PATH = path.resolve(process.cwd(), process.env.SQLITE_STORAGE || './sis
 const db = new sqlite3.Database(DB_PATH);
 
 const dbGet = (sql, p=[]) => new Promise((res, rej) => db.get(sql, p, (e, r) => e ? rej(e) : res(r)));
-const dbRun = (sql, p=[]) => new Promise((res, rej) => db.run(sql, p, function(e){ e?rej(e):res(this); }));
-
-function onlyDigits(v=''){ return String(v).replace(/\D/g,''); }
-function isCpf(d){ d = onlyDigits(d); return d.length===11; }
-function isCnpj(d){ d = onlyDigits(d); return d.length===14; }
 
 async function assertEventoDoCliente(eventoId, clienteId) {
   const row = await dbGet(`SELECT 1 FROM Eventos WHERE id=? AND id_cliente=?`, [eventoId, clienteId]);
@@ -74,13 +65,13 @@ async function findTermoDocumento(eventoId){
   );
 }
 
-async function getClienteEvento(clienteId){
-  return await dbGet(`SELECT * FROM Clientes_Eventos WHERE id=?`, [clienteId]);
-}
+// helpers removidos: a criação de signatário agora é feita apenas no painel
+// do administrador, então o portal do cliente não precisa conhecer os dados
+// completos do cliente para iniciar a assinatura.
 
 // ------------------------- 1) META do termo (baixar PDF) -------------------------
 router.get(
-  '/portal/eventos/:id/termo/meta',
+  '/:id/termo/meta',
   authMiddleware,
   authorizeRole(['CLIENTE_EVENTO']),
   async (req, res) => {
@@ -108,7 +99,7 @@ router.get(
 
 // ------------------------- 2) POST iniciar assinatura (cria tudo e tenta url) -------------------------
 router.post(
-  '/portal/eventos/:id/termo/assinafy/link',
+  '/:id/termo/assinafy/link',
   authMiddleware,
   authorizeRole(['CLIENTE_EVENTO']),
   async (req, res) => {
@@ -116,59 +107,28 @@ router.post(
     try {
       await assertEventoDoCliente(eventoId, req.user.id);
 
-      // 2.1 documento
-      let doc = await findTermoDocumento(eventoId);
-      if (!doc || !doc.pdf_url || !fs.existsSync(doc.pdf_url)) {
-        return res.status(409).json({ error: 'PDF do termo não encontrado no servidor.' });
+      // 2.1 busca o documento e verifica se já foi enviado para assinatura
+      const doc = await findTermoDocumento(eventoId);
+      if (!doc || !doc.assinafy_id) {
+        return res.status(409).json({ error: 'Termo ainda não disponível para assinatura.' });
       }
 
-      // 2.2 envia p/ Assinafy se ainda não enviado
-      if (!doc.assinafy_id) {
-        const buffer = fs.readFileSync(doc.pdf_url);
-        const fileName = path.basename(doc.pdf_url);
-        const payload = await uploadPdf(buffer, fileName, { name: fileName });
-        if (!payload?.id) return res.status(502).json({ error: 'Falha ao enviar documento à Assinafy.' });
-
-        await dbRun(`UPDATE documentos SET assinafy_id=?, status=? WHERE id=?`, [payload.id, 'uploaded', doc.id]);
-        doc.assinafy_id = payload.id;
-      }
-
-      // 2.3 signatário (dados do cliente)
-      const cliente = await getClienteEvento(req.user.id);
-      if (!cliente || !cliente.email) return res.status(400).json({ error: 'Cliente sem e-mail cadastrado.' });
-
-      const full_name = (cliente.nome_responsavel && cliente.tipo_pessoa === 'PJ')
-        ? cliente.nome_responsavel
-        : (cliente.nome_razao_social || 'Cliente');
-      const government_id = isCpf(cliente.documento) || isCnpj(cliente.documento) ? onlyDigits(cliente.documento) : undefined;
-      const phone = onlyDigits(cliente.telefone || '');
-
-      const signer = await ensureSigner({
-        full_name,
-        email: String(cliente.email).trim(),
-        government_id,
-        phone
-      });
-
-      // 2.4 assignment
-      const beforeLink = await getBestSigningUrl(doc.assinafy_id);
-      if (beforeLink) {
-        return res.json({ ok:true, url: beforeLink }); // já tinha
-      }
-
-      const assign = await createAssignment(doc.assinafy_id, signer.id, {});
-      const link = assign?.url || await getBestSigningUrl(doc.assinafy_id);
-
+      // 2.2 tenta obter o link de assinatura
+      const link = await getBestSigningUrl(doc.assinafy_id);
       if (link) {
-        return res.json({ ok:true, url: link });
+        return res.json({ ok: true, url: link });
       }
 
-      // Sem link ainda — mas assignment existe/pendente: devolve estado para o front fazer poll
+      // Se não houver link ainda, informa que há uma assinatura pendente
+      const items = await listAssignments(doc.assinafy_id);
+      const has = items && items.length > 0;
       return res.json({
         ok: true,
         pending: true,
-        email_sent: Boolean(assign?.email_sent),
-        message: 'Já existe uma assinatura pendente. O convite pode ter sido enviado por e-mail.'
+        has_assignment: has,
+        message: has
+          ? 'Convite enviado. Verifique seu e-mail para assinar.'
+          : 'Aguardando processamento do termo na Assinafy.'
       });
     } catch (e) {
       if (DEBUG) console.error('[PORTAL] assinafy link erro:', e?.response?.data || e);
@@ -180,7 +140,7 @@ router.post(
 
 // ------------------------- 2b) GET polling do link -------------------------
 router.get(
-  '/portal/eventos/:id/termo/assinafy/link',
+  '/:id/termo/assinafy/link',
   authMiddleware,
   authorizeRole(['CLIENTE_EVENTO']),
   async (req, res) => {
@@ -188,7 +148,7 @@ router.get(
     try {
       await assertEventoDoCliente(eventoId, req.user.id);
       const doc = await findTermoDocumento(eventoId);
-      if (!doc?.assinafy_id) return res.status(404).json({ error: 'Documento ainda não enviado para assinatura.' });
+      if (!doc?.assinafy_id) return res.status(409).json({ error: 'Termo ainda não disponível para assinatura.' });
 
       const link = await getBestSigningUrl(doc.assinafy_id);
       if (link) return res.json({ ok:true, url: link });
