@@ -128,25 +128,35 @@ async function getDocument(documentId) {
  *  - waiting_for_assignments
  * Qualquer outro status, inclusive "metadata_processing" e "uploaded",
  * continua o polling até atingir um status pronto ou esgotar as tentativas.
- * Opcionalmente, é possível logar o status a cada iteração passando { log: true }.
+ * Loga o status (ou erro) em cada tentativa para auxiliar na depuração.
  */
 async function waitForDocumentReady(
   documentId,
-  { retries = 10, intervalMs = 3000, log = false } = {}
+  { retries = 10, intervalMs = 3000 } = {},
 ) {
   const READY_STATUSES = ['available', 'ready', 'waiting_for_assignments'];
 
   for (let attempt = 0; attempt < retries; attempt++) {
-    const data = await getDocument(documentId);
-    const info = data?.data || data;
-    const status = info?.status;
+    try {
+      const data = await getDocument(documentId);
+      const info = data?.data || data;
+      const status = info?.status;
 
-    if (log) {
-      console.log(`Assinafy document ${documentId} status: ${status}`);
-    }
+      console.log(
+        `Assinafy document ${documentId} status (attempt ${attempt + 1}/${retries}): ${status}`,
+      );
 
-    if (status && READY_STATUSES.includes(status)) {
-      return info;
+      if (status && READY_STATUSES.includes(status)) {
+        return info;
+      }
+    } catch (err) {
+      const respStatus = err?.response?.status;
+      console.log(
+        `Assinafy document ${documentId} fetch error (attempt ${attempt + 1}/${retries}): ${respStatus || err.message}`,
+      );
+      if (respStatus !== 404) {
+        throw err;
+      }
     }
 
     if (attempt < retries - 1) {
