@@ -53,6 +53,8 @@ async function setupSchema(db) {
     hora_desmontagem TEXT,
     numero_processo TEXT,
     numero_termo TEXT,
+    evento_gratuito INTEGER DEFAULT 0,
+    justificativa_gratuito TEXT,
     status TEXT
   );`);
   await run(db, `CREATE TABLE dars (
@@ -167,5 +169,70 @@ test('atualizarEventoComDars substitui dars', async () => {
   await atualizarEventoComDars(db, id, updateData, helpers);
   const dars = await all(db, 'SELECT * FROM dars');
   assert.strictEqual(dars.length, 2);
+  await new Promise(res => db.close(res));
+});
+
+test('criarEventoComDars com evento gratuito não gera dars', async () => {
+  const db = createDb();
+  await setupSchema(db);
+  await seedCliente(db);
+  const data = {
+    idCliente: 1,
+    nomeEvento: 'Feira',
+    datasEvento: ['2025-10-10'],
+    totalDiarias: 1,
+    valorBruto: 0,
+    tipoDescontoAuto: 'Geral',
+    descontoManualPercent: 0,
+    valorFinal: 0,
+    parcelas: [],
+    eventoGratuito: true,
+    justificativaGratuito: 'Cortesia'
+  };
+  const id = await criarEventoComDars(db, data, helpers);
+  assert.strictEqual(id, 1);
+  const eventos = await all(db, 'SELECT evento_gratuito, justificativa_gratuito FROM Eventos');
+  assert.strictEqual(eventos[0].evento_gratuito, 1);
+  assert.strictEqual(eventos[0].justificativa_gratuito, 'Cortesia');
+  const dars = await all(db, 'SELECT * FROM dars');
+  assert.strictEqual(dars.length, 0);
+  await new Promise(res => db.close(res));
+});
+
+test('atualizarEventoComDars para evento gratuito remove dars', async () => {
+  const db = createDb();
+  await setupSchema(db);
+  await seedCliente(db);
+  const data = {
+    idCliente: 1,
+    nomeEvento: 'Show',
+    datasEvento: ['2025-10-10'],
+    totalDiarias: 1,
+    valorBruto: 100,
+    tipoDescontoAuto: 'Geral',
+    descontoManualPercent: 0,
+    valorFinal: 100,
+    parcelas: [{ valor: 100, vencimento: '2025-09-01' }]
+  };
+  const id = await criarEventoComDars(db, data, helpers);
+  const updateData = {
+    idCliente: 1,
+    nomeEvento: 'Show',
+    datasEvento: ['2025-10-10'],
+    totalDiarias: 1,
+    valorBruto: 0,
+    tipoDescontoAuto: 'Geral',
+    descontoManualPercent: 0,
+    valorFinal: 0,
+    parcelas: [],
+    eventoGratuito: true,
+    justificativaGratuito: 'Isento'
+  };
+  await atualizarEventoComDars(db, id, updateData, helpers);
+  const dars = await all(db, 'SELECT * FROM dars');
+  assert.strictEqual(dars.length, 0);
+  const eventos = await all(db, 'SELECT evento_gratuito, justificativa_gratuito FROM Eventos WHERE id = ?', [id]);
+  assert.strictEqual(eventos[0].evento_gratuito, 1);
+  assert.strictEqual(eventos[0].justificativa_gratuito, 'Isento');
   await new Promise(res => db.close(res));
 });

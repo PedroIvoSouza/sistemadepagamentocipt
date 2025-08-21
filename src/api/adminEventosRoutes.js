@@ -62,7 +62,8 @@ router.use(adminAuthMiddleware);
 router.post('/', async (req, res) => {
   console.log('[DEBUG] Recebido no backend /api/admin/eventos:', JSON.stringify(req.body, null, 2));
   try {
-    const eventoId = await criarEventoComDars(db, req.body, {
+    const { eventoGratuito, justificativaGratuito, ...rest } = req.body || {};
+    const eventoId = await criarEventoComDars(db, { ...rest, eventoGratuito, justificativaGratuito }, {
       emitirGuiaSefaz,
       gerarTokenDocumento,
       imprimirTokenEmPdf,
@@ -185,6 +186,8 @@ router.get('/:id', async (req, res) => {
         valor_final: ev.valor_final,
         numero_processo: ev.numero_processo,
         numero_termo: ev.numero_termo,
+        evento_gratuito: ev.evento_gratuito,
+        justificativa_gratuito: ev.justificativa_gratuito,
         status: ev.status,
         nome_cliente: ev.nome_cliente,
         tipo_cliente: ev.tipo_cliente,
@@ -213,7 +216,8 @@ router.get('/:id/detalhes', async (req, res) => {
 router.put('/:id', async (req, res) => {
   const { id } = req.params;
   try {
-    await atualizarEventoComDars(db, id, req.body, {
+    const { eventoGratuito, justificativaGratuito, ...rest } = req.body || {};
+    await atualizarEventoComDars(db, id, { ...rest, eventoGratuito, justificativaGratuito }, {
       emitirGuiaSefaz,
       gerarTokenDocumento,
       imprimirTokenEmPdf,
