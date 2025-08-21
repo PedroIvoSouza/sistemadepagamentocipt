@@ -259,4 +259,9 @@ router.get('/documentos/assinafy/:id/status', async (req, res) => {
   }
 });
 
+// exporta como função (Router)…
 module.exports = router;
+
+// …e também como “named exports” para quem usa destructuring
+module.exports.portalEventosAssinaturaRouter = router;
+module.exports.documentosAssinafyPublicRouter = router;
