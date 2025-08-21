@@ -27,6 +27,7 @@ const router = express.Router();
 
 /* ========= Helpers ========= */
 const onlyDigits = (v = '') => String(v).replace(/\D/g, '');
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /* ========= SQLite helpers com log ========= */
 const dbGet = (sql, p = [], ctx = '') =>
@@ -151,11 +152,39 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
       return res.status(500).json({ ok: false, error: 'Falha ao criar signatário no Assinafy.' });
     }
 
-    // 4) Solicita assinatura (virtual)
-    await requestSignatures(assinafyDocId, [signerId], {
-      message,
-      expires_at: expiresAt // opcional (ISO)
-    });
+    // 4) Solicita assinatura (virtual) com tentativas quando o Assinafy ainda está processando
+    const maxRetries = 3;
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        await requestSignatures(assinafyDocId, [signerId], {
+          message,
+          expires_at: expiresAt // opcional (ISO)
+        });
+        break; // sucesso
+      } catch (err) {
+        const status = err.response?.status;
+        const assinafyMsg = err.response?.data?.message;
+
+        // se documento ainda estiver em processamento, espera e tenta novamente
+        if ((assinafyMsg === 'metadata_processing' || status === 400) && attempt < maxRetries - 1) {
+          await sleep(2000);
+          try {
+            await waitForDocumentReady(assinafyDocId, { retries: 5, intervalMs: 3000 });
+          } catch (waitErr) {
+            if (waitErr.timeout) {
+              return res.status(504).json({ ok: false, error: 'Tempo limite ao processar documento no Assinafy.' });
+            }
+          }
+          continue;
+        }
+
+        if (assinafyMsg === 'metadata_processing' || status === 400) {
+          return res.status(504).json({ ok: false, error: 'Documento ainda em processamento no Assinafy.' });
+        }
+
+        throw err; // outros erros
+      }
+    }
 
     // 5) Atualiza metadados em `documentos`
     await dbRun(
