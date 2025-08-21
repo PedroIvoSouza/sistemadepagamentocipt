@@ -115,20 +115,38 @@ function drawTituloCabecalho(doc, orgUF, orgSec, orgUni) {
 }
 
 function drawParagrafoAbertura(doc, texto) {
-  // recuo de 6 cm à esquerda e alinhamento justificado
-  const left = doc.page.margins.left + cm(6);
-  const w = contentWidth(doc) - cm(6);
-  ensureSpace(doc, doc.heightOfString(texto, { width: w }));
+  const leftBase = doc.page.margins.left;
+  const left     = leftBase + cm(6); // recuo de 6 cm só aqui
+  const largura  = doc.page.width - leftBase - doc.page.margins.right - cm(6);
+  const y0       = doc.y;
+
+  doc.save();
   doc.font('Times-Bold').fontSize(12).fillColor('#000');
-  doc.text(texto, left, doc.y, { width: w, align: 'justify' });
-  doc.moveDown(0.8);
+  doc.text(texto, left, y0, { width: largura, align: 'justify', lineBreak: true });
+  doc.restore();
+
+  // >>> crucial: volta o cursor pro início da área útil
+  doc.x = leftBase;
+  doc.moveDown(1);
 }
 
+
 function drawLinhaInfo(doc, rotulo, valor) {
-  const w = contentWidth(doc);
+  const left = doc.page.margins.left;
+  const largura = doc.page.width - doc.page.margins.left - doc.page.margins.right;
   doc.font('Times-Roman').fontSize(12).fillColor('#000')
-     .text(`${rotulo} ${valor}`, { width: w, align: 'left' });
+     .text(`${rotulo} ${valor}`, left, doc.y, { width: largura, align: 'left' });
+  doc.moveDown(0.2);
 }
+
+function drawParagrafo(doc, texto) {
+  const left = doc.page.margins.left;
+  const largura = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+  doc.font('Times-Roman').fontSize(12).fillColor('#000')
+     .text(texto, left, doc.y, { width: largura, align: 'justify', lineBreak: true });
+  doc.moveDown(0.6);
+}
+
 
 function drawClausula(doc, titulo) {
   const w = contentWidth(doc);
@@ -139,14 +157,6 @@ function drawClausula(doc, titulo) {
   doc.moveDown(0.2);
 }
 
-function drawParagrafo(doc, texto) {
-  const w = contentWidth(doc);
-  const h = doc.heightOfString(texto, { width: w, align: 'justify' });
-  ensureSpace(doc, h + 6);
-  doc.font('Times-Roman').fontSize(12).fillColor('#000')
-     .text(texto, { width: w, align: 'justify' });
-  doc.moveDown(0.4);
-}
 
 function drawTabelaDiscriminacao(doc, dados) {
   const w = contentWidth(doc);
@@ -156,6 +166,20 @@ function drawTabelaDiscriminacao(doc, dados) {
     { w: Math.round(w * 0.12), label: 'Nº de dias' },
     { w: Math.round(w * 0.20), label: 'Valor total' },
   ];
+
+
+  function drawFooter(doc, page, total) {
+  doc.save();
+  const right  = doc.page.width - doc.page.margins.right;
+  const bottom = doc.page.height - doc.page.margins.bottom;
+
+  doc.font('Times-Roman').fontSize(9).fillColor('#333')
+     .text(`Página ${page} de ${total}`, right - 120, bottom + 6, {
+       width: 120, align: 'right', lineBreak: false
+     });
+
+  doc.restore();
+}
 
   const x0 = doc.page.margins.left;
   let y = doc.y + 6;
@@ -348,6 +372,7 @@ async function gerarTermoEventoPdfkitEIndexar(eventoId) {
   );
 
   // TABELA
+  ensureSpace(doc, 80); // ~1 linha de cabeçalho + uma linha de conteúdo
   drawTabelaDiscriminacao(doc, {
     discriminacao: `${ev.espaco_utilizado || 'AUDITÓRIO'} do ${imovelNome}`,
     realizacao: fmtDataExtenso(primeiraDataISO) || '-',
@@ -440,19 +465,30 @@ async function gerarTermoEventoPdfkitEIndexar(eventoId) {
   drawParagrafo(doc, `${cidadeUfDefault}, ${fmtDataExtenso(new Date().toISOString())}.`);
 
   // Assinaturas (linhas centralizadas)
-  const w = contentWidth(doc);
-  const linhaAssin = (rotulo) => {
-    ensureSpace(doc, 40);
-    doc.moveDown(2.2);
-    const y0 = doc.y;
-    doc.moveTo(doc.page.margins.left, y0).lineTo(doc.page.margins.left + w, y0).stroke();
-    doc.moveDown(0.2);
-    doc.font('Times-Roman').fontSize(11).text(rotulo, { width: w, align: 'center' });
-  };
-  linhaAssin('PERMITENTE');
-  linhaAssin('PERMISSIONÁRIA');
-  linhaAssin('TESTEMUNHA – CPF Nº');
-  linhaAssin('TESTEMUNHA – CPF Nº');
+  function ensureSpace(doc, neededPts) {
+  const bottom = doc.page.height - doc.page.margins.bottom;
+  if (doc.y + neededPts > bottom) doc.addPage();
+}
+  // ===== Assinaturas =====
+    const larguraUtil = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+    const assinaturaAlturaMin = 140; // ~4 linhas com espaço confortável
+    ensureSpace(doc, assinaturaAlturaMin);
+    
+    const linhaAssin = (rotulo) => {
+      doc.moveDown(3);
+      const y = doc.y;
+      doc.moveTo(doc.page.margins.left, y).lineTo(doc.page.margins.left + larguraUtil, y).stroke();
+      doc.moveDown(0.2);
+      doc.font('Times-Roman').fontSize(11)
+         .text(rotulo, doc.page.margins.left, doc.y, { width: larguraUtil, align: 'center', lineBreak: false });
+    };
+    
+    // 4 linhas:
+    linhaAssin('PERMITENTE');
+    linhaAssin('PERMISSIONÁRIA');
+    linhaAssin('TESTEMUNHA – CPF Nº');
+    linhaAssin('TESTEMUNHA – CPF Nº');
+
 
   // Paginação: "Página X de Y"
   const range = doc.bufferedPageRange(); // { start, count }
