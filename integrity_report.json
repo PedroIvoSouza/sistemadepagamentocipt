@@ -1,0 +1,204 @@
+{
+  "issues": [
+    {
+      "line": 2,
+      "CNPJ": "37.432.689/0001-33",
+      "missing": [
+        "telefone",
+        "endereco"
+      ]
+    },
+    {
+      "line": 3,
+      "CNPJ": "29500928000117",
+      "missing": [
+        "telefone",
+        "endereco"
+      ]
+    },
+    {
+      "line": 4,
+      "CNPJ": "46731465000113",
+      "missing": [
+        "telefone",
+        "endereco"
+      ]
+    },
+    {
+      "line": 5,
+      "CNPJ": "30.441.031/0002-20",
+      "missing": [
+        "telefone",
+        "endereco"
+      ]
+    },
+    {
+      "line": 6,
+      "CNPJ": "22080376000196",
+      "missing": [
+        "telefone",
+        "endereco"
+      ]
+    },
+    {
+      "line": 7,
+      "CNPJ": "32.860.087/0001-63",
+      "missing": [
+        "telefone",
+        "endereco"
+      ]
+    },
+    {
+      "line": 8,
+      "CNPJ": "09584747000109",
+      "missing": [
+        "telefone",
+        "endereco"
+      ]
+    },
+    {
+      "line": 9,
+      "CNPJ": "12.439.637/0001-68",
+      "missing": [
+        "telefone",
+        "endereco"
+      ]
+    },
+    {
+      "line": 10,
+      "CNPJ": "21950824000100",
+      "missing": [
+        "telefone",
+        "endereco"
+      ]
+    },
+    {
+      "line": 11,
+      "CNPJ": "10882812/0001-61",
+      "missing": [
+        "telefone",
+        "endereco"
+      ]
+    },
+    {
+      "line": 12,
+      "CNPJ": "16918665000119",
+      "missing": [
+        "telefone",
+        "endereco"
+      ]
+    },
+    {
+      "line": 13,
+      "CNPJ": "06935095000111",
+      "missing": [
+        "telefone",
+        "endereco"
+      ]
+    },
+    {
+      "line": 14,
+      "CNPJ": "03.370.669/0001-63",
+      "missing": [
+        "telefone",
+        "endereco"
+      ]
+    },
+    {
+      "line": 15,
+      "CNPJ": "10771790000162",
+      "missing": [
+        "telefone",
+        "endereco"
+      ]
+    },
+    {
+      "line": 16,
+      "CNPJ": "40411089000101",
+      "missing": [
+        "telefone",
+        "endereco"
+      ]
+    },
+    {
+      "line": 17,
+      "CNPJ": "089119340001-97",
+      "missing": [
+        "telefone",
+        "endereco"
+      ]
+    },
+    {
+      "line": 18,
+      "CNPJ": "31639572000149",
+      "missing": [
+        "telefone",
+        "endereco"
+      ]
+    },
+    {
+      "line": 19,
+      "CNPJ": "14876384000115",
+      "missing": [
+        "telefone",
+        "endereco"
+      ]
+    },
+    {
+      "line": 20,
+      "CNPJ": "43.150.497/0001-37",
+      "missing": [
+        "telefone",
+        "endereco"
+      ]
+    },
+    {
+      "line": 21,
+      "CNPJ": "28.207.096/0001-82",
+      "missing": [
+        "telefone",
+        "endereco"
+      ]
+    },
+    {
+      "line": 22,
+      "CNPJ": "1703922000128",
+      "missing": [
+        "telefone",
+        "endereco"
+      ]
+    },
+    {
+      "line": 23,
+      "CNPJ": "16.755.375/0001-00",
+      "missing": [
+        "telefone",
+        "endereco"
+      ]
+    },
+    {
+      "line": 24,
+      "CNPJ": "05.301.393/0001-97",
+      "missing": [
+        "telefone",
+        "endereco"
+      ]
+    },
+    {
+      "line": 25,
+      "CNPJ": "13.055.903/0001-11",
+      "missing": [
+        "telefone",
+        "endereco"
+      ]
+    },
+    {
+      "line": 26,
+      "CNPJ": "12.257.462/0001-78",
+      "missing": [
+        "telefone",
+        "endereco"
+      ]
+    }
+  ]
+}
