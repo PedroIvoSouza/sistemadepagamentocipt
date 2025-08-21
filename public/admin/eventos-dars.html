@@ -704,11 +704,15 @@ async function carregarClientes(){
           : parseFloat(String(ev.valor_final||'0').replace(/\./g,'').replace(',','.'))||0;
 
         let btnAssinaturaDisabled = '';
+        let mostraBtnEnviar = true;
+        let signedUrl = '';
         try {
           const rMeta = await fetch(`/api/documentos/termo/${id}/meta`, { headers: AUTH_HEADERS });
           if (!rMeta.ok) throw new Error('meta');
           const meta = await rMeta.json();
           if (meta.status !== 'gerado') btnAssinaturaDisabled = 'disabled';
+          if (['enviado','assinado','pendente_assinatura'].includes(meta.status)) mostraBtnEnviar = false;
+          if (meta.signed_pdf_public_url) signedUrl = meta.signed_pdf_public_url;
         } catch {
           btnAssinaturaDisabled = 'disabled';
         }
@@ -733,10 +737,8 @@ async function carregarClientes(){
                   data-evento-id="${id}">
             <i class="bi bi-file-earmark-text"></i>
           </button>
-          <button class="btn btn-sm btn-outline-primary btn-enviar-assinafy" title="Enviar p/ assinatura"
-                  data-evento-id="${id}" ${btnAssinaturaDisabled}>
-            <i class="bi bi-pen"></i>
-          </button>
+          ${mostraBtnEnviar ? `<button class="btn btn-sm btn-outline-primary btn-enviar-assinafy" title="Enviar p/ assinatura" data-evento-id="${id}" ${btnAssinaturaDisabled}><i class="bi bi-pen"></i></button>` : ''}
+          ${signedUrl ? `<a class="btn btn-sm btn-outline-success btn-download-assinado" href="${signedUrl}" target="_blank" title="Download assinado"><i class="bi bi-download"></i></a>` : ''}
         </div>
       </td>
                 <td class="text-center">
@@ -769,6 +771,26 @@ async function carregarClientes(){
         }
       }
     });
+  }
+
+  const assinafyPollers = {};
+  function startAssinafyPolling(assinafyId, eventoId){
+    if (!assinafyId || assinafyPollers[assinafyId]) return;
+    alert('Aguardando processamento do termo na Assinafy');
+    assinafyPollers[assinafyId] = setInterval(async ()=>{
+      try{
+        const r = await fetch(`/api/documentos/assinafy/${encodeURIComponent(assinafyId)}/status`, { headers: AUTH_HEADERS });
+        if (!r.ok) return;
+        const j = await r.json().catch(()=>({}));
+        if (j.status === 'signed' || j.status === 'assinado'){
+          clearInterval(assinafyPollers[assinafyId]);
+          delete assinafyPollers[assinafyId];
+          carregarEventos();
+        }
+      }catch(e){
+        console.error('Polling Assinafy status falhou', e);
+      }
+    }, 5000);
   }
 
   // =======================
@@ -1095,9 +1117,11 @@ async function carregarClientes(){
             const j = await r.json().catch(()=> ({}));
             if (!r.ok || !j.ok) throw new Error(j.error || 'Falha no envio');
             sucesso = true;
+            const assinafyId = j.assinafyDocId || j.assinafy_id || j.id;
             alert('Documento enviado para assinatura com sucesso!');
             // Oculta o botão para impedir reenvio
             btnAssinafy.style.display = 'none';
+            startAssinafyPolling(assinafyId, eventoId);
           } catch (err) {
             alert(`Erro: ${err.message}`);
           } finally {
