@@ -202,6 +202,22 @@ router.get(
 
       const { eventoId } = req.params;
 
+      // Se houver PDF assinado, retorna diretamente
+      const docAssinado = await dbGet(
+        `SELECT signed_pdf_public_url FROM documentos WHERE evento_id = ? AND tipo = 'termo_evento' ORDER BY id DESC LIMIT 1`,
+        [eventoId]
+      );
+      if (docAssinado?.signed_pdf_public_url) {
+        const filePath = path.join(
+          process.cwd(),
+          'public',
+          docAssinado.signed_pdf_public_url.replace(/^\/+/, '')
+        );
+        if (fs.existsSync(filePath)) {
+          return res.sendFile(filePath);
+        }
+      }
+
       // Evento + Cliente
       const ev = await dbGet(
         `SELECT e.*, c.nome_razao_social, c.tipo_pessoa, c.documento, c.email, c.telefone,
