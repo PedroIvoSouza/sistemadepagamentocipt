@@ -1,19 +1,24 @@
 // src/api/eventosClientesRoutes.js
 // Normaliza/valida CPF/CNPJ e corrige POST (sem tipoNormalizado), PF/PJ coerente com CHECK('PF','PJ')
 
-const express = require('express');
-const sqlite3 = require('sqlite3').verbose();
-const bcrypt = require('bcrypt');
-const path = require('path');
-const crypto = require('crypto');
-const jwt = require('jsonwebtoken');
+const express  = require('express');
+const sqlite3  = require('sqlite3').verbose();
+const bcrypt   = require('bcrypt');
+const path     = require('path');
+const crypto   = require('crypto');
+const jwt      = require('jsonwebtoken');
+const fs       = require('fs');
 
 const { enviarEmailDefinirSenha } = require('../services/emailService');
-const adminAuthMiddleware = require('../middleware/adminAuthMiddleware');
-const authMiddleware = require('../middleware/authMiddleware');
-const authorizeRole = require('../middleware/roleMiddleware');
+const adminAuthMiddleware         = require('../middleware/adminAuthMiddleware');
+const authMiddleware              = require('../middleware/authMiddleware');
+const authorizeRole               = require('../middleware/roleMiddleware');
 
-const adminRouter = express.Router();
+// === Serviços usados no Termo + Assinafy ===
+const { gerarTermoEventoPdfkitEIndexar } = require('../services/termoEventoPdfkitService');
+const { uploadPdf } = require('../services/assinafyClient');
+
+const adminRouter  = express.Router();
 const publicRouter = express.Router();
 const clientRouter = express.Router();
 
@@ -24,7 +29,7 @@ const SALT_ROUNDS = 10;
 
 // Utils
 const onlyDigits = (v = '') => String(v).replace(/\D/g, '');
-const isCpf = d => !!d && d.length === 11;
+const isCpf  = d => !!d && d.length === 11;
 const isCnpj = d => !!d && d.length === 14;
 
 // PF/PJ para o CHECK da tabela (aceita entradas variadas e devolve 'PF' | 'PJ')
@@ -35,35 +40,123 @@ const normalizeTipoPessoa = (v = '') => {
   return '';
 };
 
+// Helpers de DB (promessas)
+const dbGet = (sql, p = []) => new Promise((resolve, reject) => {
+  db.get(sql, p, (e, r) => e ? reject(e) : resolve(r));
+});
+const dbAll = (sql, p = []) => new Promise((resolve, reject) => {
+  db.all(sql, p, (e, r) => e ? reject(e) : resolve(r));
+});
+const dbRun = (sql, p = []) => new Promise((resolve, reject) => {
+  db.run(sql, p, function (e) { e ? reject(e) : resolve(this); });
+});
+
 /* ===================================================================
    ROTAS DO CLIENTE LOGADO (PORTAL DE EVENTOS) – exigem CLIENTE_EVENTO
    =================================================================== */
 clientRouter.use(authMiddleware, authorizeRole(['CLIENTE_EVENTO']));
 
+/**
+ * GET /api/portal/eventos/:id/termo/meta
+ * Retorna metadados do termo do evento para o portal (URL pública do PDF, status, assinafy_id, etc.)
+ */
+clientRouter.get('/:id/termo/meta', async (req, res) => {
+  try {
+    const eventoId = req.params.id;
+    // garante que existe registro em `documentos` (gera se necessário)
+    let doc = await dbGet(`SELECT * FROM documentos WHERE evento_id = ? AND tipo = 'termo_evento'`, [eventoId]);
+    if (!doc || !doc.pdf_url || !fs.existsSync(doc.pdf_url)) {
+      await gerarTermoEventoPdfkitEIndexar(eventoId);
+      doc = await dbGet(`SELECT * FROM documentos WHERE evento_id = ? AND tipo = 'termo_evento'`, [eventoId]);
+    }
+    if (!doc || !doc.pdf_url) return res.status(404).json({ error: 'Termo não encontrado.' });
+
+    // preferir a pública (que já apontamos para /public/documentos/...)
+    const url = doc.pdf_public_url || null;
+    return res.json({
+      ok: true,
+      evento_id: eventoId,
+      status: doc.status || 'gerado',
+      pdf_public_url: url,
+      assinafy_id: doc.assinafy_id || null,
+      signed_pdf_public_url: doc.signed_pdf_public_url || null,
+      signed_at: doc.signed_at || null
+    });
+  } catch (e) {
+    console.error('[PORTAL] /:id/termo/meta erro:', e);
+    res.status(500).json({ error: 'Erro ao obter metadados do termo.' });
+  }
+});
+
+/**
+ * POST /api/portal/eventos/:id/termo/assinafy/link
+ * Garante o PDF do termo, envia para a Assinafy (se ainda não enviado) e
+ * devolve URL para o cliente iniciar a assinatura no portal.
+ */
+clientRouter.post('/:id/termo/assinafy/link', async (req, res) => {
+  try {
+    const eventoId = req.params.id;
+
+    // Garante PDF do termo
+    let doc = await dbGet(
+      `SELECT * FROM documentos WHERE evento_id = ? AND tipo = 'termo_evento'`,
+      [eventoId]
+    );
+    if (!doc || !doc.pdf_url || !fs.existsSync(doc.pdf_url)) {
+      await gerarTermoEventoPdfkitEIndexar(eventoId);
+      doc = await dbGet(`SELECT * FROM documentos WHERE evento_id = ? AND tipo = 'termo_evento'`, [eventoId]);
+    }
+    if (!doc || !doc.pdf_url || !fs.existsSync(doc.pdf_url)) {
+      return res.status(409).json({ error: 'PDF do termo não encontrado.' });
+    }
+
+    // Se já existe id na Assinafy, devolve rota para abrir
+    if (doc.assinafy_id) {
+      return res.json({
+        ok: true,
+        id: doc.assinafy_id,
+        url: null,
+        open_url: `/api/documentos/assinafy/${encodeURIComponent(doc.assinafy_id)}/open`
+      });
+    }
+
+    // Envia o PDF para a Assinafy agora
+    const buffer = fs.readFileSync(doc.pdf_url);
+    const filename = path.basename(doc.pdf_url);
+    const callbackUrl = process.env.ASSINAFY_CALLBACK_URL || undefined; // opcional
+    const resp = await uploadPdf(buffer, filename, { callbackUrl });
+
+    await dbRun(
+      `UPDATE documentos SET assinafy_id = ?, status = 'enviado' WHERE id = ?`,
+      [resp.id, doc.id]
+    );
+
+    // Algumas APIs retornam uma URL de assinatura direta; se não, usamos nossa rota de "open"
+    const open_url =
+      resp.url || resp.signUrl || resp.signerUrl || resp.signingUrl ||
+      `/api/documentos/assinafy/${encodeURIComponent(resp.id)}/open`;
+
+    return res.json({ ok: true, id: resp.id, url: resp.url || null, open_url });
+  } catch (e) {
+    console.error('[PORTAL] assinafy link erro:', e?.response?.data || e);
+    res.status(500).json({ error: 'Falha ao iniciar assinatura.' });
+  }
+});
+
 clientRouter.get('/me', async (req, res) => {
   const clienteId = req.user.id;
   try {
-    const fetchUser = new Promise((resolve, reject) => {
-      const sql = `SELECT * FROM Clientes_Eventos WHERE id = ?`;
-      db.get(sql, [clienteId], (err, row) => err ? reject(err) : resolve(row));
-    });
-
-    const fetchEventos = new Promise((resolve, reject) => {
-      const sql = `SELECT * FROM Eventos WHERE id_cliente = ? ORDER BY id DESC`;
-      db.all(sql, [clienteId], (err, rows) => err ? reject(err) : resolve(rows));
-    });
-
-    const fetchDars = new Promise((resolve, reject) => {
-      const sql = `
-        SELECT d.*, de.id_evento, de.numero_parcela, de.valor_parcela
-        FROM dars d
-        JOIN DARs_Eventos de ON de.id_dar = d.id
-        JOIN Eventos e ON e.id = de.id_evento
+    const fetchUser = dbGet(`SELECT * FROM Clientes_Eventos WHERE id = ?`, [clienteId]);
+    const fetchEventos = dbAll(`SELECT * FROM Eventos WHERE id_cliente = ? ORDER BY id DESC`, [clienteId]);
+    const fetchDars = dbAll(
+      `SELECT d.*, de.id_evento, de.numero_parcela, de.valor_parcela
+         FROM dars d
+         JOIN DARs_Eventos de ON de.id_dar = d.id
+         JOIN Eventos e ON e.id = de.id_evento
         WHERE e.id_cliente = ?
-        ORDER BY d.data_vencimento DESC, d.id DESC
-      `;
-      db.all(sql, [clienteId], (err, rows) => err ? reject(err) : resolve(rows));
-    });
+        ORDER BY d.data_vencimento DESC, d.id DESC`,
+      [clienteId]
+    );
 
     const [user, eventos, dars] = await Promise.all([fetchUser, fetchEventos, fetchDars]);
     if (!user) return res.status(404).json({ error: 'Cliente não encontrado.' });
@@ -118,7 +211,7 @@ clientRouter.post('/change-password', (req, res) => {
 
   if (!senha_atual || !nova_senha || !confirmar_nova_senha) {
     return res.status(400).json({ error: 'Todos os campos de senha são obrigatórios.' });
-  }
+    }
   if (nova_senha !== confirmar_nova_senha) {
     return res.status(400).json({ error: 'As novas senhas não coincidem.' });
   }
@@ -233,9 +326,9 @@ adminRouter.post('/', async (req, res) => {
     return res.status(400).json({ error: 'Documento inválido (CPF/CNPJ).' });
   }
 
-  const telDigits = onlyDigits(telefone || '');
-  const docRespDigits = tp === 'PJ' ? onlyDigits(documento_responsavel || '') : null;
-  const nomeResp = tp === 'PJ' ? (nome_responsavel || null) : null;
+  const telDigits      = onlyDigits(telefone || '');
+  const docRespDigits  = tp === 'PJ' ? onlyDigits(documento_responsavel || '') : null;
+  const nomeResp       = tp === 'PJ' ? (nome_responsavel || null) : null;
 
   const enderecoCompleto = (
     `${logradouro || ''}, ${numero || ''}` +
@@ -353,7 +446,7 @@ adminRouter.put('/:id', (req, res) => {
 });
 
 module.exports = {
-  adminRoutes: adminRouter,
+  adminRoutes:  adminRouter,
   publicRoutes: publicRouter,
   clientRoutes: clientRouter
 };
