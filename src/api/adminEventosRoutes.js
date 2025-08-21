@@ -20,6 +20,7 @@ const { gerarTermoEventoPdfkitEIndexar } = require('../services/termoEventoPdfki
 const fs = require('fs');
 const path = require('path');
 const db = require('../database/db');
+const { normalizeMsisdn } = require('../utils/phone');
 
 const router = express.Router();
 
@@ -109,7 +110,7 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
       signerName  = signerName  || row.nome_responsavel || row.nome_razao_social;
       signerEmail = signerEmail || row.email;
       signerCpf   = signerCpf   || onlyDigits(row.documento_responsavel || row.documento || '');
-      signerPhone = signerPhone || onlyDigits(row.telefone || '');
+      signerPhone = normalizeMsisdn(signerPhone || row.telefone || '');
     }
 
     if (!signerName || !signerEmail || !signerCpf || !signerPhone) {
@@ -132,7 +133,7 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
       full_name: signerName,
       email: signerEmail,
       government_id: onlyDigits(signerCpf),
-      phone: onlyDigits(signerPhone)
+      phone: `+55${normalizeMsisdn(signerPhone)}`
     });
     const signerId = signer?.id || signer?.data?.id;
     if (!signerId) {
