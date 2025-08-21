@@ -435,15 +435,8 @@
             if (Array.isArray(esp)) esp = esp.join(', ');
             return `<tr>
               <td>${ev.nome_evento || 'Evento'}</td>
-              <td>${ev.numero_oficio_sei || ''}</td>
               <td>${ev.numero_processo || ''}</td>
               <td>${ev.numero_termo || ''}</td>
-              <td>${esp || ''}</td>
-              <td>${ev.area_m2 != null ? ev.area_m2 : ''}</td>
-              <td>${ev.hora_montagem || ''}</td>
-              <td>${ev.hora_inicio || ''}</td>
-              <td>${ev.hora_fim || ''}</td>
-              <td>${ev.hora_desmontagem || ''}</td>
               <td>${datasFmt}</td>
               <td>${formatDateBR(ev.data_vigencia_final)}</td>
               <td class="text-end">${formatBRL(valor)}</td>
