@@ -260,6 +260,9 @@ router.get('/assinafy/:id/open', async (req, res) => {
     return res.json({ ok:true, id, status: st });
   } catch (e) {
     console.error('[documentos] /assinafy/:id/open erro:', e?.response?.data || e.message);
+    if (e?.response?.status === 404) {
+      return res.status(404).json({ error: 'Documento não encontrado.' });
+    }
     res.status(500).json({ error: 'Falha ao abrir assinatura.' });
   }
 });
@@ -271,6 +274,9 @@ router.get('/assinafy/:id/status', async (req, res) => {
     res.json({ ok:true, status: st });
   } catch (e) {
     console.error('[documentos] /assinafy/:id/status erro:', e?.response?.data || e.message);
+    if (e?.response?.status === 404) {
+      return res.status(404).json({ error: 'Documento não encontrado.' });
+    }
     res.status(500).json({ error: 'Falha ao consultar status.' });
   }
 });
@@ -297,6 +303,9 @@ router.get('/assinafy/:id/download-signed', async (req, res) => {
     return safeSendFile(res, abs, fileName);
   } catch (e) {
     console.error('[documentos] /assinafy/:id/download-signed erro:', e?.response?.data || e.message);
+    if (e?.response?.status === 404) {
+      return res.status(404).json({ error: 'PDF assinado não encontrado.' });
+    }
     res.status(500).json({ error: 'Falha ao baixar PDF assinado.' });
   }
 });
