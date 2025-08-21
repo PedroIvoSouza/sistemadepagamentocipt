@@ -11,7 +11,8 @@ const {
   ensureSigner,
   requestSignatures,
   getDocument,
-  pickBestArtifactUrl
+  pickBestArtifactUrl,
+  waitForDocumentReady
 } = require('../services/assinafyService');
 
 // CORRIGIDO: Nome da função para corresponder ao que é exportado pelo serviço.
@@ -125,6 +126,16 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
     const assinafyDocId = uploaded?.id || uploaded?.data?.id;
     if (!assinafyDocId) {
       return res.status(500).json({ ok: false, error: 'Falha no upload ao Assinafy.' });
+    }
+
+    // Aguarda o processamento do documento no Assinafy antes de prosseguir
+    try {
+      await waitForDocumentReady(assinafyDocId, { retries: 20, intervalMs: 3000 });
+    } catch (err) {
+      if (err.timeout) {
+        return res.status(504).json({ ok: false, error: 'Tempo limite ao processar documento no Assinafy.' });
+      }
+      throw err;
     }
 
     // 3) Cria o signatário (se necessário)

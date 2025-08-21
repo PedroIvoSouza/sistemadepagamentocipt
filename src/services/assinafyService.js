@@ -119,6 +119,23 @@ async function getDocument(documentId) {
 }
 
 /**
+ * Aguarda até que o documento esteja pronto para solicitações de assinatura.
+ * Fica consultando o Assinafy até o status ser diferente de 'metadata_processing'.
+ */
+async function waitForDocumentReady(documentId, { retries = 10, intervalMs = 3000 } = {}) {
+  for (let attempt = 0; attempt < retries; attempt++) {
+    const data = await getDocument(documentId);
+    if (data?.status && data.status !== 'metadata_processing') return data;
+    if (attempt < retries - 1) {
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
+  }
+  const err = new Error('Timeout ao aguardar processamento do documento.');
+  err.timeout = true;
+  throw err;
+}
+
+/**
  * Retorna a melhor URL de download do PDF:
  *  - se existir artifacts.certified, usa ela (assinado)
  *  - senão, usa artifacts.original (upload)
@@ -134,5 +151,6 @@ module.exports = {
   ensureSigner,
   requestSignatures,
   getDocument,
+  waitForDocumentReady,
   pickBestArtifactUrl,
 };
