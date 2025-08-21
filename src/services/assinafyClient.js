@@ -138,14 +138,20 @@ async function downloadSignedPdf(id) {
 }
 
 async function listAssignments(documentId) {
-  const u = `/documents/${encodeURIComponent(documentId)}/assignments`;
-  const r = await axJson().get(u);
-  if (DEBUG) console.log('[ASSINAFY][GET]', BASE + u, r.status);
-  if (r.status >= 200 && r.status < 300) {
-    // API às vezes retorna array puro; às vezes, {data:[]}
-    return Array.isArray(r.data) ? r.data : (Array.isArray(r.data?.data) ? r.data.data : []);
+  const u = `/accounts/${ACCOUNT_ID}/documents/${encodeURIComponent(documentId)}/assignments`;
+  try {
+    const r = await axJson().get(u);
+    if (DEBUG) console.log('[ASSINAFY][GET]', BASE + u, r.status);
+    if (r.status === 204 || r.status === 404) return [];
+    if (r.status >= 200 && r.status < 300) {
+      // API às vezes retorna array puro; às vezes, {data:[]}
+      return Array.isArray(r.data) ? r.data : (Array.isArray(r.data?.data) ? r.data.data : []);
+    }
+    return [];
+  } catch (e) {
+    if (e?.response?.status === 404 || e?.response?.status === 204) return [];
+    throw e;
   }
-  return [];
 }
 
 function _pickAssignmentUrl(a) {
@@ -214,7 +220,7 @@ async function ensureSigner({ full_name, email, government_id, phone }) {
 async function createAssignment(documentId, signerId, opts = {}) {
   if (!documentId || !signerId) throw new Error('documentId e signerId são obrigatórios.');
 
-  const u = `/documents/${encodeURIComponent(documentId)}/assignments`;
+  const u = `/accounts/${ACCOUNT_ID}/documents/${encodeURIComponent(documentId)}/assignments`;
   const bodies = [
     { method: 'virtual', signerIds: [signerId], ...opts },
     { method: 'virtual', signer_ids: [signerId], ...opts },
