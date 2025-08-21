@@ -281,7 +281,7 @@ function findLetterheadPath() {
 }
 
 // ---------- Geração do PDF (PDFKit, timbrado, header/footer) ----------
-async function gerarTermoEventoPdfEIndexar(eventoId, { returnBuffer = false } = {}) {
+async function gerarTermoEventoPdfkitEIndexar(eventoId, { returnBuffer = false } = {}) {
     console.log(`[TERMO][SERVICE] gerarTermoEventoPdfkitEIndexar(${eventoId}) - ${VERSION}`);
     const payload = await buildPayloadFromEvento(eventoId);
     const evRow = payload._raw;
@@ -438,4 +438,4 @@ async function gerarTermoEventoPdfEIndexar(eventoId, { returnBuffer = false } = 
     return returnBuffer ? { ...saved, buffer } : saved;
 }
 
-module.exports = { gerarTermoEventoPdfEIndexar };
+module.exports = { gerarTermoEventoPdfkitEIndexar };
