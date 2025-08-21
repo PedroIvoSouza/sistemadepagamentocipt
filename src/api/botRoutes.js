@@ -441,6 +441,11 @@ router.get('/dars/:darId', botAuthMiddleware, async (req, res) => {
       const cb = codigo_barras || numero_documento;
       if (cb) {
         ld = codigoBarrasParaLinhaDigitavel(cb);
+        if (ld) {
+          try {
+            await qRun('UPDATE dars SET linha_digitavel = ? WHERE id = ?', [ld, ctx.dar.id]);
+          } catch {}
+        }
       }
     }
     const competencia = `${String(mes_referencia).padStart(2, '0')}/${ano_referencia}`;
