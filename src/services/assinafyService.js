@@ -7,6 +7,9 @@ const path = require('path');
 const BASE = process.env.ASSINAFY_API_BASE || 'https://api.assinafy.com.br/v1';
 const ACCOUNT_ID = process.env.ASSINAFY_ACCOUNT_ID;
 
+// Status do Assinafy considerados finais (documento processado)
+const FINAL_STATUSES = new Set(['available', 'ready', 'waiting_for_assignments']);
+
 function authHeaders() {
   const apiKey = process.env.ASSINAFY_API_KEY;
   const bearer = process.env.ASSINAFY_ACCESS_TOKEN;
@@ -150,8 +153,6 @@ async function waitForDocumentReady(
   documentId,
   { retries = 10, intervalMs = 3000 } = {},
 ) {
-  const READY_STATUSES = ['available', 'ready', 'waiting_for_assignments'];
-
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
       const data = await getDocument(documentId);
@@ -162,7 +163,7 @@ async function waitForDocumentReady(
         `Assinafy document ${documentId} status (attempt ${attempt + 1}/${retries}): ${status}`,
       );
 
-      if (status && READY_STATUSES.includes(status)) {
+      if (status && FINAL_STATUSES.has(status)) {
         return info;
       }
     } catch (err) {
