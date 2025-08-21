@@ -164,12 +164,26 @@
           return;
         }
 
-        acc.innerHTML = eventos.map((ev,i)=>{
+        const partes = [];
+        for (const [i, ev] of eventos.entries()) {
           const evId = ev.id || ev.evento_id || ev.id_evento;
-          const valor = Number(typeof ev.valor_final==='number' ? ev.valor_final
-                        : parseFloat(String(ev.valor_final||'0').replace(/\./g,'').replace(',','.')) || 0);
+          const valor = Number(typeof ev.valor_final==='number' ? ev.valor_final : parseFloat(String(ev.valor_final||'0').replace(/\./g,'').replace(',','.')) || 0);
           const datasFmt = Array.isArray(ev.datas_evento) ? ev.datas_evento.map(d=>formatDateBR(d)).join(', ') : formatDateBR(ev.datas_evento || ev.data);
-          return `
+
+          let showAssinar = true;
+          let signedUrl = '';
+          try {
+            const rMeta = await fetch(`/api/documentos/termo/${evId}/meta`, { headers });
+            if (rMeta.ok) {
+              const meta = await rMeta.json();
+              if (meta.status === 'assinado' || meta.status === 'signed' || meta.signed_pdf_public_url) {
+                showAssinar = false;
+                if (meta.signed_pdf_public_url) signedUrl = meta.signed_pdf_public_url;
+              }
+            }
+          } catch {}
+
+          partes.push(`
           <div class="accordion-item">
             <h2 class="accordion-header" id="head${i}">
               <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#col${i}">
@@ -183,19 +197,38 @@
               <div class="accordion-body">
                 <div class="mb-2"><strong>Processo:</strong> ${ev.numero_processo || '-'}</div>
                 <div class="mb-2"><strong>Termo:</strong> ${ev.numero_termo || '-'}</div>
-                <div class="btn-group mt-2">
+                <div class="btn-group mt-2" id="btns-${evId}">
                   <button class="btn btn-sm btn-outline-secondary" data-baixar-termo="${evId}">
                     <i class="bi bi-filetype-pdf"></i> Baixar Termo
                   </button>
-                  <button class="btn btn-sm btn-primary" data-assinar-termo="${evId}">
-                    <i class="bi bi-pen"></i> Assinar Termo
-                  </button>
+                  ${showAssinar ? `<button class="btn btn-sm btn-primary" data-assinar-termo="${evId}"><i class="bi bi-pen"></i> Assinar Termo</button>` : ''}
+                  ${signedUrl ? `<a class="btn btn-sm btn-success" href="${signedUrl}" target="_blank"><i class="bi bi-download"></i> Termo Assinado</a>` : ''}
                 </div>
                 <small class="ms-2 text-muted" id="sig-status-${evId}"></small>
               </div>
             </div>
-          </div>`;
-        }).join('');
+          </div>`);
+        }
+        acc.innerHTML = partes.join('');
+
+        async function atualizarUIEvento(eventoId){
+          try{
+            const r = await fetch(`/api/documentos/termo/${eventoId}/meta`, { headers });
+            if(!r.ok) return;
+            const meta = await r.json();
+            const btns = document.getElementById(`btns-${eventoId}`);
+            if(!btns) return;
+            const assinada = meta.status === 'assinado' || meta.status === 'signed' || !!meta.signed_pdf_public_url;
+            const signedUrl = meta.signed_pdf_public_url || '';
+            btns.innerHTML = `
+              <button class="btn btn-sm btn-outline-secondary" data-baixar-termo="${eventoId}">
+                <i class="bi bi-filetype-pdf"></i> Baixar Termo
+              </button>
+              ${assinada ? '' : `<button class="btn btn-sm btn-primary" data-assinar-termo="${eventoId}"><i class="bi bi-pen"></i> Assinar Termo</button>`}
+              ${assinada && signedUrl ? `<a class="btn btn-sm btn-success" href="${signedUrl}" target="_blank"><i class="bi bi-download"></i> Termo Assinado</a>` : ''}
+            `;
+          }catch(e){ console.warn(e); }
+        }
 
         // evento de clique
         acc.addEventListener('click', async (e)=>{
@@ -259,6 +292,13 @@
                     w.location = j2.url;
                     opened = true;
                     document.getElementById(`sig-status-${eventoId}`).textContent = 'Assinatura iniciada…';
+                    break;
+                  }
+                  if (j2.status === 'signed' || j2.status === 'assinado') {
+                    document.getElementById(`sig-status-${eventoId}`).textContent = 'Termo assinado.';
+                    try { w.close(); } catch {}
+                    await atualizarUIEvento(eventoId);
+                    opened = true;
                     break;
                   }
                 }
