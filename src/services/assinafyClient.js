@@ -1,166 +1,195 @@
 // src/services/assinafyClient.js
 const axios = require('axios');
 const FormData = require('form-data');
-const fs = require('fs'); // usado só no fallback de download por URL (opcional)
+const https = require('https');
 
-function getCredHeaders() {
-  const apiKey = process.env.ASSINAFY_API_KEY?.trim();
-  const bearer = process.env.ASSINAFY_ACCESS_TOKEN?.trim();
-  // Preferência: X-Api-Key (v1)
-  if (apiKey) return { 'X-Api-Key': apiKey };
-  if (bearer) return { Authorization: `Bearer ${bearer}` };
+const TIMEOUT = Number(process.env.ASSINAFY_TIMEOUT_MS || 60000); // 60s
+const API_KEY = process.env.ASSINAFY_API_KEY || '';
+const ACCESS_TOKEN = process.env.ASSINAFY_ACCESS_TOKEN || '';
+const ACCOUNT_ID = process.env.ASSINAFY_ACCOUNT_ID || '';
+
+/**
+ * Bases aceitas:
+ * - ASSINAFY_API_BASE (ex.: https://api.assinafy.com.br/v1)
+ * - ASSINAFY_API_URL  (ex.: https://api.assinafy.com.br)
+ *
+ * Vamos montar uma lista de possíveis endpoints de upload:
+ * 1) <base>/accounts/:id/documents           (se houver /v1 e ACCOUNT_ID)
+ * 2) <base>/documents                         (se base tiver /v1)
+ * 3) <url>/documents                          (legado/compat)
+ */
+function buildUploadEndpoints() {
+  const bases = [];
+  if (process.env.ASSINAFY_API_BASE) bases.push(process.env.ASSINAFY_API_BASE.replace(/\/+$/, ''));
+  if (process.env.ASSINAFY_API_URL)  bases.push(process.env.ASSINAFY_API_URL.replace(/\/+$/, ''));
+  // defaults sensatos (prioriza .com.br)
+  if (!bases.length) bases.push('https://api.assinafy.com.br/v1', 'https://api.assinafy.com.br');
+
+  const endpoints = [];
+  for (const base of bases) {
+    const hasV1 = /\/v1$/.test(base);
+    if (hasV1 && ACCOUNT_ID) {
+      endpoints.push(`${base}/accounts/${ACCOUNT_ID}/documents`);
+    }
+    if (hasV1) {
+      endpoints.push(`${base}/documents`);
+    }
+  }
+
+  // fallback “cru”
+  endpoints.push('https://api.assinafy.com.br/documents');
+
+  // remove duplicados mantendo ordem
+  return [...new Set(endpoints)];
+}
+
+function buildAuthHeaders() {
+  if (API_KEY) return { 'X-Api-Key': API_KEY };
+  if (ACCESS_TOKEN) return { Authorization: `Bearer ${ACCESS_TOKEN}` };
   throw new Error('Configure ASSINAFY_API_KEY ou ASSINAFY_ACCESS_TOKEN.');
 }
 
-function baseCandidates() {
-  // 1) o que vier do .env
-  const envs = [
-    process.env.ASSINAFY_API_URL,   // pode já vir com /v1 ou /accounts/:id
-    process.env.ASSINAFY_API_BASE,  // alternativa legada
-  ].filter(Boolean);
+const httpsAgent = new https.Agent({ keepAlive: true });
 
-  // 2) montar candidatos a partir do ACCOUNT_ID
-  const acc = process.env.ASSINAFY_ACCOUNT_ID?.trim();
-  if (acc) {
-    envs.push(`https://api.assinafy.com.br/v1/accounts/${acc}`);
-    envs.push(`https://api.assinafy.com.br/v1`); // caso precise cair para /documents sem account
-  }
+async function postMultipartToFirstAlive(form, extraHeaders = {}) {
+  const endpoints = buildUploadEndpoints();
+  let lastErr = null;
 
-  // 3) defaults finais
-  envs.push('https://api.assinafy.com.br/v1');
-  envs.push('https://api.assinafy.com.br');
-
-  // normaliza e remove duplicados
-  const seen = new Set();
-  return envs
-    .map(s => String(s).replace(/\/+$/,''))
-    .filter(s => { if (seen.has(s)) return false; seen.add(s); return true; });
-}
-
-function buildDocumentEndpoints() {
-  const bases = baseCandidates();
-  const endpoints = [];
-  const acc = process.env.ASSINAFY_ACCOUNT_ID?.trim();
-
-  for (const b of bases) {
-    // se já vier com /accounts/:id
-    if (/\/accounts\/[^/]+$/i.test(b)) {
-      endpoints.push(`${b}/documents`);
-      continue;
-    }
-    // se for /v1 e tenho account_id, prioriza o endpoint com account
-    if (/\/v1$/i.test(b) && acc) {
-      endpoints.push(`${b}/accounts/${acc}/documents`);
-    }
-    // tenta /documents direto
-    endpoints.push(`${b}/documents`);
-  }
-  return endpoints;
-}
-
-async function postMultipartToFirstAlive(form) {
-  const headers = { ...getCredHeaders(), ...form.getHeaders() };
-  const endpoints = buildDocumentEndpoints();
-
-  let lastErr;
   for (const url of endpoints) {
     try {
-      const resp = await axios.post(url, form, { headers, timeout: 20000 });
-      return { data: resp.data, used: url };
-    } catch (e) {
-      // se for erro de DNS/rede, tenta o próximo
-      const code = e?.code || e?.cause?.code;
-      if (code === 'ENOTFOUND' || code === 'EAI_AGAIN' || code === 'ECONNREFUSED' || code === 'ETIMEDOUT') {
-        lastErr = e; continue;
-      }
-      // se for 404/401/403, pode ser endpoint errado—tenta próximos também
-      if (e?.response?.status && [401,403,404,405].includes(e.response.status)) {
-        lastErr = e; continue;
-      }
-      // outros erros: já devolve
-      throw e;
+      const resp = await axios.post(url, form, {
+        method: 'POST',
+        timeout: TIMEOUT,
+        maxBodyLength: Infinity,
+        maxContentLength: Infinity,
+        httpsAgent,
+        // força IPv4 (evita intermitências em IPv6/CGNAT)
+        family: 4,
+        headers: {
+          ...form.getHeaders(),
+          ...buildAuthHeaders(),
+          ...extraHeaders
+        },
+        // se o servidor retornar 4xx, queremos o erro imediatamente
+        validateStatus: (s) => s >= 200 && s < 300
+      });
+      return resp.data; // sucesso
+    } catch (err) {
+      lastErr = err;
+      // Alguns CDNs respondem 404/405 rápido – seguimos para o próximo endpoint
+      // Timeouts/ECONNRESET também fazem a gente tentar o próximo
+      continue;
     }
   }
-  throw lastErr || new Error('Falha ao contatar qualquer endpoint Assinafy.');
-}
 
-function getApiKey() {
-  // compat com seu código antigo (não usado se X-Api-Key estiver configurado)
-  const key = process.env.ASSINAFY_API_KEY || process.env.ASSINAFY_ACCESS_TOKEN;
-  if (!key) throw new Error('ASSINAFY_API_KEY/ACCESS_TOKEN não configurado.');
-  return key;
+  // Se nenhum endpoint funcionou, propaga o último erro
+  throw lastErr || new Error('Falha no envio (nenhum endpoint respondeu).');
 }
 
 /**
- * Envia PDF (Buffer) — mantém a mesma assinatura que você já usa
+ * Faz o upload de um PDF (Buffer) ao Assinafy.
+ * Campos extras:
+ *  - callbackUrl: URL do seu webhook para status
+ *  - qualquer flag adicional aceita pela API
  */
 async function uploadPdf(pdfBuffer, filename = 'documento.pdf', config = {}) {
+  if (!pdfBuffer || !Buffer.isBuffer(pdfBuffer)) {
+    throw new Error('pdfBuffer inválido.');
+  }
+
   const form = new FormData();
-  form.append('file', pdfBuffer, { filename, contentType: 'application/pdf' });
-
-  const { callbackUrl = process.env.ASSINAFY_CALLBACK_URL, ...flags } = config || {};
-  if (callbackUrl) form.append('callbackUrl', callbackUrl);
-
-  Object.entries(flags).forEach(([key, value]) => {
-    if (value !== undefined && value !== null) {
-      form.append(key, typeof value === 'boolean' ? String(value) : value);
-    }
+  form.append('file', pdfBuffer, {
+    filename,
+    contentType: 'application/pdf'
   });
 
-  const { data, used } = await postMultipartToFirstAlive(form);
-  // Opcional: log para ver qual URL funcionou
-  console.log('[ASSINAFY] upload OK via:', used);
-  return data;
+  const {
+    callbackUrl = process.env.ASSINAFY_CALLBACK_URL,
+    ...flags
+  } = config || {};
+
+  if (callbackUrl) {
+    form.append('callbackUrl', callbackUrl);
+  }
+
+  // envia demais flags como strings
+  Object.entries(flags).forEach(([k, v]) => {
+    if (v === undefined || v === null) return;
+    form.append(k, typeof v === 'boolean' ? String(v) : String(v));
+  });
+
+  // tenta nas URLs possíveis (accounts/:id/documents -> /v1/documents -> /documents)
+  return await postMultipartToFirstAlive(form);
 }
 
 /**
- * Status do documento
+ * Consulta status do documento (funciona para v1 e legado).
  */
 async function getDocumentStatus(id) {
-  const headers = { ...getCredHeaders() };
-  const bases = buildDocumentEndpoints().map(u => u.replace(/\/documents$/,''));
-  // tenta GET /documents/:id em todos os bases possíveis
-  let lastErr;
-  for (const base of bases) {
+  if (!id) throw new Error('id é obrigatório.');
+  const headers = buildAuthHeaders();
+  const bases = [
+    process.env.ASSINAFY_API_BASE || 'https://api.assinafy.com.br/v1',
+    process.env.ASSINAFY_API_URL  || 'https://api.assinafy.com.br'
+  ].map(b => b.replace(/\/+$/, ''));
+
+  // ordem: v1/documents/:id -> documents/:id
+  const urls = [
+    `${bases[0]}/documents/${id}`,
+    `${bases[1]}/documents/${id}`
+  ];
+
+  let lastErr = null;
+  for (const url of urls) {
     try {
-      const resp = await axios.get(`${base}/documents/${id}`, { headers, timeout: 15000 });
+      const resp = await axios.get(url, {
+        timeout: TIMEOUT,
+        httpsAgent,
+        family: 4,
+        headers
+      });
       return resp.data;
-    } catch (e) {
-      lastErr = e; continue;
+    } catch (err) {
+      lastErr = err;
+      continue;
     }
   }
-  throw lastErr || new Error('Falha ao consultar documento no Assinafy.');
+  throw lastErr || new Error('Falha ao consultar documento.');
 }
 
 /**
- * Baixar PDF assinado — tenta binário direto; se não rolar, devolve a melhor URL
+ * Download do PDF assinado (arraybuffer).
  */
 async function downloadSignedPdf(id) {
-  const headers = { ...getCredHeaders(), Accept: 'application/pdf' };
-  const bases = buildDocumentEndpoints().map(u => u.replace(/\/documents$/,''));
-  // 1) tentativa: GET binário
-  for (const base of bases) {
+  if (!id) throw new Error('id é obrigatório.');
+  const headers = { ...buildAuthHeaders(), Accept: 'application/pdf' };
+  const bases = [
+    process.env.ASSINAFY_API_BASE || 'https://api.assinafy.com.br/v1',
+    process.env.ASSINAFY_API_URL  || 'https://api.assinafy.com.br'
+  ].map(b => b.replace(/\/+$/, ''));
+
+  const urls = [
+    `${bases[0]}/documents/${id}`, // v1
+    `${bases[1]}/documents/${id}`  // legado
+  ];
+
+  let lastErr = null;
+  for (const url of urls) {
     try {
-      const resp = await axios.get(`${base}/documents/${id}`, {
-        headers, responseType: 'arraybuffer', timeout: 20000
+      const resp = await axios.get(url, {
+        timeout: TIMEOUT,
+        responseType: 'arraybuffer',
+        httpsAgent,
+        family: 4,
+        headers
       });
-      // se veio PDF correto, retorna buffer
-      const ct = resp.headers?.['content-type'] || '';
-      if (/application\/pdf/i.test(ct) || resp.data?.byteLength) {
-        return resp.data;
-      }
-    } catch {}
+      return resp.data;
+    } catch (err) {
+      lastErr = err;
+      continue;
+    }
   }
-  // 2) fallback: buscar metadata e retornar URL do artifact (para quem chamou baixar)
-  for (const base of bases) {
-    try {
-      const resp = await axios.get(`${base}/documents/${id}`, { headers, timeout: 15000 });
-      const artifacts = resp.data?.artifacts || {};
-      const url = artifacts.certificated || artifacts.original || null;
-      if (url) return { url };
-    } catch {}
-  }
-  throw new Error('Não foi possível obter o PDF do documento.');
+  throw lastErr || new Error('Falha ao baixar PDF.');
 }
 
 module.exports = {
