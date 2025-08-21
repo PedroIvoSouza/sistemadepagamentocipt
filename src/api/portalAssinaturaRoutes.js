@@ -1,6 +1,4 @@
 // src/api/portalAssinaturaRoutes.js
-// Rotas do Portal relacionadas a Termo + Assinafy (upload, meta, assignment e open/stream do PDF)
-
 require('dotenv').config();
 
 const express = require('express');
@@ -19,6 +17,7 @@ const {
   requestSignatures,
   getDocumentStatus,
   pickSigningUrl,
+  pollSigningUrl,
   unwrap,
 } = require('../services/assinafyClient');
 
@@ -32,10 +31,7 @@ const ASSINAFY_TIMEOUT_MS = Number(process.env.ASSINAFY_TIMEOUT_MS || 90000);
 const ASSINAFY_DEBUG = String(process.env.ASSINAFY_DEBUG || '') === '1';
 const INSECURE = String(process.env.ASSINAFY_INSECURE || '') === '1';
 
-const httpsAgent = new https.Agent({
-  keepAlive: false,
-  rejectUnauthorized: !INSECURE,
-});
+const httpsAgent = new https.Agent({ keepAlive: false, rejectUnauthorized: !INSECURE });
 
 const API_KEY = (process.env.ASSINAFY_API_KEY || '').trim();
 const ACCESS_TOKEN = (process.env.ASSINAFY_ACCESS_TOKEN || '').trim();
@@ -46,7 +42,7 @@ function apiHeaders() {
   return h;
 }
 
-// --- helpers DB
+// DB helpers
 const dbGet = (sql, p=[]) => new Promise((res, rej)=> db.get(sql, p, (e, r)=> e?rej(e):res(r)));
 const dbRun = (sql, p=[]) => new Promise((res, rej)=> db.run(sql, p, function(e){ e?rej(e):res(this); }));
 
@@ -76,9 +72,7 @@ async function getClienteEvento(clienteId) {
   `, [clienteId]);
 }
 
-// ------------------------------------------------------------------
-// 1) Metadados do termo (para "Baixar Termo")
-// ------------------------------------------------------------------
+// ---------------- 1) Metadados para "Baixar Termo" ----------------
 portalEventosAssinaturaRouter.get(
   '/:id/termo/meta',
   authMiddleware,
@@ -106,9 +100,7 @@ portalEventosAssinaturaRouter.get(
   }
 );
 
-// ------------------------------------------------------------------
-// 2) Iniciar assinatura: upload (se faltar), criar/usar signer, criar assignment
-// ------------------------------------------------------------------
+// -------- 2) Iniciar assinatura: upload, signer, assignment + polling --------
 portalEventosAssinaturaRouter.post(
   '/:id/termo/assinafy/link',
   authMiddleware,
@@ -125,7 +117,7 @@ portalEventosAssinaturaRouter.post(
         return res.status(409).json({ error: 'PDF do termo não encontrado no servidor.' });
       }
 
-      // Upload caso ainda não tenha assinafy_id
+      // Upload (se necessário)
       let assinafyId = doc.assinafy_id;
       if (!assinafyId) {
         const buffer   = fs.readFileSync(doc.pdf_url);
@@ -136,7 +128,7 @@ portalEventosAssinaturaRouter.post(
         await dbRun(`UPDATE documentos SET assinafy_id = ?, status = ? WHERE id = ?`, [assinafyId, 'uploaded', doc.id]);
       }
 
-      // Dados do cliente -> signer
+      // Signer = cliente do evento
       const cliente = await getClienteEvento(req.user.id);
       if (!cliente || !cliente.email) return res.status(409).json({ error: 'Cliente sem e-mail cadastrado.' });
 
@@ -146,27 +138,38 @@ portalEventosAssinaturaRouter.post(
         government_id: cliente.documento,
         phone:         cliente.telefone,
       });
-
       const signerId = signer?.id;
       if (!signerId) return res.status(502).json({ error: 'Falha ao criar/localizar signatário na Assinafy.' });
 
+      // Cria assignment
       const assign = await requestSignatures(assinafyId, [signerId], {
         message: 'Por favor, assine o termo do evento.',
       });
 
-      // Extrai URL de assinatura
+      // 1ª tentativa: extrair do próprio retorno
       let url = pickSigningUrl(assign);
+
+      // Polling (até ~9s por padrão)
+      if (!url) url = await pollSigningUrl(assinafyId, { attempts: 6, delayMs: 1500 });
+
+      // Último fallback: tentar no documento agora
       if (!url) {
         const docInfo = await getDocumentStatus(assinafyId).catch(() => null);
         url = pickSigningUrl(docInfo) || null;
       }
-      if (!url) {
-        return res.status(502).json({ error: 'Assignment criado, mas não foi possível obter o link de assinatura.' });
+
+      if (url) {
+        return res.json({ ok: true, id: assinafyId, url });
       }
 
-      return res.json({ ok: true, id: assinafyId, url });
+      // Sem link — muitas vezes significa que o convite foi disparado por e-mail
+      return res.json({
+        ok: true,
+        id: assinafyId,
+        email_sent: true,
+        message: 'Convite de assinatura enviado por e-mail pelo provedor. O link direto ainda não foi disponibilizado.',
+      });
     } catch (e) {
-      // Tentar elaborar a melhor mensagem possível para 4xx
       const st = e?.response?.status;
       const apiMsg = e?.response?.data?.message || e?.message;
       if (ASSINAFY_DEBUG) console.error('[PORTAL] assinafy link erro:', st || '', e?.response?.data || apiMsg);
@@ -175,9 +178,7 @@ portalEventosAssinaturaRouter.post(
   }
 );
 
-// ------------------------------------------------------------------
-// 3) Público: proxy do PDF (original ou certificado)
-// ------------------------------------------------------------------
+// ---------------- 3) Público: proxy do PDF ----------------
 documentosAssinafyPublicRouter.get('/documentos/assinafy/:id/open', async (req, res) => {
   const id = req.params.id;
   try {
@@ -201,8 +202,7 @@ documentosAssinafyPublicRouter.get('/documentos/assinafy/:id/open', async (req, 
     if (ax.status < 200 || ax.status >= 300) {
       let msg = 'Não foi possível abrir o documento agora.';
       try {
-        const chunks = [];
-        for await (const c of ax.data) chunks.push(c);
+        const chunks = []; for await (const c of ax.data) chunks.push(c);
         const body = Buffer.concat(chunks).toString('utf8');
         const maybe = JSON.parse(body);
         if (maybe?.message) msg = maybe.message;
