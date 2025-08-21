@@ -320,23 +320,23 @@ router.post('/:eventoId/dars/:darId/reemitir', async (req, res) => {
    GET /api/admin/eventos/:id/termo
    Gera o TERMO (PDFKit) + indexa + envia download
    =========================================================== */
+// substitua a rota de download do termo por esta:
 router.get('/:id/termo', async (req, res) => {
   const { id } = req.params;
   try {
     const out = await gerarTermoEventoPdfkitEIndexar(id);
-
     const stat = fs.statSync(out.filePath);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${out.fileName}"`);
     res.setHeader('Content-Length', stat.size);
     res.setHeader('Cache-Control', 'no-store');
-
     fs.createReadStream(out.filePath).pipe(res);
   } catch (err) {
     console.error('[admin/eventos] termo erro:', err);
     res.status(500).json({ error: 'Falha ao gerar termo' });
   }
 });
+
 
 /* ===========================================================
    POST /api/admin/eventos/:eventoId/termo/disponibilizar
