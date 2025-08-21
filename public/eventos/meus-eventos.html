@@ -134,6 +134,23 @@
   <script defer src="/js/mobile-tweaks.js"></script>
   <script>
     // ------- helpers -------
+    async function obterTermoMetadata(eventoId){
+  const tentativas = [
+    { url: `/api/portal/eventos/${eventoId}/termo/meta`, method:'GET' },          // ideal p/ cliente
+    { url: `/api/documentos/termo/${eventoId}`, method:'GET' },                   // se você expôs via documentosRoutes
+    { url: `/api/admin/eventos/${eventoId}/termo/disponibilizar`, method:'POST' } // fallback (se estiver público)
+  ];
+  for (const t of tentativas){
+    try{
+      const r = await fetch(t.url, { method: t.method, headers });
+      if (!r.ok) continue;
+      const j = await r.json().catch(()=> ({}));
+      if (j && (j.pdf_public_url || j.url_visualizacao || j.pdf_url)) return j;
+    }catch{}
+  }
+  throw new Error('Termo ainda não disponível.');
+}
+
     const soDigitos = (v='') => String(v).replace(/\D/g,'');
     function formatarDocumento(v){
       const d = soDigitos(v||'');
@@ -378,16 +395,19 @@
               </h2>
               <div id="col${i}" class="accordion-collapse collapse" data-bs-parent="#eventosAccordion">
                 <div class="accordion-body">
-                  <div class="mb-2"><strong>Vigência final:</strong> ${vigFinal}</div>
-                  <div class="mb-2"><strong>Ofício SEI:</strong> ${ev.numero_oficio_sei || '-'}</div>
                   <div class="mb-2"><strong>Processo:</strong> ${ev.numero_processo || '-'}</div>
                   <div class="mb-2"><strong>Termo:</strong> ${ev.numero_termo || '-'}</div>
-                  <div class="mb-2"><strong>Espaço:</strong> ${esp || '-'}</div>
-                  <div class="mb-2"><strong>Área (m²):</strong> ${ev.area_m2 != null ? ev.area_m2 : '-'}</div>
-                  <div class="mb-2"><strong>Montagem:</strong> ${ev.hora_montagem || '-'}</div>
-                  <div class="mb-2"><strong>Início:</strong> ${ev.hora_inicio || '-'}</div>
-                  <div class="mb-2"><strong>Fim:</strong> ${ev.hora_fim || '-'}</div>
-                  <div class="mb-3"><strong>Desmontagem:</strong> ${ev.hora_desmontagem || '-'}</div>
+                  <div class="btn-group mt-2">
+                  <button class="btn btn-sm btn-outline-secondary"
+                          data-baixar-termo="${evId}">
+                    <i class="bi bi-filetype-pdf"></i> Baixar Termo
+                  </button>
+                  <button class="btn btn-sm btn-primary"
+                          data-assinar-termo="${evId}">
+                    <i class="bi bi-pen"></i> Assinar Termo
+                  </button>
+                </div>
+                <small class="ms-2 muted" id="sig-status-${evId}"></small>
                   <button class="btn btn-sm btn-outline-primary" data-ver-dars="${evId}" data-nome="${ev.nome_evento||''}">
                     <i class="bi bi-file-earmark-arrow-down"></i> Ver / Baixar DARs
                   </button>
@@ -400,6 +420,45 @@
             const b = e.target.closest('button[data-ver-dars]'); if(!b) return;
             abrirDARsDoEvento(b.dataset.verDars, b.dataset.nome);
           });
+          const btTermo = e.target.closest('button[data-baixar-termo]');
+if (btTermo) {
+  const eventoId = btTermo.dataset.baixarTermo;
+  try {
+    const meta = await obterTermoMetadata(eventoId); // vê abaixo
+    const url  = meta.pdf_public_url || meta.url_visualizacao || meta.pdf_url;
+    if (!url) throw new Error('Termo ainda não disponível.');
+    window.open(url, '_blank');
+  } catch (err) {
+    alert(err.message || 'Não foi possível abrir o termo.');
+  }
+  return;
+}
+
+const btAssinar = e.target.closest('button[data-assinar-termo]');
+if (btAssinar) {
+  const eventoId = btAssinar.dataset.assinarTermo;
+  const original = btAssinar.innerHTML;
+  btAssinar.disabled = true;
+  btAssinar.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Redirecionando...`;
+  try {
+    // endpoint do portal que retorna/linka à Assinafy
+    const r = await fetch(`/api/portal/eventos/${eventoId}/termo/assinafy/link`, {
+      method: 'POST',
+      headers
+    });
+    const j = await r.json().catch(()=> ({}));
+    if (!r.ok || !j.url) throw new Error(j.error || 'Falha ao iniciar assinatura.');
+    window.open(j.url, '_blank');
+    // opcional: atualizar status na UI
+    document.getElementById(`sig-status-${eventoId}`).textContent = 'Assinatura iniciada…';
+  } catch (err) {
+    alert(err.message || 'Não foi possível iniciar a assinatura.');
+  } finally {
+    btAssinar.disabled = false;
+    btAssinar.innerHTML = original;
+  }
+  return;
+}
         }
       }catch(err){
         console.warn(err);
