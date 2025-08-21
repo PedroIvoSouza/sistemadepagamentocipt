@@ -353,7 +353,8 @@ router.get('/:id/termo/assinafy-status', async (req, res) => {
     );
     if (!row?.assinafy_id) return res.status(404).json({ ok: false, error: 'Sem assinafy_id para este termo.' });
 
-    const doc = await getDocument(row.assinafy_id);
+    const resp = await getDocument(row.assinafy_id);
+    const doc = resp?.data || resp;
     // se já “certified”, salvar a URL assinada e data
     if (doc?.status === 'certified') {
       const bestUrl = pickBestArtifactUrl(doc);

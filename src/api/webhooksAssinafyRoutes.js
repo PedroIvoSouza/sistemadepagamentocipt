@@ -109,8 +109,9 @@ router.post('/', async (req, res) => {
     if (!status || !artifacts) {
       try {
         const doc = await getDocument(documentId);
-        status = status || doc?.status || null;
-        artifacts = artifacts || doc?.artifacts || null;
+        const info = doc?.data || doc;
+        status = status || info?.status || null;
+        artifacts = artifacts || info?.artifacts || null;
       } catch (e) {
         console.warn('[WEBHOOK] falha ao consultar documento na API:', e.message);
       }
