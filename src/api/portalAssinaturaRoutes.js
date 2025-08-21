@@ -174,7 +174,8 @@ router.get(
 router.get('/documentos/assinafy/:id/open', async (req, res) => {
   const id = req.params.id;
   try {
-    const info = await getDocument(id);
+    const doc = await getDocument(id);
+    const info = doc?.data || doc;
     const artifacts = info?.artifacts || {};
     const fileUrl = artifacts.certified || artifacts.original;
     if (!fileUrl) return res.status(404).send('Documento sem artefato disponível.');
@@ -217,8 +218,8 @@ router.get('/documentos/assinafy/:id/open', async (req, res) => {
 router.get('/documentos/assinafy/:id/status', async (req, res) => {
   const id = req.params.id;
   try {
-    const info = await getDocument(id);
-    res.json(info);
+    const doc = await getDocument(id);
+    res.json(doc?.data || doc);
   } catch (e) {
     const st = e?.response?.status || 500;
     res.status(st).json(e?.response?.data || { error: e.message || 'Erro ao consultar status.' });

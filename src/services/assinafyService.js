@@ -111,8 +111,9 @@ async function requestSignatures(documentId, signerIds, { message, expires_at } 
  * Consulta um documento no Assinafy (status + artifacts).
  */
 async function getDocument(documentId) {
+  assertAccount();
   const resp = await axios.get(
-    `${BASE}/documents/${documentId}`,
+    `${BASE}/accounts/${ACCOUNT_ID}/documents/${documentId}`,
     { headers: { ...authHeaders() } }
   );
   return resp.data;
@@ -137,14 +138,15 @@ async function waitForDocumentReady(
 
   for (let attempt = 0; attempt < retries; attempt++) {
     const data = await getDocument(documentId);
-    const status = data?.status;
+    const info = data?.data || data;
+    const status = info?.status;
 
     if (log) {
       console.log(`Assinafy document ${documentId} status: ${status}`);
     }
 
     if (status && READY_STATUSES.includes(status)) {
-      return data;
+      return info;
     }
 
     if (attempt < retries - 1) {
