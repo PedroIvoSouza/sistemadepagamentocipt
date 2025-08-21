@@ -92,25 +92,32 @@ test('GET /api/bot/dars/:id usa numero_documento quando codigo_barras é nulo', 
   assert.strictEqual(res.body.dar.linha_digitavel, EXPECTED);
 });
 
-test('POST /api/bot/dars/:id/emit gera linha_digitavel quando apenas codigo_barras é retornado', async () => {
+test('POST /api/bot/dars/:id/emit grava codigo_barras e linha_digitavel', async () => {
   await reset();
+  await run('UPDATE dars SET codigo_barras=NULL WHERE id=1');
   const res = await request
     .post('/api/bot/dars/1/emit')
     .set('X-Bot-Key', 'secret')
     .send({ msisdn: MSISDN });
   assert.strictEqual(res.statusCode, 200);
   assert.strictEqual(res.body.linha_digitavel, EXPECTED);
-  const row = await get('SELECT linha_digitavel FROM dars WHERE id = 1');
+  assert.strictEqual(res.body.codigo_barras, BARCODE);
+  const row = await get('SELECT linha_digitavel, codigo_barras FROM dars WHERE id = 1');
   assert.strictEqual(row.linha_digitavel, EXPECTED);
+  assert.strictEqual(row.codigo_barras, BARCODE);
 });
 
-test('POST /api/bot/dars/:id/reemit também retorna linha_digitavel', async () => {
+test('POST /api/bot/dars/:id/reemit grava codigo_barras e linha_digitavel', async () => {
   await reset();
-  await run(`UPDATE dars SET status='Emitido', numero_documento='old', linha_digitavel=NULL WHERE id=1`);
+  await run("UPDATE dars SET status='Emitido', numero_documento='old', linha_digitavel=NULL, codigo_barras=NULL WHERE id=1");
   const res = await request
     .post('/api/bot/dars/1/reemit')
     .set('X-Bot-Key', 'secret')
     .send({ msisdn: MSISDN });
   assert.strictEqual(res.statusCode, 200);
   assert.strictEqual(res.body.linha_digitavel, EXPECTED);
+  assert.strictEqual(res.body.codigo_barras, BARCODE);
+  const row = await get('SELECT linha_digitavel, codigo_barras FROM dars WHERE id = 1');
+  assert.strictEqual(row.linha_digitavel, EXPECTED);
+  assert.strictEqual(row.codigo_barras, BARCODE);
 });
