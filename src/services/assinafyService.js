@@ -112,10 +112,8 @@ async function requestSignatures(documentId, signerIds, { message, expires_at } 
  */
 async function getDocument(documentId) {
   assertAccount();
-  const resp = await axios.get(
-    `${BASE}/accounts/${ACCOUNT_ID}/documents/${documentId}`,
-    { headers: { ...authHeaders() } }
-  );
+  const url = `${BASE}/accounts/${ACCOUNT_ID}/documents/${encodeURIComponent(documentId)}`;
+  const resp = await axios.get(url, { headers: { ...authHeaders() } });
   return resp.data;
 }
 
