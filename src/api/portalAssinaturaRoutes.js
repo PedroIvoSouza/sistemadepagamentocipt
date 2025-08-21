@@ -4,6 +4,7 @@
 require('dotenv').config();
 
 const express = require('express');
+const path    = require('path');
 const fs      = require('fs');
 const https   = require('https');
 const sqlite3 = require('sqlite3').verbose();
