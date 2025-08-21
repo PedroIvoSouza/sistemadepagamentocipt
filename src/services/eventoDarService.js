@@ -41,7 +41,7 @@ async function criarEventoComDars(db, data, helpers) {
     tipoDescontoAuto,
     descontoManualPercent,
     valorFinal,
-    parcelas,
+    parcelas = [],
     espacosUtilizados = [],
     areaM2,
     horaInicio,
@@ -50,15 +50,19 @@ async function criarEventoComDars(db, data, helpers) {
     horaDesmontagem,
     numeroProcesso,
     numeroTermo,
+    eventoGratuito = false,
+    justificativaGratuito,
   } = data;
 
-  if (!idCliente || !nomeEvento || !Array.isArray(parcelas) || parcelas.length === 0) {
+  if (!idCliente || !nomeEvento || (!eventoGratuito && (!Array.isArray(parcelas) || parcelas.length === 0))) {
     throw new Error('Campos obrigatórios estão faltando.');
   }
 
-  const somaParcelas = parcelas.reduce((acc, p) => acc + (Number(p.valor) || 0), 0);
-  if (Math.abs(somaParcelas - Number(valorFinal || 0)) > 0.01) {
-    throw new Error(`A soma das parcelas (R$ ${somaParcelas.toFixed(2)}) não corresponde ao Valor Final (R$ ${Number(valorFinal||0).toFixed(2)}).`);
+  if (!eventoGratuito) {
+    const somaParcelas = parcelas.reduce((acc, p) => acc + (Number(p.valor) || 0), 0);
+    if (Math.abs(somaParcelas - Number(valorFinal || 0)) > 0.01) {
+      throw new Error(`A soma das parcelas (R$ ${somaParcelas.toFixed(2)}) não corresponde ao Valor Final (R$ ${Number(valorFinal||0).toFixed(2)}).`);
+    }
   }
   const datasOrdenadas = Array.isArray(datasEvento) ? [...datasEvento].sort((a,b)=> new Date(a)-new Date(b)) : [];
   const dataVigenciaFinal = datasOrdenadas.length ? datasOrdenadas[datasOrdenadas.length-1] : null;
@@ -72,13 +76,13 @@ async function criarEventoComDars(db, data, helpers) {
          data_vigencia_final, total_diarias, valor_bruto,
          tipo_desconto, desconto_manual, valor_final, numero_oficio_sei,
          hora_inicio, hora_fim, hora_montagem, hora_desmontagem,
-         numero_processo, numero_termo, status
+         numero_processo, numero_termo, evento_gratuito, justificativa_gratuito, status
        ) VALUES (
          ?, ?, ?, ?, ?,
          ?, ?, ?,
          ?, ?, ?, ?,
          ?, ?, ?, ?,
-         ?, ?, ?
+         ?, ?, ?, ?, ?
        )`,
       [
         idCliente,
@@ -99,6 +103,8 @@ async function criarEventoComDars(db, data, helpers) {
         horaDesmontagem || null,
         numeroProcesso || null,
         numeroTermo || null,
+        eventoGratuito ? 1 : 0,
+        justificativaGratuito || null,
         'Pendente'
       ]
     );
@@ -113,65 +119,67 @@ async function criarEventoComDars(db, data, helpers) {
     );
     if (!cliente) throw new Error(`Cliente com ID ${idCliente} não foi encontrado no banco.`);
 
-    const documentoLimpo = onlyDigits(cliente.documento);
-    const tipoInscricao = documentoLimpo.length === 11 ? 3 : 4;
-    const receitaCod = Number(String(process.env.RECEITA_CODIGO_EVENTO).replace(/\D/g, ''));
-    if (!receitaCod) throw new Error('RECEITA_CODIGO_EVENTO inválido.');
+    if (!eventoGratuito) {
+      const documentoLimpo = onlyDigits(cliente.documento);
+      const tipoInscricao = documentoLimpo.length === 11 ? 3 : 4;
+      const receitaCod = Number(String(process.env.RECEITA_CODIGO_EVENTO).replace(/\D/g, ''));
+      if (!receitaCod) throw new Error('RECEITA_CODIGO_EVENTO inválido.');
 
-    for (const [i, p] of parcelas.entries()) {
-      const valorParcela = Number(p.valor) || 0;
-      const vencimentoISO = p.vencimento;
-      if (!vencimentoISO || Number.isNaN(new Date(`${vencimentoISO}T12:00:00`).getTime())) {
-        throw new Error(`A data de vencimento da parcela ${i + 1} é inválida.`);
+      for (const [i, p] of parcelas.entries()) {
+        const valorParcela = Number(p.valor) || 0;
+        const vencimentoISO = p.vencimento;
+        if (!vencimentoISO || Number.isNaN(new Date(`${vencimentoISO}T12:00:00`).getTime())) {
+          throw new Error(`A data de vencimento da parcela ${i + 1} é inválida.`);
+        }
+        if (valorParcela <= 0) {
+          throw new Error(`O valor da parcela ${i + 1} deve ser maior que zero.`);
+        }
+        const [ano, mes] = vencimentoISO.split('-');
+        const darStmt = await dbRun(
+          db,
+          `INSERT INTO dars (valor, data_vencimento, status, mes_referencia, ano_referencia)
+           VALUES (?, ?, 'Pendente', ?, ?)`,
+          [valorParcela, vencimentoISO, Number(mes), Number(ano)]
+        );
+        const darId = darStmt.lastID;
+
+        await dbRun(
+          db,
+          `INSERT INTO DARs_Eventos (id_dar, id_evento, numero_parcela, valor_parcela, data_vencimento)
+           VALUES (?, ?, ?, ?, ?)`,
+          [darId, eventoId, i + 1, valorParcela, vencimentoISO]
+        );
+
+        const payloadSefaz = {
+          versao: '1.0',
+          contribuinteEmitente: {
+            codigoTipoInscricao: tipoInscricao,
+            numeroInscricao: documentoLimpo,
+            nome: cliente.nome_razao_social,
+            codigoIbgeMunicipio: Number(process.env.COD_IBGE_MUNICIPIO),
+            descricaoEndereco: cliente.endereco,
+            numeroCep: onlyDigits(cliente.cep)
+          },
+          receitas: [{
+            codigo: receitaCod,
+            competencia: { mes: Number(mes), ano: Number(ano) },
+            valorPrincipal: valorParcela,
+            valorDesconto: 0.00,
+            dataVencimento: vencimentoISO
+          }],
+          dataLimitePagamento: vencimentoISO,
+          observacao: `CIPT Evento: ${nomeEvento} (Montagem ${horaMontagem || '-'}; Evento ${horaInicio || '-'}-${horaFim || '-'}; Desmontagem ${horaDesmontagem || '-'}) | Parcela ${i + 1} de ${parcelas.length}`
+        };
+
+        const retorno = await emitirGuiaSefaz(payloadSefaz);
+        const tokenDoc = await gerarTokenDocumento('DAR_EVENTO', null, db);
+        const pdf = await imprimirTokenEmPdf(retorno.pdfBase64, tokenDoc);
+        await dbRun(
+          db,
+          `UPDATE dars SET numero_documento = ?, pdf_url = ?, status = 'Emitido' WHERE id = ?`,
+          [retorno.numeroGuia, pdf, darId]
+        );
       }
-      if (valorParcela <= 0) {
-        throw new Error(`O valor da parcela ${i + 1} deve ser maior que zero.`);
-      }
-      const [ano, mes] = vencimentoISO.split('-');
-      const darStmt = await dbRun(
-        db,
-        `INSERT INTO dars (valor, data_vencimento, status, mes_referencia, ano_referencia)
-         VALUES (?, ?, 'Pendente', ?, ?)`,
-        [valorParcela, vencimentoISO, Number(mes), Number(ano)]
-      );
-      const darId = darStmt.lastID;
-
-      await dbRun(
-        db,
-        `INSERT INTO DARs_Eventos (id_dar, id_evento, numero_parcela, valor_parcela, data_vencimento)
-         VALUES (?, ?, ?, ?, ?)`,
-        [darId, eventoId, i + 1, valorParcela, vencimentoISO]
-      );
-
-      const payloadSefaz = {
-        versao: '1.0',
-        contribuinteEmitente: {
-          codigoTipoInscricao: tipoInscricao,
-          numeroInscricao: documentoLimpo,
-          nome: cliente.nome_razao_social,
-          codigoIbgeMunicipio: Number(process.env.COD_IBGE_MUNICIPIO),
-          descricaoEndereco: cliente.endereco,
-          numeroCep: onlyDigits(cliente.cep)
-        },
-        receitas: [{
-          codigo: receitaCod,
-          competencia: { mes: Number(mes), ano: Number(ano) },
-          valorPrincipal: valorParcela,
-          valorDesconto: 0.00,
-          dataVencimento: vencimentoISO
-        }],
-        dataLimitePagamento: vencimentoISO,
-        observacao: `CIPT Evento: ${nomeEvento} (Montagem ${horaMontagem || '-'}; Evento ${horaInicio || '-'}-${horaFim || '-'}; Desmontagem ${horaDesmontagem || '-'}) | Parcela ${i + 1} de ${parcelas.length}`
-      };
-
-      const retorno = await emitirGuiaSefaz(payloadSefaz);
-      const tokenDoc = await gerarTokenDocumento('DAR_EVENTO', null, db);
-      const pdf = await imprimirTokenEmPdf(retorno.pdfBase64, tokenDoc);
-      await dbRun(
-        db,
-        `UPDATE dars SET numero_documento = ?, pdf_url = ?, status = 'Emitido' WHERE id = ?`,
-        [retorno.numeroGuia, pdf, darId]
-      );
     }
 
     await dbRun(db, 'COMMIT');
@@ -207,15 +215,18 @@ async function atualizarEventoComDars(db, id, data, helpers) {
     horaMontagem,
     horaDesmontagem,
     numeroProcesso,
-    numeroTermo
+    numeroTermo,
+    eventoGratuito = false,
+    justificativaGratuito,
   } = data || {};
-
-  if (!idCliente || !nomeEvento || !Array.isArray(parcelas) || parcelas.length === 0) {
+  if (!idCliente || !nomeEvento || (!eventoGratuito && (!Array.isArray(parcelas) || parcelas.length === 0))) {
     throw new Error('Campos obrigatórios estão faltando.');
   }
-  const somaParcelas = parcelas.reduce((acc, p) => acc + (Number(p.valor) || 0), 0);
-  if (Math.abs(somaParcelas - Number(valorFinal || 0)) > 0.01) {
-    throw new Error(`A soma das parcelas (R$ ${somaParcelas.toFixed(2)}) não corresponde ao Valor Final (R$ ${Number(valorFinal||0).toFixed(2)}).`);
+  if (!eventoGratuito) {
+    const somaParcelas = parcelas.reduce((acc, p) => acc + (Number(p.valor) || 0), 0);
+    if (Math.abs(somaParcelas - Number(valorFinal || 0)) > 0.01) {
+      throw new Error(`A soma das parcelas (R$ ${somaParcelas.toFixed(2)}) não corresponde ao Valor Final (R$ ${Number(valorFinal||0).toFixed(2)}).`);
+    }
   }
   const datasOrdenadas = Array.isArray(datasEvento) ? [...datasEvento].sort((a,b)=> new Date(a)-new Date(b)) : [];
   const dataVigenciaFinal = datasOrdenadas.length ? datasOrdenadas[datasOrdenadas.length-1] : null;
@@ -243,6 +254,8 @@ async function atualizarEventoComDars(db, id, data, helpers) {
               hora_desmontagem = ?,
               numero_processo = ?,
               numero_termo = ?,
+              evento_gratuito = ?,
+              justificativa_gratuito = ?,
               status = ?
         WHERE id = ?`,
       [
@@ -264,6 +277,8 @@ async function atualizarEventoComDars(db, id, data, helpers) {
         horaDesmontagem || null,
         numeroProcesso || null,
         numeroTermo || null,
+        eventoGratuito ? 1 : 0,
+        justificativaGratuito || null,
         'Pendente',
         id
       ]
@@ -296,65 +311,67 @@ async function atualizarEventoComDars(db, id, data, helpers) {
       throw new Error(`Cliente com ID ${idCliente} não encontrado.`);
     }
 
-    const docLimpo = onlyDigits(cliente.documento);
-    const tipoInscricao = docLimpo.length === 11 ? 3 : 4;
-    const receitaCod = Number(String(process.env.RECEITA_CODIGO_EVENTO).replace(/\D/g, ''));
-    if (!receitaCod) throw new Error('RECEITA_CODIGO_EVENTO inválido.');
+    if (!eventoGratuito) {
+      const docLimpo = onlyDigits(cliente.documento);
+      const tipoInscricao = docLimpo.length === 11 ? 3 : 4;
+      const receitaCod = Number(String(process.env.RECEITA_CODIGO_EVENTO).replace(/\D/g, ''));
+      if (!receitaCod) throw new Error('RECEITA_CODIGO_EVENTO inválido.');
 
-    for (let i = 0; i < parcelas.length; i++) {
-      const p = parcelas[i];
-      const valorParcela = Number(p.valor) || 0;
-      const vencimentoISO = p.vencimento;
-      if (!vencimentoISO || !(new Date(vencimentoISO).getTime() > 0)) {
-        throw new Error(`A data de vencimento da parcela ${i + 1} é inválida.`);
+      for (let i = 0; i < parcelas.length; i++) {
+        const p = parcelas[i];
+        const valorParcela = Number(p.valor) || 0;
+        const vencimentoISO = p.vencimento;
+        if (!vencimentoISO || !(new Date(vencimentoISO).getTime() > 0)) {
+          throw new Error(`A data de vencimento da parcela ${i + 1} é inválida.`);
+        }
+        if (valorParcela <= 0) {
+          throw new Error(`O valor da parcela ${i + 1} deve ser maior que zero.`);
+        }
+        const [ano, mes] = vencimentoISO.split('-');
+        const darStmt = await dbRun(
+          db,
+          `INSERT INTO dars (valor, data_vencimento, status, mes_referencia, ano_referencia)
+           VALUES (?, ?, 'Pendente', ?, ?)`,
+          [valorParcela, vencimentoISO, Number(mes), Number(ano)]
+        );
+        const darId = darStmt.lastID;
+        await dbRun(
+          db,
+          `INSERT INTO DARs_Eventos (id_dar, id_evento, numero_parcela, valor_parcela, data_vencimento)
+           VALUES (?, ?, ?, ?, ?)`,
+          [darId, id, i + 1, valorParcela, vencimentoISO]
+        );
+
+        const payloadSefaz = {
+          versao: '1.0',
+          contribuinteEmitente: {
+            codigoTipoInscricao: tipoInscricao,
+            numeroInscricao: docLimpo,
+            nome: cliente.nome_razao_social,
+            codigoIbgeMunicipio: Number(process.env.COD_IBGE_MUNICIPIO),
+            descricaoEndereco: cliente.endereco,
+            numeroCep: onlyDigits(cliente.cep)
+          },
+          receitas: [{
+            codigo: receitaCod,
+            competencia: { mes: Number(mes), ano: Number(ano) },
+            valorPrincipal: valorParcela,
+            valorDesconto: 0.00,
+            dataVencimento: vencimentoISO
+          }],
+          dataLimitePagamento: vencimentoISO,
+          observacao: `CIPT Evento: ${nomeEvento} (Montagem ${horaMontagem || '-'}; Evento ${horaInicio || '-'}-${horaFim || '-'}; Desmontagem ${horaDesmontagem || '-'}) | Parcela ${i + 1} de ${parcelas.length} (Atualização)`
+        };
+
+        const retorno = await emitirGuiaSefaz(payloadSefaz);
+        const tokenDoc = await gerarTokenDocumento('DAR_EVENTO', null, db);
+        const pdf = await imprimirTokenEmPdf(retorno.pdfBase64, tokenDoc);
+        await dbRun(
+          db,
+          `UPDATE dars SET numero_documento = ?, pdf_url = ?, status = 'Emitido' WHERE id = ?`,
+          [retorno.numeroGuia, pdf, darId]
+        );
       }
-      if (valorParcela <= 0) {
-        throw new Error(`O valor da parcela ${i + 1} deve ser maior que zero.`);
-      }
-      const [ano, mes] = vencimentoISO.split('-');
-      const darStmt = await dbRun(
-        db,
-        `INSERT INTO dars (valor, data_vencimento, status, mes_referencia, ano_referencia)
-         VALUES (?, ?, 'Pendente', ?, ?)`,
-        [valorParcela, vencimentoISO, Number(mes), Number(ano)]
-      );
-      const darId = darStmt.lastID;
-      await dbRun(
-        db,
-        `INSERT INTO DARs_Eventos (id_dar, id_evento, numero_parcela, valor_parcela, data_vencimento)
-         VALUES (?, ?, ?, ?, ?)`,
-        [darId, id, i + 1, valorParcela, vencimentoISO]
-      );
-
-      const payloadSefaz = {
-        versao: '1.0',
-        contribuinteEmitente: {
-          codigoTipoInscricao: tipoInscricao,
-          numeroInscricao: docLimpo,
-          nome: cliente.nome_razao_social,
-          codigoIbgeMunicipio: Number(process.env.COD_IBGE_MUNICIPIO),
-          descricaoEndereco: cliente.endereco,
-          numeroCep: onlyDigits(cliente.cep)
-        },
-        receitas: [{
-          codigo: receitaCod,
-          competencia: { mes: Number(mes), ano: Number(ano) },
-          valorPrincipal: valorParcela,
-          valorDesconto: 0.00,
-          dataVencimento: vencimentoISO
-        }],
-        dataLimitePagamento: vencimentoISO,
-        observacao: `CIPT Evento: ${nomeEvento} (Montagem ${horaMontagem || '-'}; Evento ${horaInicio || '-'}-${horaFim || '-'}; Desmontagem ${horaDesmontagem || '-'}) | Parcela ${i + 1} de ${parcelas.length} (Atualização)`
-      };
-
-      const retorno = await emitirGuiaSefaz(payloadSefaz);
-      const tokenDoc = await gerarTokenDocumento('DAR_EVENTO', null, db);
-      const pdf = await imprimirTokenEmPdf(retorno.pdfBase64, tokenDoc);
-      await dbRun(
-        db,
-        `UPDATE dars SET numero_documento = ?, pdf_url = ?, status = 'Emitido' WHERE id = ?`,
-        [retorno.numeroGuia, pdf, darId]
-      );
     }
 
     await dbRun(db, 'COMMIT');
