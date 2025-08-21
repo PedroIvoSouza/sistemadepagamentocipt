@@ -90,9 +90,31 @@ router.post('/', async (req, res) => {
 // POST /api/admin/eventos/:id/termo/enviar-assinatura
 router.post('/:id/termo/enviar-assinatura', async (req, res) => {
   const { id } = req.params;
-  const { signerName, signerEmail, signerCpf, signerPhone, message, expiresAt } = req.body || {};
+  let { signerName, signerEmail, signerCpf, signerPhone, message, expiresAt } = req.body || {};
 
   try {
+    // busca dados padrão do permissionário associado ao evento, se necessário
+    if (!signerName || !signerEmail || !signerCpf || !signerPhone) {
+      const sql = `
+        SELECT c.nome_responsavel, c.nome_razao_social, c.email, c.telefone,
+               c.documento_responsavel, c.documento
+          FROM Eventos e
+          JOIN Clientes_Eventos c ON c.id = e.id_cliente
+         WHERE e.id = ?`;
+      const row = await dbGet(sql, [id], 'termo/default-signer');
+      if (!row) {
+        return res.status(404).json({ ok: false, error: 'Evento ou permissionário não encontrado.' });
+      }
+      signerName  = signerName  || row.nome_responsavel || row.nome_razao_social;
+      signerEmail = signerEmail || row.email;
+      signerCpf   = signerCpf   || onlyDigits(row.documento_responsavel || row.documento || '');
+      signerPhone = signerPhone || onlyDigits(row.telefone || '');
+    }
+
+    if (!signerName || !signerEmail || !signerCpf || !signerPhone) {
+      return res.status(400).json({ ok: false, error: 'Dados do signatário incompletos.' });
+    }
+
     // 1) Gera/garante o termo e salva (usa seu service já ok)
     const out = await gerarTermoEventoPdfkitEIndexar(id); // { filePath, fileName }
 
@@ -108,8 +130,8 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
     const signer = await createSigner({
       full_name: signerName,
       email: signerEmail,
-      government_id: signerCpf,
-      phone: signerPhone
+      government_id: onlyDigits(signerCpf),
+      phone: onlyDigits(signerPhone)
     });
     const signerId = signer?.id || signer?.data?.id;
     if (!signerId) {
@@ -150,7 +172,7 @@ router.get('/', async (_req, res) => {
   try {
     // CORRIGIDO: Adicionadas crases (`) ao redor da query SQL
     const sql = `
-      SELECT e.id, e.nome_evento, e.espaco_utilizado, e.area_m2,
+      SELECT e.id, e.id_cliente, e.nome_evento, e.espaco_utilizado, e.area_m2,
              e.valor_final, e.status, e.data_vigencia_final,
              e.numero_oficio_sei, e.numero_processo, e.numero_termo,
              e.hora_inicio, e.hora_fim, e.hora_montagem, e.hora_desmontagem,
