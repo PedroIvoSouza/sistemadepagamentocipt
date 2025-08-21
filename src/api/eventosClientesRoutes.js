@@ -8,6 +8,8 @@ const path     = require('path');
 const crypto   = require('crypto');
 const jwt      = require('jsonwebtoken');
 const fs       = require('fs');
+const { Parser } = require('json2csv');
+const xlsx     = require('xlsx');
 
 const { enviarEmailDefinirSenha } = require('../services/emailService');
 const adminAuthMiddleware         = require('../middleware/adminAuthMiddleware');
@@ -300,11 +302,62 @@ adminRouter.use(adminAuthMiddleware);
 
 // LISTAR
 adminRouter.get('/', (req, res) => {
-  const sql = `SELECT * FROM Clientes_Eventos ORDER BY nome_razao_social`;
+  const { pendentes } = req.query;
+  let sql = `SELECT * FROM Clientes_Eventos`;
+  if (pendentes === 'true') {
+    sql +=
+      ` WHERE (telefone IS NULL OR TRIM(telefone) = '')` +
+      ` OR (email IS NULL OR TRIM(email) = '')` +
+      ` OR (endereco IS NULL OR TRIM(endereco) = '')`;
+  }
+  sql += ' ORDER BY nome_razao_social';
   db.all(sql, [], (err, rows) => {
     if (err) return res.status(500).json({ error: 'Erro interno no servidor.' });
     res.json(rows);
   });
+});
+
+// EXPORTAR
+adminRouter.get('/export/:format', async (req, res) => {
+  const { format } = req.params;
+  const { pendentes } = req.query;
+  try {
+    let where = '';
+    if (pendentes === 'true') {
+      where =
+        ` WHERE (telefone IS NULL OR TRIM(telefone) = '')` +
+        ` OR (email IS NULL OR TRIM(email) = '')` +
+        ` OR (endereco IS NULL OR TRIM(endereco) = '')`;
+    }
+    const rows = await dbAll(
+      `SELECT nome_razao_social, tipo_pessoa, documento, email, telefone, cep, logradouro, numero, complemento, bairro, cidade, uf, endereco FROM Clientes_Eventos${where} ORDER BY nome_razao_social`
+    );
+    if (!rows.length) {
+      return res.status(404).send('Nenhum dado encontrado para exportar.');
+    }
+    if (format === 'csv') {
+      const csv = new Parser().parse(rows);
+      res.header('Content-Type', 'text/csv');
+      res.attachment('clientes_eventos.csv');
+      return res.send(csv);
+    }
+    if (format === 'xlsx') {
+      const ws = xlsx.utils.json_to_sheet(rows);
+      const wb = xlsx.utils.book_new();
+      xlsx.utils.book_append_sheet(wb, ws, 'Clientes');
+      const buf = xlsx.write(wb, { bookType: 'xlsx', type: 'buffer' });
+      res.header(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      );
+      res.attachment('clientes_eventos.xlsx');
+      return res.send(buf);
+    }
+    return res.status(400).json({ error: 'Formato de exportação inválido.' });
+  } catch (err) {
+    console.error('[ADMIN EVENTOS CLIENTES][EXPORT] ERRO:', err.message);
+    res.status(500).json({ error: 'Erro ao exportar os dados.' });
+  }
 });
 
 // CRIAR (corrigido: sem tipoNormalizado, PF/PJ correto, endereço e token)
@@ -376,7 +429,7 @@ adminRouter.post('/', async (req, res) => {
 });
 
 // ATUALIZAR
-adminRouter.put('/:id', (req, res) => {
+adminRouter.put('/:id', async (req, res) => {
   const { id } = req.params;
   const body = req.body || {};
 
@@ -413,6 +466,8 @@ adminRouter.put('/:id', (req, res) => {
     `${safe.bairro || ''}, ${safe.cidade || ''} - ${safe.uf || ''}, ${safe.cep || ''}`
   ).replace(/\s+/g, ' ').trim();
 
+  safe.endereco = enderecoCompleto || null;
+
   const sql = `
     UPDATE Clientes_Eventos SET
       nome_razao_social = ?, tipo_pessoa = ?, documento = ?, email = ?,
@@ -424,25 +479,54 @@ adminRouter.put('/:id', (req, res) => {
     safe.nome_razao_social, safe.tipo_pessoa, safe.documento, safe.email,
     safe.telefone || null, safe.nome_responsavel, safe.tipo_cliente, safe.documento_responsavel,
     safe.cep, safe.logradouro || null, safe.numero, safe.complemento || null, safe.bairro || null,
-    safe.cidade || null, safe.uf, enderecoCompleto || null, id
+    safe.cidade || null, safe.uf, safe.endereco, id
   ];
 
-  db.run(sql, params, function (err) {
-    if (err) {
-      console.error('[EVENTOS-CLIENTES][UPDATE] ERRO SQLite:', err.message);
-      if (err.message.includes('UNIQUE constraint failed')) {
-        return res.status(409).json({ error: 'Já existe um cliente com este CPF/CNPJ.' });
-      }
-      if (err.message.includes('CHECK constraint failed')) {
-        return res.status(400).json({ error: "Valor inválido para 'tipo_pessoa'. Use 'PF' ou 'PJ'." });
-      }
-      return res.status(500).json({ error: 'Erro ao atualizar o cliente no banco de dados.' });
-    }
-    if (this.changes === 0) {
+  try {
+    const oldRow = await dbGet('SELECT telefone, email, endereco FROM Clientes_Eventos WHERE id = ?', [id]);
+    if (!oldRow) {
       return res.status(404).json({ error: 'Cliente de evento não encontrado.' });
     }
+
+    await dbRun(sql, params);
+
+    await dbRun(`CREATE TABLE IF NOT EXISTS Clientes_Eventos_Audit (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      cliente_id INTEGER NOT NULL,
+      campo TEXT NOT NULL,
+      valor_antigo TEXT,
+      valor_novo TEXT,
+      alterado_em TEXT DEFAULT CURRENT_TIMESTAMP,
+      alterado_por INTEGER
+    )`);
+
+    const campos = {
+      telefone: safe.telefone || null,
+      email: safe.email,
+      endereco: safe.endereco
+    };
+    const adminId = req.user?.id || null;
+    for (const [campo, novo] of Object.entries(campos)) {
+      const antigo = oldRow[campo];
+      if (String(antigo || '') !== String(novo || '')) {
+        await dbRun(
+          `INSERT INTO Clientes_Eventos_Audit (cliente_id, campo, valor_antigo, valor_novo, alterado_por) VALUES (?, ?, ?, ?, ?)`,
+          [id, campo, antigo || null, novo || null, adminId]
+        );
+      }
+    }
+
     res.json({ message: 'Cliente atualizado com sucesso.', id });
-  });
+  } catch (err) {
+    console.error('[EVENTOS-CLIENTES][UPDATE] ERRO:', err.message);
+    if (String(err.message).includes('UNIQUE constraint failed')) {
+      return res.status(409).json({ error: 'Já existe um cliente com este CPF/CNPJ.' });
+    }
+    if (String(err.message).includes('CHECK constraint failed')) {
+      return res.status(400).json({ error: "Valor inválido para 'tipo_pessoa'. Use 'PF' ou 'PJ'." });
+    }
+    res.status(500).json({ error: 'Erro ao atualizar o cliente no banco de dados.' });
+  }
 });
 
 module.exports = {
