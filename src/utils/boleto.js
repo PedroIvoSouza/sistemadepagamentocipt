@@ -96,4 +96,43 @@ function codigoBarrasParaLinhaDigitavel(codigo = '') {
   return '';
 }
 
-module.exports = { codigoBarrasParaLinhaDigitavel };
+/** 48 (arrecadação) -> 44 (removendo DVs de cada bloco) */
+function linha48ToCodigo44(ld48 = '') {
+  const d = onlyDigits(ld48);
+  if (d.length !== 48 || d[0] !== '8') return '';
+  const b1 = d.slice(0, 12);
+  const b2 = d.slice(12, 24);
+  const b3 = d.slice(24, 36);
+  const b4 = d.slice(36, 48);
+  return b1.slice(0, 11) + b2.slice(0, 11) + b3.slice(0, 11) + b4.slice(0, 11);
+}
+
+/** 47 (boleto) -> 44 (layout FEBRABAN) */
+function linha47ToCodigo44(ld47 = '') {
+  const d = onlyDigits(ld47);
+  if (d.length !== 47) return '';
+  const c1 = d.slice(0, 9);
+  const c2 = d.slice(10, 20);
+  const c3 = d.slice(21, 31);
+  const dvGeral = d.slice(32, 33);
+  const fatorValor = d.slice(33, 47);
+  const bancoMoeda = c1.slice(0, 4);
+  const campoLivre = c1.slice(4, 9) + c2 + c3;
+  return bancoMoeda + dvGeral + fatorValor + campoLivre;
+}
+
+/**
+ * Inverte `codigoBarrasParaLinhaDigitavel`: converte uma linha digitável (47/48)
+ * em código de barras (44). Caso não seja possível converter, retorna string vazia.
+ */
+function linhaDigitavelParaCodigoBarras(linha = '') {
+  const d = onlyDigits(linha);
+  if (!d) return '';
+
+  if (d.length === 44) return d; // já é código de barras
+  if (d.length === 48 && d[0] === '8') return linha48ToCodigo44(d) || '';
+  if (d.length === 47) return linha47ToCodigo44(d) || '';
+  return '';
+}
+
+module.exports = { codigoBarrasParaLinhaDigitavel, linhaDigitavelParaCodigoBarras };
