@@ -1,5 +1,5 @@
 // src/services/assinafyClient.js
-// Cliente Assinafy com criação idempotente de signatário, assignment e utilitários.
+// Cliente Assinafy com criação idempotente de signatário, assignment (virtual) e utilitários.
 
 const axios = require('axios');
 const https = require('https');
@@ -27,9 +27,7 @@ const httpsAgent = new https.Agent({
 // -----------------------------------------------------------------------------
 // Helpers
 // -----------------------------------------------------------------------------
-function sleep(ms) {
-  return new Promise((r) => setTimeout(r, ms));
-}
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 function authHeaders() {
   const h = {};
@@ -160,13 +158,12 @@ async function downloadArtifact(documentId, artifactName = 'certificated') {
   throw err;
 }
 
-// Conveniência específica para baixar o PDF certificado
 async function downloadSignedPdf(id) {
   return downloadArtifact(id, 'certificated'); // nome correto do artefato
 }
 
 // -----------------------------------------------------------------------------
-// Assignments (preparar documento para assinatura)
+// Assignments (preparar documento p/ assinatura SEM CAMPOS = method: "virtual")
 // -----------------------------------------------------------------------------
 async function listAssignments(documentId) {
   const u = `/documents/${encodeURIComponent(documentId)}/assignments`;
@@ -175,7 +172,6 @@ async function listAssignments(documentId) {
     if (DEBUG) console.log('[ASSINAFY][GET]', BASE + u, r.status);
     if (r.status === 204 || r.status === 404) return [];
     if (r.status >= 200 && r.status < 300) {
-      // API às vezes retorna array puro; às vezes, {data:[]}
       return Array.isArray(r.data) ? r.data : (Array.isArray(r.data?.data) ? r.data.data : []);
     }
     return [];
@@ -198,10 +194,8 @@ async function getBestSigningUrl(documentId) {
   return null;
 }
 
-// Cria assignment (virtual) — isto "prepara" o documento para assinatura
 async function createAssignment(documentId, signerId, opts = {}) {
   if (!documentId || !signerId) throw new Error('documentId e signerId são obrigatórios.');
-
   // Endpoint correto para assignments fica sob /documents/:id/assignments
   const u = `/documents/${encodeURIComponent(documentId)}/assignments`;
   const body = { method: 'virtual', signerIds: [signerId], ...opts };
@@ -212,17 +206,14 @@ async function createAssignment(documentId, signerId, opts = {}) {
   if (r.status >= 200 && r.status < 300) return r.data;
 
   const msg = r.data?.message || r.data?.error || '';
-  // se já está pendente, tratamos como ok/idempotente
   if (r.status === 400 && /pending_signature/i.test(msg)) {
     const link = await getBestSigningUrl(documentId);
     return { pending: true, email_sent: true, url: link || null };
   }
-  // se já existe assignment, tratamos como ok
   if (r.status === 409 || /already.*assignment/i.test(msg)) {
     const link = await getBestSigningUrl(documentId);
     return { reused: true, url: link || null };
   }
-
   throw new Error(r.data?.message || `Falha ao criar assignment (HTTP ${r.status}).`);
 }
 
@@ -235,12 +226,7 @@ async function createSigner({ full_name, email, government_id, phone }) {
 
   const u = `/accounts/${ACCOUNT_ID}/signers`;
   if (DEBUG) console.log('[ASSINAFY][POST]', BASE + u, 'application/json');
-  const r = await axJson().post(u, {
-    full_name,
-    email,
-    government_id,
-    telephone: phone,
-  });
+  const r = await axJson().post(u, { full_name, email, government_id, telephone: phone });
 
   if (r.status >= 200 && r.status < 300) return r.data;
 
@@ -269,7 +255,6 @@ async function ensureSigner({ full_name, email, government_id, phone }) {
   } catch (e) {
     const msg = e?.response?.data?.message || e?.message || '';
     if (/já existe/i.test(msg) || /already exists/i.test(msg) || e?.response?.status === 400) {
-      // tenta buscar
       const found = await findSignerByEmail(email);
       if (found) return found;
     }
@@ -278,12 +263,40 @@ async function ensureSigner({ full_name, email, government_id, phone }) {
 }
 
 // -----------------------------------------------------------------------------
-// Polling de status (opcional, recomendado)
+// Fluxo EMBEDDED do signatário (verify, aceitar termos, assinar "virtual")
 // -----------------------------------------------------------------------------
-/**
- * Aguarda até que o documento atinja um status-alvo.
- * Ex.: await waitForStatus(docId, s => s === 'pending_signature' || s === 'certificated')
- */
+async function verifySignerCode({ signer_access_code, verification_code }) {
+  const u = `/verify`;
+  const body = { 'signer-access-code': signer_access_code, 'verification-code': verification_code };
+  const r = await axJson().post(u, body);
+  if (DEBUG) console.log('[ASSINAFY][POST]', BASE + u, r.status);
+  if (r.status >= 200 && r.status < 300) return r.data;
+  throw new Error(r.data?.message || `Falha ao verificar código (HTTP ${r.status}).`);
+}
+
+async function acceptTerms({ signer_access_code }) {
+  const u = `/signers/accept-terms`;
+  const body = { 'signer-access-code': signer_access_code };
+  const r = await axJson().put(u, body);
+  if (DEBUG) console.log('[ASSINAFY][PUT]', BASE + u, r.status);
+  if (r.status >= 200 && r.status < 300) return r.data;
+  throw new Error(r.data?.message || `Falha ao aceitar termos (HTTP ${r.status}).`);
+}
+
+async function signVirtualDocuments(signer_access_code, documentIds) {
+  if (!Array.isArray(documentIds) || documentIds.length === 0) {
+    throw new Error('documentIds deve ser um array com pelo menos 1 id.');
+  }
+  const u = `/signers/documents/sign-multiple?signer-access-code=${encodeURIComponent(signer_access_code)}`;
+  const r = await axJson().put(u, { document_ids: documentIds });
+  if (DEBUG) console.log('[ASSINAFY][PUT]', BASE + u, r.status);
+  if (r.status >= 200 && r.status < 300) return r.data;
+  throw new Error(r.data?.message || `Falha ao assinar documentos (HTTP ${r.status}).`);
+}
+
+// -----------------------------------------------------------------------------
+// Polling de status
+// -----------------------------------------------------------------------------
 async function waitForStatus(documentId, isDone, { intervalMs = 2000, maxMs = 120000 } = {}) {
   const start = Date.now();
   while (true) {
@@ -291,17 +304,9 @@ async function waitForStatus(documentId, isDone, { intervalMs = 2000, maxMs = 12
     const status = d?.data?.status || d?.status || d?.data?.data?.status;
     if (DEBUG) console.log('[ASSINAFY][STATUS]', documentId, status);
     if (isDone(status)) return status;
-    if (Date.now() - start > maxMs) {
-      throw new Error(`Timeout aguardando status; último: ${status}`);
-    }
+    if (Date.now() - start > maxMs) throw new Error(`Timeout aguardando status; último: ${status}`);
     await sleep(intervalMs);
   }
-}
-
-// Conveniência: garante assignment e espera ficar “pendente” ou “certificado”
-async function prepareAndWait(documentId, signerId, opts = {}) {
-  await createAssignment(documentId, signerId, opts);
-  return waitForStatus(documentId, (s) => s === 'pending_signature' || s === 'certificated');
 }
 
 // -----------------------------------------------------------------------------
@@ -325,7 +330,11 @@ module.exports = {
   findSignerByEmail,
   ensureSigner,
 
+  // embedded flow
+  verifySignerCode,
+  acceptTerms,
+  signVirtualDocuments,
+
   // helpers
   waitForStatus,
-  prepareAndWait,
 };
