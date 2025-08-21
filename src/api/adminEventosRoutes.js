@@ -160,8 +160,12 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
       assinafyDocId
     });
   } catch (err) {
-    console.error('[assinafy] erro:', err.message);
-    return res.status(500).json({ ok: false, error: err.message || 'Falha ao enviar para assinatura.' });
+    console.error('[assinafy] erro:', err.message, err.response?.data);
+    return res.status(500).json({
+      ok: false,
+      error: err.message || 'Falha ao enviar para assinatura.',
+      assinafyMessage: err.response?.data?.message
+    });
   }
 });
 
