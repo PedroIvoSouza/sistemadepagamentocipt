@@ -320,15 +320,26 @@ router.post('/:eventoId/dars/:darId/reemitir', async (req, res) => {
    =========================================================== */
 router.get('/:id/termo', async (req, res) => {
   const { id } = req.params;
+
+  // 🔎 mostre qual arquivo o Node resolveu para o service
+  const resolved = require.resolve('../services/termoEventoPdfkitService');
+  console.log('[TERMO][ROUTE] usando service em:', resolved);
+
+  // 🔎 headers de diagnóstico (dá pra ver no DevTools/Network ou via curl)
+  res.setHeader('X-Doc-Route', 'adminEventosRoutes/:id/termo');
+  res.setHeader('X-Doc-Gen', 'pdfkit-v3');     // mude aqui sempre que atualizar
+  res.setHeader('X-Doc-Resolved', resolved);
+
   try {
-    // CORRIGIDO: Chamando a função com o nome correto
-    const out = await gerarTermoEventoPdfEIndexar(id);
+    const { gerarTermoEventoPdfkitEIndexar } = require('../services/termoEventoPdfkitService');
+    const out = await gerarTermoEventoPdfkitEIndexar(id);
+
     const stat = fs.statSync(out.filePath);
     res.setHeader('Content-Type', 'application/pdf');
-    // CORRIGIDO: Adicionadas crases (`)
     res.setHeader('Content-Disposition', `attachment; filename="${out.fileName}"`);
     res.setHeader('Content-Length', stat.size);
     res.setHeader('Cache-Control', 'no-store');
+
     fs.createReadStream(out.filePath).pipe(res);
   } catch (err) {
     console.error('[admin/eventos] termo erro:', err);
