@@ -120,16 +120,38 @@ async function getDocument(documentId) {
 
 /**
  * Aguarda até que o documento esteja pronto para solicitações de assinatura.
- * Fica consultando o Assinafy até o status ser diferente de 'metadata_processing'.
+ * Fica consultando o Assinafy até que o status seja considerado "ready".
+ * Status considerados prontos (segundo a documentação do Assinafy):
+ *  - available
+ *  - ready
+ *  - waiting_for_assignments
+ * Qualquer outro status, inclusive "metadata_processing" e "uploaded",
+ * continua o polling até atingir um status pronto ou esgotar as tentativas.
+ * Opcionalmente, é possível logar o status a cada iteração passando { log: true }.
  */
-async function waitForDocumentReady(documentId, { retries = 10, intervalMs = 3000 } = {}) {
+async function waitForDocumentReady(
+  documentId,
+  { retries = 10, intervalMs = 3000, log = false } = {}
+) {
+  const READY_STATUSES = ['available', 'ready', 'waiting_for_assignments'];
+
   for (let attempt = 0; attempt < retries; attempt++) {
     const data = await getDocument(documentId);
-    if (data?.status && data.status !== 'metadata_processing') return data;
+    const status = data?.status;
+
+    if (log) {
+      console.log(`Assinafy document ${documentId} status: ${status}`);
+    }
+
+    if (status && READY_STATUSES.includes(status)) {
+      return data;
+    }
+
     if (attempt < retries - 1) {
       await new Promise((resolve) => setTimeout(resolve, intervalMs));
     }
   }
+
   const err = new Error('Timeout ao aguardar processamento do documento.');
   err.timeout = true;
   throw err;
