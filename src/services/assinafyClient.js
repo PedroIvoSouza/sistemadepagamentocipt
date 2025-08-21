@@ -11,6 +11,7 @@ const ACCESS_TOKEN = (process.env.ASSINAFY_ACCESS_TOKEN || '').trim();
 const ACCOUNT_ID   = (process.env.ASSINAFY_ACCOUNT_ID || '').trim();
 const BASE         = (process.env.ASSINAFY_API_BASE || 'https://api.assinafy.com.br/v1').replace(/\/+$/, '');
 const INSECURE     = String(process.env.ASSINAFY_INSECURE || '') === '1';
+const ASSIGN_METHOD = (process.env.ASSINAFY_ASSIGN_METHOD || 'virtual').trim();
 
 const httpsAgent = new https.Agent({
   keepAlive: false,
@@ -40,11 +41,9 @@ function unwrap(payload) {
   return payload;
 }
 
-function uploadUrl() {
-  if (!ACCOUNT_ID) throw new Error('ASSINAFY_ACCOUNT_ID não configurado.');
-  return `${BASE}/accounts/${ACCOUNT_ID}/documents`;
-}
-
+// ------------------------------------------------------------
+// Requests helpers
+// ------------------------------------------------------------
 async function tryPost(url, data, headersExtra = {}) {
   const headers = {
     Accept: 'application/json',
@@ -67,7 +66,7 @@ async function tryPost(url, data, headersExtra = {}) {
     validateStatus: s => s >= 200 && s < 300,
   };
 
-  if (DEBUG) console.log('[ASSINAFY][POST]', url);
+  if (DEBUG) console.log('[ASSINAFY][POST]', url, headersExtra?.['Content-Type'] || 'multipart/form-data');
   return axios(cfg);
 }
 
@@ -91,6 +90,14 @@ async function tryGet(url, headersExtra = {}, opts = {}) {
   };
   if (DEBUG) console.log('[ASSINAFY][GET]', url);
   return axios(cfg);
+}
+
+// ------------------------------------------------------------
+// Upload de PDF
+// ------------------------------------------------------------
+function uploadUrl() {
+  if (!ACCOUNT_ID) throw new Error('ASSINAFY_ACCOUNT_ID não configurado.');
+  return `${BASE}/accounts/${ACCOUNT_ID}/documents`;
 }
 
 async function uploadPdf(pdfBuffer, filename = 'documento.pdf', { callbackUrl = process.env.ASSINAFY_CALLBACK_URL, ...flags } = {}) {
@@ -120,7 +127,9 @@ async function uploadPdf(pdfBuffer, filename = 'documento.pdf', { callbackUrl = 
   }
 }
 
-// Normalizadores opcionais
+// ------------------------------------------------------------
+// Signers
+// ------------------------------------------------------------
 const onlyDigits = s => String(s || '').replace(/\D/g, '');
 function normalizeGovId(v) {
   const d = onlyDigits(v);
@@ -135,21 +144,35 @@ function normalizePhone(v) {
   return d;
 }
 
-// ---- Signers ----
-async function createSigner({ full_name, email, government_id, phone }) {
+async function createSignerRaw(body) {
   if (!ACCOUNT_ID) throw new Error('ASSINAFY_ACCOUNT_ID não configurado.');
+  const url = `${BASE}/accounts/${ACCOUNT_ID}/signers`;
+  const resp = await tryPost(url, body, { 'Content-Type': 'application/json' });
+  return unwrap(resp.data);
+}
+
+async function createSigner({ full_name, email, government_id, phone }) {
   if (!full_name || !email) throw new Error('full_name e email são obrigatórios para o signer.');
 
-  const body = {
+  // 1) tenta completo (quando válido)
+  const bodyFull = {
     full_name,
     email,
     ...(normalizeGovId(government_id) ? { government_id: normalizeGovId(government_id) } : {}),
     ...(normalizePhone(phone) ? { telephone: normalizePhone(phone) } : {}),
   };
 
-  const url = `${BASE}/accounts/${ACCOUNT_ID}/signers`;
-  const resp = await tryPost(url, body, { 'Content-Type': 'application/json' });
-  return unwrap(resp.data); // <- pode ser { id, ... }
+  try {
+    return await createSignerRaw(bodyFull);
+  } catch (e) {
+    const st = e?.response?.status;
+    if (DEBUG) console.warn('[ASSINAFY][SIGNER] create c/ corpo completo falhou:', st, e?.response?.data || e?.message);
+    // 2) fallback: corpo mínimo (muitos 400/422 somem aqui)
+    if (st === 400 || st === 409 || st === 422) {
+      return await createSignerRaw({ full_name, email });
+    }
+    throw e;
+  }
 }
 
 // Tenta localizar um signer por e-mail (fallback caso a criação retorne 409/422)
@@ -159,7 +182,6 @@ async function findSignerByEmail(email) {
   try {
     const resp = await tryGet(url);
     const data = unwrap(resp.data);
-    // pode vir como objeto único, array ou paginação; tentamos extrair id
     if (!data) return null;
     if (data.id) return data;
     if (Array.isArray(data) && data.length) return data[0];
@@ -176,9 +198,9 @@ async function ensureSigner({ full_name, email, government_id, phone }) {
     const s = await createSigner({ full_name, email, government_id, phone });
     if (s?.id) return s;
   } catch (e) {
-    const status = e?.response?.status;
-    if (DEBUG) console.warn('[ASSINAFY][SIGNER] create falhou:', status || e.code || e.message);
-    if (status === 409 || status === 422) {
+    const st = e?.response?.status;
+    if (DEBUG) console.warn('[ASSINAFY][SIGNER] create falhou:', st || e.code || e.message, e?.response?.data || '');
+    if (st === 409 || st === 422 || st === 400) {
       const found = await findSignerByEmail(email);
       if (found?.id) return found;
     }
@@ -190,20 +212,48 @@ async function ensureSigner({ full_name, email, government_id, phone }) {
   throw new Error('Falha ao criar/localizar signatário na Assinafy.');
 }
 
-// ---- Assignment (pedido de assinatura) ----
+// ------------------------------------------------------------
+// Assignments (pedido de assinatura)
+// ------------------------------------------------------------
 async function requestSignatures(documentId, signerIds, { message, expires_at } = {}) {
   if (!documentId) throw new Error('documentId é obrigatório.');
   if (!Array.isArray(signerIds) || signerIds.length === 0) throw new Error('Informe ao menos um signerId.');
 
-  const body = { method: 'virtual', signerIds };
-  if (message) body.message = message;
-  if (expires_at) body.expires_at = expires_at;
+  // A API varia: já vimos `signerIds`, `signer_ids` e `signers: [{id}]`.
+  const base = {};
+  if (message)   base.message   = message;
+  if (expires_at) base.expires_at = expires_at;
+
+  const bodies = [
+    { method: ASSIGN_METHOD, signerIds,   ...base },
+    { method: ASSIGN_METHOD, signer_ids: signerIds, ...base },
+    { method: ASSIGN_METHOD, signers: signerIds.map(id => ({ id })), ...base },
+  ];
 
   const url = `${BASE}/documents/${documentId}/assignments`;
-  const resp = await tryPost(url, body, { 'Content-Type': 'application/json' });
-  return unwrap(resp.data);
+  let lastErr;
+  for (const body of bodies) {
+    try {
+      const resp = await tryPost(url, body, { 'Content-Type': 'application/json' });
+      return unwrap(resp.data);
+    } catch (e) {
+      lastErr = e;
+      const st = e?.response?.status;
+      if (DEBUG) console.warn('[ASSINAFY][ASSIGN] tentativa falhou:', st, body.signerIds ? 'signerIds' : (body.signer_ids ? 'signer_ids' : 'signers[]'), e?.response?.data || e?.message);
+      // se 4xx, tenta próximo formato; se 5xx, já estoura
+      if (st && st >= 500) break;
+    }
+  }
+
+  const st = lastErr?.response?.status;
+  const msg = lastErr?.response?.data?.message || lastErr?.message || 'Falha ao criar assignment.';
+  const det = lastErr?.response?.data && typeof lastErr.response.data === 'object' ? JSON.stringify(lastErr.response.data) : '';
+  throw new Error(`Falha ao criar assignment (HTTP ${st || '??'}). ${msg}${det ? ` | ${det}` : ''}`);
 }
 
+// ------------------------------------------------------------
+// Documentos
+// ------------------------------------------------------------
 async function getDocumentStatus(id) {
   if (!id) throw new Error('id é obrigatório.');
   const url = `${BASE}/documents/${id}`;
@@ -218,11 +268,8 @@ async function downloadSignedPdf(id) {
   return resp.data;
 }
 
-/**
- * Extrai uma URL de assinatura de diferentes formatos
- */
+/** Pega uma possível URL de assinatura em diferentes formatos */
 function pickSigningUrl(obj) {
-  // Primeiro, se vier embrulhado, desembrulha
   const root = unwrap(obj);
   try {
     const paths = [
