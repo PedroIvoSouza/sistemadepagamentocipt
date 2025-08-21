@@ -1,64 +1,108 @@
+// src/services/assinafyService.js
 const axios = require('axios');
 const FormData = require('form-data');
-require('dotenv').config();
+const fs = require('fs');
+const path = require('path');
 
-const BASE_URL = process.env.ASSINAFY_API_URL || 'https://api.assinafy.com';
+const BASE = process.env.ASSINAFY_API_BASE || 'https://api.assinafy.com.br/v1';
+const ACCOUNT_ID = process.env.ASSINAFY_ACCOUNT_ID;
 
-function getApiKey() {
-  const key = process.env.ASSINAFY_API_KEY;
-  if (!key) throw new Error('ASSINAFY_API_KEY não configurado.');
-  return key;
+function authHeaders() {
+  const apiKey = process.env.ASSINAFY_API_KEY;
+  const bearer = process.env.ASSINAFY_ACCESS_TOKEN;
+  if (apiKey) return { 'X-Api-Key': apiKey }; // recomendado pela doc
+  if (bearer) return { Authorization: `Bearer ${bearer}` };
+  throw new Error('Configure ASSINAFY_API_KEY ou ASSINAFY_ACCESS_TOKEN.');
 }
 
-async function uploadPdf(pdfBuffer, filename = 'documento.pdf', config = {}) {
-  const apiKey = getApiKey();
+function assertAccount() {
+  if (!ACCOUNT_ID) throw new Error('ASSINAFY_ACCOUNT_ID não configurado.');
+}
+
+/**
+ * Upload de um PDF (a partir de arquivo) -> retorna payload do Assinafy
+ * Endpoint: POST /accounts/:account_id/documents (multipart/form-data)
+ */
+async function uploadDocumentFromFile(filePath, filename) {
+  assertAccount();
   const form = new FormData();
-  form.append('file', pdfBuffer, { filename, contentType: 'application/pdf' });
+  form.append('file', fs.createReadStream(filePath), {
+    filename: filename || path.basename(filePath),
+    contentType: 'application/pdf'
+  });
 
-  const {
-    callbackUrl = process.env.ASSINAFY_CALLBACK_URL,
-    ...flags
-  } = config || {};
+  const resp = await axios.post(
+    `${BASE}/accounts/${ACCOUNT_ID}/documents`,
+    form,
+    { headers: { ...authHeaders(), ...form.getHeaders() } }
+  );
+  return resp.data; // contém id, status=uploaded e artifacts.original
+}
 
-  if (callbackUrl) {
-    form.append('callbackUrl', callbackUrl);
+/**
+ * Cria um signatário (se precisar).
+ * Endpoint: POST /accounts/:account_id/signers
+ */
+async function createSigner({ full_name, email, government_id, phone }) {
+  assertAccount();
+  if (!full_name || !email) throw new Error('full_name e email são obrigatórios para o signer.');
+
+  const resp = await axios.post(
+    `${BASE}/accounts/${ACCOUNT_ID}/signers`,
+    { full_name, email, government_id, telephone: phone },
+    { headers: { ...authHeaders(), 'Content-Type': 'application/json' } }
+  );
+  return resp.data; // geralmente retorna { id, full_name, email, ... }
+}
+
+/**
+ * Dispara a assinatura (virtual) para um documento já enviado.
+ * Endpoint: POST /documents/:documentId/assignments
+ * Body: { method: "virtual", signerIds: [ ... ] }
+ */
+async function requestSignatures(documentId, signerIds, { message, expires_at } = {}) {
+  if (!documentId) throw new Error('documentId é obrigatório.');
+  if (!Array.isArray(signerIds) || signerIds.length === 0) {
+    throw new Error('Informe ao menos um signerId.');
   }
 
-  Object.entries(flags).forEach(([key, value]) => {
-    if (value !== undefined && value !== null) {
-      form.append(key, typeof value === 'boolean' ? String(value) : value);
-    }
-  });
+  const body = { method: 'virtual', signerIds };
+  if (message) body.message = message;
+  if (expires_at) body.expires_at = expires_at; // ISO (opcional)
 
-  const resp = await axios.post(`${BASE_URL}/documents`, form, {
-    headers: {
-      ...form.getHeaders(),
-      Authorization: `Bearer ${apiKey}`
-    }
-  });
+  const resp = await axios.post(
+    `${BASE}/documents/${documentId}/assignments`,
+    body,
+    { headers: { ...authHeaders(), 'Content-Type': 'application/json' } }
+  );
   return resp.data;
 }
 
-async function getDocumentStatus(id) {
-  const apiKey = getApiKey();
-  const resp = await axios.get(`${BASE_URL}/documents/${id}`, {
-    headers: { Authorization: `Bearer ${apiKey}` }
-  });
+/**
+ * Consulta um documento no Assinafy (status + artifacts).
+ */
+async function getDocument(documentId) {
+  const resp = await axios.get(
+    `${BASE}/documents/${documentId}`,
+    { headers: { ...authHeaders() } }
+  );
   return resp.data;
 }
 
-async function downloadSignedPdf(id) {
-  const apiKey = getApiKey();
-  const resp = await axios.get(`${BASE_URL}/documents/${id}`, {
-    headers: { Authorization: `Bearer ${apiKey}`, Accept: 'application/pdf' },
-    responseType: 'arraybuffer'
-  });
-  return resp.data;
+/**
+ * Retorna a melhor URL de download do PDF:
+ *  - se existir artifacts.certificated, usa ela (assinado)
+ *  - senão, usa artifacts.original (upload)
+ */
+function pickBestArtifactUrl(documentData) {
+  const artifacts = documentData?.artifacts || {};
+  return artifacts.certificated || artifacts.original || null;
 }
 
 module.exports = {
-  uploadPdf,
-  getDocumentStatus,
-  downloadSignedPdf
+  uploadDocumentFromFile,
+  createSigner,
+  requestSignatures,
+  getDocument,
+  pickBestArtifactUrl,
 };
-
