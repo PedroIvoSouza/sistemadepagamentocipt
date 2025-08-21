@@ -120,6 +120,22 @@ async function getDocument(documentId) {
 }
 
 /**
+ * Prepara um documento para assinatura informando campos a preencher.
+ * Endpoint: POST /accounts/:accountId/documents/:documentId/prepare
+ * Body: { fields: [] }
+ */
+async function prepareDocument(documentId, fields = []) {
+  assertAccount();
+  const url = `${BASE}/accounts/${ACCOUNT_ID}/documents/${documentId}/prepare`;
+  const resp = await axios.post(
+    url,
+    { fields },
+    { headers: { ...authHeaders(), 'Content-Type': 'application/json' } },
+  );
+  return resp.data;
+}
+
+/**
  * Aguarda até que o documento esteja pronto para solicitações de assinatura.
  * Fica consultando o Assinafy até que o status seja considerado "ready".
  * Status considerados prontos (segundo a documentação do Assinafy):
@@ -185,6 +201,7 @@ module.exports = {
   ensureSigner,
   requestSignatures,
   getDocument,
+  prepareDocument,
   waitForDocumentReady,
   pickBestArtifactUrl,
 };
