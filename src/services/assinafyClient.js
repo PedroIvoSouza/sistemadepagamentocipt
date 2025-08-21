@@ -3,94 +3,130 @@ const axios = require('axios');
 const FormData = require('form-data');
 const https = require('https');
 
-const TIMEOUT = Number(process.env.ASSINAFY_TIMEOUT_MS || 60000); // 60s
+const DEBUG = String(process.env.ASSINAFY_DEBUG || '') === '1';
+
+// Tempo maior para upload via CDN
+const TIMEOUT = Number(process.env.ASSINAFY_TIMEOUT_MS || 90000);
+
+// Auth
 const API_KEY = process.env.ASSINAFY_API_KEY || '';
 const ACCESS_TOKEN = process.env.ASSINAFY_ACCESS_TOKEN || '';
+
+// Base(s)
+const ENV_BASE = (process.env.ASSINAFY_API_BASE || '').replace(/\/+$/, '');
+const ENV_URL  = (process.env.ASSINAFY_API_URL  || '').replace(/\/+$/, '');
+
+// Conta
 const ACCOUNT_ID = process.env.ASSINAFY_ACCOUNT_ID || '';
 
-/**
- * Bases aceitas:
- * - ASSINAFY_API_BASE (ex.: https://api.assinafy.com.br/v1)
- * - ASSINAFY_API_URL  (ex.: https://api.assinafy.com.br)
- *
- * Vamos montar uma lista de possíveis endpoints de upload:
- * 1) <base>/accounts/:id/documents           (se houver /v1 e ACCOUNT_ID)
- * 2) <base>/documents                         (se base tiver /v1)
- * 3) <url>/documents                          (legado/compat)
- */
-function buildUploadEndpoints() {
-  const bases = [];
-  if (process.env.ASSINAFY_API_BASE) bases.push(process.env.ASSINAFY_API_BASE.replace(/\/+$/, ''));
-  if (process.env.ASSINAFY_API_URL)  bases.push(process.env.ASSINAFY_API_URL.replace(/\/+$/, ''));
-  // defaults sensatos (prioriza .com.br)
-  if (!bases.length) bases.push('https://api.assinafy.com.br/v1', 'https://api.assinafy.com.br');
+// Agent sem keep-alive (evita “socket hang up” em alguns CDNs)
+const httpsAgent = new https.Agent({
+  keepAlive: false,         // <— importante para Cloudflare/ELB instável
+  maxSockets: 50
+});
 
-  const endpoints = [];
-  for (const base of bases) {
-    const hasV1 = /\/v1$/.test(base);
-    if (hasV1 && ACCOUNT_ID) {
-      endpoints.push(`${base}/accounts/${ACCOUNT_ID}/documents`);
-    }
-    if (hasV1) {
-      endpoints.push(`${base}/documents`);
-    }
-  }
-
-  // fallback “cru”
-  endpoints.push('https://api.assinafy.com.br/documents');
-
-  // remove duplicados mantendo ordem
-  return [...new Set(endpoints)];
-}
-
-function buildAuthHeaders() {
-  if (API_KEY) return { 'X-Api-Key': API_KEY };
+function authHeaders() {
+  if (API_KEY)      return { 'X-Api-Key': API_KEY };
   if (ACCESS_TOKEN) return { Authorization: `Bearer ${ACCESS_TOKEN}` };
   throw new Error('Configure ASSINAFY_API_KEY ou ASSINAFY_ACCESS_TOKEN.');
 }
 
-const httpsAgent = new https.Agent({ keepAlive: true });
+// Gera lista de endpoints sensata, na ordem de preferência.
+function buildUploadEndpoints() {
+  const bases = [];
+
+  if (ENV_BASE) bases.push(ENV_BASE);
+  if (ENV_URL)  bases.push(ENV_URL);
+
+  // defaults (prioriza .com.br)
+  if (!bases.length) bases.push('https://api.assinafy.com.br');
+
+  // remove duplicadas mantendo a ordem
+  const uniqBases = [...new Set(bases)];
+
+  const urls = [];
+  for (const b of uniqBases) {
+    const hasV1 = /\/v1$/.test(b);
+    // 1) v1/accounts/:id/documents
+    if (ACCOUNT_ID) {
+      if (hasV1) urls.push(`${b}/accounts/${ACCOUNT_ID}/documents`);
+      else       urls.push(`${b}/v1/accounts/${ACCOUNT_ID}/documents`);
+    }
+    // 2) v1/documents
+    if (hasV1) urls.push(`${b}/documents`);
+    else       urls.push(`${b}/v1/documents`);
+  }
+
+  // 3) fallback legado cru
+  urls.push('https://api.assinafy.com.br/documents');
+
+  // remove duplicadas mantendo a ordem
+  return [...new Set(urls)];
+}
+
+async function tryPost(url, form, extraHeaders = {}) {
+  const cfg = {
+    method: 'POST',
+    url,
+    data: form,
+    timeout: TIMEOUT,
+    maxBodyLength: Infinity,
+    maxContentLength: Infinity,
+    // Rede
+    httpsAgent,
+    family: 4,      // força IPv4
+    proxy: false,   // ignora HTTP(S)_PROXY do ambiente
+    // Headers
+    headers: {
+      ...form.getHeaders(),
+      ...authHeaders(),
+      ...extraHeaders
+    },
+    validateStatus: s => s >= 200 && s < 300
+  };
+  if (DEBUG) console.log('[ASSINAFY][POST] tentando:', url);
+  const resp = await axios(cfg);
+  if (DEBUG) console.log('[ASSINAFY][POST] OK:', url);
+  return resp.data;
+}
 
 async function postMultipartToFirstAlive(form, extraHeaders = {}) {
   const endpoints = buildUploadEndpoints();
-  let lastErr = null;
 
+  const tries = [];
   for (const url of endpoints) {
     try {
-      const resp = await axios.post(url, form, {
-        method: 'POST',
-        timeout: TIMEOUT,
-        maxBodyLength: Infinity,
-        maxContentLength: Infinity,
-        httpsAgent,
-        // força IPv4 (evita intermitências em IPv6/CGNAT)
-        family: 4,
-        headers: {
-          ...form.getHeaders(),
-          ...buildAuthHeaders(),
-          ...extraHeaders
-        },
-        // se o servidor retornar 4xx, queremos o erro imediatamente
-        validateStatus: (s) => s >= 200 && s < 300
-      });
-      return resp.data; // sucesso
+      return await tryPost(url, form, extraHeaders);
     } catch (err) {
-      lastErr = err;
-      // Alguns CDNs respondem 404/405 rápido – seguimos para o próximo endpoint
-      // Timeouts/ECONNRESET também fazem a gente tentar o próximo
+      const code   = err.code || err?.response?.status || 'ERR';
+      const status = err?.response?.status;
+      let msg = err.message || String(err);
+      // corta payloads grandes nos logs
+      const dataSnippet = err?.response?.data && typeof err.response.data === 'string'
+        ? err.response.data.slice(0, 200)
+        : (err?.response?.data ? '[json]' : '');
+
+      tries.push({ url, code, status, msg, data: dataSnippet });
+      if (DEBUG) {
+        console.warn('[ASSINAFY][POST] falhou:', { url, code, status, msg });
+      }
+      // tenta próximo endpoint
       continue;
     }
   }
 
-  // Se nenhum endpoint funcionou, propaga o último erro
-  throw lastErr || new Error('Falha no envio (nenhum endpoint respondeu).');
+  // Se todos falharam, joga erro com resumo de tentativas
+  const resume = tries.map(t => `${t.url} (code=${t.code}${t.status ? `, http=${t.status}` : ''})`).join(' | ');
+  const error  = new Error(`Falha no envio. Tentativas: ${resume}`);
+  if (DEBUG) console.error('[ASSINAFY][POST] todas tentativas falharam:', tries);
+  throw error;
 }
 
 /**
- * Faz o upload de um PDF (Buffer) ao Assinafy.
- * Campos extras:
- *  - callbackUrl: URL do seu webhook para status
- *  - qualquer flag adicional aceita pela API
+ * Upload de PDF (Buffer).
+ * Extra:
+ *   - callbackUrl: seu webhook/status
+ *   - demais flags aceitas pela API (opcionais)
  */
 async function uploadPdf(pdfBuffer, filename = 'documento.pdf', config = {}) {
   if (!pdfBuffer || !Buffer.isBuffer(pdfBuffer)) {
@@ -98,94 +134,89 @@ async function uploadPdf(pdfBuffer, filename = 'documento.pdf', config = {}) {
   }
 
   const form = new FormData();
-  form.append('file', pdfBuffer, {
-    filename,
-    contentType: 'application/pdf'
-  });
+  form.append('file', pdfBuffer, { filename, contentType: 'application/pdf' });
 
-  const {
-    callbackUrl = process.env.ASSINAFY_CALLBACK_URL,
-    ...flags
-  } = config || {};
+  const { callbackUrl = process.env.ASSINAFY_CALLBACK_URL, ...flags } = config || {};
+  if (callbackUrl) form.append('callbackUrl', callbackUrl);
 
-  if (callbackUrl) {
-    form.append('callbackUrl', callbackUrl);
-  }
-
-  // envia demais flags como strings
+  // flags como strings
   Object.entries(flags).forEach(([k, v]) => {
     if (v === undefined || v === null) return;
     form.append(k, typeof v === 'boolean' ? String(v) : String(v));
   });
 
-  // tenta nas URLs possíveis (accounts/:id/documents -> /v1/documents -> /documents)
   return await postMultipartToFirstAlive(form);
 }
 
-/**
- * Consulta status do documento (funciona para v1 e legado).
- */
+/** Consulta status (tenta v1 e legado). */
 async function getDocumentStatus(id) {
   if (!id) throw new Error('id é obrigatório.');
-  const headers = buildAuthHeaders();
-  const bases = [
-    process.env.ASSINAFY_API_BASE || 'https://api.assinafy.com.br/v1',
-    process.env.ASSINAFY_API_URL  || 'https://api.assinafy.com.br'
-  ].map(b => b.replace(/\/+$/, ''));
+  const headers = authHeaders();
 
-  // ordem: v1/documents/:id -> documents/:id
-  const urls = [
-    `${bases[0]}/documents/${id}`,
-    `${bases[1]}/documents/${id}`
-  ];
+  const bases = [];
+  if (ENV_BASE) bases.push(ENV_BASE);
+  if (ENV_URL)  bases.push(ENV_URL);
+  if (!bases.length) bases.push('https://api.assinafy.com.br');
+
+  const urls = [];
+  for (const b0 of [...new Set(bases)]) {
+    const b = b0.replace(/\/+$/, '');
+    const hasV1 = /\/v1$/.test(b);
+    if (hasV1) urls.push(`${b}/documents/${id}`);
+    else       urls.push(`${b}/v1/documents/${id}`);
+  }
+  urls.push(`https://api.assinafy.com.br/documents/${id}`);
 
   let lastErr = null;
-  for (const url of urls) {
+  for (const url of [...new Set(urls)]) {
     try {
-      const resp = await axios.get(url, {
-        timeout: TIMEOUT,
-        httpsAgent,
-        family: 4,
-        headers
-      });
+      if (DEBUG) console.log('[ASSINAFY][GET] tentando:', url);
+      const resp = await axios.get(url, { timeout: TIMEOUT, httpsAgent, family: 4, proxy: false, headers });
+      if (DEBUG) console.log('[ASSINAFY][GET] OK:', url);
       return resp.data;
     } catch (err) {
       lastErr = err;
+      if (DEBUG) console.warn('[ASSINAFY][GET] falhou:', url, err.code || err?.response?.status || err.message);
       continue;
     }
   }
   throw lastErr || new Error('Falha ao consultar documento.');
 }
 
-/**
- * Download do PDF assinado (arraybuffer).
- */
+/** Download do PDF assinado (arraybuffer). */
 async function downloadSignedPdf(id) {
   if (!id) throw new Error('id é obrigatório.');
-  const headers = { ...buildAuthHeaders(), Accept: 'application/pdf' };
-  const bases = [
-    process.env.ASSINAFY_API_BASE || 'https://api.assinafy.com.br/v1',
-    process.env.ASSINAFY_API_URL  || 'https://api.assinafy.com.br'
-  ].map(b => b.replace(/\/+$/, ''));
+  const headers = { ...authHeaders(), Accept: 'application/pdf' };
 
-  const urls = [
-    `${bases[0]}/documents/${id}`, // v1
-    `${bases[1]}/documents/${id}`  // legado
-  ];
+  const bases = [];
+  if (ENV_BASE) bases.push(ENV_BASE);
+  if (ENV_URL)  bases.push(ENV_URL);
+  if (!bases.length) bases.push('https://api.assinafy.com.br');
+
+  const urls = [];
+  for (const b0 of [...new Set(bases)]) {
+    const b = b0.replace(/\/+$/, '');
+    const hasV1 = /\/v1$/.test(b);
+    if (hasV1) urls.push(`${b}/documents/${id}`);
+    else       urls.push(`${b}/v1/documents/${id}`);
+  }
+  urls.push(`https://api.assinafy.com.br/documents/${id}`);
 
   let lastErr = null;
-  for (const url of urls) {
+  for (const url of [...new Set(urls)]) {
     try {
+      if (DEBUG) console.log('[ASSINAFY][DL] tentando:', url);
       const resp = await axios.get(url, {
         timeout: TIMEOUT,
         responseType: 'arraybuffer',
-        httpsAgent,
-        family: 4,
+        httpsAgent, family: 4, proxy: false,
         headers
       });
+      if (DEBUG) console.log('[ASSINAFY][DL] OK:', url);
       return resp.data;
     } catch (err) {
       lastErr = err;
+      if (DEBUG) console.warn('[ASSINAFY][DL] falhou:', url, err.code || err?.response?.status || err.message);
       continue;
     }
   }
@@ -195,5 +226,5 @@ async function downloadSignedPdf(id) {
 module.exports = {
   uploadPdf,
   getDocumentStatus,
-  downloadSignedPdf
+  downloadSignedPdf,
 };
