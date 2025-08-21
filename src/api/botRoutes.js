@@ -10,6 +10,57 @@ const fs = require('fs');
 const botAuthMiddleware = require('../middleware/botAuthMiddleware');
 const { codigoBarrasParaLinhaDigitavel } = require('../utils/boleto');
 
+const pdfParse = require('pdf-parse');
+
+// 48 (arrecadação) -> 44 (removendo o último dígito de cada bloco de 12)
+function linha48ToCodigo44(ld48) {
+  const d = String(ld48).replace(/\D/g, '');
+  if (d.length !== 48 || d[0] !== '8') return null;
+  const b1 = d.slice(0, 12), b2 = d.slice(12, 24), b3 = d.slice(24, 36), b4 = d.slice(36, 48);
+  return b1.slice(0, 11) + b2.slice(0, 11) + b3.slice(0, 11) + b4.slice(0, 11);
+}
+
+// 47 (boleto) -> 44 (reconstrução pelo layout FEBRABAN)
+function linha47ToCodigo44(ld47) {
+  const d = String(ld47).replace(/\D/g, '');
+  if (d.length !== 47) return null;
+  const c1 = d.slice(0, 9); /* const c1dv = d.slice(9,10); */
+  const c2 = d.slice(10, 20); /* const c2dv = d.slice(20,21); */
+  const c3 = d.slice(21, 31); /* const c3dv = d.slice(31,32); */
+  const dvGeral = d.slice(32,33);
+  const fatorValor = d.slice(33,47);
+  const bancoMoeda = c1.slice(0,4);
+  const campoLivre = c1.slice(4,9) + c2 + c3;
+  return bancoMoeda + dvGeral + fatorValor + campoLivre;
+}
+
+// Extrai LD do PDF base64 (retorna { ld, cb } já só com dígitos)
+async function extrairLinhaDigitavelDoPdfBase64(pdfBase64) {
+  if (!pdfBase64) return { ld: null, cb: null };
+  const base64 = String(pdfBase64).replace(/^data:application\/pdf;base64,/i, '');
+  const buf = Buffer.from(base64, 'base64');
+  const parsed = await pdfParse(buf);
+  const text = (parsed.text || '').replace(/[^\d\s]/g, ' ').replace(/\s+/g, ' ').trim();
+
+  // Arrecadação (48 = 4 blocos de 11+DV)
+  const m48 = text.match(/\b\d{11}\s\d\s\d{11}\s\d\s\d{11}\s\d\s\d{11}\s\d\b/);
+  if (m48) {
+    const ld48 = m48[0].replace(/\s/g, '');
+    const cb44 = linha48ToCodigo44(ld48);
+    return { ld: ld48.replace(/\D/g, ''), cb: (cb44 || '').replace(/\D/g, '') };
+  }
+
+  // Boleto (47)
+  const m47 = text.match(/\b\d{5}\s\d\s\d{5}\s\d\s\d{5}\s\d\s\d{6}\s\d{14}\b/);
+  if (m47) {
+    const ld47 = m47[0].replace(/\s/g, '');
+    const cb44 = linha47ToCodigo44(ld47);
+    return { ld: ld47.replace(/\D/g, ''), cb: (cb44 || '').replace(/\D/g, '') };
+  }
+
+  return { ld: null, cb: null };
+}
+
 // === Integração SEFAZ (oficial do sistema) =========================
 const {
   emitirGuiaSefaz,
@@ -94,7 +145,7 @@ function phoneMatches(msisdn, phoneList = []) {
 // Safe extractor para possíveis variações do payload da SEFAZ
 function pick(obj, paths = []) {
   for (const p of paths) {
-    const v = p.split('.').reduce((acc, k) => acc?.[k], obj);
+    const v = p.split('.').reduce((acc, k) => (acc && acc[k] !== undefined ? acc[k] : undefined), obj);
     if (v !== undefined && v !== null && String(v).trim() !== '') return v;
   }
   return null;
@@ -154,7 +205,6 @@ async function refreshSchema() {
   const cli_id        = colBy(colsClientes, ['id']) || 'id';
   const cli_nome      = colBy(colsClientes, ['nome_razao_social','nome','razao_social','nome_fantasia']);
   const cli_doc       = colBy(colsClientes, ['documento','cnpj','cpf']);
-  // qualquer coluna com tel/cel
   const cli_tel       = (() => {
     const telCols = colsClientes
       .map(c => c.name)
@@ -373,6 +423,7 @@ const AUTO_EMIT_ON_GET = String(process.env.BOT_AUTO_EMIT_ON_GET || 'true').toLo
 
 async function ensureLinhaDigitavelOrEmit(ctx) {
   const d = ctx.dar;
+
   // 1) tenta calcular a partir de codigo_barras
   let ld = onlyDigits(d.linha_digitavel || '');
   if (!ld) {
@@ -386,6 +437,32 @@ async function ensureLinhaDigitavelOrEmit(ctx) {
     }
   } else {
     return { ld, updated: false };
+  }
+
+  // 1.5) se tem PDF salvo e faltam campos, tenta extrair do PDF
+  if (!ld && d.pdf_url && String(d.pdf_url).length > 100) {
+    try {
+      const fromPdf = await extrairLinhaDigitavelDoPdfBase64(d.pdf_url);
+      let ldFromPdf = onlyDigits(fromPdf.ld || '');
+      let cbFromPdf = onlyDigits(fromPdf.cb || '');
+      if (!cbFromPdf && ldFromPdf?.length === 48 && ldFromPdf[0] === '8') {
+        cbFromPdf = linha48ToCodigo44(ldFromPdf) || '';
+      }
+      if (!ldFromPdf && cbFromPdf) {
+        ldFromPdf = codigoBarrasParaLinhaDigitavel(cbFromPdf) || '';
+      }
+      if (ldFromPdf) {
+        try {
+          await qRun(
+            'UPDATE dars SET linha_digitavel = COALESCE(?, linha_digitavel), codigo_barras = COALESCE(?, codigo_barras) WHERE id = ?',
+            [ldFromPdf, cbFromPdf || null, d.id]
+          );
+        } catch {}
+        return { ld: ldFromPdf, updated: true };
+      }
+    } catch (e) {
+      console.warn('[BOT] PDF->linha no GET falhou:', e?.message || e);
+    }
   }
 
   // 2) se não tem linha e não foi emitido ainda, e config permitir: emite agora
@@ -436,9 +513,28 @@ async function ensureLinhaDigitavelOrEmit(ctx) {
       throw new Error('Retorno da SEFAZ incompleto (numeroGuia/pdfBase64).');
     }
 
-    const cbClean = onlyDigits(codigoBarras || '');
-    const ldClean = onlyDigits(linhaDigitavel || '') ||
-                    (cbClean ? (codigoBarrasParaLinhaDigitavel(cbClean) || '') : '');
+    // Primeiro tente o que veio no JSON…
+    let cbClean = onlyDigits(codigoBarras || '');
+    let ldClean = onlyDigits(linhaDigitavel || '');
+
+    // …senão, tente extrair do PDF retornado
+    if (!cbClean && !ldClean) {
+      try {
+        const fromPdf = await extrairLinhaDigitavelDoPdfBase64(pdfBase64);
+        if (fromPdf.ld) ldClean = onlyDigits(fromPdf.ld);
+        if (fromPdf.cb) cbClean = onlyDigits(fromPdf.cb);
+        if (!cbClean && ldClean?.length === 48 && ldClean[0] === '8') {
+          cbClean = linha48ToCodigo44(ldClean) || '';
+        }
+      } catch (e) {
+        console.warn('[BOT] fallback PDF parse falhou (GET/emit):', e?.message || e);
+      }
+    }
+
+    // se ainda não tiver linha mas tiver código, derive via util
+    if (!ldClean && cbClean) {
+      ldClean = codigoBarrasParaLinhaDigitavel(cbClean) || '';
+    }
 
     // Token opcional no PDF
     let pdfOut = pdfBase64;
@@ -516,7 +612,7 @@ router.get('/dars', botAuthMiddleware, async (req, res) => {
 /**
  * GET /api/bot/dars/:darId?msisdn=55XXXXXXXXXXX
  * Retorna informações básicas do DAR, validando a posse via msisdn.
- * Se faltar linha_digitavel e permitido por env, emite e backfila.
+ * Se faltar linha_digitavel, tenta calcular do banco, extrair do PDF, ou emitir (se permitido).
  */
 router.get('/dars/:darId', botAuthMiddleware, async (req, res) => {
   try {
@@ -569,7 +665,7 @@ router.get('/dars/:darId', botAuthMiddleware, async (req, res) => {
 router.get('/dars/:darId/pdf', botAuthMiddleware, async (req, res) => {
   try {
     const darId = Number(req.params.darId);
-    const msisdn = String(req.query.msisdn || '').trim();
+       const msisdn = String(req.query.msisdn || '').trim();
     if (!darId || !msisdn) return res.status(400).json({ error: 'Parâmetros inválidos.' });
 
     const ctx = await obterContextoDar(darId);
@@ -691,9 +787,28 @@ router.post('/dars/:darId/emit', botAuthMiddleware, async (req, res) => {
       throw new Error('Retorno da SEFAZ incompleto (numeroGuia/pdfBase64).');
     }
 
-    const cbClean = onlyDigits(codigoBarras || '');
-    const ldClean = onlyDigits(linhaDigitavel || '') ||
-                    (cbClean ? (codigoBarrasParaLinhaDigitavel(cbClean) || '') : '');
+    // Primeiro tente o que veio no JSON…
+    let cbClean = onlyDigits(codigoBarras || '');
+    let ldClean = onlyDigits(linhaDigitavel || '');
+
+    // …senão, tente extrair do PDF retornado
+    if (!cbClean && !ldClean) {
+      try {
+        const fromPdf = await extrairLinhaDigitavelDoPdfBase64(pdfBase64);
+        if (fromPdf.ld) ldClean = onlyDigits(fromPdf.ld);
+        if (fromPdf.cb) cbClean = onlyDigits(fromPdf.cb);
+        if (!cbClean && ldClean?.length === 48 && ldClean[0] === '8') {
+          cbClean = linha48ToCodigo44(ldClean) || '';
+        }
+      } catch (e) {
+        console.warn('[BOT] fallback PDF parse falhou (emit):', e?.message || e);
+      }
+    }
+
+    // se ainda não tiver linha mas tiver código, derive via util
+    if (!ldClean && cbClean) {
+      ldClean = codigoBarrasParaLinhaDigitavel(cbClean) || '';
+    }
 
     // Token opcional
     let pdfOut = pdfBase64;
@@ -813,9 +928,28 @@ router.post('/dars/:darId/reemit', botAuthMiddleware, async (req, res) => {
       throw new Error('Retorno da SEFAZ incompleto (numeroGuia/pdfBase64).');
     }
 
-    const cbClean = onlyDigits(codigoBarras || '');
-    const ldClean = onlyDigits(linhaDigitavel || '') ||
-                    (cbClean ? (codigoBarrasParaLinhaDigitavel(cbClean) || '') : '');
+    // Primeiro tente o que veio no JSON…
+    let cbClean = onlyDigits(codigoBarras || '');
+    let ldClean = onlyDigits(linhaDigitavel || '');
+
+    // …senão, tente extrair do PDF retornado
+    if (!cbClean && !ldClean) {
+      try {
+        const fromPdf = await extrairLinhaDigitavelDoPdfBase64(pdfBase64);
+        if (fromPdf.ld) ldClean = onlyDigits(fromPdf.ld);
+        if (fromPdf.cb) cbClean = onlyDigits(fromPdf.cb);
+        if (!cbClean && ldClean?.length === 48 && ldClean[0] === '8') {
+          cbClean = linha48ToCodigo44(ldClean) || '';
+        }
+      } catch (e) {
+        console.warn('[BOT] fallback PDF parse falhou (reemit):', e?.message || e);
+      }
+    }
+
+    // se ainda não tiver linha mas tiver código, derive via util
+    if (!ldClean && cbClean) {
+      ldClean = codigoBarrasParaLinhaDigitavel(cbClean) || '';
+    }
 
     // Token opcional
     let pdfOut = pdfBase64;
