@@ -711,8 +711,10 @@ async function carregarClientes(){
           if (!rMeta.ok) throw new Error('meta');
           const meta = await rMeta.json();
           if (meta.status !== 'gerado') btnAssinaturaDisabled = 'disabled';
-          if (['enviado','assinado','pendente_assinatura'].includes(meta.status)) mostraBtnEnviar = false;
-          if (meta.signed_pdf_public_url) signedUrl = meta.signed_pdf_public_url;
+          if (meta.status === 'assinado' || meta.status === 'signed' || meta.signed_pdf_public_url) {
+            mostraBtnEnviar = false;
+            if (meta.signed_pdf_public_url) signedUrl = meta.signed_pdf_public_url;
+          }
         } catch {
           btnAssinaturaDisabled = 'disabled';
         }
