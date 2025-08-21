@@ -476,37 +476,7 @@ router.get('/:id/termo', async (req, res) => {
 });
 
 
-    // ===== 2) Derivações / placeholders =====
-    const orgUF  = process.env.ORG_UF || 'ESTADO DE ALAGOAS';
-    const orgSec = process.env.ORG_SECRETARIA || 'SECRETARIA DA CIÊNCIA, TECNOLOGIA E INOVAÇÃO';
-    const orgUni = process.env.ORG_UNIDADE || 'CENTRO DE INOVAÇÃO DO JARAGUÁ';
 
-    const permitenteRazao = process.env.PERMITENTE_RAZAO || 'SECRETARIA DE ESTADO DA CIÊNCIA, DA TECNOLOGIA E DA INOVAÇÃO DE ALAGOAS - SECTI';
-    const permitenteCnpj  = process.env.PERMITENTE_CNPJ  || '04.007.216/0001-30';
-    const permitenteEnd   = process.env.PERMITENTE_ENDERECO || 'R. BARÃO DE JARAGUÁ, Nº 590, JARAGUÁ, MACEIÓ - ALAGOAS - CEP: 57022-140';
-    const permitenteRepNm = process.env.PERMITENTE_REP_NOME || 'SÍLVIO ROMERO BULHÕES AZEVEDO';
-    const permitenteRepCg = process.env.PERMITENTE_REP_CARGO || 'SECRETÁRIO';
-    const permitenteRepCpf= process.env.PERMITENTE_REP_CPF || '053.549.204-93';
-
-    let datasArr = [];
-    try {
-      if (typeof ev.datas_evento === 'string') {
-        datasArr = ev.datas_evento.trim().startsWith('[')
-          ? JSON.parse(ev.datas_evento)
-          : ev.datas_evento.split(',').map(s => s.trim()).filter(Boolean);
-      } else if (Array.isArray(ev.datas_evento)) {
-        datasArr = ev.datas_evento;
-      }
-    } catch { /* noop */ }
-    const primeiraDataISO = datasArr[0] || '';
-    const dataEventoExt = fmtDataExtenso(primeiraDataISO) || '';
-    const cidadeUfDefault = process.env.CIDADE_UF || 'Maceió/AL';
-    const fundoNome = process.env.FUNDO_NOME || 'FUNDENTES';
-    const imovelNome = process.env.IMOVEL_NOME || 'CENTRO DE INOVAÇÃO DO JARAGUÁ';
-    const capDefault = process.env.CAPACIDADE_PADRAO ? Number(process.env.CAPACIDADE_PADRAO) : 313;
-
-    const sinal = parcelas[0]?.data_vencimento || null;
-    const saldo = parcelas[1]?.data_vencimento || parcelas[0]?.data_vencimento || null;
 
     // ===== 3) PDF =====
     const letterheadPath = path.join(process.cwd(), 'public', 'images', 'papel-timbrado-secti.png');
