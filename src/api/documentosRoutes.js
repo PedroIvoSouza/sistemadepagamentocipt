@@ -1,191 +1,170 @@
-const express = require('express');
-const sqlite3 = require('sqlite3').verbose();
-const path = require('path');
-const fs = require('fs');
-const crypto = require('crypto');
+// src/api/documentosRoutes.js
+const express  = require('express');
+const router   = express.Router();
+const fs       = require('fs');
+const path     = require('path');
+const sqlite3  = require('sqlite3').verbose();
 
-const assinafyService = require('../services/assinafyService');
+const { uploadPdf, getDocumentStatus } = require('../integrations/assinafyClient');
+const { gerarTermoEventoPdfkitEIndexar } = require('../services/termoEventoPdfkitService');
 
-const router = express.Router();
 const DB_PATH = path.resolve(process.cwd(), process.env.SQLITE_STORAGE || './sistemacipt.db');
 const db = new sqlite3.Database(DB_PATH);
 
-// helpers
-const dbGet = (sql, params = []) =>
-  new Promise((resolve, reject) => db.get(sql, params, (err, row) => (err ? reject(err) : resolve(row))));
+// helpers de BD
+const dbGet = (sql, p=[]) => new Promise((res, rej)=> db.get(sql, p, (e, r)=> e?rej(e):res(r)));
+const dbAll = (sql, p=[]) => new Promise((res, rej)=> db.all(sql, p, (e, r)=> e?rej(e):res(r)));
+const dbRun = (sql, p=[]) => new Promise((res, rej)=> db.run(sql, p, function(e){ e?rej(e):res(this); }));
 
-const dbAll = (sql, params = []) =>
-  new Promise((resolve, reject) => db.all(sql, params, (err, rows) => (err ? reject(err) : resolve(rows))));
-
-const dbRun = (sql, params = []) =>
-  new Promise((resolve, reject) => db.run(sql, params, function (err) {
-    if (err) return reject(err);
-    resolve(this);
-  }));
-
-// --- endpoints ---
-
-// Recupera metadados do documento (inclui URL pública)
-router.get('/:id', async (req, res) => {
-  try {
-    const row = await dbGet(
-      `SELECT id, tipo, evento_id, pdf_public_url, status, assinafy_id, signed_pdf_public_url, signed_at
-         FROM documentos WHERE id = ?`,
-      [req.params.id]
-    );
-    if (!row) return res.status(404).json({ error: 'Documento não encontrado.' });
-    return res.json(row);
-  } catch (err) {
-    console.error('[documentos] GET /:id erro:', err);
-    return res.status(500).json({ error: 'Erro ao consultar documento.' });
+// --- utils
+function ensureCallbackUrl() {
+  const cb = process.env.ASSINAFY_CALLBACK_URL;
+  if (!cb) {
+    console.warn('[ASSINAFY] ASSINAFY_CALLBACK_URL não definido. Recomendo configurar, ex: https://SEU_DOMINIO/api/documentos/assinafy/webhook?secret=SEGREDO');
   }
-});
+  return cb || '';
+}
+function publicViewerUrl(assinafyId){
+  // Fallback de abertura no app web da Assinafy (ajuste se necessário)
+  const app = process.env.ASSINAFY_APP_URL || 'https://app.assinafy.com';
+  return `${app}/documents/${encodeURIComponent(assinafyId)}`;
+}
 
-// Verifica token (legado / ofícios)
-router.get('/verify/:token', async (req, res) => {
+// --- GET meta do termo
+router.get('/termo/:eventoId', async (req, res) => {
   try {
-    const token = req.params.token;
-    const row = await dbGet(
-      `SELECT id, token, tipo, permissionario_id, created_at FROM documentos WHERE token = ?`,
-      [token]
+    const { eventoId } = req.params;
+    const doc = await dbGet(
+      `SELECT * FROM documentos WHERE evento_id = ? AND tipo = 'termo_evento'`,
+      [eventoId]
     );
-    if (!row) return res.status(404).json({ error: 'Token inválido.' });
-
-    if (row.tipo === 'oficio') {
-      const audit = await dbGet(`SELECT pdf_path FROM oficios_audit WHERE documento_id = ?`, [row.id]);
-      if (audit && audit.pdf_path) row.pdf_url = audit.pdf_path;
-    }
-    return res.json(row);
-  } catch (err) {
-    console.error('[documentos] verify erro:', err);
-    return res.status(500).json({ error: 'Erro de banco de dados.' });
-  }
-});
-
-// Envia para assinatura no Assinafy e retorna URL de embed
-router.post('/:id/sign-assinafy', async (req, res) => {
-  try {
-    const id = req.params.id;
-    const doc = await dbGet('SELECT id, pdf_url FROM documentos WHERE id = ?', [id]);
-    if (!doc) return res.status(404).json({ error: 'Documento não encontrado.' });
-
-    let pdfBuffer;
-
-    if (doc.pdf_url) {
-      const url = String(doc.pdf_url);
-      if (/^data:application\/pdf;base64,/i.test(url)) {
-        const b64 = url.replace(/^data:application\/pdf;base64,/i, '');
-        pdfBuffer = Buffer.from(b64, 'base64');
-      } else if (fs.existsSync(url)) {
-        pdfBuffer = fs.readFileSync(url);
-      }
-    }
-    if (!pdfBuffer) {
-      // tentativa de fallback (ofícios/audit, se aplicar)
-      const audit = await dbGet('SELECT pdf_path FROM oficios_audit WHERE documento_id = ?', [id]);
-      if (audit?.pdf_path && fs.existsSync(audit.pdf_path)) {
-        pdfBuffer = fs.readFileSync(audit.pdf_path);
-      }
-    }
-    if (!pdfBuffer) return res.status(404).json({ error: 'PDF não encontrado.' });
-
-    // monta callback com documentoId
-    const callbackUrl = `${req.protocol}://${req.get('host')}/api/documentos/assinafy/callback?documentoId=${id}`;
-
-    const options = { callbackUrl, ...(req.body || {}) };
-    const resp = await assinafyService.uploadPdf(pdfBuffer, `documento_${id}.pdf`, options);
-
-    if (resp?.id) {
-      await dbRun('UPDATE documentos SET assinafy_id = ?, status = ? WHERE id = ?',
-                  [resp.id, 'enviado', id]);
-    }
-
+    if (!doc) return res.status(404).json({ error: 'Termo não encontrado.' });
     res.json({
-      url: resp?.embedUrl || resp?.url || resp?.signUrl || resp?.redirectUrl || null,
-      assinafyId: resp?.id
+      id: doc.id,
+      evento_id: doc.evento_id,
+      pdf_url: doc.pdf_url,
+      pdf_public_url: doc.pdf_public_url,
+      assinafy_id: doc.assinafy_id,
+      status: doc.status,
+      signed_pdf_public_url: doc.signed_pdf_public_url,
+      signed_at: doc.signed_at
     });
-  } catch (err) {
-    console.error('[documentos] sign-assinafy erro:', err);
-    res.status(500).json({ error: 'Falha ao enviar para assinatura.' });
+  } catch (e) {
+    console.error('[DOC] meta erro:', e);
+    res.status(500).json({ error: 'Falha ao obter metadados do termo.' });
   }
 });
 
-// Callback do Assinafy: baixa PDF assinado, audita e atualiza a tabela documentos
-router.get('/assinafy/callback', async (req, res) => {
-  const assinafyId = req.query.id || req.query.documentId;
-  const documentoId = req.query.documentoId || req.query.localId || null;
-  if (!assinafyId) return res.status(400).send('id ausente');
-
+// --- POST enviar termo p/ Assinafy
+router.post('/termo/:eventoId/enviar-assinafy', async (req, res) => {
   try {
-    const info = await assinafyService.getDocumentStatus(assinafyId);
-    const pdfBuffer = await assinafyService.downloadSignedPdf(assinafyId);
+    const { eventoId } = req.params;
 
-    const hash = crypto.createHash('sha256').update(pdfBuffer).digest('hex');
-    const signer = info?.signer?.name || (info?.signatures && info.signatures[0]?.signer) || '';
-    const signedAt = info?.signedAt || new Date().toISOString();
+    // garante que o PDF existe (gera se não existir)
+    let docRow = await dbGet(`SELECT * FROM documentos WHERE evento_id=? AND tipo='termo_evento'`, [eventoId]);
+    if (!docRow || !docRow.pdf_url || !fs.existsSync(docRow.pdf_url)) {
+      console.log('[DOC] Gerando termo antes de enviar…');
+      await gerarTermoEventoPdfkitEIndexar(eventoId);
+      docRow = await dbGet(`SELECT * FROM documentos WHERE evento_id=? AND tipo='termo_evento'`, [eventoId]);
+    }
+    if (!docRow || !docRow.pdf_url || !fs.existsSync(docRow.pdf_url)) {
+      return res.status(409).json({ error: 'PDF do termo não encontrado para envio.' });
+    }
 
-    // salva o PDF assinado em /public/assinados
-    const dir = path.resolve(process.cwd(), 'public', 'assinados');
-    fs.mkdirSync(dir, { recursive: true });
-    const filePath = path.join(dir, `documento_${assinafyId}.pdf`);
-    fs.writeFileSync(filePath, pdfBuffer);
-    const publicUrl = `/assinados/documento_${assinafyId}.pdf`;
+    const buffer = fs.readFileSync(docRow.pdf_url);
+    const filename = path.basename(docRow.pdf_url);
 
-    // tabela de auditoria
-    await dbRun(`CREATE TABLE IF NOT EXISTS assinafy_audit (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      documento_id INTEGER,
-      assinafy_id TEXT,
-      hash TEXT,
-      signer TEXT,
-      signed_at TEXT,
-      pdf_path TEXT
-    )`);
+    const callbackUrl = ensureCallbackUrl();
+    const resp = await uploadPdf(buffer, filename, { callbackUrl });
+
+    // resp.id (obrigatório). Alguns provedores devolvem também alguma url de assinatura
+    const assinafyId = resp.id;
+    const candidateUrl =
+      resp.url || resp.signUrl || resp.signerUrl || resp.signingUrl || null;
 
     await dbRun(
-      `INSERT INTO assinafy_audit (documento_id, assinafy_id, hash, signer, signed_at, pdf_path)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [documentoId, assinafyId, hash, signer, signedAt, filePath]
+      `UPDATE documentos
+         SET assinafy_id = ?, status = 'enviado'
+       WHERE id = ?`,
+      [assinafyId, docRow.id]
     );
 
-    // atualiza o registro principal em 'documentos'
-    await dbRun(`
-      UPDATE documentos
-         SET status = 'assinado',
-             signed_pdf_public_url = ?,
-             signed_at = ?,
-             signer = ?
-       WHERE assinafy_id = ?
-          OR id = ?`, [publicUrl, signedAt, signer, assinafyId, documentoId || null]);
+    // devolve tanto uma url direta (se houver) quanto uma rota nossa de fallback
+    const open_url = candidateUrl || `/api/documentos/assinafy/${encodeURIComponent(assinafyId)}/open`;
 
-    res.json({ ok: true });
-  } catch (err) {
-    console.error('[assinafy callback] erro:', err);
-    res.status(500).json({ error: 'Erro no callback.' });
+    res.json({
+      ok: true,
+      id: assinafyId,
+      url: candidateUrl,     // pode ser null
+      open_url               // garantido
+    });
+  } catch (e) {
+    console.error('[ASSINAFY] enviar erro:', e?.response?.data || e);
+    res.status(500).json({ error: 'Falha no envio para assinatura.' });
   }
 });
 
-// Status simples (lê auditoria). Opcional: poderia checar também a coluna "status" de documentos.
-router.get('/:id/sign-assinafy-status', async (req, res) => {
+// --- GET status
+router.get('/assinafy/:id/status', async (req, res) => {
   try {
-    await dbRun(`CREATE TABLE IF NOT EXISTS assinafy_audit (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      documento_id INTEGER,
-      assinafy_id TEXT,
-      hash TEXT,
-      signer TEXT,
-      signed_at TEXT,
-      pdf_path TEXT
-    )`);
-    const row = await dbGet(
-      'SELECT hash, signer, signed_at, pdf_path FROM assinafy_audit WHERE documento_id = ? ORDER BY id DESC LIMIT 1',
-      [req.params.id]
-    );
-    if (!row) return res.json({ status: 'pending' });
-    res.json({ status: 'signed', ...row });
-  } catch (err) {
-    console.error('[documentos] status erro:', err);
-    res.status(500).json({ error: 'Erro ao consultar status.' });
+    const data = await getDocumentStatus(req.params.id);
+    res.json(data);
+  } catch (e) {
+    console.error('[ASSINAFY] status erro:', e?.response?.data || e);
+    res.status(500).json({ error: 'Falha ao consultar status.' });
+  }
+});
+
+// --- GET open (redirect)
+router.get('/assinafy/:id/open', async (req, res) => {
+  try {
+    // tenta obter uma URL amigável da API; se não, cai no app público
+    let url = null;
+    try {
+      const data = await getDocumentStatus(req.params.id);
+      url = data.url || data.signUrl || data.signerUrl || data.signingUrl || null;
+    } catch {}
+    if (!url) url = publicViewerUrl(req.params.id);
+    res.redirect(url);
+  } catch (e) {
+    console.error('[ASSINAFY] open erro:', e);
+    res.status(500).json({ error: 'Falha ao abrir documento para assinatura.' });
+  }
+});
+
+// --- POST webhook (configure ASSINAFY_CALLBACK_URL para esta rota)
+router.post('/assinafy/webhook', express.json({ limit: '2mb' }), async (req, res) => {
+  try {
+    // segurança mínima: ?secret= no callback (ou header x-assinafy-secret)
+    const sent = req.query.secret || req.headers['x-assinafy-secret'];
+    const expected = process.env.ASSINAFY_WEBHOOK_SECRET;
+    if (!expected || sent !== expected) {
+      console.warn('[ASSINAFY] webhook rejeitado: segredo inválido');
+      return res.status(401).json({ error: 'unauthorized' });
+    }
+
+    const payload = req.body || {};
+    const docId = payload.id || payload.documentId || payload.document_id || null;
+    const status = payload.status || payload.event || null;
+    const signedUrl = payload.signedPdfUrl || payload.signed_pdf_url || null;
+
+    if (docId) {
+      const row = await dbGet(`SELECT * FROM documentos WHERE assinafy_id = ?`, [docId]);
+      if (row) {
+        const sets = [];
+        const params = [];
+        if (status) { sets.push(`status = ?`); params.push(String(status)); }
+        if (signedUrl) { sets.push(`signed_pdf_public_url = ?`); params.push(signedUrl); sets.push(`signed_at = datetime('now')`); }
+        if (sets.length) {
+          await dbRun(`UPDATE documentos SET ${sets.join(', ')} WHERE id = ?`, [...params, row.id]);
+        }
+      }
+    }
+
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[ASSINAFY] webhook erro:', e);
+    res.status(500).json({ error: 'falha ao processar webhook' });
   }
 });
 
