@@ -1,3 +1,6 @@
+const VERSION = 'pdfkit-v3';
+console.log(`[TERMO][SERVICE] carregado ${VERSION} de`, __filename);
+
 const fs = require('fs');
 const path = require('path');
 const PDFDocument = require('pdfkit');
@@ -279,6 +282,7 @@ function findLetterheadPath() {
 
 // ---------- Geração do PDF (PDFKit, timbrado, header/footer) ----------
 async function gerarTermoEventoPdfEIndexar(eventoId, { returnBuffer = false } = {}) {
+    console.log(`[TERMO][SERVICE] gerarTermoEventoPdfkitEIndexar(${eventoId}) - ${VERSION}`);
     const payload = await buildPayloadFromEvento(eventoId);
     const evRow = payload._raw;
 
