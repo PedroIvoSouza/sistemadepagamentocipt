@@ -583,9 +583,10 @@ router.post('/dars/:darId/emit', botAuthMiddleware, async (req, res) => {
       throw new Error('Retorno da SEFAZ incompleto (numeroGuia/pdfBase64).');
     }
 
+    const codigoBarras = sefazResp.codigoBarras || null;
     const linhaDigitavel =
       (sefazResp.linhaDigitavel && sefazResp.linhaDigitavel.trim()) ||
-      (sefazResp.codigoBarras ? codigoBarrasParaLinhaDigitavel(sefazResp.codigoBarras) : null);
+      (codigoBarras ? codigoBarrasParaLinhaDigitavel(codigoBarras) : null);
 
     // Token opcional no PDF
     let pdfOut = sefazResp.pdfBase64;
@@ -606,7 +607,7 @@ router.post('/dars/:darId/emit', botAuthMiddleware, async (req, res) => {
              linha_digitavel = COALESCE(?, linha_digitavel),
              status = 'Emitido'
        WHERE id = ?`,
-      [sefazResp.numeroGuia, pdfOut, sefazResp.codigoBarras, linhaDigitavel, darId]
+      [sefazResp.numeroGuia, pdfOut, codigoBarras, linhaDigitavel, darId]
     );
 
     return res.json({
@@ -614,6 +615,7 @@ router.post('/dars/:darId/emit', botAuthMiddleware, async (req, res) => {
       darId,
       numero_documento: sefazResp.numeroGuia,
       linha_digitavel: linhaDigitavel,
+      codigo_barras: codigoBarras,
       pdf_url: pdfOut
     });
   } catch (err) {
@@ -693,9 +695,10 @@ router.post('/dars/:darId/reemit', botAuthMiddleware, async (req, res) => {
       throw new Error('Retorno da SEFAZ incompleto (numeroGuia/pdfBase64).');
     }
 
+    const codigoBarras = sefazResp.codigoBarras || null;
     const linhaDigitavel =
       (sefazResp.linhaDigitavel && sefazResp.linhaDigitavel.trim()) ||
-      (sefazResp.codigoBarras ? codigoBarrasParaLinhaDigitavel(sefazResp.codigoBarras) : null);
+      (codigoBarras ? codigoBarrasParaLinhaDigitavel(codigoBarras) : null);
 
     // Token opcional
     let pdfOut = sefazResp.pdfBase64;
@@ -714,7 +717,7 @@ router.post('/dars/:darId/reemit', botAuthMiddleware, async (req, res) => {
              linha_digitavel = COALESCE(?, linha_digitavel),
              status = 'Reemitido'
        WHERE id = ?`,
-      [sefazResp.numeroGuia, pdfOut, sefazResp.codigoBarras, linhaDigitavel, darId]
+      [sefazResp.numeroGuia, pdfOut, codigoBarras, linhaDigitavel, darId]
     );
 
     return res.json({
@@ -722,6 +725,7 @@ router.post('/dars/:darId/reemit', botAuthMiddleware, async (req, res) => {
       darId,
       numero_documento: sefazResp.numeroGuia,
       linha_digitavel: linhaDigitavel,
+      codigo_barras: codigoBarras,
       pdf_url: pdfOut
     });
   } catch (err) {
