@@ -8,7 +8,7 @@ const { criarEventoComDars, atualizarEventoComDars } = require('../services/even
 
 const {
   uploadDocumentFromFile,
-  createSigner,
+  ensureSigner,
   requestSignatures,
   getDocument,
   pickBestArtifactUrl
@@ -129,7 +129,7 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
 
     // 3) Cria o signatário (se necessário)
     // Obs.: se você já mantém signerId, use direto. Aqui criamos sempre um simples.
-    const signer = await createSigner({
+    const signer = await ensureSigner({
       full_name: signerName,
       email: signerEmail,
       government_id: onlyDigits(signerCpf),

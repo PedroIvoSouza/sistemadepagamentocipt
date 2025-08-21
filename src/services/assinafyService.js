@@ -56,6 +56,35 @@ async function createSigner({ full_name, email, government_id, phone }) {
 }
 
 /**
+ * Busca um signatário pelo e-mail.
+ */
+async function findSignerByEmail(email) {
+  assertAccount();
+  const resp = await axios.get(
+    `${BASE}/accounts/${ACCOUNT_ID}/signers`,
+    { params: { email }, headers: { ...authHeaders() } }
+  );
+  const arr = Array.isArray(resp.data) ? resp.data : resp.data?.data;
+  return Array.isArray(arr) && arr.length > 0 ? arr[0] : null;
+}
+
+/**
+ * Garante a existência de um signatário reutilizando por e-mail.
+ */
+async function ensureSigner({ full_name, email, government_id, phone }) {
+  try {
+    return await createSigner({ full_name, email, government_id, phone });
+  } catch (err) {
+    const msg = err?.response?.data?.message || err.message || '';
+    if (/já existe/i.test(msg) || /already exists/i.test(msg) || err?.response?.status === 400) {
+      const found = await findSignerByEmail(email);
+      if (found) return found;
+    }
+    throw err;
+  }
+}
+
+/**
  * Dispara a assinatura (virtual) para um documento já enviado.
  * Endpoint: POST /documents/:documentId/assignments
  * Body: { method: "virtual", signerIds: [ ... ] }
@@ -102,6 +131,7 @@ function pickBestArtifactUrl(documentData) {
 module.exports = {
   uploadDocumentFromFile,
   createSigner,
+  ensureSigner,
   requestSignatures,
   getDocument,
   pickBestArtifactUrl,
