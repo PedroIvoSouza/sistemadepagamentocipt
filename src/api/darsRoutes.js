@@ -5,6 +5,7 @@ const authMiddleware = require('../middleware/authMiddleware');
 const { calcularEncargosAtraso } = require('../services/cobrancaService');
 const { emitirGuiaSefaz } = require('../services/sefazService');
 const { gerarTokenDocumento, imprimirTokenEmPdf } = require('../utils/token');
+const { linhaDigitavelParaCodigoBarras } = require('../utils/boleto');
 
 const db = require('../database/db');
 
@@ -301,13 +302,19 @@ router.post('/:id/emitir', authMiddleware, async (req, res) => {
       [sefazResponse.numeroGuia, sefazResponse.pdfBase64, sefazResponse.linhaDigitavel || null, darId]
     );
 
-    // Compat com campos antigos (preenche se estiverem nulos)
+    // Compat com campos antigos: preenche codigo_barras/link_pdf se possível
+    const cb = (
+      sefazResponse.codigoBarras ||
+      linhaDigitavelParaCodigoBarras(sefazResponse.linhaDigitavel || '') ||
+      ''
+    ).replace(/\D/g, '');
+
     await dbRunAsync(
       `UPDATE dars
-         SET codigo_barras = COALESCE(numero_documento, codigo_barras),
+         SET codigo_barras = CASE WHEN length(?) = 44 THEN ? ELSE codigo_barras END,
              link_pdf      = COALESCE(pdf_url, link_pdf)
        WHERE id = ?`,
-      [darId]
+      [cb, cb, darId]
     );
 
     const payloadDebug = debug ? { _payloadDebug: payload } : {};
