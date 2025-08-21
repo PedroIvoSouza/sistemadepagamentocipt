@@ -113,6 +113,30 @@ async function getDocument(documentId) {
   throw err;
 }
 
+async function getDocumentStatus(id) {
+  const u = `/documents/${encodeURIComponent(id)}`;
+  const r = await axJson().get(u);
+  if (DEBUG) console.log('[ASSINAFY][GET]', BASE + u, r.status);
+  if (r.status >= 200 && r.status < 300) return r.data;
+  const err = new Error(`Erro ao obter status do documento (HTTP ${r.status})`);
+  err.response = r;
+  throw err;
+}
+
+async function downloadSignedPdf(id) {
+  const u = `/documents/${encodeURIComponent(id)}/artifacts/certificated`;
+  const r = await axStream().get(u);
+  if (DEBUG) console.log('[ASSINAFY][GET]', BASE + u, r.status);
+  if (r.status >= 200 && r.status < 300) {
+    const chunks = [];
+    for await (const chunk of r.data) chunks.push(chunk);
+    return Buffer.concat(chunks);
+  }
+  const err = new Error(`Erro ao baixar artefato (HTTP ${r.status})`);
+  err.response = r;
+  throw err;
+}
+
 async function listAssignments(documentId) {
   const u = `/documents/${encodeURIComponent(documentId)}/assignments`;
   const r = await axJson().get(u);
@@ -223,6 +247,8 @@ module.exports = {
   getDocument,
   listAssignments,
   getBestSigningUrl,
+  getDocumentStatus,
+  downloadSignedPdf,
   createSigner,
   findSignerByEmail,
   ensureSigner,
