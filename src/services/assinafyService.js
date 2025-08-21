@@ -91,12 +91,12 @@ async function getDocument(documentId) {
 
 /**
  * Retorna a melhor URL de download do PDF:
- *  - se existir artifacts.certificated, usa ela (assinado)
+ *  - se existir artifacts.certified, usa ela (assinado)
  *  - senão, usa artifacts.original (upload)
  */
 function pickBestArtifactUrl(documentData) {
   const artifacts = documentData?.artifacts || {};
-  return artifacts.certificated || artifacts.original || null;
+  return artifacts.certified || artifacts.original || null;
 }
 
 module.exports = {

@@ -117,7 +117,7 @@ router.post('/', async (req, res) => {
     }
 
     const bestUrl = pickBestArtifactUrl({ artifacts });
-    const assinado = status === 'certificated' || status === 'signed' || status === 'completed';
+    const assinado = status === 'certified' || status === 'signed' || status === 'completed';
 
     // Atualiza a linha correspondente (idempotente)
     await dbRun(
