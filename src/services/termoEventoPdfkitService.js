@@ -123,54 +123,108 @@ function linhaInfo(doc, rotulo, valor) {
 }
 
 function tabelaDiscriminacao(doc, dados) {
-  const largura = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-  const x0 = doc.page.margins.left;
-  const rowH = 20;
+  const left   = doc.page.margins.left;
+  const right  = doc.page.width - doc.page.margins.right;
+  const top    = doc.y; // usa a posição atual
+  const bottom = doc.page.height - doc.page.margins.bottom;
+
+  const largura = right - left;
+  const pad = { x: 6, y: 6 };
 
   const cols = [
-    { w: largura * 0.47, label: 'Discriminação / Área utilizada' },
-    { w: largura * 0.18, label: 'Área (m²) / Capacidade' },
-    { w: largura * 0.15, label: 'Nº de dias' },
-    { w: largura * 0.20, label: 'Valor total' },
+    { w: largura * 0.47, label: 'Discriminação / Área utilizada', align: 'left',  font: 'Times-Roman' },
+    { w: largura * 0.18, label: 'Área (m²) / Capacidade',         align: 'left',  font: 'Times-Roman' },
+    { w: largura * 0.15, label: 'Nº de dias',                      align: 'center',font: 'Times-Roman' },
+    { w: largura * 0.20, label: 'Valor total',                     align: 'right', font: 'Times-Roman' },
   ];
 
-  const drawRow = (cells, yy, bold = false) => {
-    let xx = x0;
-    doc.font(bold ? 'Times-Bold' : 'Times-Roman').fontSize(11);
-    cells.forEach((cell, i) => {
-      doc.text(String(cell), xx + 4, yy + 5, {
-        width: cols[i].w - 8,
-        align: i === 0 ? 'left' : (i === 3 ? 'right' : 'left'),
-        lineBreak: false
+  let x = left;
+  let y = top;
+
+  const drawHeader = () => {
+    x = left;
+    doc.font('Times-Bold').fontSize(11);
+    // calcula a altura necessária de cada cabeçalho dentro da largura da coluna
+    const heights = cols.map((c) =>
+      doc.heightOfString(c.label, { width: c.w - pad.x * 2, align: c.align })
+    );
+    const rowH = Math.max(...heights) + pad.y * 2;
+
+    // se não couber, vai pra próxima página
+    if (y + rowH > bottom) {
+      doc.addPage();
+      y = doc.page.margins.top;
+      x = left;
+    }
+
+    // desenha as células do cabeçalho
+    cols.forEach((c, i) => {
+      doc.rect(x, y, c.w, rowH).stroke('#000');
+      doc.text(c.label, x + pad.x, y + pad.y, {
+        width: c.w - pad.x * 2,
+        align: c.align
       });
-      doc.rect(xx, yy, cols[i].w, rowH).stroke('#000');
-      xx += cols[i].w;
+      x += c.w;
     });
+
+    y += rowH; // próxima linha
   };
 
-  let y = doc.y + 4;
-  drawRow(cols.map(c => c.label), y, true);
-  y += rowH;
+  const drawRow = (cells) => {
+    x = left;
+    doc.font('Times-Roman').fontSize(11);
+
+    // calcula alturas necessárias por coluna
+    const heights = cells.map((txt, i) =>
+      doc.heightOfString(String(txt), {
+        width: cols[i].w - pad.x * 2,
+        align: cols[i].align
+      })
+    );
+    const rowH = Math.max(...heights) + pad.y * 2;
+
+    // quebra de página segura (reimprime cabeçalho)
+    if (y + rowH > bottom) {
+      doc.addPage();
+      y = doc.page.margins.top;
+      drawHeader();
+    }
+
+    // desenha células
+    cells.forEach((txt, i) => {
+      const c = cols[i];
+      doc.rect(x, y, c.w, rowH).stroke('#000');
+      doc.text(String(txt), x + pad.x, y + pad.y, {
+        width: c.w - pad.x * 2,
+        align: c.align
+      });
+      x += c.w;
+    });
+
+    y += rowH;
+  };
+
+  // --- imprime ---
+  drawHeader();
 
   const col1 = [
-    dados.discriminacao,
+    `${dados.discriminacao}`,
     `Realização: ${dados.realizacao}`,
     `Montagem: ${dados.montagem}`,
     `Desmontagem: ${dados.desmontagem}`,
   ].join('\n');
 
-  drawRow(
-    [
-      col1,
-      `${dados.area} (capacidade para ${dados.capacidade} pessoas)`,
-      String(dados.dias),
-      fmtMoeda(dados.valor)
-    ],
-    y
-  );
+  const col2 = `${dados.area} (capacidade para ${dados.capacidade} pessoas)`;
+  const col3 = String(dados.dias);
+  const col4 = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
+                 .format(Number(dados.valor || 0));
 
-  doc.y = y + rowH + 6;
+  drawRow([col1, col2, col3, col4]);
+
+  // avança um espacinho após a tabela
+  doc.y = y + 8;
 }
+
 
 function assinaturasKeepTogether(doc, rotulos = ['PERMITENTE', 'PERMISSIONÁRIA', 'TESTEMUNHA – CPF Nº', 'TESTEMUNHA – CPF Nº']) {
   const largura = doc.page.width - doc.page.margins.left - doc.page.margins.right;
