@@ -130,9 +130,9 @@
             <label for="espaco-utilizado" class="form-label">Espaços Utilizados</label>
             <select class="form-select" id="espaco-utilizado" multiple>
               <option value="Auditório">Auditório</option>
-              <option value="Hall">Hall</option>
+              <option value="Anfiteatro">Anfiteatro</option>
               <option value="Coworking">Coworking</option>
-              <option value="Área Externa">Área Externa</option>
+              <option value="Espaço em Frente ao Auditório">Espaço em Frente ao Auditório</option>
             </select>
             <small id="capacidade-espaco" class="form-text text-muted"></small>
           </div>
@@ -391,9 +391,9 @@ window.onload = () => {
 
   const ESPACOS_INFO = {
     'Auditório':   { area: 429.68, capacidade: 313 },
-    'Hall':        { area: 200,    capacidade: 150 },
+    'Anfiteatro':        { area: 200,    capacidade: 150 },
     'Coworking':   { area: 100,    capacidade: 50 },
-    'Área Externa':{ area: 500,    capacidade: 500 }
+    'Espaço em Frente ao Auditório':{ area: 500,    capacidade: 500 }
   };
 
   const numeroOficioSeiMask = IMask(numeroOficioSeiInput, { mask: '00000.000000/0000-00' });
