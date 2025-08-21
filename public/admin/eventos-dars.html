@@ -716,13 +716,19 @@ async function carregarClientes(){
               <i class="bi bi-file-earmark-arrow-down"></i>
             </button>
           </td>
-          <td class="text-center">
-            <button class="btn btn-sm btn-outline-success btn-termo" title="Emitir Termo"
-                    data-evento-id="${id}">
-              <i class="bi bi-file-earmark-text"></i>
-            </button>
-          </td>
-          <td class="text-center">
+       <td class="text-center">
+        <div class="btn-group">
+          <button class="btn btn-sm btn-outline-success btn-termo" title="Emitir Termo"
+                  data-evento-id="${id}">
+            <i class="bi bi-file-earmark-text"></i>
+          </button>
+          <button class="btn btn-sm btn-outline-primary btn-enviar-assinafy" title="Enviar p/ assinatura"
+                  data-evento-id="${id}">
+            <i class="bi bi-pen"></i>
+          </button>
+        </div>
+      </td>
+                <td class="text-center">
             <button class="btn btn-sm btn-outline-secondary btn-editar" title="Editar"
                     data-evento-id="${id}">
               <i class="bi bi-pencil"></i>
@@ -1041,6 +1047,38 @@ async function carregarClientes(){
           btnTermo.innerHTML = original;
         }
       }
+      const btnAssinafy = e.target.closest('.btn-enviar-assinafy');
+        if (btnAssinafy) {
+          const eventoId = btnAssinafy.dataset.eventoId;
+        
+          // evita duplo clique
+          if (btnAssinafy.dataset.loading === '1') return;
+          const original = btnAssinafy.innerHTML;
+          btnAssinafy.dataset.loading = '1';
+          btnAssinafy.disabled = true;
+          btnAssinafy.setAttribute('aria-busy','true');
+          btnAssinafy.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span> Enviando...`;
+        
+          try {
+            const r = await fetch(`/api/admin/eventos/${eventoId}/termo/enviar-assinafy`, {
+              method: 'POST',
+              headers: AUTH_HEADERS
+            });
+            const j = await r.json().catch(()=> ({}));
+            if (!r.ok || !j.ok) throw new Error(j.error || 'Falha no envio');
+            alert('Documento enviado para assinatura com sucesso!');
+          } catch (err) {
+            alert(`Erro: ${err.message}`);
+          } finally {
+            btnAssinafy.disabled = false;
+            btnAssinafy.dataset.loading = '0';
+            btnAssinafy.removeAttribute('aria-busy');
+            btnAssinafy.innerHTML = original;
+          }
+          return;
+        }
+
+      
       if (btnApagar){
         const eventoId = btnApagar.dataset.eventoId;
         const nome = btnApagar.dataset.eventoNome || `#${eventoId}`;
