@@ -1,14 +1,4 @@
 // src/services/assinafyClient.js
-// Cliente Assinafy (upload/consulta/baixa PDF)
-// - Requer: ASSINAFY_API_BASE (ex: https://api.assinafy.com.br/v1)
-//           ASSINAFY_ACCOUNT_ID
-//           ASSINAFY_API_KEY  (ou ASSINAFY_ACCESS_TOKEN - opcional)
-//
-// Dicas:
-//   - BASE deve terminar com /v1
-//   - Use a mesma combinação que funcionou no cURL: X-Api-Key + /accounts/:id/documents
-//   - Se estiver no PM2, garanta que o processo lê as variáveis (dotenv ou ecosystem.config.js)
-
 const axios = require('axios');
 const FormData = require('form-data');
 const https = require('https');
@@ -19,15 +9,18 @@ const TIMEOUT = Number(process.env.ASSINAFY_TIMEOUT_MS || 90000);
 const API_KEY      = (process.env.ASSINAFY_API_KEY || '').trim();
 const ACCESS_TOKEN = (process.env.ASSINAFY_ACCESS_TOKEN || '').trim();
 const ACCOUNT_ID   = (process.env.ASSINAFY_ACCOUNT_ID || '').trim();
-const BASE         = ((process.env.ASSINAFY_API_BASE || 'https://api.assinafy.com.br/v1').trim()).replace(/\/+$/, '');
+const BASE         = (process.env.ASSINAFY_API_BASE || 'https://api.assinafy.com.br/v1').replace(/\/+$/, '');
+const INSECURE     = String(process.env.ASSINAFY_INSECURE || '') === '1';
 
-// agente HTTPS sem keepAlive para reduzir "socket hang up" em alguns gateways
-const httpsAgent = new https.Agent({ keepAlive: false, maxSockets: 50 });
+const httpsAgent = new https.Agent({
+  keepAlive: false,
+  rejectUnauthorized: !INSECURE, // permitir pular certificado se ASSINAFY_INSECURE=1
+});
 
-function authHeaders () {
-  const h = {};
-  // Envia TODAS as variações (há proxies/gateways sensíveis a case)
+function authHeaders() {
+  const h = { };
   if (API_KEY) {
+    // Algumas infra aceita só uma variação, outras qualquer. Mandamos todas.
     h['X-Api-Key'] = API_KEY;
     h['X-API-KEY'] = API_KEY;
     h['x-api-key'] = API_KEY;
@@ -39,63 +32,38 @@ function authHeaders () {
   return h;
 }
 
-function uploadUrl () {
+function uploadUrl() {
   if (!ACCOUNT_ID) throw new Error('ASSINAFY_ACCOUNT_ID não configurado.');
   return `${BASE}/accounts/${ACCOUNT_ID}/documents`;
 }
 
-function mask (s = '') {
-  if (!s) return s;
-  if (s.length <= 8) return '***';
-  return s.slice(0, 4) + '…' + s.slice(-4);
-}
-
-async function tryPost (url, form) {
+async function tryPost(url, data, headersExtra = {}) {
   const headers = {
     Accept: 'application/json',
-    Connection: 'close',                  // encerra após request
-    ...form.getHeaders(),
+    Connection: 'close',
     ...authHeaders(),
+    ...headersExtra,
   };
 
   const cfg = {
     method: 'POST',
     url,
-    data: form,
+    data,
     timeout: TIMEOUT,
+    httpsAgent,
+    family: 4,
+    proxy: false,
     maxBodyLength: Infinity,
     maxContentLength: Infinity,
-    httpsAgent,
-    family: 4,                            // força IPv4
-    proxy: false,
     headers,
     validateStatus: s => s >= 200 && s < 300,
   };
 
-  if (DEBUG) {
-    console.log('[ASSINAFY][POST] tentando:', url, {
-      base: BASE,
-      account: ACCOUNT_ID,
-      key_len: (API_KEY || '').length,
-      auth: ACCESS_TOKEN ? `bearer(${ACCESS_TOKEN.length})` : 'no-bearer'
-    });
-  }
+  if (DEBUG) console.log('[ASSINAFY][POST]', url);
   return axios(cfg);
 }
 
-/**
- * Faz upload de um PDF (buffer) para a Assinafy.
- * Retorna SEMPRE o objeto interno `data` (que contém `id`, `status`, `artifacts`, etc).
- *
- * Exemplo de uso:
- *   const doc = await uploadPdf(buffer, 'termo.pdf');
- *   console.log(doc.id); // <- id do documento na Assinafy
- */
-async function uploadPdf (
-  pdfBuffer,
-  filename = 'documento.pdf',
-  { callbackUrl = process.env.ASSINAFY_CALLBACK_URL, ...flags } = {}
-) {
+async function uploadPdf(pdfBuffer, filename = 'documento.pdf', { callbackUrl = process.env.ASSINAFY_CALLBACK_URL, ...flags } = {}) {
   if (!pdfBuffer || !Buffer.isBuffer(pdfBuffer)) throw new Error('pdfBuffer inválido.');
 
   const form = new FormData();
@@ -106,87 +74,122 @@ async function uploadPdf (
     form.append(k, typeof v === 'boolean' ? String(v) : String(v));
   }
 
-  const url = uploadUrl();
   try {
-    const resp = await tryPost(url, form);
-    // A API costuma responder: { status, message, data: {...documento...} }
-    const payload = resp?.data?.data || resp?.data || {};
-    if (DEBUG) {
-      console.log('[ASSINAFY][POST] OK:', resp.status, 'docId=', payload?.id || '-', 'status=', payload?.status || '-');
-    }
-    return payload;
+    const resp = await tryPost(uploadUrl(), form, form.getHeaders());
+    if (DEBUG) console.log('[ASSINAFY][UPLOAD] OK:', resp.status, resp.data?.id || '');
+    return resp.data; // { id, status, artifacts, ... }
   } catch (err) {
     const status = err?.response?.status;
-    const code   = err?.code;
-    const body   = err?.response?.data;
-
-    if (DEBUG) {
-      console.warn('[ASSINAFY][POST] falhou:', {
-        url,
-        status,
-        code,
-        body,
-        key_len: (API_KEY || '').length,
-        token_len: (ACCESS_TOKEN || '').length,
-        account: ACCOUNT_ID
-      });
-    }
-
+    const code   = err.code;
+    if (DEBUG) console.warn('[ASSINAFY][UPLOAD] falhou:', { status, code, body: err?.response?.data });
     if (status === 401) {
       throw new Error(`Falha no envio (401 Unauthorized). Verifique ASSINAFY_API_KEY/ACCESS_TOKEN e se pertencem à conta ${ACCOUNT_ID}.`);
-    }
-    if (code === 'ECONNRESET') {
-      throw new Error('Falha no envio (ECONNRESET). Tente novamente; ajuste keepAlive/timeout ou verifique a rede.');
-    }
-    if (code === 'ETIMEDOUT' || code === 'ECONNABORTED') {
-      throw new Error(`Falha no envio (timeout após ${TIMEOUT}ms).`);
     }
     throw new Error(`Falha no envio. ${status ? `HTTP ${status}` : code || err.message}`);
   }
 }
 
-/**
- * Consulta status do documento (retorna o `data` interno quando existir).
- */
-async function getDocumentStatus (id) {
+// ---- Signers ----
+async function createSigner({ full_name, email, government_id, phone }) {
+  if (!ACCOUNT_ID) throw new Error('ASSINAFY_ACCOUNT_ID não configurado.');
+  if (!full_name || !email) throw new Error('full_name e email são obrigatórios para o signer.');
+
+  const body = {
+    full_name,
+    email,
+    // Alguns ambientes usam "government_id" (CPF/CNPJ) e "telephone" (E164 ou nacional)
+    ...(government_id ? { government_id } : {}),
+    ...(phone ? { telephone: phone } : {}),
+  };
+
+  const url = `${BASE}/accounts/${ACCOUNT_ID}/signers`;
+  const resp = await tryPost(url, body, { 'Content-Type': 'application/json' });
+  return resp.data; // esperado: { id, full_name, email, ... }
+}
+
+// ---- Assignment (pedido de assinatura) ----
+async function requestSignatures(documentId, signerIds, { message, expires_at } = {}) {
+  if (!documentId) throw new Error('documentId é obrigatório.');
+  if (!Array.isArray(signerIds) || signerIds.length === 0) throw new Error('Informe ao menos um signerId.');
+
+  const body = { method: 'virtual', signerIds };
+  if (message) body.message = message;
+  if (expires_at) body.expires_at = expires_at;
+
+  const url = `${BASE}/documents/${documentId}/assignments`;
+  const resp = await tryPost(url, body, { 'Content-Type': 'application/json' });
+  return resp.data; // muitas APIs retornam dados do assignment (ou nada além de 200)
+}
+
+async function getDocumentStatus(id) {
   if (!id) throw new Error('id é obrigatório.');
   const url = `${BASE}/documents/${id}`;
-  const headers = { ...authHeaders(), Accept: 'application/json', Connection: 'close' };
   const resp = await axios.get(url, {
+    headers: { ...authHeaders(), Accept: 'application/json', Connection: 'close' },
     timeout: TIMEOUT,
     httpsAgent,
     family: 4,
     proxy: false,
-    headers,
+    validateStatus: s => s >= 200 && s < 300,
   });
-  return resp?.data?.data || resp?.data;
+  return resp.data;
+}
+
+async function downloadSignedPdf(id) {
+  if (!id) throw new Error('id é obrigatório.');
+  const url = `${BASE}/documents/${id}`;
+  const resp = await axios.get(url, {
+    headers: { ...authHeaders(), Accept: 'application/pdf', Connection: 'close' },
+    responseType: 'arraybuffer',
+    timeout: TIMEOUT,
+    httpsAgent,
+    family: 4,
+    proxy: false,
+    validateStatus: s => s >= 200 && s < 300,
+  });
+  return resp.data;
 }
 
 /**
- * Baixa o PDF assinado (se existir); faz fallback para original se o assinado ainda não existir.
- * Retorna um Buffer (arraybuffer).
+ * Tenta extrair uma URL de assinatura de diferentes formatos de payload
+ * - alguns retornam em assignment.signers[0].links.sign
+ * - outros em assignment.signers[0].signing_url
+ * - outros via document.assignment.*
  */
-async function downloadSignedPdf (id) {
-  if (!id) throw new Error('id é obrigatório.');
-  const common = { timeout: TIMEOUT, responseType: 'arraybuffer', httpsAgent, family: 4, proxy: false };
-
-  // tenta certificado (assinado)
+function pickSigningUrl(obj) {
   try {
-    const urlCert = `${BASE}/documents/${id}/download/certificated`;
-    const headers = { ...authHeaders(), Accept: 'application/pdf', Connection: 'close' };
-    const resp = await axios.get(urlCert, { ...common, headers });
-    return resp.data;
-  } catch (e1) {
-    // fallback para original
-    const urlOrig = `${BASE}/documents/${id}/download/original`;
-    const headers = { ...authHeaders(), Accept: 'application/pdf', Connection: 'close' };
-    const resp2 = await axios.get(urlOrig, { ...common, headers });
-    return resp2.data;
-  }
+    const paths = [
+      // assignment direto
+      ['assignment', 'signers', 0, 'links', 'sign'],
+      ['assignment', 'signers', 0, 'links', 'signing'],
+      ['assignment', 'signers', 0, 'signing_url'],
+      ['assignment', 'links', 'sign'],
+      ['assignment', 'sign_url'],
+      // via document
+      ['signers', 0, 'links', 'sign'],
+      ['signers', 0, 'signing_url'],
+      ['links', 'sign'],
+      ['sign_url'],
+      // raiz
+      ['signUrl'],
+      ['signerUrl'],
+      ['signingUrl'],
+      ['url'],
+    ];
+    for (const p of paths) {
+      let cur = obj;
+      for (const key of p) cur = cur?.[key];
+      if (cur && typeof cur === 'string') return cur;
+    }
+  } catch {}
+  return null;
 }
 
 module.exports = {
   uploadPdf,
+  createSigner,
+  requestSignatures,
   getDocumentStatus,
   downloadSignedPdf,
+  pickSigningUrl,
 };
