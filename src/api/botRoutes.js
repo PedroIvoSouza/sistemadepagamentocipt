@@ -428,38 +428,40 @@ router.get('/dars/:darId', botAuthMiddleware, async (req, res) => {
     }
 
     const {
-      linha_digitavel,
-      valor,
-      data_vencimento,
-      mes_referencia,
-      ano_referencia,
-      codigo_barras,
-      numero_documento
-    } = ctx.dar;
-    let ld = linha_digitavel;
-    if (!ld) {
-      const cb = codigo_barras || numero_documento;
-      if (cb) {
-        ld = codigoBarrasParaLinhaDigitavel(cb);
-        if (ld) {
-          try {
-            await qRun('UPDATE dars SET linha_digitavel = ? WHERE id = ?', [ld, ctx.dar.id]);
-          } catch {}
-        }
-      }
-    }
-    const competencia = `${String(mes_referencia).padStart(2, '0')}/${ano_referencia}`;
+  linha_digitavel,
+  valor,
+  data_vencimento,
+  mes_referencia,
+  ano_referencia,
+  codigo_barras,          // <— garanta que está sendo selecionado no SELECT
+  numero_documento        // (não use isso para converter!)
+} = ctx.dar;
 
-    return res.json({
-      ok: true,
-      dar: {
-        id: ctx.dar.id,
-        linha_digitavel: ld || null,
-        competencia,
-        vencimento: data_vencimento,
-        valor
-      }
-    });
+let ld = (linha_digitavel || '').replace(/\D/g, '');
+if (!ld) {
+  const cb = (codigo_barras || '').replace(/\D/g, '');
+  if (cb) {
+    ld = codigoBarrasParaLinhaDigitavel(cb) || '';
+    if (ld) {
+      try {
+        await qRun('UPDATE dars SET linha_digitavel = ? WHERE id = ?', [ld, ctx.dar.id]);
+      } catch {}
+    }
+  }
+}
+
+const competencia = `${String(mes_referencia).padStart(2, '0')}/${ano_referencia}`;
+
+return res.json({
+  ok: true,
+  dar: {
+    id: ctx.dar.id,
+    linha_digitavel: ld || null,
+    competencia,
+    vencimento: data_vencimento,
+    valor
+  }
+});
   } catch (err) {
     console.error('[BOT][DAR] erro:', err, err?.detail);
     return res.status(500).json({ error: 'Erro interno.' });
