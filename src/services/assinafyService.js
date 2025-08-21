@@ -86,10 +86,11 @@ async function ensureSigner({ full_name, email, government_id, phone }) {
 
 /**
  * Dispara a assinatura (virtual) para um documento já enviado.
- * Endpoint: POST /documents/:documentId/assignments
+ * Endpoint: POST /accounts/:accountId/documents/:documentId/assignments
  * Body: { method: "virtual", signerIds: [ ... ] }
  */
 async function requestSignatures(documentId, signerIds, { message, expires_at } = {}) {
+  assertAccount();
   if (!documentId) throw new Error('documentId é obrigatório.');
   if (!Array.isArray(signerIds) || signerIds.length === 0) {
     throw new Error('Informe ao menos um signerId.');
@@ -99,8 +100,9 @@ async function requestSignatures(documentId, signerIds, { message, expires_at } 
   if (message) body.message = message;
   if (expires_at) body.expires_at = expires_at; // ISO (opcional)
 
+  const url = `${BASE}/accounts/${ACCOUNT_ID}/documents/${documentId}/assignments`;
   const resp = await axios.post(
-    `${BASE}/documents/${documentId}/assignments`,
+    url,
     body,
     { headers: { ...authHeaders(), 'Content-Type': 'application/json' } }
   );
