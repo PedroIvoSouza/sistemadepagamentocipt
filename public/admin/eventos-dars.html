@@ -737,7 +737,7 @@ async function carregarClientes(){
                   data-evento-id="${id}">
             <i class="bi bi-file-earmark-text"></i>
           </button>
-          ${mostraBtnEnviar ? `<button class="btn btn-sm btn-outline-primary btn-enviar-assinafy" title="Enviar p/ assinatura" data-evento-id="${id}" ${btnAssinaturaDisabled}><i class="bi bi-pen"></i></button>` : ''}
+          ${mostraBtnEnviar ? `<button class="btn btn-sm btn-outline-primary btn-enviar-assinafy" title="Enviar p/ assinatura" data-evento-id="${id}" data-cliente-id="${ev.id_cliente}" ${btnAssinaturaDisabled}><i class="bi bi-pen"></i></button>` : ''}
           ${signedUrl ? `<a class="btn btn-sm btn-outline-success btn-download-assinado" href="${signedUrl}" target="_blank" title="Download assinado"><i class="bi bi-download"></i></a>` : ''}
         </div>
       </td>
@@ -1099,6 +1099,7 @@ async function carregarClientes(){
       const btnAssinafy = e.target.closest('.btn-enviar-assinafy');
         if (btnAssinafy) {
           const eventoId = btnAssinafy.dataset.eventoId;
+          const clienteId = btnAssinafy.dataset.clienteId;
 
           // evita duplo clique
           if (btnAssinafy.dataset.loading === '1') return;
@@ -1110,9 +1111,21 @@ async function carregarClientes(){
 
           let sucesso = false;
           try {
+            // captura dados do responsável a partir do permissionário
+            if (!clientesCarregados) await carregarClientes();
+            let signerName='', signerEmail='', signerCpf='', signerPhone='';
+            const cliente = clientes.find(c => String(c.id) === String(clienteId));
+            if (cliente) {
+              signerName  = cliente.nome_responsavel || cliente.nome_razao_social || '';
+              signerEmail = cliente.email || '';
+              signerCpf   = (cliente.documento_responsavel || cliente.documento || '').replace(/\D/g,'');
+              signerPhone = (cliente.telefone || '').replace(/\D/g,'');
+            }
+
             const r = await fetch(`/api/admin/eventos/${eventoId}/termo/enviar-assinatura`, {
               method: 'POST',
-              headers: AUTH_HEADERS
+              headers: { 'Content-Type': 'application/json', ...AUTH_HEADERS },
+              body: JSON.stringify({ signerName, signerEmail, signerCpf, signerPhone })
             });
             const j = await r.json().catch(()=> ({}));
             if (!r.ok || !j.ok) throw new Error(j.error || 'Falha no envio');
