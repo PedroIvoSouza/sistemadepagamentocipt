@@ -116,7 +116,7 @@ async function getDocument(documentId) {
   assertAccount();
   const url = `${BASE}/accounts/${ACCOUNT_ID}/documents/${encodeURIComponent(documentId)}`;
   const resp = await axios.get(url, { headers: { ...authHeaders() } });
-  return resp.data;
+  return resp.data?.data || resp.data;
 }
 
 /**
