@@ -438,27 +438,43 @@
               return;
             }
 
-            if (btnAssinar) {
-              const eventoId = btnAssinar.dataset.assinarTermo;
-              const original = btnAssinar.innerHTML;
-              btnAssinar.disabled = true;
-              btnAssinar.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Redirecionando...`;
-              try {
-                const r = await fetch(`/api/portal/eventos/${eventoId}/termo/assinafy/link`, {
-                  method: 'POST',
-                  headers
-                });
-                const j = await r.json().catch(()=> ({}));
-                if (!r.ok || !j.url) throw new Error(j.error || 'Falha ao iniciar assinatura.');
+           if (btnAssinar) {
+            const eventoId = btnAssinar.dataset.assinarTermo;
+            const original = btnAssinar.innerHTML;
+            btnAssinar.disabled = true;
+            btnAssinar.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Processando...`;
+            try {
+              const r = await fetch(`/api/portal/eventos/${eventoId}/termo/assinafy/link`, {
+                method: 'POST',
+                headers
+              });
+              const j = await r.json().catch(()=> ({}));
+          
+              if (!r.ok) throw new Error(j.error || 'Falha ao iniciar assinatura.');
+          
+              if (j.url) {
+                // Temos link direto da Assinafy -> abrir em nova aba
                 window.open(j.url, '_blank');
                 document.getElementById(`sig-status-${eventoId}`).textContent = 'Assinatura iniciada…';
-              } catch (err) {
-                alert(err.message || 'Não foi possível iniciar a assinatura.');
-              } finally {
-                btnAssinar.disabled = false;
-                btnAssinar.innerHTML = original;
+              } else if (j.email_sent || j.reused) {
+                // Sem URL (provedor enviou convite por e-mail ou já havia um pendente)
+                const msg = j.message
+                  || 'Convite de assinatura enviado por e-mail. Verifique sua caixa de entrada.';
+                alert(msg);
+                document.getElementById(`sig-status-${eventoId}`).textContent =
+                  'Convite de assinatura enviado por e-mail.';
+              } else {
+                // Caso extremo: nem URL, nem email_sent
+                throw new Error('Não foi possível obter o link de assinatura agora. Tente novamente em instantes.');
               }
+            } catch (err) {
+              alert(err.message || 'Não foi possível iniciar a assinatura.');
+            } finally {
+              btnAssinar.disabled = false;
+              btnAssinar.innerHTML = original;
             }
+          }
+
           });
         }
       }catch(err){
