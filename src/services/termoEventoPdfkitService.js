@@ -313,7 +313,7 @@ async function gerarTermoEventoPdfkitEIndexar(eventoId) {
   const dataEventoExt   = fmtDataExtenso(primeiraDataISO) || '-';
 
   const cidadeUfDefault = process.env.CIDADE_UF || 'Maceió/AL';
-  const fundoNome = process.env.FUNDO_NOME || 'FUNDENTES';
+  const fundoNome = process.env.FUNDO_NOME || 'FUNDECTES';
   const imovelNome = process.env.IMOVEL_NOME || 'CENTRO DE INOVAÇÃO DO JARAGUÁ';
   const capDefault = process.env.CAPACIDADE_PADRAO ? Number(process.env.CAPACIDADE_PADRAO) : 313;
 
