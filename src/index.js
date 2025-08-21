@@ -23,11 +23,7 @@ const adminDarsRoutes             = require('./api/adminDarsRoutes');
 const adminOficiosRoutes          = require('./api/adminOficiosRoutes');
 const permissionariosRoutes       = require('./api/permissionariosRoutes');
 const botRoutes                   = require('./api/botRoutes');
-const termoEventosRoutes          = require('./api/termoEventosRoutes');
 
-const adminTermoEventosPDFRoutes = require('./api/adminTermoEventosPDFRoutes');
-
-const adminTermoEventosRoutes     = require('./api/adminTermoEventosRoutes');
 
 // CORREÇÃO: Desestruturando os routers de eventos
 const {
@@ -53,7 +49,6 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-app.use('/api/admin', adminTermoEventosRoutes);
 
 // Servir arquivos estáticos da pasta 'public'
 const publicPath = path.join(__dirname, '..', 'public');
@@ -75,7 +70,6 @@ app.use('/api/admin/dars',        adminDarsRoutes);
 app.use('/api/admins',            adminManagementRoutes);
 app.use('/api/admin',             adminRoutes); // Rota para permissionários no painel admin
 app.use('/api/admin',             adminOficiosRoutes); 
-app.use('/api/admin', adminTermoEventosPDFRoutes);
 
 
 // --- CORREÇÃO APLICADA AQUI ---
@@ -100,7 +94,6 @@ app.use('/api/documentos',       documentosRoutes);
 
 app.use('/api/bot', botRoutes);
 
-app.use('/api/termo-eventos', termoEventosRoutes);
 
 
 // Catch-all para servir a página de login do admin quando uma rota /admin/... não for encontrada
