@@ -428,45 +428,96 @@ router.get('/dars/:darId', botAuthMiddleware, async (req, res) => {
     }
 
     const {
-  linha_digitavel,
-  valor,
-  data_vencimento,
-  mes_referencia,
-  ano_referencia,
-  codigo_barras,          // <— garanta que está sendo selecionado no SELECT
-  numero_documento        // (não use isso para converter!)
-} = ctx.dar;
+      id, linha_digitavel, valor, data_vencimento,
+      mes_referencia, ano_referencia, codigo_barras,
+      numero_documento, status
+    } = ctx.dar;
 
-let ld = (linha_digitavel || '').replace(/\D/g, '');
-if (!ld) {
-  const cb = (codigo_barras || '').replace(/\D/g, '');
-  if (cb) {
-    ld = codigoBarrasParaLinhaDigitavel(cb) || '';
-    if (ld) {
-      try {
-        await qRun('UPDATE dars SET linha_digitavel = ? WHERE id = ?', [ld, ctx.dar.id]);
-      } catch {}
+    // 1) tente converter a partir de codigo_barras (NÃO usar numero_documento)
+    let ld = (linha_digitavel || '').replace(/\D/g, '');
+    if (!ld) {
+      const cb = (codigo_barras || '').replace(/\D/g, '');
+      if (cb) {
+        ld = codigoBarrasParaLinhaDigitavel(cb) || '';
+        if (ld) {
+          try { await qRun('UPDATE dars SET linha_digitavel = ? WHERE id = ?', [ld, id]); } catch {}
+        }
+      }
     }
-  }
-}
 
-const competencia = `${String(mes_referencia).padStart(2, '0')}/${ano_referencia}`;
+    // 2) Se ainda não tem linha e a DAR não foi emitida, EMITE agora (auto-backfill)
+    if (!ld && !['Emitido','Reemitido'].includes(status)) {
+      let payload;
+      if (ctx.tipo === 'PERMISSIONARIO') {
+        payload = buildSefazPayloadPermissionario({
+          perm: { cnpj: ctx.contribuinte.cnpj, nome_empresa: ctx.contribuinte.nome },
+          darLike: {
+            id,
+            valor,
+            data_vencimento,
+            mes_referencia,
+            ano_referencia,
+            numero_documento // se existir
+          }
+        });
+      } else if (ctx.tipo === 'CLIENTE_EVENTO') {
+        payload = buildSefazPayloadEvento({
+          cliente: { cnpj: ctx.contribuinte.cnpj, nome_razao_social: ctx.contribuinte.nome },
+          parcela: {
+            id,
+            valor,
+            vencimento: data_vencimento,
+            competenciaMes: mes_referencia,
+            competenciaAno: ano_referencia
+          }
+        });
+      } else {
+        return res.status(404).json({ error: 'DAR sem contexto de emissão.' });
+      }
 
-return res.json({
-  ok: true,
-  dar: {
-    id: ctx.dar.id,
-    linha_digitavel: ld || null,
-    competencia,
-    vencimento: data_vencimento,
-    valor
-  }
-});
+      const sefazResp = await emitirGuiaSefaz(payload);
+      if (!sefazResp || !sefazResp.numeroGuia || !sefazResp.pdfBase64) {
+        throw new Error('Retorno da SEFAZ incompleto (numeroGuia/pdfBase64).');
+      }
+
+      const cbNew = (sefazResp.codigoBarras || '').replace(/\D/g, '');
+      const ldNew =
+        (sefazResp.linhaDigitavel && sefazResp.linhaDigitavel.replace(/\D/g, '')) ||
+        (cbNew ? (codigoBarrasParaLinhaDigitavel(cbNew) || '') : '');
+
+      // Atualiza banco (prioriza novos dados)
+      await qRun(
+        `UPDATE dars
+           SET numero_documento = ?,
+               pdf_url = ?,
+               codigo_barras = COALESCE(?, codigo_barras),
+               linha_digitavel = COALESCE(?, linha_digitavel),
+               status = 'Emitido'
+         WHERE id = ?`,
+        [sefazResp.numeroGuia, sefazResp.pdfBase64, cbNew || null, ldNew || null, id]
+      );
+
+      ld = ldNew;
+    }
+
+    // 3) Monta resposta final
+    const competencia = `${String(mes_referencia).padStart(2, '0')}/${ano_referencia}`;
+    return res.json({
+      ok: true,
+      dar: {
+        id,
+        linha_digitavel: ld || null,
+        competencia,
+        vencimento: data_vencimento,
+        valor
+      }
+    });
   } catch (err) {
     console.error('[BOT][DAR] erro:', err, err?.detail);
     return res.status(500).json({ error: 'Erro interno.' });
   }
 });
+
 
 /**
  * GET /api/bot/dars/:darId/pdf?msisdn=55XXXXXXXXXXX
