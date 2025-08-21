@@ -1,4 +1,6 @@
 // src/api/portalAssinaturaRoutes.js
+// Rotas do Portal relacionadas a Termo + Assinafy (upload, meta, assignment e open/stream do PDF)
+
 require('dotenv').config();
 
 const express = require('express');
@@ -13,10 +15,11 @@ const authorizeRole = require('../middleware/roleMiddleware');
 
 const {
   uploadPdf,
-  createSigner,
+  ensureSigner,
   requestSignatures,
   getDocumentStatus,
   pickSigningUrl,
+  unwrap,
 } = require('../services/assinafyClient');
 
 const portalEventosAssinaturaRouter  = express.Router();
@@ -36,7 +39,6 @@ const httpsAgent = new https.Agent({
 
 const API_KEY = (process.env.ASSINAFY_API_KEY || '').trim();
 const ACCESS_TOKEN = (process.env.ASSINAFY_ACCESS_TOKEN || '').trim();
-
 function apiHeaders() {
   const h = {};
   if (API_KEY) { h['X-Api-Key'] = API_KEY; h['X-API-KEY'] = API_KEY; h['x-api-key'] = API_KEY; }
@@ -59,21 +61,19 @@ async function assertEventoDoCliente(eventoId, clienteId) {
 }
 
 async function findTermoDocumento(eventoId) {
-  return await dbGet(
-    `SELECT * FROM documentos
+  return await dbGet(`
+    SELECT * FROM documentos
      WHERE evento_id = ? AND (tipo = 'termo_evento' OR tipo = 'termo')
-     ORDER BY id DESC`,
-    [eventoId]
-  );
+     ORDER BY id DESC
+  `, [eventoId]);
 }
 
 async function getClienteEvento(clienteId) {
-  return await dbGet(
-    `SELECT id, nome_razao_social, email, telefone, documento
-       FROM Clientes_Eventos
-      WHERE id = ?`,
-    [clienteId]
-  );
+  return await dbGet(`
+    SELECT id, nome_razao_social, email, telefone, documento
+      FROM Clientes_Eventos
+     WHERE id = ?
+  `, [clienteId]);
 }
 
 // ------------------------------------------------------------------
@@ -94,7 +94,7 @@ portalEventosAssinaturaRouter.get(
       if (doc.pdf_public_url) out.pdf_public_url = doc.pdf_public_url;
       if (doc.assinafy_id)   out.url_visualizacao = `/api/documentos/assinafy/${encodeURIComponent(doc.assinafy_id)}/open`;
       if (!out.pdf_public_url && !out.url_visualizacao && doc.pdf_url && fs.existsSync(doc.pdf_url)) {
-        out.pdf_url = doc.pdf_url;
+        out.pdf_url = doc.pdf_url; // requer que você sirva esse caminho como estático, se quiser usar
       }
       if (!out.pdf_public_url && !out.url_visualizacao && !out.pdf_url) {
         return res.status(409).json({ error: 'Termo ainda não disponível.' });
@@ -107,8 +107,8 @@ portalEventosAssinaturaRouter.get(
 );
 
 // ------------------------------------------------------------------
-// 2) Iniciar assinatura: faz upload (se preciso), cria signer e assignment,
-//    e devolve a URL de assinatura para abrir em nova aba.
+// 2) Iniciar assinatura: upload (se faltar), criar/usar signer, criar assignment,
+//    e devolver a URL de assinatura
 // ------------------------------------------------------------------
 portalEventosAssinaturaRouter.post(
   '/:id/termo/assinafy/link',
@@ -120,40 +120,37 @@ portalEventosAssinaturaRouter.post(
     try {
       await assertEventoDoCliente(eventoId, req.user.id);
 
-      // 2.1 termo
       let doc = await findTermoDocumento(eventoId);
       if (!doc) return res.status(409).json({ error: 'PDF do termo não encontrado.' });
-
       if (!doc.pdf_url || !fs.existsSync(doc.pdf_url)) {
         return res.status(409).json({ error: 'PDF do termo não encontrado no servidor.' });
       }
 
-      // 2.2 upload se ainda não tem assinafy_id
+      // Upload caso ainda não tenha assinafy_id
       let assinafyId = doc.assinafy_id;
       if (!assinafyId) {
         const buffer   = fs.readFileSync(doc.pdf_url);
         const fileName = path.basename(doc.pdf_url);
-        const up = await uploadPdf(buffer, fileName, { name: fileName });
+        const up = await uploadPdf(buffer, fileName, { name: fileName }); // up já desembrulhado
         assinafyId = up?.id;
         if (!assinafyId) return res.status(502).json({ error: 'Falha ao enviar documento à Assinafy.' });
         await dbRun(`UPDATE documentos SET assinafy_id = ?, status = ? WHERE id = ?`, [assinafyId, 'uploaded', doc.id]);
       }
 
-      // 2.3 dados do cliente para o signer
+      // Dados do cliente -> signer
       const cliente = await getClienteEvento(req.user.id);
       if (!cliente || !cliente.email) return res.status(409).json({ error: 'Cliente sem e-mail cadastrado.' });
 
-      const signer = await createSigner({
+      const signer = await ensureSigner({
         full_name:     cliente.nome_razao_social || 'Cliente',
         email:         cliente.email,
-        government_id: (cliente.documento || '').replace(/\D/g, '').slice(0, 14) || undefined,
-        phone:         (cliente.telefone || '').replace(/\D/g, '') || undefined,
+        government_id: cliente.documento,
+        phone:         cliente.telefone,
       });
 
       const signerId = signer?.id;
-      if (!signerId) return res.status(502).json({ error: 'Falha ao criar signatário na Assinafy.' });
+      if (!signerId) return res.status(502).json({ error: 'Falha ao criar/localizar signatário na Assinafy.' });
 
-      // 2.4 assignment (pedido de assinatura)
       const assign = await requestSignatures(assinafyId, [signerId], {
         message: 'Por favor, assine o termo do evento.',
       }).catch(e => {
@@ -161,14 +158,13 @@ portalEventosAssinaturaRouter.post(
         throw e;
       });
 
-      // 2.5 tentar extrair link de assinatura do retorno OU da consulta ao documento
+      // Descobrir URL de assinatura do retorno ou do documento
       let url = pickSigningUrl(assign);
       if (!url) {
-        const docInfo = await getDocumentStatus(assinafyId).catch(()=>null);
+        const docInfo = await getDocumentStatus(assinafyId).catch(() => null);
         url = pickSigningUrl(docInfo) || null;
       }
       if (!url) {
-        // como último recurso, não devolvemos o /open (é apenas visualização do PDF)
         return res.status(502).json({ error: 'Assignment criado, mas não foi possível obter o link de assinatura.' });
       }
 
@@ -186,7 +182,7 @@ portalEventosAssinaturaRouter.post(
 documentosAssinafyPublicRouter.get('/documentos/assinafy/:id/open', async (req, res) => {
   const id = req.params.id;
   try {
-    const info = await getDocumentStatus(id);
+    const info = unwrap(await getDocumentStatus(id));
     const artifacts = info?.artifacts || {};
     const fileUrl = artifacts.certificated || artifacts.original;
     if (!fileUrl) return res.status(404).send('Documento sem artefato disponível.');
