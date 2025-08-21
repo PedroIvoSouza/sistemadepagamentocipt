@@ -17,7 +17,7 @@ router.get('/', (req, res) => {
         SELECT
             e.id,
             e.nome_evento,
-            e.espaco_utilizado,
+            e.espaco_utilizado AS espacos_utilizados,
             e.area_m2,
             e.status,
             e.valor_final,
@@ -40,6 +40,14 @@ router.get('/', (req, res) => {
             console.error("Erro ao listar eventos:", err.message);
             return res.status(500).json({ error: 'Erro interno no servidor.' });
         }
+        rows = rows.map(r => {
+            try {
+                r.espacos_utilizados = JSON.parse(r.espacos_utilizados || '[]');
+            } catch {
+                r.espacos_utilizados = [];
+            }
+            return r;
+        });
         res.json(rows);
     });
 });
@@ -51,7 +59,7 @@ router.post('/', async (req, res) => {
         idCliente,
         nomeEvento,
         numeroOficioSei,
-        espacoUtilizado,
+        espacosUtilizados,
         areaM2,
         datasEvento, // Espera um array de strings de data: ["2025-10-20", "2025-10-21"]
         tipoDescontoAuto, // 'Geral', 'Governo', 'Permissionario'
@@ -102,7 +110,7 @@ router.post('/', async (req, res) => {
             const eventoParams = [
                 idCliente,
                 nomeEvento,
-                espacoUtilizado || null,
+                JSON.stringify(espacosUtilizados || []),
                 areaM2 || null,
                 datasEvento.join(','),
                 dataVigenciaFinal,
