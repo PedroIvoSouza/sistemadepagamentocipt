@@ -229,20 +229,26 @@
             document.getElementById(`sig-status-${eventoId}`).textContent = '';
 
             try{
-              // dispara criação/garantia de assignment
+              // solicita ao servidor o link de assinatura
               const r = await fetch(`/api/portal/eventos/${eventoId}/termo/assinafy/link`, { method:'POST', headers });
               const j = await r.json().catch(()=> ({}));
+
+              if (r.status === 409) {
+                writeWait('<p style="font:14px/1.4 sans-serif">O termo ainda não foi disponibilizado para assinatura.</p>');
+                document.getElementById(`sig-status-${eventoId}`).textContent = 'Termo ainda não disponível para assinatura.';
+                try{ w.close(); }catch{}
+                return;
+              }
 
               // se já vier url — abre na hora
               if (r.ok && j.url) {
                 writeWait('<p style="font:14px/1.4 sans-serif">Redirecionando para a Assinafy…</p>');
                 w.location = j.url;
                 document.getElementById(`sig-status-${eventoId}`).textContent = 'Assinatura iniciada…';
-              } else {
-                // mostra mensagem e faz polling por alguns segundos
-                writeWait('<p style="font:14px/1.4 sans-serif">Convite enviado. Aguardando link de assinatura…</p>');
-                document.getElementById(`sig-status-${eventoId}`).textContent =
-                  'Convite enviado por e-mail. Tentando abrir o link automaticamente…';
+              } else if (r.ok && j.pending) {
+                // mostra mensagem amigável e faz polling por alguns segundos
+                writeWait(`<p style="font:14px/1.4 sans-serif">${j.message || 'Convite enviado. Aguardando link de assinatura…'}</p>`);
+                document.getElementById(`sig-status-${eventoId}`).textContent = j.message || 'Convite enviado. Aguardando link…';
 
                 let opened = false;
                 for (let i=0;i<6;i++){
@@ -259,6 +265,10 @@
                 if (!opened) {
                   writeWait('<p style="font:14px/1.4 sans-serif">O link direto ainda não foi gerado. Verifique seu e-mail para assinar.</p>');
                 }
+              } else {
+                writeWait('<p style="font:14px/1.4 sans-serif">Falha ao iniciar assinatura.</p>');
+                alert(j.error || 'Falha ao iniciar assinatura.');
+                try{ w.close(); }catch{}
               }
             }catch(err){
               writeWait('<p style="font:14px/1.4 sans-serif">Falha ao iniciar. Tente novamente em instantes.</p>');
