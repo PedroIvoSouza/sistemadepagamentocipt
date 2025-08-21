@@ -176,7 +176,7 @@ router.get('/documentos/assinafy/:id/open', async (req, res) => {
   try {
     const info = await getDocument(id);
     const artifacts = info?.artifacts || {};
-    const fileUrl = artifacts.certificated || artifacts.original;
+    const fileUrl = artifacts.certified || artifacts.original;
     if (!fileUrl) return res.status(404).send('Documento sem artefato disponível.');
 
     const r = await axios.request({

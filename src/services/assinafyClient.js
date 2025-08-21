@@ -124,7 +124,7 @@ async function getDocumentStatus(id) {
 }
 
 async function downloadSignedPdf(id) {
-  const u = `/documents/${encodeURIComponent(id)}/artifacts/certificated`;
+  const u = `/documents/${encodeURIComponent(id)}/artifacts/certified`;
   const r = await axStream().get(u);
   if (DEBUG) console.log('[ASSINAFY][GET]', BASE + u, r.status);
   if (r.status >= 200 && r.status < 300) {
