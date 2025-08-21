@@ -15,7 +15,7 @@ const {
 } = require('../services/assinafyService');
 
 // CORRIGIDO: Nome da função para corresponder ao que é exportado pelo serviço.
-const { gerarTermoEventoPdfEIndexar } = require('../services/termoEventoPdfkitService');
+const { gerarTermoEventoPdfkitEIndexar } = require('../services/termoEventoPdfkitService');
 
 const fs = require('fs');
 const db = require('../database/db');
@@ -426,7 +426,6 @@ router.get('/:id/termo', async (req, res) => {
   res.setHeader('X-Doc-Resolved', resolved);
 
   try {
-    const { gerarTermoEventoPdfkitEIndexar } = require('../services/termoEventoPdfkitService');
     const out = await gerarTermoEventoPdfkitEIndexar(id);
 
     const stat = fs.statSync(out.filePath);
