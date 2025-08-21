@@ -18,6 +18,7 @@ const {
 const { gerarTermoEventoPdfkitEIndexar } = require('../services/termoEventoPdfkitService');
 
 const fs = require('fs');
+const path = require('path');
 const db = require('../database/db');
 
 const router = express.Router();
@@ -448,6 +449,22 @@ router.get('/:id/termo', async (req, res) => {
   res.setHeader('X-Doc-Resolved', resolved);
 
   try {
+    const docAssinado = await dbGet(
+      `SELECT signed_pdf_public_url FROM documentos WHERE evento_id = ? AND tipo = 'termo_evento' ORDER BY id DESC LIMIT 1`,
+      [id],
+      'termo/check-signed'
+    );
+    if (docAssinado?.signed_pdf_public_url) {
+      const filePath = path.join(
+        process.cwd(),
+        'public',
+        docAssinado.signed_pdf_public_url.replace(/^\/+/, '')
+      );
+      if (fs.existsSync(filePath)) {
+        return res.sendFile(filePath);
+      }
+    }
+
     const out = await gerarTermoEventoPdfkitEIndexar(id);
 
     const stat = fs.statSync(out.filePath);
