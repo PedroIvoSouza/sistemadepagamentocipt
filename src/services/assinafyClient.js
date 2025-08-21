@@ -5,14 +5,14 @@ const axios = require('axios');
 const https = require('https');
 const FormData = require('form-data');
 
-const DEBUG   = String(process.env.ASSINAFY_DEBUG || '') === '1';
-const TIMEOUT = Number(process.env.ASSINAFY_TIMEOUT_MS || 90000);
+const DEBUG    = String(process.env.ASSINAFY_DEBUG || '') === '1';
+const TIMEOUT  = Number(process.env.ASSINAFY_TIMEOUT_MS || 90_000);
 
-const API_KEY     = (process.env.ASSINAFY_API_KEY || '').trim();
-const ACCESS_TOKEN = (process.env.ASSINAFY_ACCESS_TOKEN || '').trim();
-const ACCOUNT_ID  = (process.env.ASSINAFY_ACCOUNT_ID || '').trim();
-const BASE        = (process.env.ASSINAFY_API_BASE || 'https://api.assinafy.com.br/v1').replace(/\/+$/, '');
-const INSECURE    = String(process.env.ASSINAFY_INSECURE || '') === '1';
+const API_KEY       = (process.env.ASSINAFY_API_KEY || '').trim();
+const ACCESS_TOKEN  = (process.env.ASSINAFY_ACCESS_TOKEN || '').trim();
+const ACCOUNT_ID    = (process.env.ASSINAFY_ACCOUNT_ID || '').trim();
+const BASE          = (process.env.ASSINAFY_API_BASE || 'https://api.assinafy.com.br/v1').replace(/\/+$/, '');
+const INSECURE      = String(process.env.ASSINAFY_INSECURE || '') === '1';
 
 if (!ACCOUNT_ID) {
   console.warn('[ASSINAFY] AVISO: ASSINAFY_ACCOUNT_ID vazio — chamadas que dependem dele irão falhar.');
@@ -24,10 +24,17 @@ const httpsAgent = new https.Agent({
   rejectUnauthorized: !INSECURE,
 });
 
+// -----------------------------------------------------------------------------
+// Helpers
+// -----------------------------------------------------------------------------
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
 function authHeaders() {
   const h = {};
   if (API_KEY) {
-    // alguns gateways são sensíveis ao case — mande tudo
+    // alguns gateways são sensíveis ao case — mande todas
     h['X-Api-Key'] = API_KEY;
     h['X-API-KEY'] = API_KEY;
     h['x-api-key'] = API_KEY;
@@ -64,7 +71,9 @@ function axStream() {
   });
 }
 
-// ------------------------- Upload de PDF -------------------------
+// -----------------------------------------------------------------------------
+// Upload de PDF
+// -----------------------------------------------------------------------------
 async function uploadPdf(pdfBuffer, filename = 'documento.pdf', extra = {}) {
   if (!ACCOUNT_ID) throw new Error('ASSINAFY_ACCOUNT_ID não configurado.');
   if (!pdfBuffer || !Buffer.isBuffer(pdfBuffer)) throw new Error('pdfBuffer inválido.');
@@ -77,7 +86,8 @@ async function uploadPdf(pdfBuffer, filename = 'documento.pdf', extra = {}) {
       form.append(k, typeof v === 'boolean' ? String(v) : String(v));
     }
   }
-  const url = `/accounts/${ACCOUNT_ID}/documents`;
+
+  const url = `/accounts/${ACCOUNT_ID}/documents`; // criação é por conta
   if (DEBUG) console.log('[ASSINAFY][POST]', BASE + url, 'multipart/form-data');
 
   const resp = await axios.request({
@@ -102,7 +112,9 @@ async function uploadPdf(pdfBuffer, filename = 'documento.pdf', extra = {}) {
   throw new Error(`Falha no envio. HTTP ${resp.status}`);
 }
 
-// ------------------------- Documento -------------------------
+// -----------------------------------------------------------------------------
+// Documento
+// -----------------------------------------------------------------------------
 async function getDocument(documentId) {
   const u = `/documents/${encodeURIComponent(documentId)}`;
   const r = await axJson().get(u);
@@ -123,22 +135,41 @@ async function getDocumentStatus(id) {
   throw err;
 }
 
-async function downloadSignedPdf(id) {
-  const u = `/documents/${encodeURIComponent(id)}/artifacts/certified`;
-  const r = await axStream().get(u);
+// Baixa artefatos do documento (original, certificated, certificate-page, bundle)
+async function downloadArtifact(documentId, artifactName = 'certificated') {
+  const u = `/documents/${encodeURIComponent(documentId)}/download/${encodeURIComponent(artifactName)}`;
+  const r = await axios.request({
+    method: 'GET',
+    url: BASE + u,
+    responseType: 'stream',
+    httpsAgent,
+    headers: { ...authHeaders(), Accept: 'application/pdf', Connection: 'close' },
+    validateStatus: () => true,
+    maxRedirects: 5,
+    proxy: false,
+    timeout: TIMEOUT,
+  });
   if (DEBUG) console.log('[ASSINAFY][GET]', BASE + u, r.status);
   if (r.status >= 200 && r.status < 300) {
     const chunks = [];
     for await (const chunk of r.data) chunks.push(chunk);
     return Buffer.concat(chunks);
   }
-  const err = new Error(`Erro ao baixar artefato (HTTP ${r.status})`);
+  const err = new Error(`Erro ao baixar artefato "${artifactName}" (HTTP ${r.status})`);
   err.response = r;
   throw err;
 }
 
+// Conveniência específica para baixar o PDF certificado
+async function downloadSignedPdf(id) {
+  return downloadArtifact(id, 'certificated'); // nome correto do artefato
+}
+
+// -----------------------------------------------------------------------------
+// Assignments (preparar documento para assinatura)
+// -----------------------------------------------------------------------------
 async function listAssignments(documentId) {
-  const u = `/accounts/${ACCOUNT_ID}/documents/${encodeURIComponent(documentId)}/assignments`;
+  const u = `/documents/${encodeURIComponent(documentId)}/assignments`;
   try {
     const r = await axJson().get(u);
     if (DEBUG) console.log('[ASSINAFY][GET]', BASE + u, r.status);
@@ -167,7 +198,37 @@ async function getBestSigningUrl(documentId) {
   return null;
 }
 
-// ------------------------- Signatário -------------------------
+// Cria assignment (virtual) — isto "prepara" o documento para assinatura
+async function createAssignment(documentId, signerId, opts = {}) {
+  if (!documentId || !signerId) throw new Error('documentId e signerId são obrigatórios.');
+
+  // Endpoint correto para assignments fica sob /documents/:id/assignments
+  const u = `/documents/${encodeURIComponent(documentId)}/assignments`;
+  const body = { method: 'virtual', signerIds: [signerId], ...opts };
+
+  const r = await axJson().post(u, body);
+  if (DEBUG) console.log('[ASSINAFY][POST]', BASE + u, r.status);
+
+  if (r.status >= 200 && r.status < 300) return r.data;
+
+  const msg = r.data?.message || r.data?.error || '';
+  // se já está pendente, tratamos como ok/idempotente
+  if (r.status === 400 && /pending_signature/i.test(msg)) {
+    const link = await getBestSigningUrl(documentId);
+    return { pending: true, email_sent: true, url: link || null };
+  }
+  // se já existe assignment, tratamos como ok
+  if (r.status === 409 || /already.*assignment/i.test(msg)) {
+    const link = await getBestSigningUrl(documentId);
+    return { reused: true, url: link || null };
+  }
+
+  throw new Error(r.data?.message || `Falha ao criar assignment (HTTP ${r.status}).`);
+}
+
+// -----------------------------------------------------------------------------
+// Signatário
+// -----------------------------------------------------------------------------
 async function createSigner({ full_name, email, government_id, phone }) {
   if (!ACCOUNT_ID) throw new Error('ASSINAFY_ACCOUNT_ID não configurado.');
   if (!full_name || !email) throw new Error('full_name e email são obrigatórios.');
@@ -216,47 +277,55 @@ async function ensureSigner({ full_name, email, government_id, phone }) {
   }
 }
 
-// ------------------------- Assignment -------------------------
-async function createAssignment(documentId, signerId, opts = {}) {
-  if (!documentId || !signerId) throw new Error('documentId e signerId são obrigatórios.');
-
-  const u = `/accounts/${ACCOUNT_ID}/documents/${encodeURIComponent(documentId)}/assignments`;
-  const bodies = [
-    { method: 'virtual', signerIds: [signerId], ...opts },
-    { method: 'virtual', signer_ids: [signerId], ...opts },
-    { method: 'virtual', signers: [signerId], ...opts },
-  ];
-
-  for (const body of bodies) {
-    const r = await axJson().post(u, body);
-    if (DEBUG) console.log('[ASSINAFY][POST]', BASE + u, r.status);
-    if (r.status >= 200 && r.status < 300) return r.data;
-
-    const msg = r.data?.message || '';
-    // se já está pendente, tratamos como ok/idempotente
-    if (r.status === 400 && /pending_signature/i.test(msg)) {
-      const link = await getBestSigningUrl(documentId);
-      return { pending: true, email_sent: true, url: link || null };
+// -----------------------------------------------------------------------------
+// Polling de status (opcional, recomendado)
+// -----------------------------------------------------------------------------
+/**
+ * Aguarda até que o documento atinja um status-alvo.
+ * Ex.: await waitForStatus(docId, s => s === 'pending_signature' || s === 'certificated')
+ */
+async function waitForStatus(documentId, isDone, { intervalMs = 2000, maxMs = 120000 } = {}) {
+  const start = Date.now();
+  while (true) {
+    const d = await getDocumentStatus(documentId);
+    const status = d?.data?.status || d?.status || d?.data?.data?.status;
+    if (DEBUG) console.log('[ASSINAFY][STATUS]', documentId, status);
+    if (isDone(status)) return status;
+    if (Date.now() - start > maxMs) {
+      throw new Error(`Timeout aguardando status; último: ${status}`);
     }
-    // se já existe assignment, tratamos como ok
-    if (r.status === 409 || /already.*assignment/i.test(msg)) {
-      const link = await getBestSigningUrl(documentId);
-      return { reused: true, url: link || null };
-    }
+    await sleep(intervalMs);
   }
-
-  throw new Error('Falha ao criar assignment.');
 }
 
+// Conveniência: garante assignment e espera ficar “pendente” ou “certificado”
+async function prepareAndWait(documentId, signerId, opts = {}) {
+  await createAssignment(documentId, signerId, opts);
+  return waitForStatus(documentId, (s) => s === 'pending_signature' || s === 'certificated');
+}
+
+// -----------------------------------------------------------------------------
+// Exports
+// -----------------------------------------------------------------------------
 module.exports = {
+  // upload / documento
   uploadPdf,
   getDocument,
+  getDocumentStatus,
+  downloadArtifact,
+  downloadSignedPdf,
+
+  // assignments
   listAssignments,
   getBestSigningUrl,
-  getDocumentStatus,
-  downloadSignedPdf,
+  createAssignment,
+
+  // signers
   createSigner,
   findSignerByEmail,
   ensureSigner,
-  createAssignment,
+
+  // helpers
+  waitForStatus,
+  prepareAndWait,
 };
