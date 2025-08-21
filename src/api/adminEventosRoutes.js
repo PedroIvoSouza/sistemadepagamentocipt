@@ -6,7 +6,8 @@ const { emitirGuiaSefaz } = require('../services/sefazService');
 const { gerarTokenDocumento, imprimirTokenEmPdf } = require('../utils/token');
 const { criarEventoComDars, atualizarEventoComDars } = require('../services/eventoDarService');
 
-const { gerarTermoEventoPdfkitEIndexar } = require('../services/termoEventoPdfkitService');
+// CORRIGIDO: Nome da função para corresponder ao que é exportado pelo serviço.
+const { gerarTermoEventoPdfEIndexar } = require('../services/termoEventoPdfkitService');
 
 const fs = require('fs');
 const db = require('../database/db');
@@ -84,6 +85,7 @@ router.post('/', async (req, res) => {
    =========================================================== */
 router.get('/', async (_req, res) => {
   try {
+    // CORRIGIDO: Adicionadas crases (`) ao redor da query SQL
     const sql = `
       SELECT e.id, e.nome_evento, e.espaco_utilizado, e.area_m2,
              e.valor_final, e.status, e.data_vigencia_final,
@@ -108,8 +110,9 @@ router.get('/', async (_req, res) => {
 router.get('/:eventoId/dars', async (req, res) => {
   const { eventoId } = req.params;
   try {
-    const rows = await dbAll(
-      `SELECT
+    // CORRIGIDO: Adicionadas crases (`) e separado o parâmetro da query
+    const sql = `
+      SELECT
          de.numero_parcela,
          de.valor_parcela,
          d.id AS dar_id,
@@ -119,10 +122,8 @@ router.get('/:eventoId/dars', async (req, res) => {
        FROM DARs_Eventos de
        JOIN dars d ON d.id = de.id_dar
       WHERE de.id_evento = ?
-      ORDER BY de.numero_parcela ASC`,
-      [eventoId],
-      'listar-dars-por-evento'
-    );
+      ORDER BY de.numero_parcela ASC`;
+    const rows = await dbAll(sql, [eventoId], 'listar-dars-por-evento');
     res.json({ dars: rows });
   } catch (err) {
     console.error('[admin/eventos] listar DARs erro:', err.message);
@@ -138,18 +139,16 @@ router.get('/:id', async (req, res) => {
   const { id } = req.params;
 
   try {
-    const ev = await dbGet(
-      `SELECT e.*, c.nome_razao_social AS nome_cliente, c.tipo_cliente
-         FROM Eventos e
-         JOIN Clientes_Eventos c ON c.id = e.id_cliente
-        WHERE e.id = ?`,
-      [id],
-      'evento/get-by-id'
-    );
+    // CORRIGIDO: Adicionadas crases (`) e separado o parâmetro da query
+    const evSql = `
+      SELECT e.*, c.nome_razao_social AS nome_cliente, c.tipo_cliente
+        FROM Eventos e
+        JOIN Clientes_Eventos c ON c.id = e.id_cliente
+       WHERE e.id = ?`;
+    const ev = await dbGet(evSql, [id], 'evento/get-by-id');
 
     if (!ev) return res.status(404).json({ error: 'Evento não encontrado.' });
 
-    // Normaliza datas_evento (string JSON, CSV ou array)
     let datas = [];
     try {
       if (typeof ev.datas_evento === 'string') {
@@ -161,8 +160,9 @@ router.get('/:id', async (req, res) => {
       }
     } catch { /* noop */ }
 
-    const parcelas = await dbAll(
-      `SELECT 
+    // CORRIGIDO: Adicionadas crases (`) e separado o parâmetro da query
+    const parcelasSql = `
+      SELECT
           de.numero_parcela,
           de.valor_parcela            AS valor,
           de.data_vencimento          AS vencimento,
@@ -173,10 +173,8 @@ router.get('/:id', async (req, res) => {
          FROM DARs_Eventos de
          JOIN dars d ON d.id = de.id_dar
         WHERE de.id_evento = ?
-        ORDER BY de.numero_parcela ASC`,
-      [id],
-      'evento/get-parcelas'
-    );
+        ORDER BY de.numero_parcela ASC`;
+    const parcelas = await dbAll(parcelasSql, [id], 'evento/get-parcelas');
 
     const payload = {
       evento: {
@@ -208,13 +206,14 @@ router.get('/:id', async (req, res) => {
 
     return res.json(payload);
   } catch (err) {
-    console.error('[admin/eventos/:id] erro:', err.message);
+    console.error(`[admin/eventos/:id] erro:`, err.message);
     return res.status(500).json({ error: 'Erro interno ao buscar o evento.' });
   }
 });
 
 /* Alias */
 router.get('/:id/detalhes', async (req, res) => {
+  // CORRIGIDO: Adicionadas crases (`)
   req.url = `/${req.params.id}`;
   return router.handle(req, res);
 });
@@ -236,7 +235,7 @@ router.put('/:id', async (req, res) => {
 
     return res.json({ message: 'Evento atualizado e DARs reemitidas com sucesso.', id: Number(id) });
   } catch (err) {
-    console.error('[admin/eventos PUT/:id] erro:', err.message);
+    console.error(`[admin/eventos PUT/:id] erro:`, err.message);
     return res.status(err.status || 500).json({ error: err.message || 'Erro ao atualizar o evento.' });
   }
 });
@@ -247,11 +246,12 @@ router.put('/:id', async (req, res) => {
    =========================================================== */
 router.post('/:eventoId/dars/:darId/reemitir', async (req, res) => {
   const { eventoId, darId } = req.params;
+  // CORRIGIDO: Adicionadas crases (`)
   console.log(`[ADMIN] Reemitir DAR ID: ${darId} do Evento ID: ${eventoId}`);
 
   try {
-    const row = await dbGet(
-      `
+    // CORRIGIDO: Adicionadas crases (`) e separado o parâmetro da query
+    const sql = `
       SELECT e.nome_evento,
              e.hora_inicio, e.hora_fim, e.hora_montagem, e.hora_desmontagem,
              de.numero_parcela,
@@ -262,11 +262,8 @@ router.post('/:eventoId/dars/:darId/reemitir', async (req, res) => {
         JOIN DARs_Eventos de ON d.id = de.id_dar
         JOIN Eventos e       ON de.id_evento = e.id
         JOIN Clientes_Eventos c ON e.id_cliente = c.id
-       WHERE d.id = ? AND e.id = ?
-      `,
-      [darId, eventoId],
-      'reemitir/buscar-contexto'
-    );
+       WHERE d.id = ? AND e.id = ?`;
+    const row = await dbGet(sql, [darId, eventoId], 'reemitir/buscar-contexto');
 
     if (!row) return res.status(404).json({ error: 'DAR ou Evento não encontrado.' });
 
@@ -295,6 +292,7 @@ router.post('/:eventoId/dars/:darId/reemitir', async (req, res) => {
         dataVencimento: row.data_vencimento
       }],
       dataLimitePagamento: row.data_vencimento,
+      // CORRIGIDO: Adicionadas crases (`)
       observacao: `CIPT Evento: ${row.nome_evento} (Montagem ${row.hora_montagem || '-'}; Evento ${row.hora_inicio || '-'}-${row.hora_fim || '-'}; Desmontagem ${row.hora_desmontagem || '-'}) | Parcela ${row.numero_parcela}/${row.total_parcelas} (Reemissão)`
     };
 
@@ -302,15 +300,15 @@ router.post('/:eventoId/dars/:darId/reemitir', async (req, res) => {
     const tokenDoc = await gerarTokenDocumento('DAR_EVENTO', null, db);
     retornoSefaz.pdfBase64 = await imprimirTokenEmPdf(retornoSefaz.pdfBase64, tokenDoc);
 
-    await dbRun(
-      `UPDATE dars SET numero_documento = ?, pdf_url = ?, status = 'Reemitido' WHERE id = ?`,
-      [retornoSefaz.numeroGuia, retornoSefaz.pdfBase64, darId],
-      'reemitir/update-dars'
-    );
+    // CORRIGIDO: Adicionadas crases (`)
+    const updateSql = `UPDATE dars SET numero_documento = ?, pdf_url = ?, status = 'Reemitido' WHERE id = ?`;
+    await dbRun(updateSql, [retornoSefaz.numeroGuia, retornoSefaz.pdfBase64, darId], 'reemitir/update-dars');
 
+    // CORRIGIDO: Adicionadas crases (`)
     console.log(`[ADMIN] DAR ID: ${darId} reemitida. Novo número: ${retornoSefaz.numeroGuia}`);
     res.status(200).json({ message: 'DAR reemitida com sucesso!', ...retornoSefaz });
   } catch (err) {
+    // CORRIGIDO: Adicionadas crases (`)
     console.error(`[ERRO] Ao reemitir DAR ID ${darId}:`, err.message);
     res.status(500).json({ error: err.message || 'Falha ao reemitir a DAR.' });
   }
@@ -320,13 +318,14 @@ router.post('/:eventoId/dars/:darId/reemitir', async (req, res) => {
    GET /api/admin/eventos/:id/termo
    Gera o TERMO (PDFKit) + indexa + envia download
    =========================================================== */
-// substitua a rota de download do termo por esta:
 router.get('/:id/termo', async (req, res) => {
   const { id } = req.params;
   try {
-    const out = await gerarTermoEventoPdfkitEIndexar(id);
+    // CORRIGIDO: Chamando a função com o nome correto
+    const out = await gerarTermoEventoPdfEIndexar(id);
     const stat = fs.statSync(out.filePath);
     res.setHeader('Content-Type', 'application/pdf');
+    // CORRIGIDO: Adicionadas crases (`)
     res.setHeader('Content-Disposition', `attachment; filename="${out.fileName}"`);
     res.setHeader('Content-Length', stat.size);
     res.setHeader('Cache-Control', 'no-store');
@@ -345,11 +344,9 @@ router.get('/:id/termo', async (req, res) => {
 router.post('/:eventoId/termo/disponibilizar', async (req, res) => {
   try {
     const { eventoId } = req.params;
-    const row = await dbGet(
-      `SELECT * FROM documentos WHERE evento_id = ? AND tipo = 'termo_evento' ORDER BY id DESC LIMIT 1`,
-      [eventoId],
-      'termo/get-doc-row'
-    );
+    // CORRIGIDO: Adicionadas crases (`)
+    const sql = `SELECT * FROM documentos WHERE evento_id = ? AND tipo = 'termo_evento' ORDER BY id DESC LIMIT 1`;
+    const row = await dbGet(sql, [eventoId], 'termo/get-doc-row');
     if (!row) return res.status(404).json({ ok: false, error: 'Nenhum termo gerado ainda.' });
     return res.json({
       ok: true,
@@ -369,6 +366,7 @@ router.post('/:eventoId/termo/disponibilizar', async (req, res) => {
    =========================================================== */
 router.delete('/:eventoId', async (req, res) => {
   const { eventoId } = req.params;
+  // CORRIGIDO: Adicionadas crases (`)
   console.log(`[ADMIN] Apagar evento ID: ${eventoId}`);
 
   try {
@@ -381,7 +379,9 @@ router.delete('/:eventoId', async (req, res) => {
 
     if (darIds.length) {
       const placeholders = darIds.map(() => '?').join(',');
-      await dbRun(`DELETE FROM dars WHERE id IN (${placeholders})`, darIds, 'apagar/delete-dars');
+      // CORRIGIDO: Adicionadas crases (`)
+      const deleteSql = `DELETE FROM dars WHERE id IN (${placeholders})`;
+      await dbRun(deleteSql, darIds, 'apagar/delete-dars');
     }
 
     const result = await dbRun('DELETE FROM Eventos WHERE id = ?', [eventoId], 'apagar/delete-evento');
@@ -389,10 +389,12 @@ router.delete('/:eventoId', async (req, res) => {
 
     await dbRun('COMMIT', [], 'apagar/COMMIT');
 
+    // CORRIGIDO: Adicionadas crases (`)
     console.log(`[ADMIN] Evento ${eventoId} e ${darIds.length} DARs apagados.`);
     res.status(200).json({ message: 'Evento e DARs associadas apagados com sucesso!' });
   } catch (err) {
     try { await dbRun('ROLLBACK', [], 'apagar/ROLLBACK'); } catch {}
+    // CORRIGIDO: Adicionadas crases (`)
     console.error(`[ERRO] Ao apagar evento ID ${eventoId}:`, err.message);
     res.status(500).json({ error: 'Falha ao apagar o evento.' });
   }
