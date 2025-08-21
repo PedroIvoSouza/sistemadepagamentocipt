@@ -1,11 +1,14 @@
 // src/api/portalAssinaturaRoutes.js
-// Rotas do Portal relacionadas a Termo + Assinafy (upload, meta e open/stream do PDF)
-// - POST   /api/portal/eventos/:id/termo/assinafy/link   (CLIENTE_EVENTO) -> cria/usa doc no Assinafy e devolve URL para abrir
-// - GET    /api/portal/eventos/:id/termo/meta            (CLIENTE_EVENTO) -> metadados do termo (URL pública/visualização)
-// - GET    /api/documentos/assinafy/:id/open             (PUBLIC)         -> faz proxy/stream do artefato (original/certificado)
-// - GET    /api/documentos/assinafy/:id/status           (ADMIN opcional) -> status bruto (debug)
+// Rotas do Portal + Assinafy
+// - MONTADO EM: app.use('/api/portal/eventos', portalEventosAssinaturaRouter)
+//     • GET  /:id/termo/meta
+//     • POST /:id/termo/assinafy/link
+// - MONTADO EM: app.use('/api', documentosAssinafyPublicRouter)
+//     • GET  /documentos/assinafy/:id/open
+//     • GET  /documentos/assinafy/:id/status
 
 require('dotenv').config();
+
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
@@ -13,17 +16,18 @@ const https = require('https');
 const sqlite3 = require('sqlite3').verbose();
 const axios = require('axios');
 
-// middlewares existentes do projeto
+// Middlewares do projeto
 const authMiddleware = require('../middleware/authMiddleware');
 const authorizeRole = require('../middleware/roleMiddleware');
 
-// client Assinafy (já criado anteriormente)
+// Cliente Assinafy
 const { uploadPdf, getDocumentStatus } = require('../services/assinafyClient');
 
 // ----------------------------------------------------------------------------
-// Config
+// Configuração e instâncias
 // ----------------------------------------------------------------------------
-const router = express.Router();
+const portalEventosAssinaturaRouter   = express.Router();
+const documentosAssinafyPublicRouter  = express.Router();
 
 const DB_PATH = path.resolve(process.cwd(), process.env.SQLITE_STORAGE || './sistemacipt.db');
 const db = new sqlite3.Database(DB_PATH);
@@ -38,7 +42,7 @@ const ACCESS_TOKEN = (process.env.ASSINAFY_ACCESS_TOKEN || '').trim();
 function apiHeaders() {
   const h = {};
   if (API_KEY) {
-    // enviamos todas as variações de case, alguns gateways são sensíveis
+    // enviamos todas as variações de case — alguns gateways são sensíveis
     h['X-Api-Key'] = API_KEY;
     h['X-API-KEY'] = API_KEY;
     h['x-api-key'] = API_KEY;
@@ -52,7 +56,7 @@ const httpsAgent = new https.Agent({
 });
 
 // ----------------------------------------------------------------------------
-// Helpers DB
+/** Helpers DB */
 // ----------------------------------------------------------------------------
 const dbGet = (sql, params = []) =>
   new Promise((resolve, reject) => db.get(sql, params, (err, row) => (err ? reject(err) : resolve(row))));
@@ -67,7 +71,7 @@ const dbRun = (sql, params = []) =>
   );
 
 // ----------------------------------------------------------------------------
-// Verificações auxiliares
+/** Verificações auxiliares */
 // ----------------------------------------------------------------------------
 async function assertEventoDoCliente(eventoId, clienteId) {
   const row = await dbGet(`SELECT 1 FROM Eventos WHERE id = ? AND id_cliente = ?`, [eventoId, clienteId]);
@@ -94,11 +98,12 @@ async function findTermoDocumento(eventoId) {
   return doc;
 }
 
-// ----------------------------------------------------------------------------
-// 1) CLIENTE_EVENTO: metadados do termo (para Baixar Termo no front)
-// ----------------------------------------------------------------------------
-router.get(
-  '/portal/eventos/:id/termo/meta',
+// ============================================================================
+// 1) CLIENTE_EVENTO (montado em /api/portal/eventos)
+//    GET /:id/termo/meta  |  POST /:id/termo/assinafy/link
+// ============================================================================
+portalEventosAssinaturaRouter.get(
+  '/:id/termo/meta',
   authMiddleware,
   authorizeRole(['CLIENTE_EVENTO']),
   async (req, res) => {
@@ -113,13 +118,12 @@ router.get(
       if (doc.pdf_public_url) out.pdf_public_url = doc.pdf_public_url;
 
       if (doc.assinafy_id) {
+        // abrir via proxy local, montado em /api
         out.url_visualizacao = `/api/documentos/assinafy/${encodeURIComponent(doc.assinafy_id)}/open`;
       }
 
-      // como fallback, se existir pdf_url local e for legível, você pode expor por estático
+      // fallback — se existir pdf local, pode expor via estático (fora daqui)
       if (!out.pdf_public_url && !out.url_visualizacao && doc.pdf_url && fs.existsSync(doc.pdf_url)) {
-        // ATENÇÃO: exponha sua pasta de documentos via express.static em outro lugar,
-        // aqui devolvemos apenas um campo indicativo
         out.pdf_url = doc.pdf_url;
       }
 
@@ -134,11 +138,8 @@ router.get(
   }
 );
 
-// ----------------------------------------------------------------------------
-// 2) CLIENTE_EVENTO: criar/obter link de assinatura (upload no Assinafy, salvar assinafy_id)
-// ----------------------------------------------------------------------------
-router.post(
-  '/portal/eventos/:id/termo/assinafy/link',
+portalEventosAssinaturaRouter.post(
+  '/:id/termo/assinafy/link',
   authMiddleware,
   authorizeRole(['CLIENTE_EVENTO']),
   async (req, res) => {
@@ -168,7 +169,7 @@ router.post(
         });
       }
 
-      // Caso contrário, faz upload para Assinafy e salva assinafy_id
+      // Caso contrário: upload para Assinafy e salva assinafy_id
       const buffer = fs.readFileSync(doc.pdf_url);
       const fileName = path.basename(doc.pdf_url);
 
@@ -179,11 +180,10 @@ router.post(
         return res.status(502).json({ error: 'Falha ao enviar documento à Assinafy.' });
       }
 
-      await dbRun(`UPDATE documentos SET assinafy_id = ?, status = ? WHERE id = ?`, [
-        assinafyId,
-        'uploaded',
-        doc.id,
-      ]);
+      await dbRun(
+        `UPDATE documentos SET assinafy_id = ?, status = ? WHERE id = ?`,
+        [assinafyId, 'uploaded', doc.id]
+      );
 
       return res.json({
         ok: true,
@@ -197,15 +197,15 @@ router.post(
   }
 );
 
-// ----------------------------------------------------------------------------
-// 3) PUBLIC: stream do artefato do documento (original/certificado) para o navegador
-// ----------------------------------------------------------------------------
-router.get('/documentos/assinafy/:id/open', async (req, res) => {
+// ============================================================================
+// 2) PÚBLICO (montado em /api)
+//    GET /documentos/assinafy/:id/open  |  GET /documentos/assinafy/:id/status
+// ============================================================================
+documentosAssinafyPublicRouter.get('/documentos/assinafy/:id/open', async (req, res) => {
   const id = req.params.id;
   try {
-    // Consulta status para checar se existe certificado; se não, baixa original
+    // Consulta status para pegar artifact (certificado preferível)
     const info = await getDocumentStatus(id).catch((err) => {
-      // Quando credencial está errada ou id inválido, a Assinafy devolve JSON com status 401/404
       if (ASSINAFY_DEBUG) console.error('[DOC/OPEN] getDocumentStatus falhou:', err?.response?.status, err?.message);
       throw err;
     });
@@ -216,7 +216,7 @@ router.get('/documentos/assinafy/:id/open', async (req, res) => {
       return res.status(404).send('Documento sem artefato disponível.');
     }
 
-    // Busca o PDF real (stream) com autenticação do servidor
+    // Baixa o PDF com autenticação do servidor e faz proxy
     const ax = await axios.request({
       method: 'GET',
       url: fileUrl,
@@ -253,7 +253,7 @@ router.get('/documentos/assinafy/:id/open', async (req, res) => {
       return res.status(502).send(`${msg}${hint}`);
     }
 
-    // ok — faz proxy do PDF
+    // ok — stream do PDF
     res.setHeader('Content-Type', 'application/pdf');
     const safeName = (info?.name || `documento-${id}`).replace(/[^a-zA-Z0-9_.-]+/g, '_');
     res.setHeader('Content-Disposition', `inline; filename="${safeName}.pdf"`);
@@ -268,10 +268,7 @@ router.get('/documentos/assinafy/:id/open', async (req, res) => {
   }
 });
 
-// ----------------------------------------------------------------------------
-// 4) (Opcional) Status bruto para diagnóstico rápido (proteger se quiser)
-// ----------------------------------------------------------------------------
-router.get('/documentos/assinafy/:id/status', async (req, res) => {
+documentosAssinafyPublicRouter.get('/documentos/assinafy/:id/status', async (req, res) => {
   const id = req.params.id;
   try {
     const info = await getDocumentStatus(id);
@@ -282,4 +279,7 @@ router.get('/documentos/assinafy/:id/status', async (req, res) => {
   }
 });
 
-module.exports = router;
+module.exports = {
+  portalEventosAssinaturaRouter,
+  documentosAssinafyPublicRouter,
+};
