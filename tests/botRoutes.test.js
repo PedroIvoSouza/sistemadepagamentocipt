@@ -81,6 +81,17 @@ test('GET /api/bot/dars/:id retorna linha_digitavel a partir do codigo_barras', 
   assert.strictEqual(res.body.dar.linha_digitavel, EXPECTED);
 });
 
+test('GET /api/bot/dars/:id usa numero_documento quando codigo_barras é nulo', async () => {
+  await reset();
+  await run('UPDATE dars SET codigo_barras=NULL, numero_documento=? WHERE id=1', [BARCODE]);
+  const res = await request
+    .get('/api/bot/dars/1')
+    .set('X-Bot-Key', 'secret')
+    .query({ msisdn: MSISDN });
+  assert.strictEqual(res.statusCode, 200);
+  assert.strictEqual(res.body.dar.linha_digitavel, EXPECTED);
+});
+
 test('POST /api/bot/dars/:id/emit gera linha_digitavel quando apenas codigo_barras é retornado', async () => {
   await reset();
   const res = await request
