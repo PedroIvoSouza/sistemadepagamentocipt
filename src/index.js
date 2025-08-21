@@ -22,6 +22,8 @@ const adminDarsRoutes       = require('./api/adminDarsRoutes');
 const adminOficiosRoutes    = require('./api/adminOficiosRoutes');
 const permissionariosRoutes = require('./api/permissionariosRoutes');
 const botRoutes             = require('./api/botRoutes');
+const { portalEventosAssinaturaRouter, documentosAssinafyPublicRouter } =
+  require('./src/api/portalAssinaturaRoutes');
 
 // Routers de eventos (desestruturados)
 const {
@@ -64,6 +66,10 @@ app.use('/api/user',              userRoutes);
 // DARs para permissionários
 app.use('/api/dars',              darsRoutes);
 app.use('/api/permissionarios',   permissionariosRoutes);
+
+app.use('/api/portal/eventos', portalEventosAssinaturaRouter); // precisa de token CLIENTE_EVENTO
+app.use('/api', documentosAssinafyPublicRouter);               // público p/ abrir em nova aba
+
 
 // Administração Geral
 app.use('/api/admin/auth',        adminAuthRoutes);
