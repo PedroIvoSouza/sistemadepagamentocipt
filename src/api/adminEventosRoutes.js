@@ -225,18 +225,18 @@ router.get('/:id', async (req, res) => {
 
     // CORRIGIDO: Adicionadas crases (`) e separado o parâmetro da query
     const parcelasSql = `
-      SELECT
-          de.numero_parcela,
-          de.valor_parcela            AS valor,
-          de.data_vencimento          AS vencimento,
-          d.id                        AS dar_id,
-          d.status                    AS dar_status,
-          d.pdf_url                   AS dar_pdf,
-          d.numero_documento          AS dar_numero
-         FROM DARs_Eventos de
-         JOIN dars d ON d.id = de.id_dar
-        WHERE de.id_evento = ?
-        ORDER BY de.numero_parcela ASC`;
+        SELECT
+            de.numero_parcela,
+            de.valor_parcela            AS valor,
+            de.data_vencimento          AS vencimento,
+            d.id                        AS dar_id,
+            d.status                    AS dar_status,
+            d.pdf_url                   AS dar_pdf,
+            d.numero_documento          AS dar_numero
+           FROM DARs_Eventos de
+           JOIN dars d ON d.id = de.id_dar
+          WHERE de.id_evento = ?
+          ORDER BY de.numero_parcela ASC`;
     const parcelas = await dbAll(parcelasSql, [id], 'evento/get-parcelas');
 
     const payload = {
@@ -291,10 +291,10 @@ router.get('/:id/termo/assinafy-status', async (req, res) => {
       const bestUrl = pickBestArtifactUrl(doc);
       await dbRun(
         `UPDATE documentos
-           SET status = 'assinado',
-               signed_pdf_public_url = COALESCE(signed_pdf_public_url, ?),
-               signed_at = COALESCE(signed_at, datetime('now'))
-         WHERE evento_id = ? AND tipo = 'termo_evento'`,
+             SET status = 'assinado',
+                 signed_pdf_public_url = COALESCE(signed_pdf_public_url, ?),
+                 signed_at = COALESCE(signed_at, datetime('now'))
+           WHERE evento_id = ? AND tipo = 'termo_evento'`,
         [bestUrl || null, id],
         'termo/assinafy-cert'
       );
@@ -305,7 +305,6 @@ router.get('/:id/termo/assinafy-status', async (req, res) => {
     return res.status(500).json({ ok: false, error: 'Falha ao consultar status no Assinafy.' });
   }
 });
-
 
 /* Alias */
 router.get('/:id/detalhes', async (req, res) => {
@@ -348,17 +347,17 @@ router.post('/:eventoId/dars/:darId/reemitir', async (req, res) => {
   try {
     // CORRIGIDO: Adicionadas crases (`) e separado o parâmetro da query
     const sql = `
-      SELECT e.nome_evento,
-             e.hora_inicio, e.hora_fim, e.hora_montagem, e.hora_desmontagem,
-             de.numero_parcela,
-             (SELECT COUNT(*) FROM DARs_Eventos WHERE id_evento = e.id) AS total_parcelas,
-             d.valor, d.data_vencimento,
-             c.nome_razao_social, c.documento, c.endereco, c.cep
-        FROM dars d
-        JOIN DARs_Eventos de ON d.id = de.id_dar
-        JOIN Eventos e       ON de.id_evento = e.id
-        JOIN Clientes_Eventos c ON e.id_cliente = c.id
-       WHERE d.id = ? AND e.id = ?`;
+        SELECT e.nome_evento,
+               e.hora_inicio, e.hora_fim, e.hora_montagem, e.hora_desmontagem,
+               de.numero_parcela,
+               (SELECT COUNT(*) FROM DARs_Eventos WHERE id_evento = e.id) AS total_parcelas,
+               d.valor, d.data_vencimento,
+               c.nome_razao_social, c.documento, c.endereco, c.cep
+          FROM dars d
+          JOIN DARs_Eventos de ON d.id = de.id_dar
+          JOIN Eventos e       ON de.id_evento = e.id
+          JOIN Clientes_Eventos c ON e.id_cliente = c.id
+         WHERE d.id = ? AND e.id = ?`;
     const row = await dbGet(sql, [darId, eventoId], 'reemitir/buscar-contexto');
 
     if (!row) return res.status(404).json({ error: 'DAR ou Evento não encontrado.' });
@@ -442,7 +441,6 @@ router.get('/:id/termo', async (req, res) => {
     res.status(500).json({ error: 'Falha ao gerar termo' });
   }
 });
-
 
 /* ===========================================================
    POST /api/admin/eventos/:eventoId/termo/disponibilizar
