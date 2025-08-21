@@ -94,7 +94,7 @@ portalEventosAssinaturaRouter.get(
       if (doc.pdf_public_url) out.pdf_public_url = doc.pdf_public_url;
       if (doc.assinafy_id)   out.url_visualizacao = `/api/documentos/assinafy/${encodeURIComponent(doc.assinafy_id)}/open`;
       if (!out.pdf_public_url && !out.url_visualizacao && doc.pdf_url && fs.existsSync(doc.pdf_url)) {
-        out.pdf_url = doc.pdf_url; // requer que você sirva esse caminho como estático, se quiser usar
+        out.pdf_url = doc.pdf_url;
       }
       if (!out.pdf_public_url && !out.url_visualizacao && !out.pdf_url) {
         return res.status(409).json({ error: 'Termo ainda não disponível.' });
@@ -107,8 +107,7 @@ portalEventosAssinaturaRouter.get(
 );
 
 // ------------------------------------------------------------------
-// 2) Iniciar assinatura: upload (se faltar), criar/usar signer, criar assignment,
-//    e devolver a URL de assinatura
+// 2) Iniciar assinatura: upload (se faltar), criar/usar signer, criar assignment
 // ------------------------------------------------------------------
 portalEventosAssinaturaRouter.post(
   '/:id/termo/assinafy/link',
@@ -131,7 +130,7 @@ portalEventosAssinaturaRouter.post(
       if (!assinafyId) {
         const buffer   = fs.readFileSync(doc.pdf_url);
         const fileName = path.basename(doc.pdf_url);
-        const up = await uploadPdf(buffer, fileName, { name: fileName }); // up já desembrulhado
+        const up = await uploadPdf(buffer, fileName, { name: fileName });
         assinafyId = up?.id;
         if (!assinafyId) return res.status(502).json({ error: 'Falha ao enviar documento à Assinafy.' });
         await dbRun(`UPDATE documentos SET assinafy_id = ?, status = ? WHERE id = ?`, [assinafyId, 'uploaded', doc.id]);
@@ -153,12 +152,9 @@ portalEventosAssinaturaRouter.post(
 
       const assign = await requestSignatures(assinafyId, [signerId], {
         message: 'Por favor, assine o termo do evento.',
-      }).catch(e => {
-        if (ASSINAFY_DEBUG) console.error('[ASSIGN] erro:', e?.response?.status, e?.response?.data || e.message);
-        throw e;
       });
 
-      // Descobrir URL de assinatura do retorno ou do documento
+      // Extrai URL de assinatura
       let url = pickSigningUrl(assign);
       if (!url) {
         const docInfo = await getDocumentStatus(assinafyId).catch(() => null);
@@ -170,14 +166,17 @@ portalEventosAssinaturaRouter.post(
 
       return res.json({ ok: true, id: assinafyId, url });
     } catch (e) {
-      if (ASSINAFY_DEBUG) console.error('[PORTAL] assinafy link erro:', e?.response || e);
-      res.status(500).json({ error: e.message || 'Falha ao iniciar assinatura.' });
+      // Tentar elaborar a melhor mensagem possível para 4xx
+      const st = e?.response?.status;
+      const apiMsg = e?.response?.data?.message || e?.message;
+      if (ASSINAFY_DEBUG) console.error('[PORTAL] assinafy link erro:', st || '', e?.response?.data || apiMsg);
+      res.status(st && st >= 400 && st < 500 ? 400 : 500).json({ error: apiMsg || 'Falha ao iniciar assinatura.' });
     }
   }
 );
 
 // ------------------------------------------------------------------
-// 3) Público: proxy do PDF (original ou certificado) — não mostra UI de assinar
+// 3) Público: proxy do PDF (original ou certificado)
 // ------------------------------------------------------------------
 documentosAssinafyPublicRouter.get('/documentos/assinafy/:id/open', async (req, res) => {
   const id = req.params.id;
