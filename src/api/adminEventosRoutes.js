@@ -5,6 +5,9 @@ const { emitirGuiaSefaz } = require('../services/sefazService');
 const { gerarTokenDocumento, imprimirTokenEmPdf } = require('../utils/token');
 const { criarEventoComDars, atualizarEventoComDars } = require('../services/eventoDarService');
 
+
+const { gerarTermoEventoPdfkitEIndexar } = require('../services/termoEventoPdfkitService'); 
+
 const fs = require('fs');
 const path = require('path');
 const PDFDocument = require('pdfkit');
@@ -59,6 +62,16 @@ const dbRun = (sql, p = [], ctx = '') =>
       else { console.log('[SQL][RUN][OK]', ctx, 'lastID:', this.lastID, 'changes:', this.changes); resolve(this); }
     });
   });
+
+function nomeArquivo(ev, idDoc) {
+  const razao = String(ev?.nome_razao_social || 'Cliente')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^\w]+/g,'_');
+
+  const termo = String(ev?.numero_termo || 's-n').replace(/[\/\\]+/g, '-');
+  const dataPrimeira = (String(ev?.datas_evento||'').split(',')[0]||'').trim();
+
+  return `TermoPermissao_${termo}_${razao}_Data-${dataPrimeira || 's-d'}_${idDoc}.pdf`;
+}
 
 /* ========= Schema documentos: garante colunas/índice ========= */
 async function ensureDocumentosSchema() {
@@ -447,28 +460,21 @@ router.post('/:eventoId/dars/:darId/reemitir', async (req, res) => {
 router.get('/:id/termo', async (req, res) => {
   const { id } = req.params;
   try {
-    await ensureDocumentosSchema();
+    // Gera via PDFKit (com timbrado/cabeçalho/rodapé) e indexa
+    const out = await gerarTermoEventoPdfkitEIndexar(id);
 
-    // ===== 1) Carrega dados do evento/cliente/parcelas =====
-    const ev = await dbGet(
-      `SELECT e.*, c.nome_razao_social, c.documento, c.endereco, c.cep, c.nome_responsavel, c.documento_responsavel
-         FROM Eventos e
-         JOIN Clientes_Eventos c ON c.id = e.id_cliente
-        WHERE e.id = ?`,
-      [id],
-      'termo/get-evento'
-    );
-    if (!ev) return res.status(404).json({ error: 'Evento não encontrado.' });
+    const stat = fs.statSync(out.filePath);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${out.fileName}"`);
+    res.setHeader('Content-Length', stat.size);
+    res.setHeader('Cache-Control', 'no-store');
+    fs.createReadStream(out.filePath).pipe(res);
+  } catch (err) {
+    console.error('[admin/eventos] termo erro:', err);
+    res.status(500).json({ error: 'Falha ao gerar termo' });
+  }
+});
 
-    const parcelas = await dbAll(
-      `SELECT de.numero_parcela, de.valor_parcela, de.data_vencimento, d.status
-         FROM DARs_Eventos de
-         JOIN dars d ON d.id = de.id_dar
-        WHERE de.id_evento = ?
-        ORDER BY de.numero_parcela ASC`,
-      [id],
-      'termo/get-parcelas'
-    );
 
     // ===== 2) Derivações / placeholders =====
     const orgUF  = process.env.ORG_UF || 'ESTADO DE ALAGOAS';
