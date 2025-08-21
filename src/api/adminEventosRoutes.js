@@ -678,7 +678,6 @@ router.get('/:id/termo', async (req, res) => {
     doc.end();
 
     // indexa/atualiza em `documentos` (UPSERT por evento+tipo)
-    await ensureDocumentosSchema();
     const createdAt = new Date().toISOString();
     const publicUrl = `/documentos/${fileName}`;
     await dbRun(
