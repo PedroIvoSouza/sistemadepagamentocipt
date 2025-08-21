@@ -6,6 +6,14 @@ const { emitirGuiaSefaz } = require('../services/sefazService');
 const { gerarTokenDocumento, imprimirTokenEmPdf } = require('../utils/token');
 const { criarEventoComDars, atualizarEventoComDars } = require('../services/eventoDarService');
 
+const {
+  uploadDocumentFromFile,
+  createSigner,
+  requestSignatures,
+  getDocument,
+  pickBestArtifactUrl
+} = require('../services/assinafyService');
+
 // CORRIGIDO: Nome da função para corresponder ao que é exportado pelo serviço.
 const { gerarTermoEventoPdfEIndexar } = require('../services/termoEventoPdfkitService');
 
@@ -76,6 +84,61 @@ router.post('/', async (req, res) => {
   } catch (err) {
     console.error('[ERRO] criar evento:', err.message);
     res.status(err.status || 500).json({ error: err.message || 'Não foi possível criar o evento e emitir as DARs.' });
+  }
+});
+
+// POST /api/admin/eventos/:id/termo/enviar-assinatura
+router.post('/:id/termo/enviar-assinatura', async (req, res) => {
+  const { id } = req.params;
+  const { signerName, signerEmail, signerCpf, signerPhone, message, expiresAt } = req.body || {};
+
+  try {
+    // 1) Gera/garante o termo e salva (usa seu service já ok)
+    const out = await gerarTermoEventoPdfkitEIndexar(id); // { filePath, fileName }
+
+    // 2) Upload pro Assinafy
+    const uploaded = await uploadDocumentFromFile(out.filePath, out.fileName);
+    const assinafyDocId = uploaded?.id || uploaded?.data?.id;
+    if (!assinafyDocId) {
+      return res.status(500).json({ ok: false, error: 'Falha no upload ao Assinafy.' });
+    }
+
+    // 3) Cria o signatário (se necessário)
+    // Obs.: se você já mantém signerId, use direto. Aqui criamos sempre um simples.
+    const signer = await createSigner({
+      full_name: signerName,
+      email: signerEmail,
+      government_id: signerCpf,
+      phone: signerPhone
+    });
+    const signerId = signer?.id || signer?.data?.id;
+    if (!signerId) {
+      return res.status(500).json({ ok: false, error: 'Falha ao criar signatário no Assinafy.' });
+    }
+
+    // 4) Solicita assinatura (virtual)
+    await requestSignatures(assinafyDocId, [signerId], {
+      message,
+      expires_at: expiresAt // opcional (ISO)
+    });
+
+    // 5) Atualiza metadados em `documentos`
+    await dbRun(
+      `UPDATE documentos
+         SET assinafy_id = ?, status = 'pendente_assinatura'
+       WHERE evento_id = ? AND tipo = 'termo_evento'`,
+      [assinafyDocId, id],
+      'termo/assinafy-up'
+    );
+
+    return res.json({
+      ok: true,
+      message: 'Documento enviado para assinatura (Assinafy).',
+      assinafyDocId
+    });
+  } catch (err) {
+    console.error('[assinafy] erro:', err.message);
+    return res.status(500).json({ ok: false, error: err.message || 'Falha ao enviar para assinatura.' });
   }
 });
 
@@ -210,6 +273,39 @@ router.get('/:id', async (req, res) => {
     return res.status(500).json({ error: 'Erro interno ao buscar o evento.' });
   }
 });
+
+// GET /api/admin/eventos/:id/termo/assinafy-status
+router.get('/:id/termo/assinafy-status', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const row = await dbGet(
+      `SELECT assinafy_id FROM documentos WHERE evento_id = ? AND tipo = 'termo_evento' ORDER BY id DESC LIMIT 1`,
+      [id],
+      'termo/assinafy-get'
+    );
+    if (!row?.assinafy_id) return res.status(404).json({ ok: false, error: 'Sem assinafy_id para este termo.' });
+
+    const doc = await getDocument(row.assinafy_id);
+    // se já “certificated”, salvar a URL assinada e data
+    if (doc?.status === 'certificated') {
+      const bestUrl = pickBestArtifactUrl(doc);
+      await dbRun(
+        `UPDATE documentos
+           SET status = 'assinado',
+               signed_pdf_public_url = COALESCE(signed_pdf_public_url, ?),
+               signed_at = COALESCE(signed_at, datetime('now'))
+         WHERE evento_id = ? AND tipo = 'termo_evento'`,
+        [bestUrl || null, id],
+        'termo/assinafy-cert'
+      );
+    }
+    return res.json({ ok: true, assinafy: doc });
+  } catch (err) {
+    console.error('[assinafy-status] erro:', err.message);
+    return res.status(500).json({ ok: false, error: 'Falha ao consultar status no Assinafy.' });
+  }
+});
+
 
 /* Alias */
 router.get('/:id/detalhes', async (req, res) => {
