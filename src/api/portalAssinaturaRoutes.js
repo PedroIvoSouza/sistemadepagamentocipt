@@ -1,157 +1,114 @@
-const express  = require('express');
-const fs       = require('fs');
-const path     = require('path');
-const sqlite3  = require('sqlite3').verbose();
+// src/api/portalAssinaturaRoutes.js
+const express = require('express');
+const path = require('path');
+const fs = require('fs');
+const sqlite3 = require('sqlite3').verbose();
+const axios = require('axios');
 
-const authMiddleware   = require('../middleware/authMiddleware');
-const authorizeRole    = require('../middleware/roleMiddleware');
 const { uploadPdf, getDocumentStatus } = require('../services/assinafyClient');
 
-// Se você já tem essa função em outro módulo, importe-a.
-// Aqui deixo opcional: caso não exista, só acusamos falta do PDF.
-let gerarTermoEventoPdfkitEIndexar = null;
-try {
-  ({ gerarTermoEventoPdfkitEIndexar } = require('../services/termoService'));
-} catch { /* opcional */ }
+// --- env para o proxy de download ---
+const API_KEY = (process.env.ASSINAFY_API_KEY || '').trim();
+const ACCESS_TOKEN = (process.env.ASSINAFY_ACCESS_TOKEN || '').trim();
+const BASE = (process.env.ASSINAFY_API_BASE || 'https://api.assinafy.com.br/v1').replace(/\/+$/, '');
+function apiHeaders() {
+  const h = {};
+  if (API_KEY) {
+    h['X-Api-Key'] = API_KEY;
+    h['X-API-KEY'] = API_KEY;
+    h['x-api-key'] = API_KEY;
+  }
+  if (ACCESS_TOKEN) h.Authorization = `Bearer ${ACCESS_TOKEN}`;
+  return h;
+}
 
-const dbPath = path.resolve(__dirname, '..', '..', 'sistemacipt.db');
-const db = new sqlite3.Database(dbPath);
-
-// helpers SQLite
+// --- DB ---
+const DB_PATH = path.resolve(process.cwd(), process.env.SQLITE_STORAGE || './sistemacipt.db');
+const db = new sqlite3.Database(DB_PATH);
 const dbGet = (sql, p=[]) => new Promise((res, rej)=> db.get(sql, p, (e, r)=> e?rej(e):res(r)));
-const dbAll = (sql, p=[]) => new Promise((res, rej)=> db.all(sql, p, (e, r)=> e?rej(e):res(r)));
 const dbRun = (sql, p=[]) => new Promise((res, rej)=> db.run(sql, p, function(e){ e?rej(e):res(this); }));
 
-// ---------------- Routers ----------------
-const portalEventosAssinaturaRouter = express.Router();
-// exige usuário logado no Portal (role CLIENTE_EVENTO ou ADMIN)
-portalEventosAssinaturaRouter.use(authMiddleware, authorizeRole(['CLIENTE_EVENTO','ADMIN']));
+// Routers
+const portalEventosAssinaturaRouter = express.Router();     // para cliente logado (monte em /api/portal/eventos)
+const documentosAssinafyPublicRouter = express.Router();    // público p/ abrir PDF (monte em /api)
 
-const documentosAssinafyPublicRouter = express.Router(); // público: vai abrir em nova aba
+// TODO: se quiser exigir auth aqui, adicione seu middleware de auth do cliente:
+// portalEventosAssinaturaRouter.use(authMiddleware, authorizeRole(['CLIENTE_EVENTO']));
 
-// ---------------- Util ----------------
-async function obterDocumentoTermo(eventoId){
-  const doc = await dbGet(
-    `SELECT * FROM documentos
-     WHERE evento_id = ? AND (tipo = 'termo_evento' OR tipo = 'termo') 
-     ORDER BY id DESC LIMIT 1`,
-    [eventoId]
-  );
+// Utilitário: achar/garantir PDF do termo desse evento
+async function getTermoDocRegistro(eventoId) {
+  // documentos: id, evento_id, tipo, pdf_url, assinafy_id, status, ...
+  const doc = await dbGet(`SELECT * FROM documentos WHERE evento_id=? AND tipo='termo_evento'`, [eventoId]);
   return doc || null;
 }
 
-function fileExists(p){
-  try { return !!p && fs.existsSync(p); } catch { return false; }
-}
-
-// ---------------- Rotas ----------------
-
-/**
- * GET /api/portal/eventos/:id/termo/meta
- * Retorna metadados para o botão "Baixar Termo" do front:
- * { pdf_public_url, url_visualizacao, pdf_url }
- */
-portalEventosAssinaturaRouter.get('/:id/termo/meta', async (req, res) => {
-  const eventoId = req.params.id;
-  try {
-    const doc = await obterDocumentoTermo(eventoId);
-    if (!doc) return res.status(404).json({ error: 'Termo não encontrado.' });
-
-    // Tente sempre priorizar um link público (se você já publica esse PDF em storage/CDN)
-    const payload = {
-      pdf_public_url  : doc.pdf_public_url || null,
-      url_visualizacao: doc.url_visualizacao || null,
-      pdf_url         : doc.pdf_url || null
-    };
-
-    // Se só houver caminho local, deixe-o (o front abre numa nova aba se for http(s))
-    return res.json(payload);
-  } catch (e) {
-    console.error('[TERMO][meta] erro:', e);
-    res.status(500).json({ error: 'Falha ao obter metadados do termo.' });
-  }
-});
-
-/**
- * POST /api/portal/eventos/:id/termo/assinafy/link
- * Envia o PDF do termo à Assinafy e retorna uma URL para abrir (j.url).
- * Sempre devolvemos 'url' preenchida (compatível com o seu front).
- */
+// POST /:id/termo/assinafy/link
+// Faz upload do PDF do termo, grava assinafy_id e devolve uma URL da SUA API que o browser pode abrir.
 portalEventosAssinaturaRouter.post('/:id/termo/assinafy/link', async (req, res) => {
-  const eventoId = req.params.id;
   try {
-    // 1) Garante que existe PDF do termo
-    let doc = await obterDocumentoTermo(eventoId);
+    const eventoId = req.params.id;
 
-    if (!doc || !(doc.pdf_public_url || fileExists(doc.pdf_url))) {
-      if (typeof gerarTermoEventoPdfkitEIndexar === 'function') {
-        await gerarTermoEventoPdfkitEIndexar(eventoId);
-        doc = await obterDocumentoTermo(eventoId);
-      }
+    // 1) busca registro do termo
+    let doc = await getTermoDocRegistro(eventoId);
+    if (!doc || !doc.pdf_url || !fs.existsSync(doc.pdf_url)) {
+      return res.status(409).json({ error: 'PDF do termo não encontrado. Gere o termo antes.' });
     }
 
-    if (!doc || !(doc.pdf_public_url || fileExists(doc.pdf_url))) {
-      return res.status(409).json({ error: 'PDF do termo não encontrado para este evento.' });
-    }
-
-    // 2) Se já foi enviado à Assinafy, devolva a URL de abrir
+    // 2) se já tem assinafy_id, reutiliza
     if (doc.assinafy_id) {
-      const open_url = `/api/documentos/assinafy/${encodeURIComponent(doc.assinafy_id)}/open`;
-      return res.json({ ok: true, id: doc.assinafy_id, url: open_url, open_url });
+      const openUrl = `/api/documentos/assinafy/${encodeURIComponent(doc.assinafy_id)}/open`;
+      return res.json({ ok: true, id: doc.assinafy_id, url: openUrl });
     }
 
-    // 3) Carrega o PDF em buffer (prioriza arquivo local; se só tiver URL pública, você poderia baixar aqui)
-    let buffer = null;
-    let filename = 'termo-evento.pdf';
+    // 3) upload agora
+    const pdfBuffer = fs.readFileSync(doc.pdf_url);
+    const filename = path.basename(doc.pdf_url);
+    const payload = await uploadPdf(pdfBuffer, filename, { callbackUrl: process.env.ASSINAFY_CALLBACK_URL });
 
-    if (fileExists(doc.pdf_url)) {
-      buffer = fs.readFileSync(doc.pdf_url);
-      filename = path.basename(doc.pdf_url);
-    } else if (doc.pdf_public_url) {
-      // (opcional) baixar a URL pública para buffer; simplificando, retornamos erro se não houver local
-      return res.status(409).json({ error: 'PDF disponível apenas via URL pública. Baixe e armazene local antes do envio.' });
+    if (!payload?.id) {
+      return res.status(502).json({ error: 'Assinafy não retornou identificador do documento.' });
     }
 
-    // 4) Envia à Assinafy
-    const payload = await uploadPdf(buffer, filename, {});
+    await dbRun(`UPDATE documentos SET assinafy_id=?, status='uploaded' WHERE id=?`, [payload.id, doc.id]);
 
-    // 5) Persiste o assinafy_id
-    await dbRun(`UPDATE documentos SET assinafy_id = ?, status = ? WHERE id = ?`, [
-      payload.id || null,
-      'uploaded',
-      doc.id
-    ]);
-
-    // 6) Monta link compatível com o front (sempre devolver 'url')
-    const open_url = `/api/documentos/assinafy/${encodeURIComponent(payload.id)}/open`;
-    return res.json({ ok: true, id: payload.id, url: open_url, open_url });
+    const openUrl = `/api/documentos/assinafy/${encodeURIComponent(payload.id)}/open`;
+    res.json({ ok: true, id: payload.id, url: openUrl });
   } catch (e) {
-    const status = e?.response?.status;
-    console.error('[PORTAL] assinafy link erro:', e);
-    if (status === 401) {
-      return res.status(401).json({ error: 'Falha ao iniciar assinatura (401). Verifique as credenciais da Assinafy.' });
-    }
-    return res.status(500).json({ error: 'Falha ao iniciar assinatura.' });
+    console.error('[PORTAL] assinafy link erro:', e?.response?.data || e);
+    const msg = e?.message || 'Falha ao iniciar assinatura.';
+    res.status(500).json({ error: msg });
   }
 });
 
-/**
- * GET /api/documentos/assinafy/:id/open  (público)
- * Redireciona para o melhor artefato disponível (certificado > original).
- * Se preferir, você pode alterar para pedir assinatura e então abrir um “signingUrl”.
- */
+// GET /documentos/assinafy/:id/open
+// Abre o PDF do documento (assinado se disponível, senão o original) via proxy, SEM expor sua chave ao browser.
 documentosAssinafyPublicRouter.get('/documentos/assinafy/:id/open', async (req, res) => {
-  const id = req.params.id;
   try {
-    const data = await getDocumentStatus(id); // { artifacts: { certificated, original } ... }
-    const artifacts = data?.artifacts || {};
-    const best = artifacts.certificated || artifacts.original;
-    if (!best) return res.status(404).send('Documento não possui artefatos para abrir.');
-    return res.redirect(best);
+    const id = req.params.id;
+    const info = await getDocumentStatus(id);
+
+    const artifacts = info?.artifacts || {};
+    const url = artifacts.certificated || artifacts.original;
+    if (!url) {
+      return res.status(404).send('Documento sem artefato disponível.');
+    }
+
+    // baixa do endpoint protegido usando suas credenciais e faz stream para o browser
+    const ax = await axios.get(url, {
+      responseType: 'stream',
+      headers: { ...apiHeaders(), Accept: 'application/pdf' },
+      maxBodyLength: Infinity,
+    });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${(info?.name || 'documento')}.pdf"`);
+    ax.data.pipe(res);
   } catch (e) {
-    console.error('[ASSINAFY][open] erro:', e?.response?.data || e);
-    const status = e?.response?.status || 500;
-    return res.status(status).send('Não foi possível abrir o documento.');
+    const st = e?.response?.status || 500;
+    const body = e?.response?.data;
+    console.error('[DOC/OPEN] erro:', st, body || e.message);
+    if (st === 401) return res.status(502).send('Falha ao abrir documento (credenciais inválidas no servidor).');
+    res.status(502).send('Não foi possível abrir o documento agora.');
   }
 });
 
