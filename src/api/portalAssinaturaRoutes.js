@@ -8,6 +8,7 @@ const fs      = require('fs');
 const https   = require('https');
 const sqlite3 = require('sqlite3').verbose();
 const axios   = require('axios');
+const path    = require('path');
 
 const authMiddleware  = require('../middleware/authMiddleware');
 const authorizeRole   = require('../middleware/roleMiddleware');
@@ -82,12 +83,17 @@ router.get(
       if (!doc) return res.status(404).json({ error: 'Termo não localizado.' });
 
       const out = {};
-      if (doc.pdf_public_url) out.pdf_public_url = doc.pdf_public_url;
-      if (doc.assinafy_id) out.url_visualizacao = `/api/documentos/assinafy/${encodeURIComponent(doc.assinafy_id)}/open`;
-      if (!out.pdf_public_url && !out.url_visualizacao && doc.pdf_url && fs.existsSync(doc.pdf_url)) {
+      if (doc.signed_pdf_public_url) {
+        out.signed_pdf_public_url = doc.signed_pdf_public_url;
+      } else if (doc.assinafy_id) {
+        out.url_visualizacao = `/api/documentos/assinafy/${encodeURIComponent(doc.assinafy_id)}/open`;
+      } else if (doc.pdf_public_url) {
+        out.pdf_public_url = doc.pdf_public_url;
+      } else if (doc.pdf_url && fs.existsSync(doc.pdf_url)) {
         out.pdf_url = doc.pdf_url; // servidor deve expor estaticamente se quiser
       }
-      if (!out.pdf_public_url && !out.url_visualizacao && !out.pdf_url) {
+
+      if (!out.signed_pdf_public_url && !out.url_visualizacao && !out.pdf_public_url && !out.pdf_url) {
         return res.status(409).json({ error: 'Termo ainda não disponível.' });
       }
       res.json(out);

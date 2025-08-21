@@ -207,7 +207,7 @@
             try{
               const r = await fetch(`/api/portal/eventos/${eventoId}/termo/meta`, { headers });
               const j = await r.json();
-              const url = j.pdf_public_url || j.url_visualizacao || j.pdf_url;
+              const url = j.signed_pdf_public_url || j.url_visualizacao || j.pdf_public_url || j.pdf_url;
               if (!r.ok || !url) throw new Error(j.error || 'Termo indisponível.');
               window.open(url, '_blank');
             }catch(err){
