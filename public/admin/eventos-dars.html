@@ -402,8 +402,11 @@ window.onload = () => {
               throw new Error(errorData.error || 'Falha ao buscar eventos.');
           }
           const data = await response.json();
-          await renderTable(data.eventos || data.data); // Usar await se renderTable for async
-          renderPagination(data.totalPages, data.currentPage);
+          const eventos = Array.isArray(data) ? data : data.eventos || data.data;
+          await renderTable(eventos);
+          const totalPages = Array.isArray(data) ? 1 : data.totalPages || 1;
+          const currentPageData = Array.isArray(data) ? 1 : data.currentPage || 1;
+          renderPagination(totalPages, currentPageData);
       } catch (error) {
           eventosTableBody.innerHTML = `<tr><td colspan="9" class="text-center text-danger">${error.message}</td></tr>`;
       }
@@ -1243,8 +1246,7 @@ window.onload = () => {
   // =======================
   inicializarEventListeners();
   carregarClientes();
-  carregarEventos();
-};
+  fetchEventos();
 </script>
 </body>
 </html>
