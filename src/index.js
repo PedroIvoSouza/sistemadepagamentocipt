@@ -1,5 +1,4 @@
 // Em: src/index.js
-
 require('dotenv').config();
 
 console.log('[BOT] BOT_SHARED_KEY len =', (process.env.BOT_SHARED_KEY || '').length);
@@ -22,9 +21,11 @@ const adminDarsRoutes       = require('./api/adminDarsRoutes');
 const adminOficiosRoutes    = require('./api/adminOficiosRoutes');
 const permissionariosRoutes = require('./api/permissionariosRoutes');
 const botRoutes             = require('./api/botRoutes');
-const { portalEventosAssinaturaRouter, documentosAssinafyPublicRouter } =
-  require('./api/portalAssinaturaRoutes'); // ✅ certo
 
+const {
+  portalEventosAssinaturaRouter,
+  documentosAssinafyPublicRouter
+} = require('./api/portalAssinaturaRoutes');
 
 // Routers de eventos (desestruturados)
 const {
@@ -33,17 +34,19 @@ const {
   clientRoutes: eventosClientesClientRoutes
 } = require('./api/eventosClientesRoutes');
 
-const eventosRoutes     = require('./api/eventosRoutes');
+const eventosRoutes          = require('./api/eventosRoutes');
 // NOVA ROTA: eventos admin
-const adminEventosRoutes = require('./api/adminEventosRoutes');
+const adminEventosRoutes     = require('./api/adminEventosRoutes');
 // NOVA ROTA: webhooks Assinafy
 const webhooksAssinafyRoutes = require('./api/webhooksAssinafyRoutes');
+// NOVAS ROTAS: preparar/embedded Assinafy (conforme arquivos enviados)
+const assinafyRoutes         = require('./routes/assinafy');
 
 const documentosRoutes = require('./api/documentosRoutes');
 
 const app  = express();
 app.use(cors({
-  origin: '*', // ⚠️ permite tudo. Para produção, restrinja isso.
+  origin: '*', // ⚠️ Em produção, restrinja para seus domínios
   credentials: true
 }));
 const PORT = process.env.PORT || 3000;
@@ -68,9 +71,9 @@ app.use('/api/user',              userRoutes);
 app.use('/api/dars',              darsRoutes);
 app.use('/api/permissionarios',   permissionariosRoutes);
 
+// Portal de assinatura (cliente)
 app.use('/api/portal/eventos', portalEventosAssinaturaRouter); // exige auth do cliente
 app.use('/api', documentosAssinafyPublicRouter);               // público p/ abrir em nova aba
-
 
 // Administração Geral
 app.use('/api/admin/auth',        adminAuthRoutes);
@@ -81,6 +84,10 @@ app.use('/api/admin',             adminOficiosRoutes);
 
 // Webhook da Assinafy
 app.use('/api/webhooks/assinafy', webhooksAssinafyRoutes);
+
+// === Assinafy: preparar documento e fluxo embedded ===
+// (inclui: POST /api/eventos/:id/termo/preparar e /api/embedded/*)
+app.use('/api', assinafyRoutes);
 
 // --- Rotas de eventos (cada uma com seu prefixo) ---
 // 1. Rotas PÚBLICAS para clientes de eventos (login, definir senha)
@@ -96,6 +103,7 @@ app.use('/api/admin/eventos',     adminEventosRoutes);
 app.use('/api/eventos',           eventosRoutes);
 app.use('/api/documentos',        documentosRoutes);
 
+// Bot
 app.use('/api/bot',               botRoutes);
 
 // Catch-all para servir a página de login do admin quando uma rota /admin/... não for encontrada
@@ -132,6 +140,7 @@ function ensureClientesEventosColumns(db) {
     })();
   });
 }
+
 function ensureEventosColumns(db) {
   db.all(`PRAGMA table_info(Eventos)`, [], (err, cols) => {
     if (err) { console.error('[DB] PRAGMA table_info Eventos falhou:', err.message); return; }
