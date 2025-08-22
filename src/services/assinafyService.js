@@ -11,8 +11,10 @@ const ACCOUNT_ID = (process.env.ASSINAFY_ACCOUNT_ID || '').trim();
 const API_KEY = (process.env.ASSINAFY_API_KEY || '').trim();
 const ACCESS_TOKEN = (process.env.ASSINAFY_ACCESS_TOKEN || '').trim();
 
+const DEBUG = String(process.env.ASSINAFY_DEBUG || '') === '1';
+
 if (!ACCOUNT_ID) {
-  console.warn('[ASSINAFY] AVISO: ASSINAFY_ACCOUNT_ID vazio — endpoints que precisam de conta irão falhar.');
+  console.warn('[ASSINAFY] AVISO: ASSINAFY_ACCOUNT_ID vazio — endpoints que precisam de conta irão falhar se usados.');
 }
 
 function authHeaders() {
@@ -32,7 +34,7 @@ const FINAL_READY = new Set([
   'waiting_for_assignments',
   'pending_signature',
   'certificated',
-  'certified' // às vezes aparece assim
+  'certified'
 ]);
 
 const onlyDigits = (v = '') => String(v).replace(/\D/g, '');
@@ -48,21 +50,22 @@ async function uploadDocumentFromFile(filePath, filename) {
     contentType: 'application/pdf',
   });
 
-  const resp = await axios.post(
-    `${BASE}/accounts/${ACCOUNT_ID}/documents`,
-    form,
-    { headers: { ...authHeaders(), ...form.getHeaders() } }
-  );
-  return resp.data; // normalmente { id, status: 'uploaded', artifacts: { original: ... } }
+  const url = `${BASE}/accounts/${ACCOUNT_ID}/documents`;
+  if (DEBUG) console.log('[ASSINAFY][POST]', url, '(multipart/form-data)');
+
+  const resp = await axios.post(url, form, { headers: { ...authHeaders(), ...form.getHeaders() } });
+  return resp.data; // { id, status: 'uploaded', ... }
 }
 
 /* ------------------------ Signer ------------------------ */
 async function createSigner({ full_name, email, government_id, phone }) {
   assertAccount();
   if (!full_name || !email) throw new Error('full_name e email são obrigatórios para o signer.');
+  const url = `${BASE}/accounts/${ACCOUNT_ID}/signers`;
+  if (DEBUG) console.log('[ASSINAFY][POST]', url);
 
   const resp = await axios.post(
-    `${BASE}/accounts/${ACCOUNT_ID}/signers`,
+    url,
     { full_name, email, government_id, telephone: phone },
     { headers: { ...authHeaders(), 'Content-Type': 'application/json' } }
   );
@@ -71,10 +74,8 @@ async function createSigner({ full_name, email, government_id, phone }) {
 
 async function findSignerByEmail(email) {
   assertAccount();
-  const resp = await axios.get(
-    `${BASE}/accounts/${ACCOUNT_ID}/signers`,
-    { params: { email }, headers: { ...authHeaders() } }
-  );
+  const url = `${BASE}/accounts/${ACCOUNT_ID}/signers`;
+  const resp = await axios.get(url, { params: { email }, headers: { ...authHeaders() } });
   const arr = Array.isArray(resp.data) ? resp.data : resp.data?.data;
   return Array.isArray(arr) && arr.length > 0 ? arr[0] : null;
 }
@@ -95,6 +96,7 @@ async function ensureSigner({ full_name, email, government_id, phone }) {
 /* ------------------------ Document & Status ------------------------ */
 async function getDocument(documentId) {
   const url = `${BASE}/documents/${encodeURIComponent(documentId)}`;
+  if (DEBUG) console.log('[ASSINAFY][GET]', url);
   const resp = await axios.get(url, { headers: { ...authHeaders() } });
   return resp.data?.data || resp.data;
 }
@@ -113,24 +115,48 @@ async function waitForDocumentReady(documentId, { retries = 20, intervalMs = 300
 }
 
 /* ------------------------ Assignments & Sign URL ------------------------ */
+/**
+ * Cria assignment “virtual” para o documento (sem campos).
+ * Usa endpoint SEM /accounts (evita 404).
+ * Tenta 3 formatos de payload (signerIds | signer_ids | signers).
+ * Trata 409 (já existe assignment) como sucesso.
+ */
 async function requestSignatures(documentId, signerIds, { message, expires_at } = {}) {
-  assertAccount();
   if (!documentId) throw new Error('documentId é obrigatório.');
   if (!Array.isArray(signerIds) || signerIds.length === 0) {
     throw new Error('Informe ao menos um signerId.');
   }
 
-  const body = { method: 'virtual', signerIds };
-  if (message) body.message = message;
-  if (expires_at) body.expires_at = expires_at;
+  const url = `${BASE}/documents/${encodeURIComponent(documentId)}/assignments`;
+  const bodies = [
+    { method: 'virtual', signerIds, ...(message ? { message } : {}), ...(expires_at ? { expires_at } : {}) },
+    { method: 'virtual', signer_ids: signerIds, ...(message ? { message } : {}), ...(expires_at ? { expires_at } : {}) },
+    { method: 'virtual', signers: signerIds, ...(message ? { message } : {}), ...(expires_at ? { expires_at } : {}) },
+  ];
 
-  const url = `${BASE}/accounts/${ACCOUNT_ID}/documents/${encodeURIComponent(documentId)}/assignments`;
-  const resp = await axios.post(url, body, { headers: { ...authHeaders(), 'Content-Type': 'application/json' } });
-  return resp.data;
+  let lastErr;
+  for (const body of bodies) {
+    try {
+      if (DEBUG) console.log('[ASSINAFY][POST]', url, JSON.stringify(body));
+      const resp = await axios.post(url, body, { headers: { ...authHeaders(), 'Content-Type': 'application/json' } });
+      return resp.data;
+    } catch (err) {
+      const status = err?.response?.status;
+      const msg = err?.response?.data?.message;
+      if (status === 409 || /already.*assignment/i.test(String(msg || ''))) {
+        if (DEBUG) console.log('[ASSINAFY][POST] assignment já existe — OK.');
+        return { reused: true };
+      }
+      lastErr = err;
+      // tenta próximo formato
+    }
+  }
+  throw lastErr || new Error('Falha ao criar assignment.');
 }
 
 async function listAssignments(documentId) {
   const url = `${BASE}/documents/${encodeURIComponent(documentId)}/assignments`;
+  if (DEBUG) console.log('[ASSINAFY][GET]', url);
   const resp = await axios.get(url, { headers: { ...authHeaders() } });
   const data = Array.isArray(resp.data) ? resp.data : (Array.isArray(resp.data?.data) ? resp.data.data : []);
   return data || [];
