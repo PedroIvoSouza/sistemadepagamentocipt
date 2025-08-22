@@ -528,6 +528,44 @@ window.onload = () => {
   const form = document.getElementById('evento-form');
   const clienteSelect = document.getElementById('cliente-select');
   const descontoManualInput = document.getElementById('desconto-manual');
+  const tipoDescontoAutoDisplay = document.getElementById('tipo-desconto-auto');
+  const totalDiariasDisplay = document.getElementById('total-diarias');
+  const valorBrutoDisplay = document.getElementById('valor-bruto');
+  const valorFinalDisplay = document.getElementById('valor-final');
+  const totalParceladoDisplay = document.getElementById('total-parcelado');
+  const parcelasContainer = document.getElementById('parcelas-container');
+
+  function atualizarCalculos(){
+    const totalDiarias = fp?.selectedDates?.length || 0;
+    totalDiariasDisplay.textContent = totalDiarias;
+
+    const tipoCliente = clienteSelect.selectedOptions[0]?.dataset?.tipo || 'Geral';
+    if (tipoDescontoAutoDisplay) tipoDescontoAutoDisplay.value = tipoCliente;
+
+    const descontoManual = parseFloat(descontoManualInput.value) || 0;
+    const valorBruto = typeof calcularValorBruto === 'function'
+      ? calcularValorBruto(totalDiarias)
+      : 0;
+    valorBrutoDisplay.textContent = fmtBRL(valorBruto);
+
+    const valorFinal = typeof calcularValorFinal === 'function'
+      ? calcularValorFinal(valorBruto, tipoCliente, descontoManual)
+      : valorBruto;
+    valorFinalDisplay.textContent = fmtBRL(valorFinal);
+
+    let totalParcelado = 0;
+    if (typeof parcelasMasks !== 'undefined' && Array.isArray(parcelasMasks)) {
+      totalParcelado = parcelasMasks.reduce(
+        (s, m) => s + parseCurrency(m.valorMask?.el?.value || m.valorMask?.value),
+        0
+      );
+    } else if (parcelasContainer) {
+      parcelasContainer.querySelectorAll('input').forEach(inp => {
+        totalParcelado += parseCurrency(inp.value);
+      });
+    }
+    totalParceladoDisplay.textContent = fmtBRL(totalParcelado);
+  }
   let modoEdicao = false;
   let editEventoId = null;
   function atualizarStatusNaTabelaEventos(eventoId, status){
