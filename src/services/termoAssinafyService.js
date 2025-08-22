@@ -8,6 +8,7 @@ const {
   createAssignment,
   getBestSigningUrl,
   waitForStatus,
+  getDocumentStatus,
 } = require('./assinafyClient');
 
 const DEBUG = String(process.env.ASSINAFY_DEBUG || '') === '1';
@@ -63,12 +64,12 @@ async function upsertDocumentoPreparado({ eventoId, documentId, assinaturaUrl })
 async function prepararTermoEventoSemCampos({ eventoId, pdfPath, pdfFilename, signer }) {
   if (!fs.existsSync(pdfPath)) throw new Error(`PDF não encontrado em ${pdfPath}`);
 
-  // 1) Se não veio pelo body, usa dados do evento/cliente
+  // 1) Dados do signatário
   const { evento } = await getEventoComCliente(eventoId);
-  const full_name = signer?.full_name || evento?.nome_responsavel || evento?.nome_razao_social || 'Responsável';
-  const email     = signer?.email || evento?.email_responsavel || evento?.email || null;
+  const full_name     = signer?.full_name || evento?.nome_responsavel || evento?.nome_razao_social || 'Responsável';
+  const email         = signer?.email || evento?.email_responsavel || evento?.email || null;
   const government_id = signer?.government_id || evento?.documento_responsavel || evento?.documento || null;
-  const phone     = signer?.phone || evento?.telefone_responsavel || null;
+  const phone         = signer?.phone || evento?.telefone_responsavel || null;
   if (!email) throw new Error('Email do signatário não informado.');
 
   // 2) Upload do PDF
@@ -77,22 +78,30 @@ async function prepararTermoEventoSemCampos({ eventoId, pdfPath, pdfFilename, si
   const documentId = up?.id || up?.data?.id;
   if (!documentId) throw new Error('Falha no upload: id do documento não retornado.');
 
-  if (DEBUG) console.log('[PREPARAR][UPLOAD OK]', documentId);
+  if (DEBUG) console.log('[PREPARAR] Upload OK. doc=', documentId);
 
-  // 3) Garante signatário e cria o assignment virtual (SEM CAMPOS)
+  // 2.1) Aguarda o processamento do arquivo (a UI mostra “Documento processado”)
+  // estados possíveis antes de preparar: uploading -> metadata_processing -> metadata_ready
+  await waitForStatus(documentId, (s) => s && s !== 'metadata_processing' && s !== 'uploading', {
+    intervalMs: 1000, maxMs: 30000
+  });
+  const afterProc = await getDocumentStatus(documentId);
+  const st0 = afterProc?.data?.status || afterProc?.status;
+  if (DEBUG) console.log('[PREPARAR] Status pós-processamento:', st0);
+
+  // 3) Garante signatário e cria o assignment (isto é a “preparação”)
   const signerObj = await ensureSigner({ full_name, email, government_id, phone });
   const signerId = signerObj?.id || signerObj?.data?.id;
   if (!signerId) throw new Error('Falha ao garantir signatário.');
 
-  await createAssignment(documentId, signerId, {
-    // message, expires_at etc podem ser passados aqui se desejar
+  await createAssignment(documentId, signerId, { /* message, expires_at... */ });
+
+  // 4) Aguarda ficar pronto para assinar (pending_signature ou já certificated)
+  const status = await waitForStatus(documentId, (s) => s === 'pending_signature' || s === 'certificated', {
+    intervalMs: 1500, maxMs: 120000
   });
 
-  // 4) Espera o status mover para pending_signature (pronto p/ assinar)
-  const status = await waitForStatus(documentId, s => s === 'pending_signature' || s === 'certificated',
-    { intervalMs: 1500, maxMs: 120000 });
-
-  // 5) Melhor URL de assinatura (link do convite)
+  // 5) URL de assinatura (para embed/no e-mail)
   const assinaturaUrl = await getBestSigningUrl(documentId);
 
   // 6) Atualiza DB local
