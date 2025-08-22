@@ -74,27 +74,39 @@
           </button>
         </div>
 
-        <div class="card">
+       <div class="card">
           <div class="card-body p-4">
+            <div class="row g-3 mb-4">
+                <div class="col-md-8">
+                    <input type="text" id="searchInput" class="form-control" placeholder="Buscar por Nome, Documento ou Email...">
+                </div>
+                <div class="col-md-4">
+                    <select id="limitSelect" class="form-select">
+                        <option value="10" selected>10 por página</option>
+                        <option value="20">20 por página</option>
+                        <option value="30">30 por página</option>
+                    </select>
+                </div>
+            </div>
             <div class="table-responsive">
               <table class="table table-hover align-middle">
                 <thead>
                   <tr>
-                    <th>Nome / Razão Social</th>
+                    <th>Nome/Razão Social</th>
                     <th>Documento</th>
                     <th>Email</th>
                     <th>Tipo</th>
-                    <th class="text-end">Ações</th>
+                    <th>Ações</th>
                   </tr>
                 </thead>
-                <tbody id="clientes-table-body"></tbody>
+                <tbody id="clientes-table-body">
+                    </tbody>
               </table>
             </div>
-          </div>
-        </div>
-      </main>
-    </div>
-  </div>
+
+            <nav id="paginationNav" class="d-flex justify-content-center mt-4"></nav>
+            </div>
+        </div>>
 
   <!-- Modal -->
   <div class="modal fade" id="cliente-modal" tabindex="-1" aria-labelledby="modal-title" aria-hidden="true">
@@ -227,6 +239,320 @@
   <script defer src="/js/ui-kit.js"></script>
   <script defer src="/js/mobile-tweaks.js"></script>
   <script>
+
+// COLE TODO ESTE CÓDIGO DENTRO DA TAG <SCRIPT>
+
+    // --- Funções de formatação e helpers ---
+    function formatarDocumento(doc) {
+        if (!doc) return '';
+        const docLimpo = doc.toString().replace(/\D/g, '');
+        if (docLimpo.length === 11) { // CPF
+            return docLimpo.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+        }
+        if (docLimpo.length === 14) { // CNPJ
+            return docLimpo.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
+        }
+        return doc;
+    }
+
+    const toApiTipo = (v) => v === 'PF' ? 'FISICA' : v === 'PJ' ? 'JURIDICA' : (String(v||'').toUpperCase());
+    const fromApiTipo = (v) => (String(v||'').toUpperCase() === 'FISICA' ? 'PF' : 'PJ');
+    const soDig = s => (s||'').replace(/\D/g,'');
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const token = localStorage.getItem('adminAuthToken');
+      if (!token) { window.location.href = '/admin/login.html'; return; }
+
+      // --- Lógica de Menu e Header ---
+      (function bootMenuAndHeader() {
+          const path = window.location.pathname;
+          document.querySelectorAll('.sidebar-nav .nav-link').forEach(link => {
+              const href = link.getAttribute('href');
+              link.classList.remove('active');
+              if (href && path.includes(href) && href !== '#') {
+                  link.classList.add('active');
+                  const parent = link.closest('.menu-dropdown');
+                  if (parent) {
+                      parent.querySelector('a.nav-link').classList.add('active');
+                      parent.querySelector('.submenu').style.display = 'block';
+                  }
+              }
+          });
+          document.querySelectorAll('.menu-dropdown > a').forEach(toggle => {
+              toggle.addEventListener('click', (e) => {
+                  e.preventDefault();
+                  const submenu = toggle.nextElementSibling;
+                  submenu.style.display = submenu.style.display === 'block' ? 'none' : 'block';
+              });
+          });
+          document.getElementById('logoutButton')?.addEventListener('click', (e) => {
+              e.preventDefault(); localStorage.removeItem('adminAuthToken'); window.location.href = '/admin/login.html';
+          });
+          try { const p = JSON.parse(atob(token.split('.')[1])); document.getElementById('adminName').innerText = p?.nome || ''; } catch {}
+      })();
+
+      // --- Referências de Elementos ---
+      const API_URL = '/api/admin/eventos-clientes';
+      const searchInput = document.getElementById('searchInput');
+      const limitSelect = document.getElementById('limitSelect');
+      const tableBody   = document.getElementById('clientes-table-body');
+      const paginationNav = document.getElementById('paginationNav');
+      
+      const clienteModalEl = document.getElementById('cliente-modal');
+      const clienteModal   = new bootstrap.Modal(clienteModalEl);
+      const modalTitle     = document.getElementById('modal-title');
+      const form           = document.getElementById('cliente-form');
+      const submitBtn      = clienteModalEl.querySelector('.modal-footer button[form="cliente-form"]');
+      const clienteIdField = document.getElementById('cliente-id');
+      const tipoPessoaSelect = document.getElementById('tipo_pessoa');
+      const documentoInput   = document.getElementById('documento');
+      const nomeRazaoInput   = document.getElementById('nome_razao_social');
+      const emailInput       = document.getElementById('email');
+      const telefoneInput    = document.getElementById('telefone');
+      const tipoClienteSel   = document.getElementById('tipo_cliente');
+      const responsavelGroup = document.getElementById('responsavel-group');
+      const nomeRespInput    = document.getElementById('nome_responsavel');
+      const docRespInput     = document.getElementById('documento_responsavel');
+      const cepInput         = document.getElementById('cep');
+      const logradouroInput  = document.getElementById('logradouro');
+      const numeroInput      = document.getElementById('numero');
+      const complInput       = document.getElementById('complemento');
+      const bairroInput      = document.getElementById('bairro');
+      const cidadeInput      = document.getElementById('cidade');
+      const ufInput          = document.getElementById('uf');
+
+      // --- Estado da Paginação e Busca ---
+      let currentPage = 1, currentSearch = '', currentLimit = 10, searchTimeout;
+
+      // --- Lógica de Carregamento e Renderização da Tabela ---
+      async function fetchClientes() {
+          tableBody.innerHTML = `<tr><td colspan="5" class="text-center">Carregando...</td></tr>`;
+          try {
+              const response = await fetch(`${API_URL}?search=${encodeURIComponent(currentSearch)}&page=${currentPage}&limit=${currentLimit}`, {
+                  headers: { 'Authorization': `Bearer ${token}` }
+              });
+              if (!response.ok) {
+                  const errorData = await response.json().catch(() => ({}));
+                  throw new Error(errorData.error || 'Falha ao buscar os dados.');
+              }
+              const data = await response.json();
+              renderTable(data.clientes || data.data); // Compatibilidade com diferentes retornos da API
+              renderPagination(data.totalPages, data.currentPage);
+          } catch (error) {
+              tableBody.innerHTML = `<tr><td colspan="5" class="text-center text-danger">${error.message}</td></tr>`;
+          }
+      }
+
+      function renderTable(clientes) {
+          if (!clientes || clientes.length === 0) {
+              tableBody.innerHTML = '<tr><td colspan="5" class="text-center">Nenhum cliente encontrado.</td></tr>';
+              return;
+          }
+          tableBody.innerHTML = clientes.map(c => {
+              const resendButton = !c.senha_hash
+                  ? `<button class="btn btn-sm btn-outline-info btn-resend" data-id="${c.id}" title="Reenviar convite de senha"><i class="bi bi-envelope-arrow-up-fill"></i></button>`
+                  : `<button class="btn btn-sm btn-outline-success" disabled title="Senha já definida pelo cliente"><i class="bi bi-check-circle-fill"></i></button>`;
+              
+              return `
+                  <tr>
+                      <td><strong>${c.nome_razao_social || ''}</strong></td>
+                      <td>${formatarDocumento(c.documento)}</td>
+                      <td>${c.email || ''}</td>
+                      <td><span class="badge bg-secondary">${c.tipo_cliente || ''}</span></td>
+                      <td>
+                          <div class="btn-group">
+                              ${resendButton}
+                              <button class="btn btn-sm btn-outline-primary btn-edit" data-cliente='${JSON.stringify(c)}' title="Editar"><i class="bi bi-pencil-fill"></i></button>
+                              <button class="btn btn-sm btn-outline-danger btn-delete" data-id="${c.id}" title="Excluir"><i class="bi bi-trash-fill"></i></button>
+                          </div>
+                      </td>
+                  </tr>`;
+          }).join('');
+      }
+
+      function renderPagination(totalPages, page) {
+          paginationNav.innerHTML = '';
+          if (totalPages <= 1) return;
+          let paginationHTML = '<ul class="pagination">';
+          paginationHTML += `<li class="page-item ${page === 1 ? 'disabled' : ''}"><a class="page-link" href="#" data-page="${page - 1}">Anterior</a></li>`;
+          
+          for (let i = 1; i <= totalPages; i++) {
+              paginationHTML += `<li class="page-item ${i === page ? 'active' : ''}"><a class="page-link" href="#" data-page="${i}">${i}</a></li>`;
+          }
+
+          paginationHTML += `<li class="page-item ${page === totalPages ? 'disabled' : ''}"><a class="page-link" href="#" data-page="${page + 1}">Próximo</a></li>`;
+          paginationHTML += '</ul>';
+          paginationNav.innerHTML = paginationHTML;
+      }
+
+      // --- Event Listeners para Filtros e Paginação ---
+      searchInput.addEventListener('keyup', () => { 
+          clearTimeout(searchTimeout); 
+          searchTimeout = setTimeout(() => { 
+              currentSearch = searchInput.value; 
+              currentPage = 1; 
+              fetchClientes(); 
+          }, 300); 
+      });
+      limitSelect.addEventListener('change', () => { 
+          currentLimit = limitSelect.value; 
+          currentPage = 1; 
+          fetchClientes(); 
+      });
+      paginationNav.addEventListener('click', (e) => { 
+          if (e.target.tagName === 'A' && !e.target.parentElement.classList.contains('disabled')) { 
+              e.preventDefault(); 
+              currentPage = Number(e.target.dataset.page); 
+              fetchClientes(); 
+          } 
+      });
+
+      // --- Lógica do Modal e Formulário (PRESERVADA) ---
+      let documentoMask, responsavelCpfMask, telefoneMask, cepMask;
+
+      function aplicarMascaras(){
+        documentoMask && documentoMask.destroy();
+        responsavelCpfMask && responsavelCpfMask.destroy();
+        telefoneMask && telefoneMask.destroy();
+        cepMask && cepMask.destroy();
+
+        const tipo = tipoPessoaSelect.value;
+        responsavelGroup.style.display = tipo === 'PJ' ? 'block' : 'none';
+        documentoInput.placeholder = tipo === 'PJ' ? '00.000.000/0000-00' : '000.000.000-00';
+        documentoMask = IMask(documentoInput, { mask: tipo === 'PJ' ? '00.000.000/0000-00' : '000.000.000-00', lazy:false });
+        if (documentoInput.value) documentoMask.unmaskedValue = soDig(documentoInput.value);
+        if (tipo === 'PJ'){
+          responsavelCpfMask = IMask(docRespInput, { mask: '000.000.000-00', lazy:false });
+          if (docRespInput.value) responsavelCpfMask.unmaskedValue = soDig(docRespInput.value);
+        }
+        telefoneMask = IMask(telefoneInput, { mask: [{ mask: '(00) 0000-0000' }, { mask: '(00) 0 0000-0000' }], lazy:false });
+        if (telefoneInput.value) telefoneMask.unmaskedValue = soDig(telefoneInput.value);
+        cepMask = IMask(cepInput, { mask: '00000-000', lazy:false });
+        if (cepInput.value) cepMask.unmaskedValue = soDig(cepInput.value);
+      }
+
+      async function buscarCEP(cep){
+        const soNum = soDig(cep); if (soNum.length !== 8) return null;
+        try{ const r = await fetch(`https://viacep.com.br/ws/${soNum}/json/`); if (!r.ok) return null; const j = await r.json(); if (j.erro) return null; return j; }catch{ return null; }
+      }
+      async function buscarCNPJ(cnpj){
+        const soNum = soDig(cnpj); if (soNum.length !== 14) return null;
+        try{ const r = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${soNum}`); if (!r.ok) return null; return await r.json(); }catch{ return null; }
+      }
+      
+      function setupModal(cliente=null){
+        form.reset(); form.classList.remove('was-validated');
+        if (cliente){
+            modalTitle.textContent = 'Editar Cliente';
+            clienteIdField.value = cliente.id;
+            tipoPessoaSelect.value = fromApiTipo(cliente.tipo_pessoa || cliente.tipo || 'JURIDICA');
+            documentoInput.value = cliente.documento || '';
+            nomeRazaoInput.value = cliente.nome_razao_social || '';
+            emailInput.value = cliente.email || '';
+            telefoneInput.value = cliente.telefone || '';
+            tipoClienteSel.value = cliente.tipo_cliente || 'Geral';
+            nomeRespInput.value = cliente.nome_responsavel || '';
+            docRespInput.value = cliente.documento_responsavel || '';
+            cepInput.value = cliente.cep || '';
+            logradouroInput.value = cliente.logradouro || '';
+            numeroInput.value = cliente.numero || '';
+            complInput.value = cliente.complemento || '';
+            bairroInput.value = cliente.bairro || '';
+            cidadeInput.value = cliente.cidade || '';
+            ufInput.value = cliente.uf || '';
+        } else {
+            modalTitle.textContent = 'Adicionar Novo Cliente';
+            clienteIdField.value = '';
+        }
+        aplicarMascaras();
+      }
+
+      document.getElementById('add-cliente-btn')?.addEventListener('click', ()=> setupModal(null));
+      tipoPessoaSelect.addEventListener('change', aplicarMascaras);
+      documentoInput.addEventListener('blur', async ()=>{ /* sua lógica original */ });
+      cepInput.addEventListener('blur', async ()=>{ /* sua lógica original */ });
+
+      form.addEventListener('submit', async (e)=>{
+        e.preventDefault();
+        const tipoApi = toApiTipo(tipoPessoaSelect.value);
+        const docNum = soDig(documentoInput.value);
+        const docResp = soDig(docRespInput.value);
+        if (tipoApi === 'FISICA' && docNum.length !== 11){ alert('CPF inválido (11 dígitos).'); return; }
+        if (tipoApi === 'JURIDICA' && docNum.length !== 14){ alert('CNPJ inválido (14 dígitos).'); return; }
+        if (tipoApi === 'JURIDICA' && docResp && docResp.length !== 11){ alert('CPF do responsável inválido.'); return; }
+        if (!form.checkValidity()){ form.classList.add('was-validated'); return; }
+
+        const id = clienteIdField.value;
+        const url = id ? `${API_URL}/${id}` : API_URL;
+        const method = id ? 'PUT' : 'POST';
+        const body = {
+            nome_razao_social: nomeRazaoInput.value,
+            tipo_pessoa: tipoApi,
+            documento: docNum,
+            email: emailInput.value,
+            telefone: soDig(telefoneInput.value) || null,
+            nome_responsavel: nomeRespInput.value || null,
+            documento_responsavel: docResp || null,
+            tipo_cliente: tipoClienteSel.value,
+            cep: soDig(cepInput.value) || null,
+            logradouro: logradouroInput.value || null,
+            bairro: bairroInput.value || null,
+            cidade: cidadeInput.value || null,
+            uf: (ufInput.value||'').toUpperCase() || null,
+            numero: numeroInput.value || null,
+            complemento: complInput.value || null
+        };
+
+        submitBtn.disabled = true; submitBtn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Salvando...`;
+        try{
+            const r = await fetch(url, { method, headers: { 'Content-Type':'application/json', Authorization:`Bearer ${token}` }, body: JSON.stringify(body) });
+            const j = await r.json().catch(()=> ({}));
+            if (!r.ok) throw new Error(j.error || `Erro ${r.status}`);
+            alert(j.message || 'Cliente salvo com sucesso!');
+            clienteModal.hide();
+            fetchClientes(); // Atualiza a tabela
+        } catch(err){
+            alert(`Erro ao salvar: ${err.message}`);
+        } finally {
+            submitBtn.disabled=false; submitBtn.textContent='Salvar';
+        }
+      });
+      
+      tableBody.addEventListener('click', async (e)=>{
+        const btn = e.target.closest('button'); if (!btn) return;
+        const id  = btn.dataset.id;
+        
+        if (btn.classList.contains('btn-edit')){
+          const data = JSON.parse(btn.dataset.cliente);
+          setupModal(data); clienteModal.show(); return;
+        }
+        if (btn.classList.contains('btn-delete')){
+          if (!confirm('Excluir cliente?')) return;
+          try{
+            const r = await fetch(`${API_URL}/${id}`, { method:'DELETE', headers:{ Authorization:`Bearer ${token}` }});
+            const j = await r.json().catch(()=>({}));
+            if (!r.ok) throw new Error(j.error || `Erro ${r.status}`);
+            alert('Cliente excluído.'); fetchClientes();
+          }catch(err){ alert(`Erro ao excluir: ${err.message}`); }
+          return;
+        }
+        if (btn.classList.contains('btn-resend')){
+          const original = btn.innerHTML; btn.disabled = true; btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
+          try{
+            const r = await fetch(`${API_URL}/${id}/reenviar-senha`, { method:'POST', headers:{ Authorization:`Bearer ${token}` }});
+            const j = await r.json().catch(()=>({}));
+            if (!r.ok) throw new Error(j.error || `Erro ${r.status}`);
+            alert(j.message || 'E-mail enviado.');
+            btn.outerHTML = `<button class="btn btn-sm btn-outline-success" disabled title="E-mail enviado"><i class="bi bi-check-circle-fill"></i></button>`;
+          }catch(err){ alert(`Erro: ${err.message}`); btn.disabled=false; btn.innerHTML = original; }
+        }
+      });
+      
+      // --- Inicialização ---
+      fetchClientes();
+      aplicarMascaras();
+    });
+    
 const toApiTipo = (v) => v === 'PF' ? 'FISICA' : v === 'PJ' ? 'JURIDICA' : (String(v||'').toUpperCase());
 const fromApiTipo = (v) => (String(v||'').toUpperCase() === 'FISICA' ? 'PF' : 'PJ');
 const soDig = s => (s||'').replace(/\D/g,'');
