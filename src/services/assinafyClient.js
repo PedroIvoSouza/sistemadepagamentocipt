@@ -353,8 +353,6 @@ module.exports = {
 
   // helpers
   waitForStatus,
-
   getStatusPlain,
   safeDownloadCertificatedOrNull,
-};
 };
