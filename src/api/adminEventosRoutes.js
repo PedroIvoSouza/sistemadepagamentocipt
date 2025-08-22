@@ -11,9 +11,11 @@ const {
   ensureSigner,
   requestSignatures,
   getDocument,
-  pickBestArtifactUrl,
-  waitForDocumentReady,
   getSigningUrl,
+  pickBestArtifactUrl,
+  waitUntilReadyForAssignment,
+  waitUntilPendingSignature,
+  waitForDocumentReady, // compat (usado em uma rota)
   onlyDigits,
 } = require('../services/assinafyService');
 
@@ -21,51 +23,29 @@ const fs = require('fs');
 const path = require('path');
 const db = require('../database/db');
 
-// Nome certo do service do termo
+// Service correto do termo
 const { gerarTermoEventoPdfkitEIndexar } = require('../services/termoEventoPdfkitService');
 
 const router = express.Router();
-
-/* ========= Helpers ========= */
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /* ========= SQLite helpers com log ========= */
 const dbGet = (sql, p = [], ctx = '') =>
   new Promise((resolve, reject) => {
     console.log('[SQL][GET]', ctx, '\n ', sql, '\n ', 'params:', p);
-    db.get(sql, p, (err, row) => {
-      if (err) {
-        console.error('[SQL][GET][ERRO]', ctx, err.message);
-        return reject(err);
-      }
-      resolve(row);
-    });
+    db.get(sql, p, (err, row) => (err ? reject(err) : resolve(row)));
   });
 
 const dbAll = (sql, p = [], ctx = '') =>
   new Promise((resolve, reject) => {
     console.log('[SQL][ALL]', ctx, '\n ', sql, '\n ', 'params:', p);
-    db.all(sql, p, (err, rows) => {
-      if (err) {
-        console.error('[SQL][ALL][ERRO]', ctx, err.message);
-        return reject(err);
-      }
-      console.log('[SQL][ALL][OK]', ctx, 'rows:', rows?.length ?? 0);
-      resolve(rows);
-    });
+    db.all(sql, p, (err, rows) => (err ? reject(err) : resolve(rows)));
   });
 
 const dbRun = (sql, p = [], ctx = '') =>
   new Promise((resolve, reject) => {
     console.log('[SQL][RUN]', ctx, '\n ', sql, '\n ', 'params:', p);
-    db.run(sql, p, function (err) {
-      if (err) {
-        console.error('[SQL][RUN][ERRO]', ctx, err.message);
-        return reject(err);
-      }
-      console.log('[SQL][RUN][OK]', ctx, 'lastID:', this.lastID, 'changes:', this.changes);
-      resolve(this);
-    });
+    db.run(sql, p, function (err) { return err ? reject(err) : resolve(this); });
   });
 
 /* ========= Middleware ========= */
@@ -92,7 +72,7 @@ router.post('/', async (req, res) => {
 
 /* ===========================================================
    POST /api/admin/eventos/:id/termo/enviar-assinatura
-   Gera termo → upload → aguarda → ensureSigner → assignment → salva assinatura_url
+   Gera termo → upload → WAIT#1 → ensureSigner → assignment → WAIT#2 → salva assinatura_url
    =========================================================== */
 router.post('/:id/termo/enviar-assinatura', async (req, res) => {
   const { id } = req.params;
@@ -115,7 +95,6 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
       signerCpf   = signerCpf   || onlyDigits(row.documento_responsavel || row.documento || '');
       signerPhone = signerPhone || row.telefone || '';
     }
-
     if (!signerName || !signerEmail) {
       return res.status(400).json({ ok: false, error: 'Nome e email do signatário são obrigatórios.' });
     }
@@ -124,17 +103,12 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
     const out = await gerarTermoEventoPdfkitEIndexar(id); // { filePath, fileName }
 
     // 2) Upload pro Assinafy
-    const uploaded = await uploadDocumentFromFile(out.filePath, out.fileName);
-    const assinafyDocId = uploaded?.id || uploaded?.data?.id;
+    const up = await uploadDocumentFromFile(out.filePath, out.fileName);
+    const assinafyDocId = up?.id || up?.data?.id;
     if (!assinafyDocId) return res.status(500).json({ ok: false, error: 'Falha no upload ao Assinafy.' });
 
-    // 3) Aguarda processamento
-    try {
-      await waitForDocumentReady(assinafyDocId, { retries: 20, intervalMs: 3000 });
-    } catch (err) {
-      if (err.timeout) return res.status(504).json({ ok: false, error: 'Tempo limite ao processar documento no Assinafy.' });
-      throw err;
-    }
+    // 3) WAIT #1 — processamento até ficar pronto para assignment
+    await waitUntilReadyForAssignment(assinafyDocId, { retries: 20, intervalMs: 3000 });
 
     // 4) Ensure signer
     const signer = await ensureSigner({
@@ -146,7 +120,7 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
     const signerId = signer?.id || signer?.data?.id;
     if (!signerId) return res.status(500).json({ ok: false, error: 'Falha ao criar signatário no Assinafy.' });
 
-    // 5) Assignment (virtual) com retry
+    // 5) Assignment (virtual) com tentativas e fallback de rota
     const maxRetries = 3;
     let assigned = false;
     for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -159,7 +133,7 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
         const assinafyMsg = err.response?.data?.message;
         if ((assinafyMsg === 'metadata_processing' || status === 400) && attempt < maxRetries - 1) {
           await sleep(2000);
-          await waitForDocumentReady(assinafyDocId, { retries: 5, intervalMs: 1500 });
+          await waitUntilReadyForAssignment(assinafyDocId, { retries: 5, intervalMs: 1500 });
           continue;
         }
         if (status === 409) { assigned = true; break; }
@@ -168,15 +142,11 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
     }
     if (!assigned) return res.status(500).json({ ok: false, error: 'Não foi possível criar o assignment.' });
 
-    // 6) Captura assinatura_url
-    let assinaturaUrl = null;
-    for (let i = 0; i < 3; i++) {
-      assinaturaUrl = await getSigningUrl(assinafyDocId);
-      if (assinaturaUrl) break;
-      await sleep(1000);
-    }
+    // 6) WAIT #2 — aguarda virar "pending_signature"
+    await waitUntilPendingSignature(assinafyDocId, { retries: 30, intervalMs: 2000 });
 
-    // 7) Atualiza metadados
+    // 7) Captura assinatura_url e salva
+    const assinaturaUrl = await getSigningUrl(assinafyDocId);
     await dbRun(
       `UPDATE documentos
           SET assinafy_id = ?, status = 'pendente_assinatura', assinatura_url = ?
@@ -202,8 +172,8 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
 });
 
 /* ===========================================================
-   Reativar assinatura (documento já enviado)
    POST /api/admin/eventos/:id/termo/reativar-assinatura
+   (documento já enviado: recria assignment/URL se precisar)
    =========================================================== */
 router.post('/:id/termo/reativar-assinatura', async (req, res) => {
   const { id } = req.params;
@@ -251,7 +221,7 @@ router.post('/:id/termo/reativar-assinatura', async (req, res) => {
     try {
       await requestSignatures(assinafyDocId, [signerId], { message, expires_at: expiresAt });
     } catch (err) {
-      if (err.response?.status !== 409) throw err; // 409 = já existe
+      if (err.response?.status !== 409) throw err; // 409 = já existe assignment
     }
 
     let assinaturaUrl = await getSigningUrl(assinafyDocId);
@@ -310,37 +280,10 @@ router.get('/:id/termo/assinatura-url', async (req, res) => {
 });
 
 /* ===========================================================
-   (Restante das rotas originais — preservadas)
+   GET /api/admin/eventos
    =========================================================== */
-
-router.get('/', async (req, res) => {
+router.get('/', async (_req, res) => {
   try {
-    let page = parseInt(req.query.page, 10);
-    let limit = parseInt(req.query.limit, 10);
-
-    page = Number.isNaN(page) || page < 1 ? 1 : page;
-    limit = Number.isNaN(limit) || limit < 1 ? 10 : limit;
-
-    const rawSearch = typeof req.query.search === 'string' ? req.query.search : '';
-    const sanitizedSearch = rawSearch.trim().replace(/[%_]/g, '');
-
-    const whereClause = sanitizedSearch
-      ? `WHERE e.nome_evento LIKE ? OR c.nome_razao_social LIKE ? OR e.numero_processo LIKE ?`
-      : '';
-    const params = sanitizedSearch
-      ? [`%${sanitizedSearch}%`, `%${sanitizedSearch}%`, `%${sanitizedSearch}%`]
-      : [];
-
-    const countSql = `
-      SELECT COUNT(*) AS total
-        FROM Eventos e
-        JOIN Clientes_Eventos c ON e.id_cliente = c.id
-        ${whereClause}`;
-    const totalRow = await dbGet(countSql, params, 'eventos/count');
-    const total = totalRow?.total || 0;
-
-    const offset = (page - 1) * limit;
-
     const sql = `
       SELECT e.id, e.id_cliente, e.nome_evento, e.espaco_utilizado, e.area_m2,
              e.valor_final, e.status, e.data_vigencia_final,
@@ -349,20 +292,18 @@ router.get('/', async (req, res) => {
              c.nome_razao_social AS nome_cliente
         FROM Eventos e
         JOIN Clientes_Eventos c ON e.id_cliente = c.id
-        ${whereClause}
-       ORDER BY e.id DESC
-       LIMIT ? OFFSET ?`;
-    const rows = await dbAll(sql, [...params, limit, offset], 'listar-eventos');
-
-    const totalPages = Math.ceil(total / limit) || 1;
-
-    res.json({ eventos: rows, totalPages, currentPage: page });
+       ORDER BY e.id DESC`;
+    const rows = await dbAll(sql, [], 'listar-eventos');
+    res.json(rows);
   } catch (err) {
     console.error('[admin/eventos] listar erro:', err.message);
     res.status(500).json({ error: 'Erro interno no servidor ao buscar eventos.' });
   }
 });
 
+/* ===========================================================
+   GET /api/admin/eventos/:eventoId/dars
+   =========================================================== */
 router.get('/:eventoId/dars', async (req, res) => {
   const { eventoId } = req.params;
   try {
@@ -386,6 +327,9 @@ router.get('/:eventoId/dars', async (req, res) => {
   }
 });
 
+/* ===========================================================
+   GET /api/admin/eventos/:id
+   =========================================================== */
 router.get('/:id', async (req, res) => {
   const { id } = req.params;
 
@@ -460,6 +404,9 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+/* ===========================================================
+   GET /api/admin/eventos/:id/termo
+   =========================================================== */
 router.get('/:id/termo', async (req, res) => {
   const { id } = req.params;
 
@@ -495,6 +442,9 @@ router.get('/:id/termo', async (req, res) => {
   }
 });
 
+/* ===========================================================
+   POST /api/admin/eventos/:eventoId/termo/disponibilizar
+   =========================================================== */
 router.post('/:eventoId/termo/disponibilizar', async (req, res) => {
   try {
     const { eventoId } = req.params;
@@ -516,6 +466,9 @@ router.post('/:eventoId/termo/disponibilizar', async (req, res) => {
   }
 });
 
+/* ===========================================================
+   DELETE /api/admin/eventos/:eventoId
+   =========================================================== */
 router.delete('/:eventoId', async (req, res) => {
   const { eventoId } = req.params;
   console.log(`[ADMIN] Apagar evento ID: ${eventoId}`);
