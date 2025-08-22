@@ -1067,6 +1067,64 @@ window.onload = () => {
   }
 
   // =======================
+  function validarFormularioCompleto(){
+    let valido = true;
+    const marcar = (el, invalido) => {
+      if (!el) return;
+      if (invalido){
+        el.classList.add('is-invalid');
+        valido = false;
+      } else {
+        el.classList.remove('is-invalid');
+      }
+    };
+
+    const cliente = document.getElementById('cliente-select');
+    const nomeEvento = document.getElementById('nome-evento');
+    const datasInput = document.getElementById('datas-evento');
+    const gratuito = document.getElementById('evento-gratuito')?.checked;
+    const parcelasWrap = parcelasContainer || document.getElementById('parcelas-container');
+
+    marcar(cliente, !cliente?.value);
+    marcar(nomeEvento, !nomeEvento?.value.trim());
+    const temDatas = (typeof fp !== 'undefined' && Array.isArray(fp?.selectedDates))
+      ? fp.selectedDates.length > 0
+      : !!datasInput?.value.trim();
+    marcar(datasInput, !temDatas);
+
+    if (!gratuito){
+      let parcelasValidas = true;
+      if (typeof parcelasMasks !== 'undefined' && Array.isArray(parcelasMasks) && parcelasMasks.length){
+        parcelasMasks.forEach(({valorMask,picker})=>{
+          const invalValor = parseCurrency(valorMask?.el?.value) <= 0;
+          const invalVenc  = !(picker?.input?.value);
+          marcar(valorMask?.el, invalValor);
+          marcar(picker?.input, invalVenc);
+          if (invalValor || invalVenc) parcelasValidas = false;
+        });
+      } else {
+        const inputs = parcelasWrap ? parcelasWrap.querySelectorAll('input') : [];
+        if (inputs.length === 0) parcelasValidas = false;
+        inputs.forEach(inp => {
+          const inv = !inp.value.trim();
+          marcar(inp, inv);
+          if (inv) parcelasValidas = false;
+        });
+      }
+      if (!parcelasValidas){
+        parcelasWrap?.classList.add('border','border-danger');
+        valido = false;
+      } else {
+        parcelasWrap?.classList.remove('border','border-danger');
+      }
+    } else {
+      parcelasWrap?.classList.remove('border','border-danger');
+    }
+
+    return valido;
+  }
+
+  // =======================
   // Submit (criar/editar)
   // =======================
   form.addEventListener('submit', async (e)=>{
