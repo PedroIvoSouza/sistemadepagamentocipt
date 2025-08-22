@@ -8,15 +8,7 @@ const crypto   = require('crypto');
 const sqlite3  = require('sqlite3').verbose();
 
 const { gerarTermoEventoPdfkitEIndexar } = require('../services/termoEventoPdfkitService');
-const {
-+  uploadPdf,
-+  getDocumentStatus,
-+  downloadSignedPdf,
-+  ensureSigner,
-+  createAssignment,
-+  waitForStatus,
-+  getBestSigningUrl,
-+} = require('../services/assinafyClient');
+const {  uploadPdf, getDocumentStatus, downloadSignedPdf, ensureSigner, createAssignment, waitForStatus, getBestSigningUrl} = require('../services/assinafyClient');
 
 const router = express.Router();
 
