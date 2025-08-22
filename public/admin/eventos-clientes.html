@@ -20,7 +20,7 @@
     .sidebar-header{padding:1.5rem;text-align:center;background:rgba(0,0,0,.1)}
     .sidebar-header img{max-width:180px;height:auto}
     .sidebar-nav{padding:1rem 0;flex-grow:1}
-    .sidebar-nav .nav-link{color:rgba(255,255,255,.8);padding:.8rem 1.5rem;display:flex;align-items:center;font-weight:500}
+    .sidebar-nav .nav-link{color:rgba(255,255,255,.8);padding:.8rem 1.5rem;display:flex;align-items:center;font-weight:500; text-decoration: none;}
     .sidebar-nav .nav-link .bi{margin-right:1rem;font-size:1.2rem}
     .sidebar-nav .nav-link:hover{color:#fff;background:rgba(255,255,255,.05)}
     .sidebar-nav .nav-link.active{color:#fff;background:var(--cor-primaria)}
@@ -32,7 +32,8 @@
     .card{border:none;border-radius:var(--raio-borda);box-shadow:0 2px 5px rgba(0,0,0,.05);margin-bottom:2rem}
     .modal .form-label{font-weight:600}
     .badge{font-size:.8rem}
-    .btn-group .btn + .btn{margin-left:.25rem}
+    .btn-group .btn { white-space: nowrap; }
+    th { white-space: nowrap; }
   </style>
 </head>
 <body>
@@ -47,7 +48,7 @@
         <li class="nav-item"><a class="nav-link" href="/admin/dars.html"><i class="bi bi-file-earmark-text-fill"></i>DARs</a></li>
         <li class="nav-item menu-dropdown">
           <a class="nav-link" href="#"><i class="bi bi-calendar-event-fill"></i>Eventos</a>
-          <ul class="submenu" style="list-style:none;padding-left:20px;display:none;">
+          <ul class="submenu" style="list-style:none;padding-left:20px;display:block;">
             <li><a class="nav-link active" href="/admin/eventos-clientes.html"><i class="bi bi-person-lines-fill"></i>Clientes de Eventos</a></li>
             <li><a class="nav-link" href="/admin/eventos-dars.html"><i class="bi bi-receipt-cutoff"></i>DARs de Eventos</a></li>
           </ul>
@@ -74,7 +75,7 @@
           </button>
         </div>
 
-       <div class="card">
+        <div class="card">
           <div class="card-body p-4">
             <div class="row g-3 mb-4">
                 <div class="col-md-8">
@@ -106,9 +107,11 @@
 
             <nav id="paginationNav" class="d-flex justify-content-center mt-4"></nav>
             </div>
-        </div>>
+        </div>
+      </main>
+    </div>
+  </div>
 
-  <!-- Modal -->
   <div class="modal fade" id="cliente-modal" tabindex="-1" aria-labelledby="modal-title" aria-hidden="true">
     <div class="modal-dialog modal-lg">
       <div class="modal-content">
@@ -238,10 +241,8 @@
   <script defer src="/js/mobile-adapter.js"></script>
   <script defer src="/js/ui-kit.js"></script>
   <script defer src="/js/mobile-tweaks.js"></script>
+  
   <script>
-
-// COLE TODO ESTE CÓDIGO DENTRO DA TAG <SCRIPT>
-
     // --- Funções de formatação e helpers ---
     function formatarDocumento(doc) {
         if (!doc) return '';
@@ -409,6 +410,7 @@
 
       // --- Lógica do Modal e Formulário (PRESERVADA) ---
       let documentoMask, responsavelCpfMask, telefoneMask, cepMask;
+      const onlyDigits = v => (v||'').toString().replace(/\D/g,'');
 
       function aplicarMascaras(){
         documentoMask && documentoMask.destroy();
@@ -432,11 +434,11 @@
       }
 
       async function buscarCEP(cep){
-        const soNum = soDig(cep); if (soNum.length !== 8) return null;
+        const soNum = onlyDigits(cep); if (soNum.length !== 8) return null;
         try{ const r = await fetch(`https://viacep.com.br/ws/${soNum}/json/`); if (!r.ok) return null; const j = await r.json(); if (j.erro) return null; return j; }catch{ return null; }
       }
       async function buscarCNPJ(cnpj){
-        const soNum = soDig(cnpj); if (soNum.length !== 14) return null;
+        const soNum = onlyDigits(cnpj); if (soNum.length !== 14) return null;
         try{ const r = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${soNum}`); if (!r.ok) return null; return await r.json(); }catch{ return null; }
       }
       
@@ -469,8 +471,30 @@
 
       document.getElementById('add-cliente-btn')?.addEventListener('click', ()=> setupModal(null));
       tipoPessoaSelect.addEventListener('change', aplicarMascaras);
-      documentoInput.addEventListener('blur', async ()=>{ /* sua lógica original */ });
-      cepInput.addEventListener('blur', async ()=>{ /* sua lógica original */ });
+      documentoInput.addEventListener('blur', async ()=>{
+        if (tipoPessoaSelect.value !== 'PJ') return;
+        const cnpjInfo = await buscarCNPJ(documentoInput.value);
+        if (!cnpjInfo) return;
+        if (!nomeRazaoInput.value) nomeRazaoInput.value = cnpjInfo.razao_social || cnpjInfo.nome_fantasia || '';
+        if (!telefoneInput.value && cnpjInfo.telefone) telefoneInput.value = cnpjInfo.telefone;
+        if (!cepInput.value && cnpjInfo.cep) cepInput.value = cnpjInfo.cep;
+        if (!logradouroInput.value) logradouroInput.value = cnpjInfo.logradouro || '';
+        if (!numeroInput.value)     numeroInput.value     = cnpjInfo.numero || '';
+        if (!complInput.value)      complInput.value      = cnpjInfo.complemento || '';
+        if (!bairroInput.value)     bairroInput.value     = cnpjInfo.bairro || '';
+        if (!cidadeInput.value)     cidadeInput.value     = cnpjInfo.municipio || cnpjInfo.cidade || '';
+        if (!ufInput.value)         ufInput.value         = cnpjInfo.uf || '';
+        aplicarMascaras();
+      });
+      cepInput.addEventListener('blur', async ()=>{
+        const data = await buscarCEP(cepInput.value);
+        if (!data) return;
+        logradouroInput.value = data.logradouro || logradouroInput.value;
+        bairroInput.value     = data.bairro     || bairroInput.value;
+        cidadeInput.value     = data.localidade || cidadeInput.value;
+        ufInput.value         = data.uf         || ufInput.value;
+        aplicarMascaras();
+      });
 
       form.addEventListener('submit', async (e)=>{
         e.preventDefault();
@@ -552,333 +576,6 @@
       fetchClientes();
       aplicarMascaras();
     });
-    
-const toApiTipo = (v) => v === 'PF' ? 'FISICA' : v === 'PJ' ? 'JURIDICA' : (String(v||'').toUpperCase());
-const fromApiTipo = (v) => (String(v||'').toUpperCase() === 'FISICA' ? 'PF' : 'PJ');
-const soDig = s => (s||'').replace(/\D/g,'');
-document.addEventListener('DOMContentLoaded', () => {
-  const token = localStorage.getItem('adminAuthToken');
-  if (!token) { window.location.href = '/admin/login.html'; return; }
-
-  // logout / header
-  document.getElementById('logoutButton')?.addEventListener('click', (e)=>{
-    e.preventDefault(); localStorage.removeItem('adminAuthToken'); window.location.href='/admin/login.html';
-  });
-  try{ const p=JSON.parse(atob(token.split('.')[1])); document.getElementById('adminName').innerText = p?.nome || ''; }catch{}
-
-  // refs
-  const API_URL = '/api/admin/eventos-clientes';
-  const clienteModalEl = document.getElementById('cliente-modal');
-  const clienteModal   = new bootstrap.Modal(clienteModalEl);
-  const modalTitle     = document.getElementById('modal-title');
-  const form           = document.getElementById('cliente-form');
-  const submitBtn      = clienteModalEl.querySelector('.modal-footer button[form="cliente-form"]');
-  const tableBody      = document.getElementById('clientes-table-body');
-
-  const clienteIdField   = document.getElementById('cliente-id');
-  const tipoPessoaSelect = document.getElementById('tipo_pessoa');
-  const documentoInput   = document.getElementById('documento');
-  const nomeRazaoInput   = document.getElementById('nome_razao_social');
-  const emailInput       = document.getElementById('email');
-  const telefoneInput    = document.getElementById('telefone');
-  const tipoClienteSel   = document.getElementById('tipo_cliente');
-
-  const responsavelGroup = document.getElementById('responsavel-group');
-  const nomeRespInput    = document.getElementById('nome_responsavel');
-  const docRespInput     = document.getElementById('documento_responsavel');
-
-  const cepInput         = document.getElementById('cep');
-  const logradouroInput  = document.getElementById('logradouro');
-  const numeroInput      = document.getElementById('numero');
-  const complInput       = document.getElementById('complemento');
-  const bairroInput      = document.getElementById('bairro');
-  const cidadeInput      = document.getElementById('cidade');
-  const ufInput          = document.getElementById('uf');
-
-  // máscaras
-  let documentoMask, responsavelCpfMask, telefoneMask, cepMask;
-  const onlyDigits = v => (v||'').toString().replace(/\D/g,'');
-
-  function aplicarMascaras(){
-    documentoMask && documentoMask.destroy();
-    responsavelCpfMask && responsavelCpfMask.destroy();
-    telefoneMask && telefoneMask.destroy();
-    cepMask && cepMask.destroy();
-
-    const tipo = tipoPessoaSelect.value;
-    responsavelGroup.style.display = tipo === 'PJ' ? 'block' : 'none';
-    documentoInput.placeholder = tipo === 'PJ' ? '00.000.000/0000-00' : '000.000.000-00';
-
-    documentoMask = IMask(documentoInput, { mask: tipo === 'PJ' ? '00.000.000/0000-00' : '000.000.000-00', lazy:false });
-    if (documentoInput.value) documentoMask.unmaskedValue = onlyDigits(documentoInput.value);
-
-    if (tipo === 'PJ'){
-      responsavelCpfMask = IMask(docRespInput, { mask: '000.000.000-00', lazy:false });
-      if (docRespInput.value) responsavelCpfMask.unmaskedValue = onlyDigits(docRespInput.value);
-    }
-    telefoneMask = IMask(telefoneInput, { mask: [{ mask: '(00) 0000-0000' }, { mask: '(00) 0 0000-0000' }], lazy:false });
-    if (telefoneInput.value) telefoneMask.unmaskedValue = onlyDigits(telefoneInput.value);
-
-    cepMask = IMask(cepInput, { mask: '00000-000', lazy:false });
-    if (cepInput.value) cepMask.unmaskedValue = onlyDigits(cepInput.value);
-  }
-
-  function limparEndereco(){
-    logradouroInput.value=''; numeroInput.value=''; complInput.value='';
-    bairroInput.value=''; cidadeInput.value=''; ufInput.value='';
-  }
-  function limparPessoaJuridica(){ nomeRespInput.value=''; docRespInput.value=''; }
-  function limparDocumentoENome(){ documentoInput.value=''; nomeRazaoInput.value=''; }
-
-  // APIS auxiliares
-  async function buscarCEP(cep){
-    const soNum = onlyDigits(cep);
-    if (soNum.length !== 8) return null;
-    try{
-      const r = await fetch(`https://viacep.com.br/ws/${soNum}/json/`);
-      if (!r.ok) return null;
-      const j = await r.json(); if (j.erro) return null; return j;
-    }catch{ return null; }
-  }
-  async function buscarCNPJ(cnpj){
-    const soNum = onlyDigits(cnpj);
-    if (soNum.length !== 14) return null;
-    try{
-      const r = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${soNum}`);
-      if (!r.ok) return null;
-      return await r.json();
-    }catch{ return null; }
-  }
-
-  // tabela
-  async function carregarClientes(){
-    tableBody.innerHTML = `<tr><td colspan="5" class="text-center">Carregando...</td></tr>`;
-    try{
-      const r = await fetch(API_URL, { headers:{ Authorization:`Bearer ${token}` }});
-      const j = await r.json().catch(()=>([]));
-      if (!r.ok) throw new Error(j.error || `Erro ${r.status}`);
-      if (!Array.isArray(j) || !j.length){
-        tableBody.innerHTML = `<tr><td colspan="5" class="text-center text-muted py-3">Nenhum cliente cadastrado.</td></tr>`;
-        return;
-      }
-      tableBody.innerHTML = j.map(c=>{
-        const resendButton = !c.senha_hash
-          ? `<button class="btn btn-sm btn-outline-info btn-resend" data-id="${c.id}" title="Reenviar senha"><i class="bi bi-envelope-arrow-up-fill"></i></button>`
-          : `<button class="btn btn-sm btn-outline-success" disabled title="Senha já definida"><i class="bi bi-check-circle-fill"></i></button>`;
-        return `
-          <tr>
-            <td>${c.nome_razao_social || ''}</td>
-            <td>${c.documento || ''}</td>
-            <td>${c.email || ''}</td>
-            <td><span class="badge bg-secondary">${c.tipo_cliente || ''}</span></td>
-            <td class="text-end">
-              <div class="btn-group">
-                ${resendButton}
-                <button class="btn btn-sm btn-outline-primary btn-edit" data-cliente='${JSON.stringify(c)}'><i class="bi bi-pencil-fill"></i> Editar</button>
-                <button class="btn btn-sm btn-outline-danger btn-delete" data-id="${c.id}"><i class="bi bi-trash-fill"></i> Excluir</button>
-              </div>
-            </td>
-          </tr>`;
-      }).join('');
-    }catch(err){
-      tableBody.innerHTML = `<tr><td colspan="5" class="text-danger text-center">Erro: ${err.message}</td></tr>`;
-    }
-  }
-
-  function setupModal(cliente=null){
-  form.reset();
-  form.classList.remove('was-validated');
-
-  if (cliente){
-    modalTitle.textContent = 'Editar Cliente';
-    clienteIdField.value = cliente.id;
-    // converte 'FISICA'/'JURIDICA' -> 'PF'/'PJ'
-    const tipoFront = fromApiTipo(cliente.tipo_pessoa || cliente.tipo || 'JURIDICA');
-    tipoPessoaSelect.value = tipoFront;
-
-    documentoInput.value   = cliente.documento || '';
-    nomeRazaoInput.value   = cliente.nome_razao_social || '';
-    emailInput.value       = cliente.email || '';
-    telefoneInput.value    = cliente.telefone || '';
-    tipoClienteSel.value   = cliente.tipo_cliente || 'Geral';
-
-    nomeRespInput.value    = cliente.nome_responsavel || '';
-    docRespInput.value     = cliente.documento_responsavel || '';
-
-    cepInput.value         = cliente.cep || '';
-    logradouroInput.value  = cliente.logradouro || '';
-    numeroInput.value      = cliente.numero || '';
-    complInput.value       = cliente.complemento || '';
-    bairroInput.value      = cliente.bairro || '';
-    cidadeInput.value      = cliente.cidade || '';
-    ufInput.value          = cliente.uf || '';
-  } else {
-    modalTitle.textContent = 'Adicionar Novo Cliente';
-    clienteIdField.value = '';
-  }
-  aplicarMascaras();
-}
-
-  document.getElementById('add-cliente-btn')?.addEventListener('click', ()=> setupModal(null));
-
-  // alternar PF/PJ
-  tipoPessoaSelect.addEventListener('change', ()=>{
-  // só atualiza máscaras e campos exclusivos de PJ; não zere documento/nome!
-  aplicarMascaras();
-});
-  // CNPJ → auto preencher
-  documentoInput.addEventListener('blur', async ()=>{
-    if (tipoPessoaSelect.value !== 'PJ') return;
-    const cnpjInfo = await buscarCNPJ(documentoInput.value);
-    if (!cnpjInfo) return;
-    if (!nomeRazaoInput.value) nomeRazaoInput.value = cnpjInfo.razao_social || cnpjInfo.nome_fantasia || '';
-    if (!telefoneInput.value && cnpjInfo.telefone) telefoneInput.value = cnpjInfo.telefone;
-    if (!cepInput.value && cnpjInfo.cep) cepInput.value = cnpjInfo.cep;
-
-    if (!logradouroInput.value) logradouroInput.value = cnpjInfo.logradouro || '';
-    if (!numeroInput.value)     numeroInput.value     = cnpjInfo.numero || '';
-    if (!complInput.value)      complInput.value      = cnpjInfo.complemento || '';
-    if (!bairroInput.value)     bairroInput.value     = cnpjInfo.bairro || '';
-    if (!cidadeInput.value)     cidadeInput.value     = cnpjInfo.municipio || cnpjInfo.cidade || '';
-    if (!ufInput.value)         ufInput.value         = cnpjInfo.uf || '';
-    aplicarMascaras();
-  });
-
-  // CEP → endereço
-  cepInput.addEventListener('blur', async ()=>{
-    const data = await buscarCEP(cepInput.value);
-    if (!data) return;
-    logradouroInput.value = data.logradouro || logradouroInput.value;
-    bairroInput.value     = data.bairro     || bairroInput.value;
-    cidadeInput.value     = data.localidade || cidadeInput.value;
-    ufInput.value         = data.uf         || ufInput.value;
-    aplicarMascaras();
-  });
-
-  // helpers de validação (caso ainda não estejam no arquivo)
-function cpfValido(cpf){cpf=(cpf||'').replace(/\D/g,'');if(cpf.length!==11||/^(\d)\1+$/.test(cpf))return false;let s=0,r;for(let i=1;i<=9;i++)s+=parseInt(cpf.substring(i-1,i),10)*(11-i);r=(s*10)%11;if(r===10||r===11)r=0;if(r!==parseInt(cpf.substring(9,10),10))return false;s=0;for(let i=1;i<=10;i++)s+=parseInt(cpf.substring(i-1,i),10)*(12-i);r=(s*10)%11;if(r===10||r===11)r=0;return r===parseInt(cpf.substring(10,11),10)}
-function cnpjValido(cnpj){cnpj=(cnpj||'').replace(/\D/g,'');if(cnpj.length!==14||/^(\d)\1+$/.test(cnpj))return false;const calc=(b)=>{let len=b.length,nums=b.substring(0,len-2).split('').map(n=>+n);const d=b.substring(len-2).split('').map(n=>+n);let p=len-7,s=0;for(let i=len-12;i>=0;i--){s+=nums[i]*p--;if(p<2)p=9}let r=s%11;r=(r<2)?0:11-r;if(r!==d[0])return false;nums.push(r);s=0;p=len-7;for(let i=len-11;i>=0;i--){s+=nums[i]*p--;if(p<2)p=9}r=s%11;r=(r<2)?0:11-r;return r===d[1]};return calc(cnpj)}
-function soDigitos(v){ return (v||'').replace(/\D/g,''); }
-function ehCPF(v){ return soDigitos(v).length === 11; }
-function ehCNPJ(v){ return soDigitos(v).length === 14; }
-
-function validarCamposCliente(){
-  const tipo = tipoPessoaSelect.value;
-  const doc  = soDigitos(documentoInput.value);
-  if (tipo === 'PF' && !ehCPF(doc)) {
-    alert('CPF inválido. Informe 11 dígitos.'); documentoInput.focus(); return false;
-  }
-  if (tipo === 'PJ' && !ehCNPJ(doc)) {
-    alert('CNPJ inválido. Informe 14 dígitos.'); documentoInput.focus(); return false;
-  }
-  // responsável é opcional, mas se vier, valida
-  const docResp = soDigitos(docRespInput.value);
-  if (tipo === 'PJ' && docResp && !ehCPF(docResp)) {
-    alert('CPF do responsável inválido (11 dígitos).'); docRespInput.focus(); return false;
-  }
-  // email required já está com required no form; confere rápido:
-  if (!emailInput.value || !emailInput.checkValidity()){
-    alert('Informe um e-mail válido.'); emailInput.focus(); return false;
-  }
-  return true;
-}
-
-form.addEventListener('submit', async (e)=>{
-  e.preventDefault();
-
-  const tipoFront = tipoPessoaSelect.value; // 'PF' ou 'PJ'
-  const tipoApi   = toApiTipo(tipoFront);   // 'FISICA' ou 'JURIDICA'
-  const docNum    = soDig(documentoInput.value);
-  const docResp   = soDig(docRespInput.value);
-
-  // validações simples
-  if (tipoApi === 'FISICA'  && docNum.length !== 11){ alert('CPF inválido (11 dígitos).'); return; }
-  if (tipoApi === 'JURIDICA'&& docNum.length !== 14){ alert('CNPJ inválido (14 dígitos).'); return; }
-  if (tipoApi === 'JURIDICA' && docResp && docResp.length !== 11){ alert('CPF do responsável inválido.'); return; }
-  if (!form.checkValidity()){ form.classList.add('was-validated'); return; }
-
-  const id     = clienteIdField.value;
-  const url    = id ? `${API_URL}/${id}` : API_URL;
-  const method = id ? 'PUT' : 'POST';
-  // no submit do form, antes de montar body:
-  const tp = (tipoPessoaSelect.value || '').toUpperCase();
-  const tipoParaApi = tp === 'PF' ? 'FISICA' : (tp === 'PJ' ? 'JURIDICA' : tp);
-
-const body = {
-  nome_razao_social: nomeRazaoInput.value,
-  tipo_pessoa: tipoParaApi,                 // <--- usa mapeado
-  documento: documentoInput.value.replace(/\D/g,''),
-  email: emailInput.value,
-  telefone: (telefoneInput.value || '').replace(/\D/g,'') || null,
-  nome_responsavel: nomeRespInput.value || null,
-  documento_responsavel: (docRespInput.value||'').replace(/\D/g,'') || null,
-  tipo_cliente: tipoClienteSel.value,
-  cep: (cepInput.value||'').replace(/\D/g,'') || null,
-  logradouro: logradouroInput.value || null,
-  bairro: bairroInput.value || null,
-  cidade: cidadeInput.value || null,
-  uf: (ufInput.value||'').toUpperCase() || null,
-  numero: numeroInput.value || null,
-  complemento: complInput.value || null
-};
-
-  // salva
-  submitBtn.disabled = true; submitBtn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Salvando...`;
-  try{
-    const r = await fetch(url, {
-      method,
-      headers: { 'Content-Type':'application/json', Authorization:`Bearer ${token}` },
-      body: JSON.stringify(body)
-    });
-    const j = await r.json().catch(()=> ({}));
-    if (!r.ok) throw new Error(j.error || `Erro ${r.status}`);
-
-    alert(j.message || 'Cliente salvo com sucesso!');
-    clienteModal.hide();
-    setupModal(null);
-    carregarClientes();
-  }catch(err){
-    alert(`Erro ao salvar: ${err.message}`);
-  }finally{
-    submitBtn.disabled=false; submitBtn.textContent='Salvar';
-  }
-});
-
-  // ações tabela
-  tableBody.addEventListener('click', async (e)=>{
-    const btn = e.target.closest('button'); if (!btn) return;
-    const id  = btn.dataset.id;
-
-    if (btn.classList.contains('btn-edit')){
-      const data = JSON.parse(btn.dataset.cliente);
-      setupModal(data); clienteModal.show(); return;
-    }
-    if (btn.classList.contains('btn-delete')){
-      if (!confirm('Excluir cliente?')) return;
-      try{
-        const r = await fetch(`${API_URL}/${id}`, { method:'DELETE', headers:{ Authorization:`Bearer ${token}` }});
-        const j = await r.json().catch(()=> ({}));
-        if (!r.ok) throw new Error(j.error || `Erro ${r.status}`);
-        alert('Cliente excluído.'); carregarClientes();
-      }catch(err){ alert(`Erro ao excluir: ${err.message}`); }
-      return;
-    }
-    if (btn.classList.contains('btn-resend')){
-      const original = btn.innerHTML; btn.disabled = true; btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
-      try{
-        const r = await fetch(`${API_URL}/${id}/reenviar-senha`, { method:'POST', headers:{ Authorization:`Bearer ${token}` }});
-        const j = await r.json().catch(()=> ({}));
-        if (!r.ok) throw new Error(j.error || `Erro ${r.status}`);
-        alert(j.message || 'E-mail enviado.');
-        btn.outerHTML = `<button class="btn btn-sm btn-outline-success" disabled title="E-mail enviado"><i class="bi bi-check-circle-fill"></i></button>`;
-      }catch(err){ alert(`Erro: ${err.message}`); btn.disabled=false; btn.innerHTML = original; }
-    }
-  });
-
-  // boot
-  carregarClientes();
-  aplicarMascaras();
-});
-</script>
+  </script>
 </body>
 </html>
