@@ -171,73 +171,73 @@ router.get('/termo/:eventoId', async (req, res) => {
 // Força re-geração do termo e devolve metadados
 router.post('/termo/:eventoId/generate', async (req, res) => {
 const eventoId = req.params.eventoId;
-+  try {
-+    // 1) Garante PDF local gerado
-+    let docRow = await dbGet(`SELECT * FROM documentos WHERE evento_id=? AND tipo='termo_evento'`, [eventoId]);
-+    if (!docRow || !docRow.pdf_url || !fs.existsSync(docRow.pdf_url)) {
-+      await gerarTermoEventoPdfkitEIndexar(eventoId);
-+      docRow = await dbGet(`SELECT * FROM documentos WHERE evento_id=? AND tipo='termo_evento'`, [eventoId]);
-+    }
-+    if (!docRow || !docRow.pdf_url || !fs.existsSync(docRow.pdf_url)) {
-+      return res.status(409).json({ error: 'PDF do termo não encontrado.' });
-+    }
-+
-+    // 2) Sobe o PDF para a Assinafy
-+    const buffer = fs.readFileSync(docRow.pdf_url);
-+    const filename = path.basename(docRow.pdf_url);
-+    const callbackUrl = process.env.ASSINAFY_CALLBACK_URL || undefined;
-+    const up = await uploadPdf(buffer, filename, { callbackUrl });
-+    const documentId = up?.id || up?.data?.id;
-+    if (!documentId) throw new Error('Upload sem id de documento.');
-+
-+    // 3) Coleta Nome/Email do responsável (para o assignment)
-+    const ev = await dbGet(`
-+      SELECT e.id,
-+             c.nome_responsavel, c.email as email_responsavel,
-+             c.nome_razao_social, c.email AS email_cliente,
-+             c.documento_responsavel, c.telefone AS telefone_responsavel
-+        FROM Eventos e
-+        JOIN Clientes_Eventos c ON c.id = e.id_cliente
-+       WHERE e.id = ?`, [eventoId]);
-+    const full_name     = ev?.nome_responsavel || ev?.nome_razao_social || 'Responsável';
-+    const email         = ev?.email_responsavel || ev?.email_cliente;
-+    const government_id = ev?.documento_responsavel || null;
-+    const phone         = ev?.telefone_responsavel || null;
-+    if (!email) return res.status(409).json({ error: 'Email do signatário não encontrado.' });
-+
-+    // 4) Garante signatário e PREPARA (assignment "virtual" = sem campos)
-+    const signer = await ensureSigner({ full_name, email, government_id, phone });
-+    const signerId = signer?.id || signer?.data?.id;
-+    await createAssignment(documentId, signerId, { /* message, expires_at */ });
-+
-+    // 5) Espera ficar pronto para assinar (pending_signature)
-+    const status = await waitForStatus(documentId, s => s === 'pending_signature' || s === 'certificated',
-+      { intervalMs: 1200, maxMs: 120000 });
-+
-+    // 6) Pega URL de assinatura (para embed/link)
-+    const assinaturaUrl = await getBestSigningUrl(documentId);
-+
-+    // 7) Atualiza tabela
-+    const createdAt = new Date().toISOString();
-+    await dbRun(
-+      `INSERT INTO documentos (tipo, token, evento_id, pdf_url, pdf_public_url, status, created_at, assinafy_id, assinatura_url)
-+       VALUES ('termo_evento', ?, ?, ?, ?, 'pendente_assinatura', ?, ?, ?)
-+       ON CONFLICT(evento_id, tipo) DO UPDATE SET
-+         token=excluded.token, pdf_url=excluded.pdf_url, pdf_public_url=excluded.pdf_public_url,
-+         status='pendente_assinatura', created_at=excluded.created_at,
-+         assinafy_id=excluded.assinafy_id, assinatura_url=excluded.assinatura_url`,
-+      [documentId, eventoId, docRow.pdf_url, docRow.pdf_public_url, createdAt, documentId, assinaturaUrl || null]
-+    );
-+
-+    return res.json({
-+      ok: true,
-+      message: 'Documento preparado para assinatura.',
-+      data: { documentId, status, assinaturaUrl, full_name, email }
-+    });
-+  } catch (e) {
-+    console.error('[documentos] /termo/:eventoId/assinafy/send erro:', e?.response?.data || e);
-+    res.status(500).json({ error: 'Falha no envio/preparação' });
-+  }
+  try {
+    // 1) Garante PDF local gerado
+    let docRow = await dbGet(`SELECT * FROM documentos WHERE evento_id=? AND tipo='termo_evento'`, [eventoId]);
+    if (!docRow || !docRow.pdf_url || !fs.existsSync(docRow.pdf_url)) {
+      await gerarTermoEventoPdfkitEIndexar(eventoId);
+      docRow = await dbGet(`SELECT * FROM documentos WHERE evento_id=? AND tipo='termo_evento'`, [eventoId]);
+   }
+    if (!docRow || !docRow.pdf_url || !fs.existsSync(docRow.pdf_url)) {
+      return res.status(409).json({ error: 'PDF do termo não encontrado.' });
+    }
+
+    // 2) Sobe o PDF para a Assinafy
+    const buffer = fs.readFileSync(docRow.pdf_url);
+    const filename = path.basename(docRow.pdf_url);
+    const callbackUrl = process.env.ASSINAFY_CALLBACK_URL || undefined;
+    const up = await uploadPdf(buffer, filename, { callbackUrl });
+    const documentId = up?.id || up?.data?.id;
+    if (!documentId) throw new Error('Upload sem id de documento.');
+
+    // 3) Coleta Nome/Email do responsável (para o assignment)
+    const ev = await dbGet(`
+      SELECT e.id,
+             c.nome_responsavel, c.email as email_responsavel,
+             c.nome_razao_social, c.email AS email_cliente,
+             c.documento_responsavel, c.telefone AS telefone_responsavel
+        FROM Eventos e
+        JOIN Clientes_Eventos c ON c.id = e.id_cliente
+       WHERE e.id = ?`, [eventoId]);
+    const full_name     = ev?.nome_responsavel || ev?.nome_razao_social || 'Responsável';
+    const email         = ev?.email_responsavel || ev?.email_cliente;
+    const government_id = ev?.documento_responsavel || null;
+    const phone         = ev?.telefone_responsavel || null;
+    if (!email) return res.status(409).json({ error: 'Email do signatário não encontrado.' });
+
+    // 4) Garante signatário e PREPARA (assignment "virtual" = sem campos)
+    const signer = await ensureSigner({ full_name, email, government_id, phone });
+    const signerId = signer?.id || signer?.data?.id;
+    await createAssignment(documentId, signerId, { /* message, expires_at */ });
+
+    // 5) Espera ficar pronto para assinar (pending_signature)
+    const status = await waitForStatus(documentId, s => s === 'pending_signature' || s === 'certificated',
+      { intervalMs: 1200, maxMs: 120000 });
+
+    // 6) Pega URL de assinatura (para embed/link)
+    const assinaturaUrl = await getBestSigningUrl(documentId);
+
+    // 7) Atualiza tabela
+    const createdAt = new Date().toISOString();
+    await dbRun(
+      `INSERT INTO documentos (tipo, token, evento_id, pdf_url, pdf_public_url, status, created_at, assinafy_id, assinatura_url)
+       VALUES ('termo_evento', ?, ?, ?, ?, 'pendente_assinatura', ?, ?, ?)
+       ON CONFLICT(evento_id, tipo) DO UPDATE SET
+         token=excluded.token, pdf_url=excluded.pdf_url, pdf_public_url=excluded.pdf_public_url,
+         status='pendente_assinatura', created_at=excluded.created_at,
+         assinafy_id=excluded.assinafy_id, assinatura_url=excluded.assinatura_url`,
+      [documentId, eventoId, docRow.pdf_url, docRow.pdf_public_url, createdAt, documentId, assinaturaUrl || null]
+    );
+
+    return res.json({
+      ok: true,
+      message: 'Documento preparado para assinatura.',
+      data: { documentId, status, assinaturaUrl, full_name, email }
+    });
+  } catch (e) {
+    console.error('[documentos] /termo/:eventoId/assinafy/send erro:', e?.response?.data || e);
+    res.status(500).json({ error: 'Falha no envio/preparação' });
+  }
  });
 
 // Devolve metadados do termo (URL pública, status, assinafy_id etc.)
