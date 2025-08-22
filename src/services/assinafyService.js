@@ -39,7 +39,7 @@ async function uploadDocumentFromFile(filePath, filename) {
     form,
     { headers: { ...authHeaders(), ...form.getHeaders() } }
   );
-  return resp.data; // contém id, status=uploaded e artifacts.original
+  return resp.data; // contém { id, status, artifacts: { original } }
 }
 
 /**
@@ -55,11 +55,12 @@ async function createSigner({ full_name, email, government_id, phone }) {
     { full_name, email, government_id, telephone: phone },
     { headers: { ...authHeaders(), 'Content-Type': 'application/json' } }
   );
-  return resp.data; // geralmente retorna { id, full_name, email, ... }
+  return resp.data; // geralmente { id, full_name, email, ... }
 }
 
 /**
  * Busca um signatário pelo e-mail.
+ * Endpoint: GET /accounts/:account_id/signers?email=...
  */
 async function findSignerByEmail(email) {
   assertAccount();
@@ -88,9 +89,9 @@ async function ensureSigner({ full_name, email, government_id, phone }) {
 }
 
 /**
- * Dispara a assinatura (virtual) para um documento já enviado.
- * Endpoint: POST /accounts/:accountId/documents/:documentId/assignments
- * Body: { method: "virtual", signerIds: [ ... ] }
+ * PREPARAR (assignment virtual): dispara a assinatura para um documento já enviado.
+ * Endpoint: POST /documents/:documentId/assignments
+ * Body: { method: "virtual", signerIds: [ ... ], message?, expires_at? }
  */
 async function requestSignatures(documentId, signerIds, { message, expires_at } = {}) {
   assertAccount();
@@ -99,11 +100,11 @@ async function requestSignatures(documentId, signerIds, { message, expires_at } 
     throw new Error('Informe ao menos um signerId.');
   }
 
-  const body = { method: 'virtual', signerIds };
+  const body = { method: 'virtual', signerIds: signerIds.slice() };
   if (message) body.message = message;
   if (expires_at) body.expires_at = expires_at; // ISO (opcional)
 
-  const url = `${BASE}/accounts/${ACCOUNT_ID}/documents/${documentId}/assignments`;
+  const url = `${BASE}/documents/${encodeURIComponent(documentId)}/assignments`;
   const resp = await axios.post(
     url,
     body,
@@ -114,56 +115,56 @@ async function requestSignatures(documentId, signerIds, { message, expires_at } 
 
 /**
  * Consulta um documento no Assinafy (status + artifacts).
+ * Endpoint: GET /documents/:documentId
  */
 async function getDocument(documentId) {
   assertAccount();
-  const url = `${BASE}/accounts/${ACCOUNT_ID}/documents/${encodeURIComponent(documentId)}`;
+  const url = `${BASE}/documents/${encodeURIComponent(documentId)}`;
   const resp = await axios.get(url, { headers: { ...authHeaders() } });
   return resp.data?.data || resp.data;
 }
 
 /**
- * Prepara um documento para assinatura informando campos a preencher.
- * Endpoint: POST /accounts/:accountId/documents/:documentId/prepare
- * Body: { fields: [] }
+ * (LEGADO) "prepareDocument": não existe endpoint /prepare.
+ * Usar requestSignatures(documentId, [signerId], ...).
+ * Mantemos a função para compatibilidade, redirecionando para o fluxo certo.
  */
-async function prepareDocument(documentId, fields = []) {
-  assertAccount();
-  const url = `${BASE}/accounts/${ACCOUNT_ID}/documents/${documentId}/prepare`;
-  const resp = await axios.post(
-    url,
-    { fields },
-    { headers: { ...authHeaders(), 'Content-Type': 'application/json' } },
-  );
-  return resp.data;
+async function prepareDocument(documentId, fieldsOrOptions = {}) {
+  const { signerIds, message, expires_at } = fieldsOrOptions || {};
+  if (!Array.isArray(signerIds) || signerIds.length === 0) {
+    throw new Error('prepareDocument: forneça signerIds; preparar = criar assignment virtual.');
+  }
+  return requestSignatures(documentId, signerIds, { message, expires_at });
 }
 
 /**
- * Aguarda até que o documento esteja pronto para solicitações de assinatura.
- * Fica consultando o Assinafy até que o status seja considerado "ready".
- * Status considerados prontos (segundo a documentação do Assinafy):
- *  - available
- *  - ready
- *  - waiting_for_assignments
- * Qualquer outro status, inclusive "metadata_processing" e "uploaded",
- * continua o polling até atingir um status pronto ou esgotar as tentativas.
- * Loga o status (ou erro) em cada tentativa para auxiliar na depuração.
+ * Aguarda até que o documento esteja processado para poder receber assignment
+ * Estados transitórios comuns: "uploading", "metadata_processing"
+ * Consideramos processado quando sair desses estados OU quando já estiver
+ * pronto p/ assinatura: "pending_signature" (ou final: "certificated").
  */
 async function waitForDocumentReady(
   documentId,
-  { retries = 10, intervalMs = 3000 } = {},
+  { retries = 15, intervalMs = 2000 } = {},
 ) {
+  const PROCESSED_OR_WAITING = new Set([
+    'pending_signature', 'waiting_for_assignments', 'available', 'ready', 'certificated', 'signed'
+  ]);
+
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
       const data = await getDocument(documentId);
       const info = data?.data || data;
       const status = info?.status;
 
-      console.log(
-        `Assinafy document ${documentId} status (attempt ${attempt + 1}/${retries}): ${status}`,
-      );
+      console.log(`Assinafy document ${documentId} status (attempt ${attempt + 1}/${retries}): ${status}`);
 
-      if (status && FINAL_STATUSES.has(status)) {
+      if (!status || status === 'uploading' || status === 'metadata_processing') {
+        // ainda processando — segue polling
+      } else {
+        // já processado / aguardando assinatura / assinado
+        if (PROCESSED_OR_WAITING.has(status)) return info;
+        // fallback: se não reconhecido mas saiu do processamento, também seguimos
         return info;
       }
     } catch (err) {
@@ -171,9 +172,8 @@ async function waitForDocumentReady(
       console.log(
         `Assinafy document ${documentId} fetch error (attempt ${attempt + 1}/${retries}): ${respStatus || err.message}`,
       );
-      if (respStatus !== 404) {
-        throw err;
-      }
+      // 404 pode acontecer em latência logo após upload — tenta de novo
+      if (respStatus && respStatus !== 404) throw err;
     }
 
     if (attempt < retries - 1) {
@@ -188,13 +188,14 @@ async function waitForDocumentReady(
 
 /**
  * Retorna a melhor URL de download do PDF:
- *  - se existir artifacts.certified, usa ela (assinado)
+ *  - se existir artifacts.certificated, usa ela (assinado)
  *  - senão, usa artifacts.original (upload)
  */
 function pickBestArtifactUrl(documentData) {
   const artifacts = documentData?.artifacts || {};
-  return artifacts.certified || artifacts.original || null;
+  return artifacts.certificated || artifacts.original || null;
 }
+
 
 module.exports = {
   uploadDocumentFromFile,
