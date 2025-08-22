@@ -9,10 +9,12 @@ const { criarEventoComDars, atualizarEventoComDars } = require('../services/even
 const {
   uploadDocumentFromFile,
   ensureSigner,
-  requestSignatures,   // ← usa POST /documents/:documentId/assignments (virtual)
+  requestSignatures,
   getDocument,
+  // prepareDocument, // ← NÃO usamos no fluxo virtual sem campos
   pickBestArtifactUrl,
-  waitForDocumentReady
+  waitForDocumentReady,
+  getSigningUrl,
 } = require('../services/assinafyService');
 
 const { gerarTermoEventoPdfkitEIndexar } = require('../services/termoEventoPdfkitService');
@@ -67,7 +69,7 @@ const dbRun = (sql, p = [], ctx = '') =>
     });
   });
 
-/* ========= Middleware (apenas uma vez) ========= */
+/* ========= Middleware ========= */
 router.use(adminAuthMiddleware);
 
 /* ===========================================================
@@ -90,7 +92,11 @@ router.post('/', async (req, res) => {
   }
 });
 
-// POST /api/admin/eventos/:id/termo/enviar-assinatura
+/* ===========================================================
+   POST /api/admin/eventos/:id/termo/enviar-assinatura
+   Gera o termo, faz upload na Assinafy, cria signer e assignment,
+   salva assinatura_url para o front do cliente abrir o pop-up.
+   =========================================================== */
 router.post('/:id/termo/enviar-assinatura', async (req, res) => {
   const { id } = req.params;
   let { signerName, signerEmail, signerCpf, signerPhone, message, expiresAt } = req.body || {};
@@ -108,7 +114,7 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
       if (!row) {
         return res.status(404).json({ ok: false, error: 'Evento ou permissionário não encontrado.' });
       }
-      signerName  = signerName  || row.nome_responsavel || row.nome_razao_social;
+      signerName  = signerName  || row.nome_responsavel || row.nome_razao_social || 'Responsável';
       signerEmail = signerEmail || row.email;
       signerCpf   = signerCpf   || onlyDigits(row.documento_responsavel || row.documento || '');
       signerPhone = normalizeMsisdn(signerPhone || row.telefone || '');
@@ -118,17 +124,17 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'Dados do signatário incompletos.' });
     }
 
-    // 1) Gera/garante o termo e salva (usa seu service já ok)
+    // 1) Gera/garante o termo
     const out = await gerarTermoEventoPdfkitEIndexar(id); // { filePath, fileName }
 
-    // 2) Upload pro Assinafy
+    // 2) Upload para a Assinafy
     const uploaded = await uploadDocumentFromFile(out.filePath, out.fileName);
     const assinafyDocId = uploaded?.id || uploaded?.data?.id;
     if (!assinafyDocId) {
       return res.status(500).json({ ok: false, error: 'Falha no upload ao Assinafy.' });
     }
 
-    // Aguarda o processamento do documento no Assinafy até ficar pronto para assignment
+    // 3) Aguarda processamento do documento (até metadata_ready)
     try {
       await waitForDocumentReady(assinafyDocId, { retries: 20, intervalMs: 3000 });
     } catch (err) {
@@ -138,7 +144,7 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
       throw err;
     }
 
-    // 3) Cria/garante o signatário
+    // 4) Cria/garante o signatário
     const signer = await ensureSigner({
       full_name: signerName,
       email: signerEmail,
@@ -150,8 +156,7 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
       return res.status(500).json({ ok: false, error: 'Falha ao criar signatário no Assinafy.' });
     }
 
-    // 4) Cria o assignment (virtual) → documento vai para pending_signature
-    //    (se já estiver pending_signature, tratar como idempotente)
+    // 5) Cria assignment (virtual) — sem campos — e lida com "metadata_processing"
     const maxRetries = 3;
     let assigned = false;
     for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -167,7 +172,6 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
         const assinafyMsg = err.response?.data?.message;
         console.warn('[assinafy] requestSignatures erro:', status, assinafyMsg);
 
-        // Se o doc ainda estiver processando, aguarde e tente de novo
         if ((assinafyMsg === 'metadata_processing' || status === 400) && attempt < maxRetries - 1) {
           await sleep(2000);
           try {
@@ -179,14 +183,10 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
           }
           continue;
         }
-
-        // Se já estiver aguardando assinatura, consideramos OK/idempotente
         if (status === 409 || /already.*assignment/i.test(String(assinafyMsg))) {
           assigned = true;
           break;
         }
-
-        // Outros erros: propaga
         throw err;
       }
     }
@@ -195,19 +195,28 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
       return res.status(500).json({ ok: false, error: 'Não foi possível criar o assignment no Assinafy.' });
     }
 
-    // 5) Atualiza metadados em `documentos`
+    // 6) Buscar URL de assinatura (com 3 tentativas, caso crie de forma assíncrona)
+    let assinaturaUrl = null;
+    for (let i = 0; i < 3; i++) {
+      assinaturaUrl = await getSigningUrl(assinafyDocId);
+      if (assinaturaUrl) break;
+      await sleep(1200);
+    }
+
+    // 7) Atualiza metadados em `documentos`
     await dbRun(
       `UPDATE documentos
-         SET assinafy_id = ?, status = 'pendente_assinatura'
+         SET assinafy_id = ?, status = 'pendente_assinatura', assinatura_url = ?
        WHERE evento_id = ? AND tipo = 'termo_evento'`,
-      [assinafyDocId, id],
+      [assinafyDocId, assinaturaUrl || null, id],
       'termo/assinafy-up'
     );
 
     return res.json({
       ok: true,
       message: 'Documento enviado e aguardando assinatura (Assinafy).',
-      assinafyDocId
+      assinafyDocId,
+      assinaturaUrl
     });
   } catch (err) {
     console.error('[assinafy] erro:', err.message, err.response?.data);
@@ -221,7 +230,6 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
 
 /* ===========================================================
    GET /api/admin/eventos
-   Listar eventos
    =========================================================== */
 router.get('/', async (_req, res) => {
   try {
@@ -244,7 +252,6 @@ router.get('/', async (_req, res) => {
 
 /* ===========================================================
    GET /api/admin/eventos/:eventoId/dars
-   Listar DARs do evento
    =========================================================== */
 router.get('/:eventoId/dars', async (req, res) => {
   const { eventoId } = req.params;
@@ -271,7 +278,6 @@ router.get('/:eventoId/dars', async (req, res) => {
 
 /* ===========================================================
    GET /api/admin/eventos/:id
-   Detalhes do evento
    =========================================================== */
 router.get('/:id', async (req, res) => {
   const { id } = req.params;
@@ -331,254 +337,4 @@ router.get('/:id', async (req, res) => {
         justificativa_gratuito: ev.justificativa_gratuito,
         status: ev.status,
         nome_cliente: ev.nome_cliente,
-        tipo_cliente: ev.tipo_cliente,
-        hora_inicio: ev.hora_inicio,
-        hora_fim: ev.hora_fim,
-        hora_montagem: ev.hora_montagem,
-        hora_desmontagem: ev.hora_desmontagem
-      },
-      parcelas
-    };
-
-    return res.json(payload);
-  } catch (err) {
-    console.error(`[admin/eventos/:id] erro:`, err.message);
-    return res.status(500).json({ error: 'Erro interno ao buscar o evento.' });
-  }
-});
-
-// GET /api/admin/eventos/:id/termo/assinafy-status
-router.get('/:id/termo/assinafy-status', async (req, res) => {
-  const { id } = req.params;
-  try {
-    const row = await dbGet(
-      `SELECT assinafy_id FROM documentos WHERE evento_id = ? AND tipo = 'termo_evento' ORDER BY id DESC LIMIT 1`,
-      [id],
-      'termo/assinafy-get'
-    );
-    if (!row?.assinafy_id) return res.status(404).json({ ok: false, error: 'Sem assinafy_id para este termo.' });
-
-    const resp = await getDocument(row.assinafy_id);
-    const doc = resp?.data || resp;
-
-    // se já “certificated”, salvar a URL assinada e data
-    if (doc?.status === 'certified') {
-      const bestUrl = pickBestArtifactUrl(doc);
-      await dbRun(
-        `UPDATE documentos
-             SET status = 'assinado',
-                 signed_pdf_public_url = COALESCE(signed_pdf_public_url, ?),
-                 signed_at = COALESCE(signed_at, datetime('now'))
-           WHERE evento_id = ? AND tipo = 'termo_evento'`,
-        [bestUrl || null, id],
-        'termo/assinafy-cert'
-      );
-    }
-    return res.json({ ok: true, assinafy: doc });
-  } catch (err) {
-    console.error('[assinafy-status] erro:', err.message);
-    return res.status(500).json({ ok: false, error: 'Falha ao consultar status no Assinafy.' });
-  }
-});
-
-/* Alias */
-router.get('/:id/detalhes', async (req, res) => {
-  req.url = `/${req.params.id}`;
-  return router.handle(req, res);
-});
-
-/* ===========================================================
-   PUT /api/admin/eventos/:id
-   Atualiza evento e reemite DARs
-   =========================================================== */
-router.put('/:id', async (req, res) => {
-  const { id } = req.params;
-  try {
-    const { eventoGratuito, justificativaGratuito, ...rest } = req.body || {};
-    await atualizarEventoComDars(
-      db,
-      id,
-      { ...rest, eventoGratuito, justificativaGratuito },
-      { emitirGuiaSefaz, gerarTokenDocumento, imprimirTokenEmPdf }
-    );
-
-    return res.json({ message: 'Evento atualizado e DARs reemitidas com sucesso.', id: Number(id) });
-  } catch (err) {
-    console.error(`[admin/eventos PUT/:id] erro:`, err.message);
-    return res.status(err.status || 500).json({ error: err.message || 'Erro ao atualizar o evento.' });
-  }
-});
-
-/* ===========================================================
-   POST /api/admin/eventos/:eventoId/dars/:darId/reemitir
-   Reemitir DAR específica
-   =========================================================== */
-router.post('/:eventoId/dars/:darId/reemitir', async (req, res) => {
-  const { eventoId, darId } = req.params;
-  console.log(`[ADMIN] Reemitir DAR ID: ${darId} do Evento ID: ${eventoId}`);
-
-  try {
-    const sql = `
-        SELECT e.nome_evento,
-               e.hora_inicio, e.hora_fim, e.hora_montagem, e.hora_desmontagem,
-               de.numero_parcela,
-               (SELECT COUNT(*) FROM DARs_Eventos WHERE id_evento = e.id) AS total_parcelas,
-               d.valor, d.data_vencimento,
-               c.nome_razao_social, c.documento, c.endereco, c.cep
-          FROM dars d
-          JOIN DARs_Eventos de ON d.id = de.id_dar
-          JOIN Eventos e       ON de.id_evento = e.id
-          JOIN Clientes_Eventos c ON e.id_cliente = c.id
-         WHERE d.id = ? AND e.id = ?`;
-    const row = await dbGet(sql, [darId, eventoId], 'reemitir/buscar-contexto');
-
-    if (!row) return res.status(404).json({ error: 'DAR ou Evento não encontrado.' });
-
-    const documentoLimpo = onlyDigits(row.documento);
-    const tipoInscricao = documentoLimpo.length === 11 ? 3 : 4;
-    const [ano, mes] = row.data_vencimento.split('-');
-
-    const receitaCod = Number(String(process.env.RECEITA_CODIGO_EVENTO || '').replace(/\D/g, ''));
-    if (!receitaCod) throw new Error('RECEITA_CODIGO_EVENTO inválido.');
-
-    const payloadSefaz = {
-      versao: '1.0',
-      contribuinteEmitente: {
-        codigoTipoInscricao: tipoInscricao,
-        numeroInscricao: documentoLimpo,
-        nome: row.nome_razao_social,
-        codigoIbgeMunicipio: Number(process.env.COD_IBGE_MUNICIPIO),
-        descricaoEndereco: row.endereco,
-        numeroCep: onlyDigits(row.cep)
-      },
-      receitas: [{
-        codigo: receitaCod,
-        competencia: { mes: Number(mes), ano: Number(ano) },
-        valorPrincipal: row.valor,
-        valorDesconto: 0.00,
-        dataVencimento: row.data_vencimento
-      }],
-      dataLimitePagamento: row.data_vencimento,
-      observacao: `CIPT Evento: ${row.nome_evento} (Montagem ${row.hora_montagem || '-'}; Evento ${row.hora_inicio || '-'}-${row.hora_fim || '-'}; Desmontagem ${row.hora_desmontagem || '-'}) | Parcela ${row.numero_parcela}/${row.total_parcelas} (Reemissão)`
-    };
-
-    const retornoSefaz = await emitirGuiaSefaz(payloadSefaz);
-    const tokenDoc = await gerarTokenDocumento('DAR_EVENTO', null, db);
-    retornoSefaz.pdfBase64 = await imprimirTokenEmPdf(retornoSefaz.pdfBase64, tokenDoc);
-
-    const updateSql = `UPDATE dars SET numero_documento = ?, pdf_url = ?, status = 'Reemitido' WHERE id = ?`;
-    await dbRun(updateSql, [retornoSefaz.numeroGuia, retornoSefaz.pdfBase64, darId], 'reemitir/update-dars');
-
-    console.log(`[ADMIN] DAR ID: ${darId} reemitida. Novo número: ${retornoSefaz.numeroGuia}`);
-    res.status(200).json({ message: 'DAR reemitida com sucesso!', ...retornoSefaz });
-  } catch (err) {
-    console.error(`[ERRO] Ao reemitir DAR ID ${darId}:`, err.message);
-    res.status(500).json({ error: err.message || 'Falha ao reemitir a DAR.' });
-  }
-});
-
-/* ===========================================================
-   GET /api/admin/eventos/:id/termo
-   Gera o TERMO (PDFKit) + indexa + envia download
-   =========================================================== */
-router.get('/:id/termo', async (req, res) => {
-  const { id } = req.params;
-
-  const resolved = require.resolve('../services/termoEventoPdfkitService');
-  console.log('[TERMO][ROUTE] usando service em:', resolved);
-
-  res.setHeader('X-Doc-Route', 'adminEventosRoutes/:id/termo');
-  res.setHeader('X-Doc-Gen', 'pdfkit-v3');
-  res.setHeader('X-Doc-Resolved', resolved);
-
-  try {
-    const docAssinado = await dbGet(
-      `SELECT signed_pdf_public_url FROM documentos WHERE evento_id = ? AND tipo = 'termo_evento' ORDER BY id DESC LIMIT 1`,
-      [id],
-      'termo/check-signed'
-    );
-    if (docAssinado?.signed_pdf_public_url) {
-      const filePath = path.join(
-        process.cwd(),
-        'public',
-        docAssinado.signed_pdf_public_url.replace(/^\/+/, '')
-      );
-      if (fs.existsSync(filePath)) {
-        return res.sendFile(filePath);
-      }
-    }
-
-    const out = await gerarTermoEventoPdfkitEIndexar(id);
-
-    const stat = fs.statSync(out.filePath);
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${out.fileName}"`);
-    res.setHeader('Content-Length', stat.size);
-    res.setHeader('Cache-Control', 'no-store');
-
-    fs.createReadStream(out.filePath).pipe(res);
-  } catch (err) {
-    console.error('[admin/eventos] termo erro:', err);
-    res.status(500).json({ error: 'Falha ao gerar termo' });
-  }
-});
-
-/* ===========================================================
-   POST /api/admin/eventos/:eventoId/termo/disponibilizar
-   Retorna metadados do último termo gerado
-   =========================================================== */
-router.post('/:eventoId/termo/disponibilizar', async (req, res) => {
-  try {
-    const { eventoId } = req.params;
-    const sql = `SELECT * FROM documentos WHERE evento_id = ? AND tipo = 'termo_evento' ORDER BY id DESC LIMIT 1`;
-    const row = await dbGet(sql, [eventoId], 'termo/get-doc-row');
-    if (!row) return res.status(404).json({ ok: false, error: 'Nenhum termo gerado ainda.' });
-    return res.json({
-      ok: true,
-      documentoId: row.id,
-      pdf_url: row.pdf_public_url,
-      url_visualizacao: row.pdf_public_url
-    });
-  } catch (err) {
-    console.error('[admin disponibilizar termo] erro:', err);
-    return res.status(500).json({ ok: false, error: 'Falha ao disponibilizar termo.' });
-  }
-});
-
-/* ===========================================================
-   DELETE /api/admin/eventos/:eventoId
-   Apaga evento + DARs
-   =========================================================== */
-router.delete('/:eventoId', async (req, res) => {
-  const { eventoId } = req.params;
-  console.log(`[ADMIN] Apagar evento ID: ${eventoId}`);
-
-  try {
-    await dbRun('BEGIN TRANSACTION', [], 'apagar/BEGIN');
-
-    const darsRows = await dbAll('SELECT id_dar FROM DARs_Eventos WHERE id_evento = ?', [eventoId], 'apagar/listar-vinculos');
-    const darIds = darsRows.map(r => r.id_dar);
-
-    await dbRun('DELETE FROM DARs_Eventos WHERE id_evento = ?', [eventoId], 'apagar/delete-join');
-
-    if (darIds.length) {
-      const placeholders = darIds.map(() => '?').join(',');
-      const deleteSql = `DELETE FROM dars WHERE id IN (${placeholders})`;
-      await dbRun(deleteSql, darIds, 'apagar/delete-dars');
-    }
-
-    const result = await dbRun('DELETE FROM Eventos WHERE id = ?', [eventoId], 'apagar/delete-evento');
-    if (!result.changes) throw new Error('Nenhum evento encontrado com este ID.');
-
-    await dbRun('COMMIT', [], 'apagar/COMMIT');
-
-    console.log(`[ADMIN] Evento ${eventoId} e ${darIds.length} DARs apagados.`);
-    res.status(200).json({ message: 'Evento e DARs associadas apagados com sucesso!' });
-  } catch (err) {
-    try { await dbRun('ROLLBACK', [], 'apagar/ROLLBACK'); } catch {}
-    console.error(`[ERRO] Ao apagar evento ID ${eventoId}:`, err.message);
-    res.status(500).json({ error: 'Falha ao apagar o evento.' });
-  }
-});
-
-module.exports = router;
+        tipo_client_
