@@ -8,15 +8,13 @@ const { criarEventoComDars, atualizarEventoComDars } = require('../services/even
 
 const {
   uploadDocumentFromFile,
+  ensureSigner,
+  requestSignatures,   // ← usa POST /documents/:documentId/assignments (virtual)
   getDocument,
-  prepareDocument,
   pickBestArtifactUrl,
-  waitForDocumentReady,
-  waitForPendingSignature,
-  getBestSigningUrl,
+  waitForDocumentReady
 } = require('../services/assinafyService');
 
-// CORRIGIDO: Nome da função para corresponder ao que é exportado pelo serviço.
 const { gerarTermoEventoPdfkitEIndexar } = require('../services/termoEventoPdfkitService');
 
 const fs = require('fs');
@@ -92,16 +90,13 @@ router.post('/', async (req, res) => {
   }
 });
 
-/* ===========================================================
-   POST /api/admin/eventos/:id/termo/enviar-assinatura
-   Gera termo, envia à Assinafy, PREPARA (assignment virtual) e retorna URL de assinatura
-   =========================================================== */
+// POST /api/admin/eventos/:id/termo/enviar-assinatura
 router.post('/:id/termo/enviar-assinatura', async (req, res) => {
   const { id } = req.params;
   let { signerName, signerEmail, signerCpf, signerPhone, message, expiresAt } = req.body || {};
 
   try {
-    // 0) Dados do signatário (fallback para dados do permissionário do evento)
+    // busca dados padrão do permissionário associado ao evento, se necessário
     if (!signerName || !signerEmail || !signerCpf || !signerPhone) {
       const sql = `
         SELECT c.nome_responsavel, c.nome_razao_social, c.email, c.telefone,
@@ -113,9 +108,9 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
       if (!row) {
         return res.status(404).json({ ok: false, error: 'Evento ou permissionário não encontrado.' });
       }
-      signerName  = signerName  || row.nome_responsavel || row.nome_razao_social || 'Responsável';
+      signerName  = signerName  || row.nome_responsavel || row.nome_razao_social;
       signerEmail = signerEmail || row.email;
-      signerCpf   = signerCpf   || onlyDigits(row.documento_responsavel || row.document || '');
+      signerCpf   = signerCpf   || onlyDigits(row.documento_responsavel || row.documento || '');
       signerPhone = normalizeMsisdn(signerPhone || row.telefone || '');
     }
 
@@ -126,14 +121,14 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
     // 1) Gera/garante o termo e salva (usa seu service já ok)
     const out = await gerarTermoEventoPdfkitEIndexar(id); // { filePath, fileName }
 
-    // 2) Upload para a Assinafy
+    // 2) Upload pro Assinafy
     const uploaded = await uploadDocumentFromFile(out.filePath, out.fileName);
     const assinafyDocId = uploaded?.id || uploaded?.data?.id;
     if (!assinafyDocId) {
       return res.status(500).json({ ok: false, error: 'Falha no upload ao Assinafy.' });
     }
 
-    // 3) Aguarda processamento inicial do documento
+    // Aguarda o processamento do documento no Assinafy até ficar pronto para assignment
     try {
       await waitForDocumentReady(assinafyDocId, { retries: 20, intervalMs: 3000 });
     } catch (err) {
@@ -143,59 +138,83 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
       throw err;
     }
 
-    // 4) PREPARAR: cria assignment virtual informando Nome/Email (e opcionalmente CPF/telefone)
-    //    Isso "coloca o doc em preparação aguardando assinatura".
-    let prep;
-    try {
-      prep = await prepareDocument(assinafyDocId, {
-        full_name: signerName,
-        email: signerEmail,
-        government_id: onlyDigits(signerCpf),
-        phone: `+55${normalizeMsisdn(signerPhone)}`,
-        message,
-        expires_at: expiresAt, // opcional (ISO)
-      });
-    } catch (err) {
-      console.error('[assinafy] prepareDocument erro:', err.message);
-      return res.status(500).json({ ok: false, error: 'Falha ao preparar documento no Assinafy.' });
+    // 3) Cria/garante o signatário
+    const signer = await ensureSigner({
+      full_name: signerName,
+      email: signerEmail,
+      government_id: onlyDigits(signerCpf),
+      phone: `+55${normalizeMsisdn(signerPhone)}`
+    });
+    const signerId = signer?.id || signer?.data?.id;
+    if (!signerId) {
+      return res.status(500).json({ ok: false, error: 'Falha ao criar signatário no Assinafy.' });
     }
 
-    // 5) Aguarda o estado "pending_signature" para garantir que a URL de assinatura exista
-    try {
-      await waitForPendingSignature(assinafyDocId, { retries: 40, intervalMs: 1500 });
-    } catch (err) {
-      if (err.timeout) {
-        return res.status(504).json({ ok: false, error: 'Tempo limite aguardando pending_signature no Assinafy.' });
+    // 4) Cria o assignment (virtual) → documento vai para pending_signature
+    //    (se já estiver pending_signature, tratar como idempotente)
+    const maxRetries = 3;
+    let assigned = false;
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        await requestSignatures(assinafyDocId, [signerId], {
+          message,
+          expires_at: expiresAt // ISO opcional
+        });
+        assigned = true;
+        break; // sucesso
+      } catch (err) {
+        const status = err.response?.status;
+        const assinafyMsg = err.response?.data?.message;
+        console.warn('[assinafy] requestSignatures erro:', status, assinafyMsg);
+
+        // Se o doc ainda estiver processando, aguarde e tente de novo
+        if ((assinafyMsg === 'metadata_processing' || status === 400) && attempt < maxRetries - 1) {
+          await sleep(2000);
+          try {
+            await waitForDocumentReady(assinafyDocId, { retries: 5, intervalMs: 3000 });
+          } catch (waitErr) {
+            if (waitErr.timeout) {
+              return res.status(504).json({ ok: false, error: 'Tempo limite ao processar documento no Assinafy.' });
+            }
+          }
+          continue;
+        }
+
+        // Se já estiver aguardando assinatura, consideramos OK/idempotente
+        if (status === 409 || /already.*assignment/i.test(String(assinafyMsg))) {
+          assigned = true;
+          break;
+        }
+
+        // Outros erros: propaga
+        throw err;
       }
-      throw err;
     }
 
-    // 6) Obtem a URL de assinatura para embutir no botão do portal
-    const assinaturaUrl = prep?.assinaturaUrl || (await getBestSigningUrl(assinafyDocId)) || null;
+    if (!assigned) {
+      return res.status(500).json({ ok: false, error: 'Não foi possível criar o assignment no Assinafy.' });
+    }
 
-    // 7) Atualiza metadados em `documentos`
+    // 5) Atualiza metadados em `documentos`
     await dbRun(
       `UPDATE documentos
-         SET assinafy_id = ?,
-             status = 'pendente_assinatura',
-             assinatura_url = ?
+         SET assinafy_id = ?, status = 'pendente_assinatura'
        WHERE evento_id = ? AND tipo = 'termo_evento'`,
-      [assinafyDocId, assinaturaUrl, id],
+      [assinafyDocId, id],
       'termo/assinafy-up'
     );
 
     return res.json({
       ok: true,
-      message: 'Documento preparado e disponível para assinatura (Assinafy).',
-      assinafyDocId,
-      assinaturaUrl,
+      message: 'Documento enviado e aguardando assinatura (Assinafy).',
+      assinafyDocId
     });
   } catch (err) {
     console.error('[assinafy] erro:', err.message, err.response?.data);
     return res.status(500).json({
       ok: false,
       error: err.message || 'Falha ao enviar para assinatura.',
-      assinafyMessage: err.response?.data?.message,
+      assinafyMessage: err.response?.data?.message
     });
   }
 });
@@ -206,7 +225,6 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
    =========================================================== */
 router.get('/', async (_req, res) => {
   try {
-    // CORRIGIDO: Adicionadas crases (`) ao redor da query SQL
     const sql = `
       SELECT e.id, e.id_cliente, e.nome_evento, e.espaco_utilizado, e.area_m2,
              e.valor_final, e.status, e.data_vigencia_final,
@@ -329,10 +347,7 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-/* ===========================================================
-   GET /api/admin/eventos/:id/termo/assinafy-status
-   Consulta status do documento na Assinafy e atualiza se assinado
-   =========================================================== */
+// GET /api/admin/eventos/:id/termo/assinafy-status
 router.get('/:id/termo/assinafy-status', async (req, res) => {
   const { id } = req.params;
   try {
@@ -346,10 +361,9 @@ router.get('/:id/termo/assinafy-status', async (req, res) => {
     const resp = await getDocument(row.assinafy_id);
     const doc = resp?.data || resp;
 
-    // estados finais aceitos (pode variar "certified" vs "certificated")
-    const finalStates = new Set(['certified', 'certificated', 'signed']);
-    if (finalStates.has(String(doc?.status || '').toLowerCase())) {
-      const bestUrl = pickBestArtifactUrl(doc); // normalmente artifacts.certificated
+    // se já “certificated”, salvar a URL assinada e data
+    if (doc?.status === 'certified') {
+      const bestUrl = pickBestArtifactUrl(doc);
       await dbRun(
         `UPDATE documentos
              SET status = 'assinado',
