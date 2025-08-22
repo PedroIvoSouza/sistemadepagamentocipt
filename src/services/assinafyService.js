@@ -1,5 +1,5 @@
 // src/services/assinafyService.js
-// Serviço de alto nível Assinafy: upload, signers, assignments (com fallback), waits e utilitários.
+// Serviço Assinafy: upload, signers, assignments (com fallback), waits e utilitários.
 
 const axios = require('axios');
 const FormData = require('form-data');
@@ -68,7 +68,7 @@ async function getDocument(documentId) {
 
 /** Estados “prontos para criar assignment” */
 const READY_FOR_ASSIGNMENT = new Set([
-  'metadata_ready',     // <- essencial para sair do seu loop
+  'metadata_ready',     // <- essencial para sair do loop
   'available',
   'ready'
 ]);
@@ -80,21 +80,21 @@ const PENDING_SIGNATURE_STATES = new Set([
   'waiting_for_signatures'
 ]);
 
-/** Estados finais/gerais que também tratamos como “ready o suficiente” */
+/** Estados finais/gerais que tratamos como “ready o suficiente” */
 const GENERIC_READY = new Set([
   ...READY_FOR_ASSIGNMENT,
-  'waiting_for_assignments', // ainda sem assignment
+  'waiting_for_assignments',
   'pending_signature',
   'certified',
   'certificated'
 ]);
 
-/** Compat: usado em outros pontos — agora mapeia para READY_FOR_ASSIGNMENT */
+/** Compat: mantém o nome antigo e mapeia p/ READY_FOR_ASSIGNMENT */
 async function waitForDocumentReady(documentId, { retries=20, intervalMs=3000 } = {}) {
   return waitUntilReadyForAssignment(documentId, { retries, intervalMs });
 }
 
-/** 1ª espera: até o arquivo estar processado e pronto para criar assignment */
+/** 1ª espera: até ficar pronto para criar assignment */
 async function waitUntilReadyForAssignment(documentId, { retries=20, intervalMs=3000 } = {}) {
   for (let i=0;i<retries;i++) {
     const data = await getDocument(documentId);
@@ -109,7 +109,7 @@ async function waitUntilReadyForAssignment(documentId, { retries=20, intervalMs=
   throw err;
 }
 
-/** 2ª espera: após criar assignment, aguardar “pending_signature” */
+/** 2ª espera: após assignment, aguardar “pending_signature” */
 async function waitUntilPendingSignature(documentId, { retries=30, intervalMs=2000 } = {}) {
   for (let i=0;i<retries;i++) {
     const data = await getDocument(documentId);
