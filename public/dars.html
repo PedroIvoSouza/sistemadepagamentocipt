@@ -182,24 +182,6 @@
                 window.location.href = '/login.html'; 
                 return;
             }
-            // Torna disponível no escopo global para uso no onclick do HTML
-                window.tentarPreviewDAR = async function tentarPreviewDAR(darId){
-                const tries = [
-                    `/api/dars/${darId}/preview`,
-                    `/api/dars/${darId}/emitir?debug=1` // se o backend suportar modo "debug"
-                ];
-                for (const u of tries){
-                    try{
-                    const r = await fetch(u, { headers });
-                    if (!r.ok) continue;
-                    const j = await r.json();
-                    console.log('[DEBUG][PREVIEW DAR]', j);
-                    alert('Preview de payload disponível no console (F12).');
-                    return;
-                    }catch{}
-                }
-                alert('Preview indisponível (endpoint não implementado).');
-                };
 
             const recalculateModal = new bootstrap.Modal(document.getElementById('recalculoModal'));
             const confirmarEmissaoBtn = document.getElementById('confirmarEmissaoBtn');
@@ -268,9 +250,6 @@
                                 <div class="btn-group">
                                     <button class="btn btn-primary btn-sm emitir-btn" data-id="${dar.id}" data-status="${dar.status}">
                                     Emitir
-                                    </button>
-                                    <button class="btn btn-outline-secondary btn-sm" onclick="tentarPreviewDAR(${dar.id})">
-                                    Preview
                                     </button>
                                 </div>
                                 </td>
