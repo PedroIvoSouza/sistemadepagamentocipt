@@ -313,8 +313,34 @@ router.get('/:id/termo/assinatura-url', async (req, res) => {
    (Restante das rotas originais — preservadas)
    =========================================================== */
 
-router.get('/', async (_req, res) => {
+router.get('/', async (req, res) => {
   try {
+    let page = parseInt(req.query.page, 10);
+    let limit = parseInt(req.query.limit, 10);
+
+    page = Number.isNaN(page) || page < 1 ? 1 : page;
+    limit = Number.isNaN(limit) || limit < 1 ? 10 : limit;
+
+    const rawSearch = typeof req.query.search === 'string' ? req.query.search : '';
+    const sanitizedSearch = rawSearch.trim().replace(/[%_]/g, '');
+
+    const whereClause = sanitizedSearch
+      ? `WHERE e.nome_evento LIKE ? OR c.nome_razao_social LIKE ? OR e.numero_processo LIKE ?`
+      : '';
+    const params = sanitizedSearch
+      ? [`%${sanitizedSearch}%`, `%${sanitizedSearch}%`, `%${sanitizedSearch}%`]
+      : [];
+
+    const countSql = `
+      SELECT COUNT(*) AS total
+        FROM Eventos e
+        JOIN Clientes_Eventos c ON e.id_cliente = c.id
+        ${whereClause}`;
+    const totalRow = await dbGet(countSql, params, 'eventos/count');
+    const total = totalRow?.total || 0;
+
+    const offset = (page - 1) * limit;
+
     const sql = `
       SELECT e.id, e.id_cliente, e.nome_evento, e.espaco_utilizado, e.area_m2,
              e.valor_final, e.status, e.data_vigencia_final,
@@ -323,9 +349,14 @@ router.get('/', async (_req, res) => {
              c.nome_razao_social AS nome_cliente
         FROM Eventos e
         JOIN Clientes_Eventos c ON e.id_cliente = c.id
-       ORDER BY e.id DESC`;
-    const rows = await dbAll(sql, [], 'listar-eventos');
-    res.json(rows);
+        ${whereClause}
+       ORDER BY e.id DESC
+       LIMIT ? OFFSET ?`;
+    const rows = await dbAll(sql, [...params, limit, offset], 'listar-eventos');
+
+    const totalPages = Math.ceil(total / limit) || 1;
+
+    res.json({ eventos: rows, totalPages, currentPage: page });
   } catch (err) {
     console.error('[admin/eventos] listar erro:', err.message);
     res.status(500).json({ error: 'Erro interno no servidor ao buscar eventos.' });
