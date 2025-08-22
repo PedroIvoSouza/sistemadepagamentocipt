@@ -8,12 +8,12 @@ const { criarEventoComDars, atualizarEventoComDars } = require('../services/even
 
 const {
   uploadDocumentFromFile,
-  ensureSigner,
-  requestSignatures,
   getDocument,
   prepareDocument,
   pickBestArtifactUrl,
-  waitForDocumentReady
+  waitForDocumentReady,
+  waitForPendingSignature,
+  getBestSigningUrl,
 } = require('../services/assinafyService');
 
 // CORRIGIDO: Nome da função para corresponder ao que é exportado pelo serviço.
@@ -92,13 +92,16 @@ router.post('/', async (req, res) => {
   }
 });
 
-// POST /api/admin/eventos/:id/termo/enviar-assinatura
+/* ===========================================================
+   POST /api/admin/eventos/:id/termo/enviar-assinatura
+   Gera termo, envia à Assinafy, PREPARA (assignment virtual) e retorna URL de assinatura
+   =========================================================== */
 router.post('/:id/termo/enviar-assinatura', async (req, res) => {
   const { id } = req.params;
   let { signerName, signerEmail, signerCpf, signerPhone, message, expiresAt } = req.body || {};
 
   try {
-    // busca dados padrão do permissionário associado ao evento, se necessário
+    // 0) Dados do signatário (fallback para dados do permissionário do evento)
     if (!signerName || !signerEmail || !signerCpf || !signerPhone) {
       const sql = `
         SELECT c.nome_responsavel, c.nome_razao_social, c.email, c.telefone,
@@ -110,9 +113,9 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
       if (!row) {
         return res.status(404).json({ ok: false, error: 'Evento ou permissionário não encontrado.' });
       }
-      signerName  = signerName  || row.nome_responsavel || row.nome_razao_social;
+      signerName  = signerName  || row.nome_responsavel || row.nome_razao_social || 'Responsável';
       signerEmail = signerEmail || row.email;
-      signerCpf   = signerCpf   || onlyDigits(row.documento_responsavel || row.documento || '');
+      signerCpf   = signerCpf   || onlyDigits(row.documento_responsavel || row.document || '');
       signerPhone = normalizeMsisdn(signerPhone || row.telefone || '');
     }
 
@@ -123,14 +126,14 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
     // 1) Gera/garante o termo e salva (usa seu service já ok)
     const out = await gerarTermoEventoPdfkitEIndexar(id); // { filePath, fileName }
 
-    // 2) Upload pro Assinafy
+    // 2) Upload para a Assinafy
     const uploaded = await uploadDocumentFromFile(out.filePath, out.fileName);
     const assinafyDocId = uploaded?.id || uploaded?.data?.id;
     if (!assinafyDocId) {
       return res.status(500).json({ ok: false, error: 'Falha no upload ao Assinafy.' });
     }
 
-    // Aguarda o processamento do documento no Assinafy antes de prosseguir
+    // 3) Aguarda processamento inicial do documento
     try {
       await waitForDocumentReady(assinafyDocId, { retries: 20, intervalMs: 3000 });
     } catch (err) {
@@ -140,91 +143,59 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
       throw err;
     }
 
-    // Prepara o documento para assinatura
+    // 4) PREPARAR: cria assignment virtual informando Nome/Email (e opcionalmente CPF/telefone)
+    //    Isso "coloca o doc em preparação aguardando assinatura".
+    let prep;
     try {
-      await prepareDocument(assinafyDocId);
+      prep = await prepareDocument(assinafyDocId, {
+        full_name: signerName,
+        email: signerEmail,
+        government_id: onlyDigits(signerCpf),
+        phone: `+55${normalizeMsisdn(signerPhone)}`,
+        message,
+        expires_at: expiresAt, // opcional (ISO)
+      });
     } catch (err) {
       console.error('[assinafy] prepareDocument erro:', err.message);
       return res.status(500).json({ ok: false, error: 'Falha ao preparar documento no Assinafy.' });
     }
 
-    // Aguarda novamente após o prepare
+    // 5) Aguarda o estado "pending_signature" para garantir que a URL de assinatura exista
     try {
-      await waitForDocumentReady(assinafyDocId, { retries: 20, intervalMs: 3000 });
+      await waitForPendingSignature(assinafyDocId, { retries: 40, intervalMs: 1500 });
     } catch (err) {
       if (err.timeout) {
-        return res.status(504).json({ ok: false, error: 'Tempo limite ao processar documento no Assinafy.' });
+        return res.status(504).json({ ok: false, error: 'Tempo limite aguardando pending_signature no Assinafy.' });
       }
       throw err;
     }
 
-    // 3) Cria o signatário (se necessário)
-    // Obs.: se você já mantém signerId, use direto. Aqui criamos sempre um simples.
-    const signer = await ensureSigner({
-      full_name: signerName,
-      email: signerEmail,
-      government_id: onlyDigits(signerCpf),
-      phone: `+55${normalizeMsisdn(signerPhone)}`
-    });
-    const signerId = signer?.id || signer?.data?.id;
-    if (!signerId) {
-      return res.status(500).json({ ok: false, error: 'Falha ao criar signatário no Assinafy.' });
-    }
+    // 6) Obtem a URL de assinatura para embutir no botão do portal
+    const assinaturaUrl = prep?.assinaturaUrl || (await getBestSigningUrl(assinafyDocId)) || null;
 
-    // 4) Solicita assinatura (virtual) com tentativas quando o Assinafy ainda está processando
-    const maxRetries = 3;
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-      try {
-        await requestSignatures(assinafyDocId, [signerId], {
-          message,
-          expires_at: expiresAt // opcional (ISO)
-        });
-        break; // sucesso
-      } catch (err) {
-        const status = err.response?.status;
-        const assinafyMsg = err.response?.data?.message;
-
-        // se documento ainda estiver em processamento, espera e tenta novamente
-        if ((assinafyMsg === 'metadata_processing' || status === 400) && attempt < maxRetries - 1) {
-          await sleep(2000);
-          try {
-            await waitForDocumentReady(assinafyDocId, { retries: 5, intervalMs: 3000 });
-          } catch (waitErr) {
-            if (waitErr.timeout) {
-              return res.status(504).json({ ok: false, error: 'Tempo limite ao processar documento no Assinafy.' });
-            }
-          }
-          continue;
-        }
-
-        if (assinafyMsg === 'metadata_processing' || status === 400) {
-          return res.status(504).json({ ok: false, error: 'Documento ainda em processamento no Assinafy.' });
-        }
-
-        throw err; // outros erros
-      }
-    }
-
-    // 5) Atualiza metadados em `documentos`
+    // 7) Atualiza metadados em `documentos`
     await dbRun(
       `UPDATE documentos
-         SET assinafy_id = ?, status = 'pendente_assinatura'
+         SET assinafy_id = ?,
+             status = 'pendente_assinatura',
+             assinatura_url = ?
        WHERE evento_id = ? AND tipo = 'termo_evento'`,
-      [assinafyDocId, id],
+      [assinafyDocId, assinaturaUrl, id],
       'termo/assinafy-up'
     );
 
     return res.json({
       ok: true,
-      message: 'Documento enviado para assinatura (Assinafy).',
-      assinafyDocId
+      message: 'Documento preparado e disponível para assinatura (Assinafy).',
+      assinafyDocId,
+      assinaturaUrl,
     });
   } catch (err) {
     console.error('[assinafy] erro:', err.message, err.response?.data);
     return res.status(500).json({
       ok: false,
       error: err.message || 'Falha ao enviar para assinatura.',
-      assinafyMessage: err.response?.data?.message
+      assinafyMessage: err.response?.data?.message,
     });
   }
 });
@@ -260,7 +231,6 @@ router.get('/', async (_req, res) => {
 router.get('/:eventoId/dars', async (req, res) => {
   const { eventoId } = req.params;
   try {
-    // CORRIGIDO: Adicionadas crases (`) e separado o parâmetro da query
     const sql = `
       SELECT
          de.numero_parcela,
@@ -289,7 +259,6 @@ router.get('/:id', async (req, res) => {
   const { id } = req.params;
 
   try {
-    // CORRIGIDO: Adicionadas crases (`) e separado o parâmetro da query
     const evSql = `
       SELECT e.*, c.nome_razao_social AS nome_cliente, c.tipo_cliente
         FROM Eventos e
@@ -310,7 +279,6 @@ router.get('/:id', async (req, res) => {
       }
     } catch { /* noop */ }
 
-    // CORRIGIDO: Adicionadas crases (`) e separado o parâmetro da query
     const parcelasSql = `
         SELECT
             de.numero_parcela,
@@ -361,7 +329,10 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// GET /api/admin/eventos/:id/termo/assinafy-status
+/* ===========================================================
+   GET /api/admin/eventos/:id/termo/assinafy-status
+   Consulta status do documento na Assinafy e atualiza se assinado
+   =========================================================== */
 router.get('/:id/termo/assinafy-status', async (req, res) => {
   const { id } = req.params;
   try {
@@ -374,9 +345,11 @@ router.get('/:id/termo/assinafy-status', async (req, res) => {
 
     const resp = await getDocument(row.assinafy_id);
     const doc = resp?.data || resp;
-    // se já “certified”, salvar a URL assinada e data
-    if (doc?.status === 'certified') {
-      const bestUrl = pickBestArtifactUrl(doc);
+
+    // estados finais aceitos (pode variar "certified" vs "certificated")
+    const finalStates = new Set(['certified', 'certificated', 'signed']);
+    if (finalStates.has(String(doc?.status || '').toLowerCase())) {
+      const bestUrl = pickBestArtifactUrl(doc); // normalmente artifacts.certificated
       await dbRun(
         `UPDATE documentos
              SET status = 'assinado',
@@ -396,7 +369,6 @@ router.get('/:id/termo/assinafy-status', async (req, res) => {
 
 /* Alias */
 router.get('/:id/detalhes', async (req, res) => {
-  // CORRIGIDO: Adicionadas crases (`)
   req.url = `/${req.params.id}`;
   return router.handle(req, res);
 });
@@ -429,11 +401,9 @@ router.put('/:id', async (req, res) => {
    =========================================================== */
 router.post('/:eventoId/dars/:darId/reemitir', async (req, res) => {
   const { eventoId, darId } = req.params;
-  // CORRIGIDO: Adicionadas crases (`)
   console.log(`[ADMIN] Reemitir DAR ID: ${darId} do Evento ID: ${eventoId}`);
 
   try {
-    // CORRIGIDO: Adicionadas crases (`) e separado o parâmetro da query
     const sql = `
         SELECT e.nome_evento,
                e.hora_inicio, e.hora_fim, e.hora_montagem, e.hora_desmontagem,
@@ -475,7 +445,6 @@ router.post('/:eventoId/dars/:darId/reemitir', async (req, res) => {
         dataVencimento: row.data_vencimento
       }],
       dataLimitePagamento: row.data_vencimento,
-      // CORRIGIDO: Adicionadas crases (`)
       observacao: `CIPT Evento: ${row.nome_evento} (Montagem ${row.hora_montagem || '-'}; Evento ${row.hora_inicio || '-'}-${row.hora_fim || '-'}; Desmontagem ${row.hora_desmontagem || '-'}) | Parcela ${row.numero_parcela}/${row.total_parcelas} (Reemissão)`
     };
 
@@ -483,15 +452,12 @@ router.post('/:eventoId/dars/:darId/reemitir', async (req, res) => {
     const tokenDoc = await gerarTokenDocumento('DAR_EVENTO', null, db);
     retornoSefaz.pdfBase64 = await imprimirTokenEmPdf(retornoSefaz.pdfBase64, tokenDoc);
 
-    // CORRIGIDO: Adicionadas crases (`)
     const updateSql = `UPDATE dars SET numero_documento = ?, pdf_url = ?, status = 'Reemitido' WHERE id = ?`;
     await dbRun(updateSql, [retornoSefaz.numeroGuia, retornoSefaz.pdfBase64, darId], 'reemitir/update-dars');
 
-    // CORRIGIDO: Adicionadas crases (`)
     console.log(`[ADMIN] DAR ID: ${darId} reemitida. Novo número: ${retornoSefaz.numeroGuia}`);
     res.status(200).json({ message: 'DAR reemitida com sucesso!', ...retornoSefaz });
   } catch (err) {
-    // CORRIGIDO: Adicionadas crases (`)
     console.error(`[ERRO] Ao reemitir DAR ID ${darId}:`, err.message);
     res.status(500).json({ error: err.message || 'Falha ao reemitir a DAR.' });
   }
@@ -504,13 +470,11 @@ router.post('/:eventoId/dars/:darId/reemitir', async (req, res) => {
 router.get('/:id/termo', async (req, res) => {
   const { id } = req.params;
 
-  // 🔎 mostre qual arquivo o Node resolveu para o service
   const resolved = require.resolve('../services/termoEventoPdfkitService');
   console.log('[TERMO][ROUTE] usando service em:', resolved);
 
-  // 🔎 headers de diagnóstico (dá pra ver no DevTools/Network ou via curl)
   res.setHeader('X-Doc-Route', 'adminEventosRoutes/:id/termo');
-  res.setHeader('X-Doc-Gen', 'pdfkit-v3');     // mude aqui sempre que atualizar
+  res.setHeader('X-Doc-Gen', 'pdfkit-v3');
   res.setHeader('X-Doc-Resolved', resolved);
 
   try {
@@ -552,7 +516,6 @@ router.get('/:id/termo', async (req, res) => {
 router.post('/:eventoId/termo/disponibilizar', async (req, res) => {
   try {
     const { eventoId } = req.params;
-    // CORRIGIDO: Adicionadas crases (`)
     const sql = `SELECT * FROM documentos WHERE evento_id = ? AND tipo = 'termo_evento' ORDER BY id DESC LIMIT 1`;
     const row = await dbGet(sql, [eventoId], 'termo/get-doc-row');
     if (!row) return res.status(404).json({ ok: false, error: 'Nenhum termo gerado ainda.' });
@@ -574,7 +537,6 @@ router.post('/:eventoId/termo/disponibilizar', async (req, res) => {
    =========================================================== */
 router.delete('/:eventoId', async (req, res) => {
   const { eventoId } = req.params;
-  // CORRIGIDO: Adicionadas crases (`)
   console.log(`[ADMIN] Apagar evento ID: ${eventoId}`);
 
   try {
@@ -587,7 +549,6 @@ router.delete('/:eventoId', async (req, res) => {
 
     if (darIds.length) {
       const placeholders = darIds.map(() => '?').join(',');
-      // CORRIGIDO: Adicionadas crases (`)
       const deleteSql = `DELETE FROM dars WHERE id IN (${placeholders})`;
       await dbRun(deleteSql, darIds, 'apagar/delete-dars');
     }
@@ -597,12 +558,10 @@ router.delete('/:eventoId', async (req, res) => {
 
     await dbRun('COMMIT', [], 'apagar/COMMIT');
 
-    // CORRIGIDO: Adicionadas crases (`)
     console.log(`[ADMIN] Evento ${eventoId} e ${darIds.length} DARs apagados.`);
     res.status(200).json({ message: 'Evento e DARs associadas apagados com sucesso!' });
   } catch (err) {
     try { await dbRun('ROLLBACK', [], 'apagar/ROLLBACK'); } catch {}
-    // CORRIGIDO: Adicionadas crases (`)
     console.error(`[ERRO] Ao apagar evento ID ${eventoId}:`, err.message);
     res.status(500).json({ error: 'Falha ao apagar o evento.' });
   }
