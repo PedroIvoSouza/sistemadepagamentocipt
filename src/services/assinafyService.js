@@ -1,203 +1,188 @@
 // src/services/assinafyService.js
-// Service de alto nível para integração com a Assinafy (upload, signer, assignment, status, urls)
+// Serviço de alto nível com fallback de assignments e utilitários.
 
 const axios = require('axios');
 const FormData = require('form-data');
 const fs = require('fs');
 const path = require('path');
 
-const BASE = (process.env.ASSINAFY_API_BASE || 'https://api.assinafy.com.br/v1').replace(/\/+$/, '');
-const ACCOUNT_ID = (process.env.ASSINAFY_ACCOUNT_ID || '').trim();
-const API_KEY = (process.env.ASSINAFY_API_KEY || '').trim();
-const ACCESS_TOKEN = (process.env.ASSINAFY_ACCESS_TOKEN || '').trim();
-
 const DEBUG = String(process.env.ASSINAFY_DEBUG || '') === '1';
-
-if (!ACCOUNT_ID) {
-  console.warn('[ASSINAFY] AVISO: ASSINAFY_ACCOUNT_ID vazio — endpoints que precisam de conta irão falhar se usados.');
-}
+const BASE  = (process.env.ASSINAFY_API_BASE || 'https://api.assinafy.com.br/v1').replace(/\/+$/, '');
+const ACCOUNT_ID = (process.env.ASSINAFY_ACCOUNT_ID || '').trim();
+const TIMEOUT = Number(process.env.ASSINAFY_TIMEOUT_MS || 90000);
 
 function authHeaders() {
-  if (API_KEY) return { 'X-Api-Key': API_KEY };
-  if (ACCESS_TOKEN) return { Authorization: `Bearer ${ACCESS_TOKEN}` };
-  throw new Error('Configure ASSINAFY_API_KEY ou ASSINAFY_ACCESS_TOKEN.');
+  const h = {};
+  const apiKey = (process.env.ASSINAFY_API_KEY || '').trim();
+  const bearer = (process.env.ASSINAFY_ACCESS_TOKEN || '').trim();
+  if (apiKey) { h['X-Api-Key'] = apiKey; h['X-API-KEY'] = apiKey; h['x-api-key'] = apiKey; }
+  if (bearer) h.Authorization = `Bearer ${bearer}`;
+  return h;
+}
+const http = axios.create({
+  baseURL: BASE,
+  timeout: TIMEOUT,
+  headers: { Accept: 'application/json', Connection: 'close', ...authHeaders() },
+  validateStatus: () => true,
+  maxRedirects: 5,
+  proxy: false,
+});
+
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+const onlyDigits = (v='') => String(v).replace(/\D/g,'');
+
+function ensureOk(resp, what='request') {
+  if (resp.status >= 200 && resp.status < 300) return resp.data;
+  const err = new Error(`${what} failed (HTTP ${resp.status})`);
+  err.response = resp;
+  throw err;
 }
 
-function assertAccount() {
-  if (!ACCOUNT_ID) throw new Error('ASSINAFY_ACCOUNT_ID não configurado.');
-}
-
-const FINAL_READY = new Set([
-  'metadata_ready',
-  'available',
-  'ready',
-  'waiting_for_assignments',
-  'pending_signature',
-  'certificated',
-  'certified'
-]);
-
-const onlyDigits = (v = '') => String(v).replace(/\D/g, '');
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-/* ------------------------ Upload ------------------------ */
+/* Upload */
 async function uploadDocumentFromFile(filePath, filename) {
-  assertAccount();
-  if (!filePath || !fs.existsSync(filePath)) throw new Error('Arquivo do PDF não encontrado.');
   const form = new FormData();
   form.append('file', fs.createReadStream(filePath), {
     filename: filename || path.basename(filePath),
     contentType: 'application/pdf',
   });
-
-  const url = `${BASE}/accounts/${ACCOUNT_ID}/documents`;
-  if (DEBUG) console.log('[ASSINAFY][POST]', url, '(multipart/form-data)');
-
-  const resp = await axios.post(url, form, { headers: { ...authHeaders(), ...form.getHeaders() } });
-  return resp.data; // { id, status: 'uploaded', ... }
+  const url = `/accounts/${ACCOUNT_ID}/documents`;
+  if (DEBUG) console.log('[ASSINAFY][POST]', BASE + url, '(multipart)');
+  const resp = await axios.post(BASE + url, form, {
+    headers: { ...authHeaders(), ...form.getHeaders() },
+    timeout: TIMEOUT,
+    validateStatus: () => true,
+    maxBodyLength: Infinity,
+    maxContentLength: Infinity,
+  });
+  return ensureOk(resp, 'uploadDocumentFromFile');
 }
 
-/* ------------------------ Signer ------------------------ */
-async function createSigner({ full_name, email, government_id, phone }) {
-  assertAccount();
-  if (!full_name || !email) throw new Error('full_name e email são obrigatórios para o signer.');
-  const url = `${BASE}/accounts/${ACCOUNT_ID}/signers`;
-  if (DEBUG) console.log('[ASSINAFY][POST]', url);
-
-  const resp = await axios.post(
-    url,
-    { full_name, email, government_id, telephone: phone },
-    { headers: { ...authHeaders(), 'Content-Type': 'application/json' } }
-  );
-  return resp.data;
-}
-
-async function findSignerByEmail(email) {
-  assertAccount();
-  const url = `${BASE}/accounts/${ACCOUNT_ID}/signers`;
-  const resp = await axios.get(url, { params: { email }, headers: { ...authHeaders() } });
-  const arr = Array.isArray(resp.data) ? resp.data : resp.data?.data;
-  return Array.isArray(arr) && arr.length > 0 ? arr[0] : null;
-}
-
-async function ensureSigner({ full_name, email, government_id, phone }) {
-  try {
-    return await createSigner({ full_name, email, government_id, phone });
-  } catch (err) {
-    const msg = err?.response?.data?.message || err.message || '';
-    if (/já existe/i.test(msg) || /already exists/i.test(msg) || err?.response?.status === 400) {
-      const found = await findSignerByEmail(email);
-      if (found) return found;
-    }
-    throw err;
-  }
-}
-
-/* ------------------------ Document & Status ------------------------ */
+/* Document */
 async function getDocument(documentId) {
-  const url = `${BASE}/documents/${encodeURIComponent(documentId)}`;
-  if (DEBUG) console.log('[ASSINAFY][GET]', url);
-  const resp = await axios.get(url, { headers: { ...authHeaders() } });
-  return resp.data?.data || resp.data;
+  const url = `/documents/${encodeURIComponent(documentId)}`;
+  const resp = await http.get(url);
+  if (DEBUG) console.log('[ASSINAFY][GET]', BASE + url, resp.status);
+  return ensureOk(resp, 'getDocument');
 }
 
-async function waitForDocumentReady(documentId, { retries = 20, intervalMs = 3000 } = {}) {
-  for (let i = 0; i < retries; i++) {
-    const info = await getDocument(documentId);
-    const st = info?.status;
-    console.log(`Assinafy document ${documentId} status (attempt ${i + 1}/${retries}): ${st}`);
-    if (st && FINAL_READY.has(String(st))) return info;
-    if (i < retries - 1) await sleep(intervalMs);
+const READY_STATUSES = new Set(['available','ready','waiting_for_assignments','pending_signature','certified','certificated']);
+
+async function waitForDocumentReady(documentId, { retries=20, intervalMs=3000 } = {}) {
+  for (let i=0;i<retries;i++) {
+    const data = await getDocument(documentId);
+    const info = data?.data || data;
+    const status = info?.status;
+    console.log(`Assinafy document ${documentId} status (attempt ${i+1}/${retries}): ${status}`);
+    if (status && READY_STATUSES.has(status)) return info;
+    await sleep(intervalMs);
   }
   const err = new Error('Timeout ao aguardar processamento do documento.');
   err.timeout = true;
   throw err;
 }
 
-/* ------------------------ Assignments & Sign URL ------------------------ */
-/**
- * Cria assignment “virtual” para o documento (sem campos).
- * Usa endpoint SEM /accounts (evita 404).
- * Tenta 3 formatos de payload (signerIds | signer_ids | signers).
- * Trata 409 (já existe assignment) como sucesso.
- */
-async function requestSignatures(documentId, signerIds, { message, expires_at } = {}) {
-  if (!documentId) throw new Error('documentId é obrigatório.');
-  if (!Array.isArray(signerIds) || signerIds.length === 0) {
-    throw new Error('Informe ao menos um signerId.');
-  }
+/* Signer */
+async function createSigner({ full_name, email, government_id, phone }) {
+  const url = `/accounts/${ACCOUNT_ID}/signers`;
+  if (DEBUG) console.log('[ASSINAFY][POST]', BASE + url);
+  const resp = await http.post(url, { full_name, email, government_id, telephone: phone });
+  return ensureOk(resp, 'createSigner');
+}
 
-  const url = `${BASE}/documents/${encodeURIComponent(documentId)}/assignments`;
-  const bodies = [
-    { method: 'virtual', signerIds, ...(message ? { message } : {}), ...(expires_at ? { expires_at } : {}) },
-    { method: 'virtual', signer_ids: signerIds, ...(message ? { message } : {}), ...(expires_at ? { expires_at } : {}) },
-    { method: 'virtual', signers: signerIds, ...(message ? { message } : {}), ...(expires_at ? { expires_at } : {}) },
-  ];
+async function findSignerByEmail(email) {
+  const url = `/accounts/${ACCOUNT_ID}/signers`;
+  const resp = await http.get(url, { params: { email } });
+  const ok = ensureOk(resp, 'findSignerByEmail');
+  const arr = Array.isArray(ok) ? ok : ok?.data;
+  return Array.isArray(arr) && arr.length ? arr[0] : null;
+}
 
-  let lastErr;
-  for (const body of bodies) {
-    try {
-      if (DEBUG) console.log('[ASSINAFY][POST]', url, JSON.stringify(body));
-      const resp = await axios.post(url, body, { headers: { ...authHeaders(), 'Content-Type': 'application/json' } });
-      return resp.data;
-    } catch (err) {
-      const status = err?.response?.status;
-      const msg = err?.response?.data?.message;
-      if (status === 409 || /already.*assignment/i.test(String(msg || ''))) {
-        if (DEBUG) console.log('[ASSINAFY][POST] assignment já existe — OK.');
-        return { reused: true };
-      }
-      lastErr = err;
-      // tenta próximo formato
+async function ensureSigner({ full_name, email, government_id, phone }) {
+  try { return await createSigner({ full_name, email, government_id, phone }); }
+  catch (e) {
+    const msg = e?.response?.data?.message || e?.message || '';
+    if (/já existe/i.test(msg) || /already exists/i.test(msg) || e?.response?.status === 400) {
+      const found = await findSignerByEmail(email);
+      if (found) return found;
     }
+    throw e;
   }
-  throw lastErr || new Error('Falha ao criar assignment.');
+}
+
+/* Assignments com fallback */
+async function requestSignatures(documentId, signerIds, { message, expires_at } = {}) {
+  if (!Array.isArray(signerIds) || !signerIds.length) throw new Error('Informe ao menos um signerId.');
+
+  const body = { method: 'virtual', signerIds };
+  if (message) body.message = message;
+  if (expires_at) body.expires_at = expires_at;
+
+  // 1) tenta rota global
+  let url = `/documents/${encodeURIComponent(documentId)}/assignments`;
+  if (DEBUG) console.log('[ASSINAFY][POST try#1]', BASE + url, body);
+  let resp = await http.post(url, body);
+
+  if (resp.status === 404) {
+    // 2) tenta rota com account
+    url = `/accounts/${ACCOUNT_ID}/documents/${encodeURIComponent(documentId)}/assignments`;
+    if (DEBUG) console.log('[ASSINAFY][POST try#2]', BASE + url, body);
+    resp = await http.post(url, body);
+  }
+
+  if (resp.status === 409) {
+    if (DEBUG) console.log('[ASSINAFY][assignments] 409 — assignment já existe.');
+    return resp.data || { reused: true };
+  }
+
+  return ensureOk(resp, 'requestSignatures');
 }
 
 async function listAssignments(documentId) {
-  const url = `${BASE}/documents/${encodeURIComponent(documentId)}/assignments`;
-  if (DEBUG) console.log('[ASSINAFY][GET]', url);
-  const resp = await axios.get(url, { headers: { ...authHeaders() } });
-  const data = Array.isArray(resp.data) ? resp.data : (Array.isArray(resp.data?.data) ? resp.data.data : []);
-  return data || [];
+  let url = `/documents/${encodeURIComponent(documentId)}/assignments`;
+  let resp = await http.get(url);
+  if (DEBUG) console.log('[ASSINAFY][GET try#1]', BASE + url, resp.status);
+  if (resp.status === 404) {
+    url = `/accounts/${ACCOUNT_ID}/documents/${encodeURIComponent(documentId)}/assignments`;
+    resp = await http.get(url);
+    if (DEBUG) console.log('[ASSINAFY][GET try#2]', BASE + url, resp.status);
+  }
+  const ok = ensureOk(resp, 'listAssignments');
+  return Array.isArray(ok) ? ok : (Array.isArray(ok?.data) ? ok.data : []);
 }
 
-function _pickAssignmentUrl(a) {
+function pickAssignmentUrl(a) {
   return a?.sign_url || a?.signer_url || a?.signerUrl || a?.signing_url || a?.url || a?.link || null;
 }
 
 async function getSigningUrl(documentId) {
   const list = await listAssignments(documentId);
   for (const a of list) {
-    const u = _pickAssignmentUrl(a);
+    const u = pickAssignmentUrl(a);
     if (u && /^https?:\/\//i.test(u)) return u;
   }
   return null;
 }
 
-/* ------------------------ Artifacts ------------------------ */
+/* Artifacts */
 function pickBestArtifactUrl(documentData) {
-  const artifacts = documentData?.artifacts || {};
+  const d = documentData?.data || documentData;
+  const artifacts = d?.artifacts || {};
   return artifacts.certified || artifacts.certificated || artifacts.original || null;
 }
 
 module.exports = {
   uploadDocumentFromFile,
+  getDocument,
+  waitForDocumentReady,
 
   createSigner,
   findSignerByEmail,
   ensureSigner,
 
   requestSignatures,
-
-  getDocument,
-  waitForDocumentReady,
-
   listAssignments,
   getSigningUrl,
 
   pickBestArtifactUrl,
-
-  // helpers
   onlyDigits,
 };
