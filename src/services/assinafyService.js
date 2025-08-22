@@ -105,11 +105,9 @@ async function requestSignatures(documentId, signerIds, { message, expires_at } 
   if (expires_at) body.expires_at = expires_at; // ISO (opcional)
 
   const url = `${BASE}/documents/${encodeURIComponent(documentId)}/assignments`;
-  const resp = await axios.post(
-    url,
-    body,
-    { headers: { ...authHeaders(), 'Content-Type': 'application/json' } }
-  );
+  const resp = await axios.post(url, body, {
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' }
+  });
   return resp.data;
 }
 
@@ -125,65 +123,83 @@ async function getDocument(documentId) {
 }
 
 /**
- * (LEGADO) "prepareDocument": não existe endpoint /prepare.
- * Usar requestSignatures(documentId, [signerId], ...).
- * Mantemos a função para compatibilidade, redirecionando para o fluxo certo.
+ * Lista assignments de um documento (para obter a URL de assinatura).
+ * Endpoint: GET /documents/:documentId/assignments
  */
-async function prepareDocument(documentId, fieldsOrOptions = {}) {
-  const { signerIds, message, expires_at } = fieldsOrOptions || {};
-  if (!Array.isArray(signerIds) || signerIds.length === 0) {
-    throw new Error('prepareDocument: forneça signerIds; preparar = criar assignment virtual.');
+async function listAssignments(documentId) {
+  const url = `${BASE}/documents/${encodeURIComponent(documentId)}/assignments`;
+  const resp = await axios.get(url, { headers: { ...authHeaders() } });
+  const arr = Array.isArray(resp.data) ? resp.data : resp.data?.data;
+  return Array.isArray(arr) ? arr : [];
+}
+
+function _pickAssignmentUrl(a) {
+  return a?.sign_url || a?.signer_url || a?.signerUrl || a?.signing_url || a?.url || a?.link || null;
+}
+async function getBestSigningUrl(documentId) {
+  const list = await listAssignments(documentId);
+  for (const a of list) {
+    const link = _pickAssignmentUrl(a);
+    if (link && /^https?:\/\//i.test(link)) return link;
   }
-  return requestSignatures(documentId, signerIds, { message, expires_at });
+  return null;
 }
 
 /**
- * Aguarda até que o documento esteja processado para poder receber assignment
- * Estados transitórios comuns: "uploading", "metadata_processing"
- * Consideramos processado quando sair desses estados OU quando já estiver
- * pronto p/ assinatura: "pending_signature" (ou final: "certificated").
+ * (NOVO) Aguarda até ficar pronto para assinar (pending_signature ou certificated)
  */
-async function waitForDocumentReady(
-  documentId,
-  { retries = 15, intervalMs = 2000 } = {},
-) {
-  const PROCESSED_OR_WAITING = new Set([
-    'pending_signature', 'waiting_for_assignments', 'available', 'ready', 'certificated', 'signed'
-  ]);
-
+async function waitForPendingSignature(documentId, { retries = 60, intervalMs = 1500 } = {}) {
   for (let attempt = 0; attempt < retries; attempt++) {
-    try {
-      const data = await getDocument(documentId);
-      const info = data?.data || data;
-      const status = info?.status;
-
-      console.log(`Assinafy document ${documentId} status (attempt ${attempt + 1}/${retries}): ${status}`);
-
-      if (!status || status === 'uploading' || status === 'metadata_processing') {
-        // ainda processando — segue polling
-      } else {
-        // já processado / aguardando assinatura / assinado
-        if (PROCESSED_OR_WAITING.has(status)) return info;
-        // fallback: se não reconhecido mas saiu do processamento, também seguimos
-        return info;
-      }
-    } catch (err) {
-      const respStatus = err?.response?.status;
-      console.log(
-        `Assinafy document ${documentId} fetch error (attempt ${attempt + 1}/${retries}): ${respStatus || err.message}`,
-      );
-      // 404 pode acontecer em latência logo após upload — tenta de novo
-      if (respStatus && respStatus !== 404) throw err;
-    }
-
-    if (attempt < retries - 1) {
-      await new Promise((resolve) => setTimeout(resolve, intervalMs));
-    }
+    const info = await getDocument(documentId);
+    const status = info?.status;
+    // logs úteis para depuração
+    console.log(`Assinafy document ${documentId} status (attempt ${attempt + 1}/${retries}): ${status}`);
+    if (status === 'pending_signature' || status === 'certificated') return info;
+    await new Promise(r => setTimeout(r, intervalMs));
   }
-
-  const err = new Error('Timeout ao aguardar processamento do documento.');
+  const err = new Error('Timeout aguardando pending_signature.');
   err.timeout = true;
   throw err;
+}
+
+/**
+ * (COMPATÍVEL) "prepareDocument":
+ * - Aceita EITHER signerIds OR { full_name, email, government_id?, phone?, message?, expires_at? }
+ * - Internamente garante o signatário e cria o assignment virtual
+ * - Retorna também a URL de assinatura
+ * Uso legado com signerIds:
+ *   await prepareDocument(docId, { signerIds: [signerId] })
+ * Uso por Nome/Email:
+ *   await prepareDocument(docId, { full_name, email })
+ */
+async function prepareDocument(documentId, opts = {}) {
+  if (!documentId) throw new Error('documentId é obrigatório.');
+
+  // Caminho 1: já veio com signerIds
+  if (Array.isArray(opts.signerIds) && opts.signerIds.length > 0) {
+    await requestSignatures(documentId, opts.signerIds, { message: opts.message, expires_at: opts.expires_at });
+  } else if (opts.email && opts.full_name) {
+    // Caminho 2: Nome/Email do cliente → garante signatário e usa o id
+    const signer = await ensureSigner({
+      full_name: opts.full_name,
+      email: opts.email,
+      government_id: opts.government_id,
+      phone: opts.phone
+    });
+    const signerId = signer?.id || signer?.data?.id;
+    if (!signerId) throw new Error('Falha ao garantir signatário.');
+    await requestSignatures(documentId, [signerId], { message: opts.message, expires_at: opts.expires_at });
+  } else {
+    throw new Error('prepareDocument: forneça signerIds OU { full_name, email }.');
+  }
+
+  // Aguarda documento entrar em pending_signature (ou já assinado)
+  await waitForPendingSignature(documentId, { retries: 60, intervalMs: 1500 });
+
+  // Obtém a URL para você embutir/abrir
+  const assinaturaUrl = await getBestSigningUrl(documentId);
+
+  return { ok: true, documentId, assinaturaUrl };
 }
 
 /**
@@ -195,7 +211,6 @@ function pickBestArtifactUrl(documentData) {
   const artifacts = documentData?.artifacts || {};
   return artifacts.certificated || artifacts.original || null;
 }
-
 
 module.exports = {
   uploadDocumentFromFile,
