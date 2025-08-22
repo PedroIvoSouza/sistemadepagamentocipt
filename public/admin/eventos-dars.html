@@ -576,9 +576,17 @@ window.onload = () => {
   const valorFinalDisplay = document.getElementById('valor-final');
   const totalParceladoDisplay = document.getElementById('total-parcelado');
   const parcelasContainer = document.getElementById('parcelas-container');
+  const addParcelaBtn = document.getElementById('add-parcela-btn');
+  let parcelasMasks = [];
+  const fp = flatpickr('#datas-evento', {
+    mode: 'multiple',
+    dateFormat: 'd/m/Y',
+    locale: flatpickr.l10ns.pt,
+    onChange: atualizarCalculos
+  });
 
   function atualizarCalculos(){
-    const totalDiarias = fp?.selectedDates?.length || 0;
+    const totalDiarias = fp.selectedDates.length;
     totalDiariasDisplay.textContent = totalDiarias;
 
     const tipoCliente = clienteSelect.selectedOptions[0]?.dataset?.tipo || 'Geral';
@@ -591,18 +599,62 @@ window.onload = () => {
     const valorFinal = calcularValorFinal(valorBruto, tipoCliente, descontoManual);
     valorFinalDisplay.textContent = fmtBRL(valorFinal);
 
-    let totalParcelado = 0;
-    if (typeof parcelasMasks !== 'undefined' && Array.isArray(parcelasMasks)) {
-      totalParcelado = parcelasMasks.reduce(
-        (s, m) => s + parseCurrency(m.valorMask?.el?.value || m.valorMask?.value),
-        0
-      );
-    } else if (parcelasContainer) {
-      parcelasContainer.querySelectorAll('input').forEach(inp => {
-        totalParcelado += parseCurrency(inp.value);
-      });
-    }
+    const totalParcelado = parcelasMasks.reduce(
+      (s, m) => s + parseCurrency(m.valorMask.el.value),
+      0
+    );
     totalParceladoDisplay.textContent = fmtBRL(totalParcelado);
+  }
+
+  function adicionarParcela(){
+    const row = document.createElement('div');
+    row.className = 'row g-2 align-items-end mb-2';
+    row.innerHTML = `
+      <div class="col-md-5">
+        <input type="text" class="form-control parcela-valor" placeholder="Valor" />
+      </div>
+      <div class="col-md-5">
+        <input type="text" class="form-control parcela-vencimento" placeholder="Vencimento" />
+      </div>
+      <div class="col-md-2 text-center">
+        <button type="button" class="btn btn-sm btn-outline-danger remover-parcela"><i class="bi bi-x"></i></button>
+      </div>`;
+
+    parcelasContainer.appendChild(row);
+
+    const valorInput = row.querySelector('.parcela-valor');
+    const vencInput = row.querySelector('.parcela-vencimento');
+
+    const valorMask = IMask(valorInput, {
+      mask: Number,
+      scale: 2,
+      thousandsSeparator: '.',
+      padFractionalZeros: true,
+      radix: ',',
+      mapToRadix: ['.']
+    });
+
+    const picker = flatpickr(vencInput, {
+      dateFormat: 'd/m/Y',
+      locale: flatpickr.l10ns.pt,
+      onChange: atualizarCalculos
+    });
+
+    const entry = { row, valorMask, picker };
+    parcelasMasks.push(entry);
+
+    valorInput.addEventListener('input', atualizarCalculos);
+    vencInput.addEventListener('change', atualizarCalculos);
+
+    row.querySelector('.remover-parcela').addEventListener('click', () => {
+      try { valorMask.destroy(); } catch {}
+      try { picker.destroy(); } catch {}
+      parcelasMasks = parcelasMasks.filter(p => p !== entry);
+      row.remove();
+      atualizarCalculos();
+    });
+
+    atualizarCalculos();
   }
   let modoEdicao = false;
   let editEventoId = null;
@@ -1233,6 +1285,8 @@ window.onload = () => {
   form.querySelector('button[type="submit"]').textContent = 'Salvar Evento e Gerar DARs';
   modal.style.display = 'block';
 });
+
+  addParcelaBtn.addEventListener('click', adicionarParcela);
 
   clienteSelect.addEventListener('change', atualizarCalculos);
   descontoManualInput.addEventListener('input', atualizarCalculos);
