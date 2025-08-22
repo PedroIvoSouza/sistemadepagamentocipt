@@ -1,5 +1,5 @@
 // src/api/documentosRoutes.js
-// Rotas de documentos — preserva endpoints clássicos e adiciona integração Assinafy + utilitários de termo
+// Rotas de documentos — integra Assinafy + utilitários de termo
 
 const express  = require('express');
 const path     = require('path');
@@ -8,15 +8,7 @@ const crypto   = require('crypto');
 const sqlite3  = require('sqlite3').verbose();
 
 const { gerarTermoEventoPdfkitEIndexar } = require('../services/termoEventoPdfkitService');
-const {
-  uploadPdf,
-  getDocumentStatus,
-  downloadSignedPdf,
-  ensureSigner,
-  createAssignment,
-  waitForStatus,
-  getBestSigningUrl
-} = require('../services/assinafyClient');
+const { uploadPdf, getDocumentStatus, downloadSignedPdf } = require('../services/assinafyClient');
 
 const router = express.Router();
 
@@ -132,7 +124,7 @@ router.get('/:id/signed', async (req, res) => {
   }
 });
 
-// Upsert genérico (mantido para retrocompatibilidade)
+// Upsert genérico (retrocompatibilidade)
 router.post('/upsert', async (req, res) => {
   const { tipo, evento_id, pdf_url, pdf_public_url, token=null, status='gerado' } = req.body || {};
   if (!tipo || !evento_id) return res.status(400).json({ error: 'tipo e evento_id são obrigatórios.' });
@@ -176,21 +168,19 @@ router.get('/termo/:eventoId', async (req, res) => {
   }
 });
 
-// Força re-geração do termo (APENAS PDF local)
+// Força re-geração do termo e devolve metadados (mantido)
 router.post('/termo/:eventoId/generate', async (req, res) => {
   const eventoId = req.params.eventoId;
   try {
-    await gerarTermoEventoPdfkitEIndexar(eventoId);
-    const docRow = await dbGet(`SELECT * FROM documentos WHERE evento_id=? AND tipo='termo_evento'`, [eventoId]);
-    if (!docRow) return res.status(404).json({ error: 'Termo não encontrado após gerar.' });
-    res.json({ ok:true, documento: docRow });
+    const out = await gerarTermoEventoPdfkitEIndexar(eventoId);
+    res.json({ ok:true, ...out });
   } catch (e) {
     console.error('[documentos]/termo/:eventoId/generate erro:', e);
     res.status(500).json({ error: 'Falha ao gerar termo.' });
   }
 });
 
-// Devolve metadados do termo (URL pública, status, assinafy_id etc.)
+// Devolve metadados do termo (inclui assinatura_url)
 router.get('/termo/:eventoId/meta', async (req, res) => {
   const eventoId = req.params.eventoId;
   try {
@@ -207,7 +197,7 @@ router.get('/termo/:eventoId/meta', async (req, res) => {
       status: docRow.status || 'gerado',
       pdf_public_url: docRow.pdf_public_url || null,
       assinafy_id: docRow.assinafy_id || null,
-      assinatura_url: docRow.assinatura_url || null,
+      assinatura_url: docRow.assinatura_url || null,   // ← exposto para o front do cliente
       signed_pdf_public_url: docRow.signed_pdf_public_url || null,
       signed_at: docRow.signed_at || null
     });
@@ -231,93 +221,15 @@ router.post('/termo/:eventoId/disponibilizar', async (req, res) => {
 });
 
 // ===================================================================================
-//                               ASSINAFY
+//                               ASSINAFY (utilidades)
 // ===================================================================================
 
-// (ADMIN) Disponibilizar para assinatura: upload → preparar → pending_signature → salvar assinatura_url
-router.post('/termo/:eventoId/assinafy/send', async (req, res) => {
-  const eventoId = req.params.eventoId;
-  try {
-    // 1) Garante PDF local
-    let docRow = await dbGet(`SELECT * FROM documentos WHERE evento_id=? AND tipo='termo_evento'`, [eventoId]);
-    if (!docRow || !docRow.pdf_url || !fs.existsSync(docRow.pdf_url)) {
-      await gerarTermoEventoPdfkitEIndexar(eventoId);
-      docRow = await dbGet(`SELECT * FROM documentos WHERE evento_id=? AND tipo='termo_evento'`, [eventoId]);
-    }
-    if (!docRow || !docRow.pdf_url || !fs.existsSync(docRow.pdf_url)) {
-      return res.status(409).json({ error: 'PDF do termo não encontrado.' });
-    }
-
-    // 2) Upload para Assinafy
-    const buffer = fs.readFileSync(docRow.pdf_url);
-    const filename = path.basename(docRow.pdf_url);
-    const callbackUrl = process.env.ASSINAFY_CALLBACK_URL || undefined;
-    const up = await uploadPdf(buffer, filename, { callbackUrl });
-    const documentId = up?.id || up?.data?.id;
-    if (!documentId) throw new Error('Upload sem id de documento.');
-
-    // 3) Coleta Nome/Email do responsável
-    const ev = await dbGet(`
-      SELECT e.id,
-             c.nome_responsavel, c.email as email_responsavel,
-             c.nome_razao_social, c.email AS email_cliente,
-             c.documento_responsavel, c.telefone AS telefone_responsavel
-        FROM Eventos e
-        JOIN Clientes_Eventos c ON c.id = e.id_cliente
-       WHERE e.id = ?`, [eventoId]);
-    const full_name     = ev?.nome_responsavel || ev?.nome_razao_social || 'Responsável';
-    const email         = ev?.email_responsavel || ev?.email_cliente;
-    const government_id = ev?.documento_responsavel || null;
-    const phone         = ev?.telefone_responsavel || null;
-    if (!email) return res.status(409).json({ error: 'Email do signatário não encontrado.' });
-
-    // 4) Garante signatário e PREPARA (assignment virtual)
-    const signer  = await ensureSigner({ full_name, email, government_id, phone });
-    const signerId = signer?.id || signer?.data?.id;
-    await createAssignment(documentId, signerId, { /* message, expires_at */ });
-
-    // 5) Espera pending_signature (ou certificated)
-    const status = await waitForStatus(
-      documentId,
-      s => s === 'pending_signature' || s === 'certificated',
-      { intervalMs: 1200, maxMs: 120000 }
-    );
-
-    // 6) URL de assinatura (embed/link)
-    const assinaturaUrl = await getBestSigningUrl(documentId);
-
-    // 7) Persiste
-    const createdAt = new Date().toISOString();
-    await dbRun(
-      `INSERT INTO documentos (tipo, token, evento_id, pdf_url, pdf_public_url, status, created_at, assinafy_id, assinatura_url)
-       VALUES ('termo_evento', ?, ?, ?, ?, 'pendente_assinatura', ?, ?, ?)
-       ON CONFLICT(evento_id, tipo) DO UPDATE SET
-         token=excluded.token, pdf_url=excluded.pdf_url, pdf_public_url=excluded.pdf_public_url,
-         status='pendente_assinatura', created_at=excluded.created_at,
-         assinafy_id=excluded.assinafy_id, assinatura_url=excluded.assinatura_url`,
-      [documentId, eventoId, docRow.pdf_url, docRow.pdf_public_url, createdAt, documentId, assinaturaUrl || null]
-    );
-
-    return res.json({
-      ok: true,
-      message: 'Documento preparado para assinatura.',
-      data: { documentId, status, assinaturaUrl, full_name, email }
-    });
-  } catch (e) {
-    console.error('[documentos] /termo/:eventoId/assinafy/send erro:', e?.response?.data || e);
-    res.status(500).json({ error: 'Falha no envio/preparação' });
-  }
-});
-
-// Abre/redireciona para a tela de assinatura (tenta pegar a melhor URL de assignment)
 router.get('/assinafy/:id/open', async (req, res) => {
   const id = req.params.id;
   try {
-    const url = await getBestSigningUrl(id);
-    if (url) return res.redirect(url);
-
-    // fallback: devolve status quando não há URL
     const st = await getDocumentStatus(id);
+    const url = st.url || st.signUrl || st.signerUrl || st.signingUrl;
+    if (url) return res.redirect(url);
     return res.json({ ok:true, id, status: st });
   } catch (e) {
     console.error('[documentos] /assinafy/:id/open erro:', e?.response?.data || e.message);
@@ -328,7 +240,6 @@ router.get('/assinafy/:id/open', async (req, res) => {
   }
 });
 
-// Consulta status na Assinafy
 router.get('/assinafy/:id/status', async (req, res) => {
   try {
     const st = await getDocumentStatus(req.params.id);
@@ -342,7 +253,7 @@ router.get('/assinafy/:id/status', async (req, res) => {
   }
 });
 
-// Baixa a versão assinada (via cache local se existir; se não, baixa da Assinafy agora)
+// Baixa a versão assinada (cache local se existir; se não, baixa agora)
 router.get('/assinafy/:id/download-signed', async (req, res) => {
   const id = req.params.id;
   try {
@@ -351,7 +262,6 @@ router.get('/assinafy/:id/download-signed', async (req, res) => {
       const abs = path.join(PUBLIC_DIR, doc.signed_pdf_public_url.replace(/^\//,''));
       return safeSendFile(res, abs, `termo_assinado_${doc.evento_id || id}.pdf`);
     }
-    // baixa agora
     const bin = await downloadSignedPdf(id);
     const fileName = `termo_assinado_${id}.pdf`;
     const abs = path.join(SIGNED_DIR, fileName);
@@ -374,7 +284,6 @@ router.get('/assinafy/:id/download-signed', async (req, res) => {
 // Webhook da Assinafy — atualiza status e armazena o PDF assinado
 router.post('/assinafy/webhook', express.json({ type:'application/json' }), async (req, res) => {
   try {
-    // Validação simples por segredo
     const secret = process.env.ASSINAFY_WEBHOOK_SECRET;
     const provided = req.headers['x-assinafy-signature'] || req.headers['x-webhook-secret'] || req.query.secret;
     if (secret && String(provided) !== String(secret)) {
@@ -388,13 +297,10 @@ router.post('/assinafy/webhook', express.json({ type:'application/json' }), asyn
 
     if (!id) return res.status(400).json({ error: 'ID do documento ausente no webhook.' });
 
-    // Atualiza status básico
-    await dbRun(`UPDATE documentos SET status=?, signer=? WHERE assinafy_id=?`,
-      [String(status||'').toLowerCase(), signer, id]);
+    await dbRun(`UPDATE documentos SET status=?, signer=? WHERE assinafy_id=?`, [String(status||'').toLowerCase(), signer, id]);
 
-    // Se concluído/assinado, baixa e salva localmente
     const statusNorm = String(status||'').toLowerCase();
-    if (['signed', 'concluded', 'completed', 'assinado', 'finalizado', 'certificated'].includes(statusNorm)) {
+    if (['signed', 'concluded', 'completed', 'assinado', 'finalizado'].includes(statusNorm)) {
       try {
         const bin = await downloadSignedPdf(id);
         const fileName = `termo_assinado_${id}.pdf`;
@@ -415,11 +321,7 @@ router.post('/assinafy/webhook', express.json({ type:'application/json' }), asyn
   }
 });
 
-// ===================================================================================
-//                             ROTAS AUXILIARES / LEGADAS
-// ===================================================================================
-
-// Compat: baixa termo por caminho público (quando já há pdf_public_url)
+// Compat: baixar por caminho público
 router.get('/termo-public/:eventoId', async (req, res) => {
   try {
     const doc = await dbGet(`SELECT * FROM documentos WHERE evento_id=? AND tipo='termo_evento'`, [req.params.eventoId]);
@@ -432,7 +334,7 @@ router.get('/termo-public/:eventoId', async (req, res) => {
   }
 });
 
-// Compat: retorna apenas a URL pública (se existir)
+// Compat: retorna apenas a URL pública
 router.get('/termo-url/:eventoId', async (req, res) => {
   try {
     const doc = await dbGet(`SELECT pdf_public_url FROM documentos WHERE evento_id=? AND tipo='termo_evento'`, [req.params.eventoId]);
