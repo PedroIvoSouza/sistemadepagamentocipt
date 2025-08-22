@@ -340,6 +340,48 @@ window.onload = () => {
   window.baixarPdfBase64 = baixarPdfBase64;
 
   // =======================
+  // Cálculos de valores
+  // =======================
+  const precosPorDia = [
+    2495.00, // 1ª diária
+    1996.00, // 2ª diária
+    1596.80, // 3ª diária
+    1277.44, // 4ª diária
+    1277.44  // 5ª diária em diante
+  ];
+
+  function calcularValorBruto(totalDiarias) {
+    if (totalDiarias <= 0) return 0;
+
+    let valorTotal = 0;
+    if (totalDiarias >= 1) valorTotal += precosPorDia[0];
+    if (totalDiarias >= 2) valorTotal += precosPorDia[1];
+    if (totalDiarias >= 3) valorTotal += precosPorDia[2];
+    if (totalDiarias >= 4) {
+      const diariasRestantes = totalDiarias - 3;
+      valorTotal += diariasRestantes * precosPorDia[3];
+    }
+
+    return parseFloat(valorTotal.toFixed(2));
+  }
+
+  function calcularValorFinal(valorBruto, tipoDesconto, descontoManualPercent = 0) {
+    let valor = valorBruto;
+
+    if (tipoDesconto === 'Governo') {
+      valor *= 0.80; // 20% de desconto
+    } else if (tipoDesconto === 'Permissionario') {
+      valor *= 0.40; // 60% de desconto
+    }
+
+    if (descontoManualPercent > 0) {
+      valor *= (1 - descontoManualPercent / 100);
+    }
+
+    return parseFloat(valor.toFixed(2));
+  }
+
+  // =======================
   // Topo / menu
   // =======================
   (function bootMenu(){
@@ -543,14 +585,10 @@ window.onload = () => {
     if (tipoDescontoAutoDisplay) tipoDescontoAutoDisplay.value = tipoCliente;
 
     const descontoManual = parseFloat(descontoManualInput.value) || 0;
-    const valorBruto = typeof calcularValorBruto === 'function'
-      ? calcularValorBruto(totalDiarias)
-      : 0;
+    const valorBruto = calcularValorBruto(totalDiarias);
     valorBrutoDisplay.textContent = fmtBRL(valorBruto);
 
-    const valorFinal = typeof calcularValorFinal === 'function'
-      ? calcularValorFinal(valorBruto, tipoCliente, descontoManual)
-      : valorBruto;
+    const valorFinal = calcularValorFinal(valorBruto, tipoCliente, descontoManual);
     valorFinalDisplay.textContent = fmtBRL(valorFinal);
 
     let totalParcelado = 0;
