@@ -15,12 +15,12 @@
   <style>
     :root { --cor-primaria:#0056a0; --cor-sidebar:#004480; --raio-borda:.5rem; }
     body{font-family:'Montserrat',sans-serif;background:#f4f7f6}
-    .wrapper{display:flex;min-height:100vh}
+    .wrapper{display:flex;min-height:100vh;width:100%}
     .sidebar{width:260px;background:var(--cor-sidebar);color:rgba(255,255,255,.8);display:flex;flex-direction:column}
     .sidebar-header{padding:1.5rem;text-align:center;background:rgba(0,0,0,.1)}
     .sidebar-header img{max-width:180px;height:auto}
     .sidebar-nav{padding:1rem 0;flex-grow:1}
-    .sidebar-nav .nav-link{color:rgba(255,255,255,.8);padding:.8rem 1.5rem;display:flex;align-items:center;font-weight:500; text-decoration: none;}
+    .sidebar-nav .nav-link{color:rgba(255,255,255,.8);padding:.8rem 1.5rem;display:flex;align-items:center;font-weight:500;text-decoration:none}
     .sidebar-nav .nav-link .bi{margin-right:1rem;font-size:1.2rem}
     .sidebar-nav .nav-link:hover{color:#fff;background:rgba(255,255,255,.05)}
     .sidebar-nav .nav-link.active{color:#fff;background:var(--cor-primaria)}
@@ -30,10 +30,14 @@
     .topbar{background:#fff;padding:1rem 2rem;box-shadow:0 1px 3px rgba(0,0,0,.1);display:flex;justify-content:flex-end;align-items:center}
     .content{padding:2rem}
     .card{border:none;border-radius:var(--raio-borda);box-shadow:0 2px 5px rgba(0,0,0,.05);margin-bottom:2rem}
-    .modal .form-label{font-weight:600}
-    .badge{font-size:.8rem}
-    .btn-group .btn { white-space: nowrap; }
-    th { white-space: nowrap; }
+    .card-title{color:var(--cor-primaria);font-weight:700}
+    .table th, .table td { vertical-align: middle; }
+    /* Larguras e não quebrar cabeçalhos */
+    .th-nome { min-width: 260px; white-space: nowrap; }
+    .th-doc  { min-width: 160px; white-space: nowrap; }
+    .th-email{ min-width: 220px; white-space: nowrap; }
+    .th-tipo { min-width: 120px; white-space: nowrap; }
+    .th-acoes{ min-width: 180px; white-space: nowrap; }
   </style>
 </head>
 <body>
@@ -47,7 +51,7 @@
         <li class="nav-item"><a class="nav-link" href="/admin/permissionarios.html"><i class="bi bi-people-fill"></i>Permissionários</a></li>
         <li class="nav-item"><a class="nav-link" href="/admin/dars.html"><i class="bi bi-file-earmark-text-fill"></i>DARs</a></li>
         <li class="nav-item menu-dropdown">
-          <a class="nav-link" href="#"><i class="bi bi-calendar-event-fill"></i>Eventos</a>
+          <a class="nav-link active" href="#"><i class="bi bi-calendar-event-fill"></i>Eventos</a>
           <ul class="submenu" style="list-style:none;padding-left:20px;display:block;">
             <li><a class="nav-link active" href="/admin/eventos-clientes.html"><i class="bi bi-person-lines-fill"></i>Clientes de Eventos</a></li>
             <li><a class="nav-link" href="/admin/eventos-dars.html"><i class="bi bi-receipt-cutoff"></i>DARs de Eventos</a></li>
@@ -71,47 +75,52 @@
         <div class="d-flex justify-content-between align-items-center mb-4">
           <h1 class="h2">Clientes de Eventos</h1>
           <button id="add-cliente-btn" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#cliente-modal">
-            <i class="bi bi-plus-circle me-2"></i>Novo Cliente
+            <i class="bi bi-plus-circle-fill me-2"></i>Novo Cliente
           </button>
         </div>
 
         <div class="card">
           <div class="card-body p-4">
+            <!-- Barra de filtro e limite (igual Permissionários) -->
             <div class="row g-3 mb-4">
-                <div class="col-md-8">
-                    <input type="text" id="searchInput" class="form-control" placeholder="Buscar por Nome, Documento ou Email...">
-                </div>
-                <div class="col-md-4">
-                    <select id="limitSelect" class="form-select">
-                        <option value="10" selected>10 por página</option>
-                        <option value="20">20 por página</option>
-                        <option value="30">30 por página</option>
-                    </select>
-                </div>
+              <div class="col-md-6">
+                <input type="text" id="searchInput" class="form-control" placeholder="Buscar por Nome/Razão, Documento ou E-mail...">
+              </div>
+              <div class="col-md-2">
+                <select id="limitSelect" class="form-select">
+                  <option value="10" selected>10 por página</option>
+                  <option value="20">20 por página</option>
+                  <option value="30">30 por página</option>
+                </select>
+              </div>
+              <div class="col-md-4 text-end">
+                <!-- espaço reservado (identidade visual consistente) -->
+              </div>
             </div>
+
             <div class="table-responsive">
               <table class="table table-hover align-middle">
                 <thead>
                   <tr>
-                    <th>Nome/Razão Social</th>
-                    <th>Documento</th>
-                    <th>Email</th>
-                    <th>Tipo</th>
-                    <th>Ações</th>
+                    <th class="th-nome">Nome / Razão Social</th>
+                    <th class="th-doc">Documento</th>
+                    <th class="th-email">Email</th>
+                    <th class="th-tipo">Tipo</th>
+                    <th class="th-acoes text-end">Ações</th>
                   </tr>
                 </thead>
-                <tbody id="clientes-table-body">
-                    </tbody>
+                <tbody id="clientes-table-body"></tbody>
               </table>
             </div>
 
             <nav id="paginationNav" class="d-flex justify-content-center mt-4"></nav>
-            </div>
+          </div>
         </div>
       </main>
     </div>
   </div>
 
+  <!-- Modal -->
   <div class="modal fade" id="cliente-modal" tabindex="-1" aria-labelledby="modal-title" aria-hidden="true">
     <div class="modal-dialog modal-lg">
       <div class="modal-content">
@@ -241,341 +250,349 @@
   <script defer src="/js/mobile-adapter.js"></script>
   <script defer src="/js/ui-kit.js"></script>
   <script defer src="/js/mobile-tweaks.js"></script>
-  
+
   <script>
-    // --- Funções de formatação e helpers ---
-    function formatarDocumento(doc) {
-        if (!doc) return '';
-        const docLimpo = doc.toString().replace(/\D/g, '');
-        if (docLimpo.length === 11) { // CPF
-            return docLimpo.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
-        }
-        if (docLimpo.length === 14) { // CNPJ
-            return docLimpo.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
-        }
-        return doc;
+/* ===========================
+   Helpers / máscaras / auth
+   =========================== */
+const toApiTipo = (v) => v === 'PF' ? 'FISICA' : v === 'PJ' ? 'JURIDICA' : (String(v||'').toUpperCase());
+const fromApiTipo = (v) => (String(v||'').toUpperCase() === 'FISICA' ? 'PF' : 'PJ');
+const soDig = s => (s||'').replace(/\D/g,'');
+
+function formatarCPF(cpf){
+  const d = soDig(cpf);
+  if (d.length !== 11) return cpf || '';
+  return d.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/,'$1.$2.$3-$4');
+}
+function formatarCNPJ(cnpj){
+  const d = soDig(cnpj);
+  if (d.length !== 14) return cnpj || '';
+  return d.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/,'$1.$2.$3/$4-$5');
+}
+function formatarDocumento(v){
+  const d = soDig(v);
+  if (d.length === 11) return formatarCPF(d);
+  if (d.length === 14) return formatarCNPJ(d);
+  return v || '';
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const token = localStorage.getItem('adminAuthToken');
+  if (!token) { window.location.href = '/admin/login.html'; return; }
+
+  // header/menu
+  document.getElementById('logoutButton')?.addEventListener('click', (e)=>{
+    e.preventDefault(); localStorage.removeItem('adminAuthToken'); window.location.href='/admin/login.html';
+  });
+  try{ const p=JSON.parse(atob(token.split('.')[1])); document.getElementById('adminName').innerText = p?.nome || ''; }catch{}
+
+  // refs UI
+  const API_URL = '/api/admin/eventos-clientes';
+  const clienteModalEl = document.getElementById('cliente-modal');
+  const clienteModal   = new bootstrap.Modal(clienteModalEl);
+  const modalTitle     = document.getElementById('modal-title');
+  const form           = document.getElementById('cliente-form');
+  const submitBtn      = clienteModalEl.querySelector('.modal-footer button[form="cliente-form"]');
+  const tableBody      = document.getElementById('clientes-table-body');
+  const paginationNav  = document.getElementById('paginationNav');
+  const searchInput    = document.getElementById('searchInput');
+  const limitSelect    = document.getElementById('limitSelect');
+
+  // form fields
+  const clienteIdField    = document.getElementById('cliente-id');
+  const tipoPessoaSelect  = document.getElementById('tipo_pessoa');
+  const documentoInput    = document.getElementById('documento');
+  const nomeRazaoInput    = document.getElementById('nome_razao_social');
+  const emailInput        = document.getElementById('email');
+  const telefoneInput     = document.getElementById('telefone');
+  const tipoClienteSel    = document.getElementById('tipo_cliente');
+  const responsavelGroup  = document.getElementById('responsavel-group');
+  const nomeRespInput     = document.getElementById('nome_responsavel');
+  const docRespInput      = document.getElementById('documento_responsavel');
+  const cepInput          = document.getElementById('cep');
+  const logradouroInput   = document.getElementById('logradouro');
+  const numeroInput       = document.getElementById('numero');
+  const complInput        = document.getElementById('complemento');
+  const bairroInput       = document.getElementById('bairro');
+  const cidadeInput       = document.getElementById('cidade');
+  const ufInput           = document.getElementById('uf');
+
+  // máscaras
+  let documentoMask, responsavelCpfMask, telefoneMask, cepMask;
+  const onlyDigits = v => (v||'').toString().replace(/\D/g,'');
+
+  function aplicarMascaras(){
+    documentoMask && documentoMask.destroy();
+    responsavelCpfMask && responsavelCpfMask.destroy();
+    telefoneMask && telefoneMask.destroy();
+    cepMask && cepMask.destroy();
+
+    const tipo = tipoPessoaSelect.value;
+    responsavelGroup.style.display = tipo === 'PJ' ? 'block' : 'none';
+    documentoInput.placeholder = tipo === 'PJ' ? '00.000.000/0000-00' : '000.000.000-00';
+    documentoMask = IMask(documentoInput, { mask: tipo === 'PJ' ? '00.000.000/0000-00' : '000.000.000-00', lazy:false });
+
+    if (tipo === 'PJ'){
+      responsavelCpfMask = IMask(docRespInput, { mask: '000.000.000-00', lazy:false });
     }
+    telefoneMask = IMask(telefoneInput, { mask: [{ mask: '(00) 0000-0000' }, { mask: '(00) 0 0000-0000' }], lazy:false });
+    cepMask      = IMask(cepInput,       { mask: '00000-000', lazy:false });
+  }
 
-    const toApiTipo = (v) => v === 'PF' ? 'FISICA' : v === 'PJ' ? 'JURIDICA' : (String(v||'').toUpperCase());
-    const fromApiTipo = (v) => (String(v||'').toUpperCase() === 'FISICA' ? 'PF' : 'PJ');
-    const soDig = s => (s||'').replace(/\D/g,'');
+  // ====== BUSCA/PAGINAÇÃO NO PADRÃO PERMISSIONÁRIOS ======
+  let currentPage = 1, currentSearch = '', currentLimit = 10, searchTimeout;
+  let cacheList = []; // fallback local
 
-    document.addEventListener('DOMContentLoaded', () => {
-      const token = localStorage.getItem('adminAuthToken');
-      if (!token) { window.location.href = '/admin/login.html'; return; }
+  function renderPagination(totalPages, page){
+    paginationNav.innerHTML = '';
+    if (!totalPages || totalPages <= 1) return;
+    let html = '<ul class="pagination">';
+    html += `<li class="page-item ${page===1?'disabled':''}"><a class="page-link" href="#" data-page="${page-1}">Anterior</a></li>`;
+    for (let i=1;i<=totalPages;i++){
+      html += `<li class="page-item ${i===page?'active':''}"><a class="page-link" href="#" data-page="${i}">${i}</a></li>`;
+    }
+    html += `<li class="page-item ${page===totalPages?'disabled':''}"><a class="page-link" href="#" data-page="${page+1}">Próximo</a></li>`;
+    html += '</ul>';
+    paginationNav.innerHTML = html;
+  }
 
-      // --- Lógica de Menu e Header ---
-      (function bootMenuAndHeader() {
-          const path = window.location.pathname;
-          document.querySelectorAll('.sidebar-nav .nav-link').forEach(link => {
-              const href = link.getAttribute('href');
-              link.classList.remove('active');
-              if (href && path.includes(href) && href !== '#') {
-                  link.classList.add('active');
-                  const parent = link.closest('.menu-dropdown');
-                  if (parent) {
-                      parent.querySelector('a.nav-link').classList.add('active');
-                      parent.querySelector('.submenu').style.display = 'block';
-                  }
-              }
-          });
-          document.querySelectorAll('.menu-dropdown > a').forEach(toggle => {
-              toggle.addEventListener('click', (e) => {
-                  e.preventDefault();
-                  const submenu = toggle.nextElementSibling;
-                  submenu.style.display = submenu.style.display === 'block' ? 'none' : 'block';
-              });
-          });
-          document.getElementById('logoutButton')?.addEventListener('click', (e) => {
-              e.preventDefault(); localStorage.removeItem('adminAuthToken'); window.location.href = '/admin/login.html';
-          });
-          try { const p = JSON.parse(atob(token.split('.')[1])); document.getElementById('adminName').innerText = p?.nome || ''; } catch {}
-      })();
+  function renderTable(clientes){
+    if (!clientes || !clientes.length){
+      tableBody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">Nenhum cliente encontrado.</td></tr>';
+      return;
+    }
+    tableBody.innerHTML = clientes.map(c=>{
+      const resendButton = !c.senha_hash
+        ? `<button class="btn btn-sm btn-outline-info btn-resend" data-id="${c.id}" title="Reenviar senha"><i class="bi bi-envelope-arrow-up-fill"></i></button>`
+        : `<button class="btn btn-sm btn-outline-success" disabled title="Senha já definida"><i class="bi bi-check-circle-fill"></i></button>`;
+      const docFmt = formatarDocumento(c.documento);
+      return `
+        <tr>
+          <td><strong>${c.nome_razao_social || ''}</strong></td>
+          <td>${docFmt}</td>
+          <td>${c.email || ''}</td>
+          <td><span class="badge bg-secondary">${c.tipo_cliente || ''}</span></td>
+          <td class="text-end">
+            <div class="btn-group">
+              ${resendButton}
+              <button class="btn btn-sm btn-outline-primary btn-edit" data-cliente='${JSON.stringify(c)}'><i class="bi bi-pencil-fill"></i> Editar</button>
+              <button class="btn btn-sm btn-outline-danger btn-delete" data-id="${c.id}"><i class="bi bi-trash-fill"></i> Excluir</button>
+            </div>
+          </td>
+        </tr>`;
+    }).join('');
+  }
 
-      // --- Referências de Elementos ---
-      const API_URL = '/api/admin/eventos-clientes';
-      const searchInput = document.getElementById('searchInput');
-      const limitSelect = document.getElementById('limitSelect');
-      const tableBody   = document.getElementById('clientes-table-body');
-      const paginationNav = document.getElementById('paginationNav');
-      
-      const clienteModalEl = document.getElementById('cliente-modal');
-      const clienteModal   = new bootstrap.Modal(clienteModalEl);
-      const modalTitle     = document.getElementById('modal-title');
-      const form           = document.getElementById('cliente-form');
-      const submitBtn      = clienteModalEl.querySelector('.modal-footer button[form="cliente-form"]');
-      const clienteIdField = document.getElementById('cliente-id');
-      const tipoPessoaSelect = document.getElementById('tipo_pessoa');
-      const documentoInput   = document.getElementById('documento');
-      const nomeRazaoInput   = document.getElementById('nome_razao_social');
-      const emailInput       = document.getElementById('email');
-      const telefoneInput    = document.getElementById('telefone');
-      const tipoClienteSel   = document.getElementById('tipo_cliente');
-      const responsavelGroup = document.getElementById('responsavel-group');
-      const nomeRespInput    = document.getElementById('nome_responsavel');
-      const docRespInput     = document.getElementById('documento_responsavel');
-      const cepInput         = document.getElementById('cep');
-      const logradouroInput  = document.getElementById('logradouro');
-      const numeroInput      = document.getElementById('numero');
-      const complInput       = document.getElementById('complemento');
-      const bairroInput      = document.getElementById('bairro');
-      const cidadeInput      = document.getElementById('cidade');
-      const ufInput          = document.getElementById('uf');
+  // tenta server-side; se vier array puro, faz fallback local
+  async function fetchClientes(){
+    tableBody.innerHTML = '<tr><td colspan="5" class="text-center">Carregando...</td></tr>';
+    try{
+      const url = `${API_URL}?search=${encodeURIComponent(currentSearch)}&page=${currentPage}&limit=${currentLimit}`;
+      const r = await fetch(url, { headers:{ Authorization:`Bearer ${token}` }});
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || `Erro ${r.status}`);
 
-      // --- Estado da Paginação e Busca ---
-      let currentPage = 1, currentSearch = '', currentLimit = 10, searchTimeout;
-
-      // --- Lógica de Carregamento e Renderização da Tabela ---
-      async function fetchClientes() {
-          tableBody.innerHTML = `<tr><td colspan="5" class="text-center">Carregando...</td></tr>`;
-          try {
-              const response = await fetch(`${API_URL}?search=${encodeURIComponent(currentSearch)}&page=${currentPage}&limit=${currentLimit}`, {
-                  headers: { 'Authorization': `Bearer ${token}` }
-              });
-              if (!response.ok) {
-                  const errorData = await response.json().catch(() => ({}));
-                  throw new Error(errorData.error || 'Falha ao buscar os dados.');
-              }
-              const data = await response.json();
-              renderTable(data.clientes || data.data); // Compatibilidade com diferentes retornos da API
-              renderPagination(data.totalPages, data.currentPage);
-          } catch (error) {
-              tableBody.innerHTML = `<tr><td colspan="5" class="text-center text-danger">${error.message}</td></tr>`;
-          }
+      // formato paginado do servidor?
+      if (data && (Array.isArray(data.clientes) || Array.isArray(data.items))) {
+        const rows = data.clientes || data.items;
+        renderTable(rows);
+        renderPagination(data.totalPages || data.pages || 1, data.currentPage || data.page || 1);
+        return;
       }
 
-      function renderTable(clientes) {
-          if (!clientes || clientes.length === 0) {
-              tableBody.innerHTML = '<tr><td colspan="5" class="text-center">Nenhum cliente encontrado.</td></tr>';
-              return;
-          }
-          tableBody.innerHTML = clientes.map(c => {
-              const resendButton = !c.senha_hash
-                  ? `<button class="btn btn-sm btn-outline-info btn-resend" data-id="${c.id}" title="Reenviar convite de senha"><i class="bi bi-envelope-arrow-up-fill"></i></button>`
-                  : `<button class="btn btn-sm btn-outline-success" disabled title="Senha já definida pelo cliente"><i class="bi bi-check-circle-fill"></i></button>`;
-              
-              return `
-                  <tr>
-                      <td><strong>${c.nome_razao_social || ''}</strong></td>
-                      <td>${formatarDocumento(c.documento)}</td>
-                      <td>${c.email || ''}</td>
-                      <td><span class="badge bg-secondary">${c.tipo_cliente || ''}</span></td>
-                      <td>
-                          <div class="btn-group">
-                              ${resendButton}
-                              <button class="btn btn-sm btn-outline-primary btn-edit" data-cliente='${JSON.stringify(c)}' title="Editar"><i class="bi bi-pencil-fill"></i></button>
-                              <button class="btn btn-sm btn-outline-danger btn-delete" data-id="${c.id}" title="Excluir"><i class="bi bi-trash-fill"></i></button>
-                          </div>
-                      </td>
-                  </tr>`;
-          }).join('');
+      // formato lista simples -> fallback
+      if (Array.isArray(data)) {
+        cacheList = data;
+        const filtered = (currentSearch||'').trim()
+          ? cacheList.filter(c=>{
+              const txt = `${c.nome_razao_social||''} ${c.documento||''} ${c.email||''}`.toLowerCase();
+              return txt.includes(currentSearch.toLowerCase());
+            })
+          : cacheList.slice();
+        const totalPages = Math.max(1, Math.ceil(filtered.length / currentLimit));
+        const start = (currentPage-1)*currentLimit;
+        const pageRows = filtered.slice(start, start+currentLimit);
+        renderTable(pageRows);
+        renderPagination(totalPages, currentPage>totalPages?totalPages:currentPage);
+        return;
       }
 
-      function renderPagination(totalPages, page) {
-          paginationNav.innerHTML = '';
-          if (totalPages <= 1) return;
-          let paginationHTML = '<ul class="pagination">';
-          paginationHTML += `<li class="page-item ${page === 1 ? 'disabled' : ''}"><a class="page-link" href="#" data-page="${page - 1}">Anterior</a></li>`;
-          
-          for (let i = 1; i <= totalPages; i++) {
-              paginationHTML += `<li class="page-item ${i === page ? 'active' : ''}"><a class="page-link" href="#" data-page="${i}">${i}</a></li>`;
-          }
+      // desconhecido
+      renderTable([]);
+      renderPagination(1,1);
+    }catch(err){
+      tableBody.innerHTML = `<tr><td colspan="5" class="text-center text-danger">${err.message}</td></tr>`;
+      renderPagination(1,1);
+    }
+  }
 
-          paginationHTML += `<li class="page-item ${page === totalPages ? 'disabled' : ''}"><a class="page-link" href="#" data-page="${page + 1}">Próximo</a></li>`;
-          paginationHTML += '</ul>';
-          paginationNav.innerHTML = paginationHTML;
-      }
+  // eventos de filtro/página
+  searchInput.addEventListener('keyup', ()=>{
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(()=>{ currentSearch = searchInput.value; currentPage=1; fetchClientes(); }, 300);
+  });
+  limitSelect.addEventListener('change', ()=>{
+    currentLimit = Number(limitSelect.value||10); currentPage=1; fetchClientes();
+  });
+  paginationNav.addEventListener('click', (e)=>{
+    if (e.target.tagName==='A' && !e.target.parentElement.classList.contains('disabled')){
+      e.preventDefault(); currentPage = Number(e.target.dataset.page); fetchClientes();
+    }
+  });
 
-      // --- Event Listeners para Filtros e Paginação ---
-      searchInput.addEventListener('keyup', () => { 
-          clearTimeout(searchTimeout); 
-          searchTimeout = setTimeout(() => { 
-              currentSearch = searchInput.value; 
-              currentPage = 1; 
-              fetchClientes(); 
-          }, 300); 
-      });
-      limitSelect.addEventListener('change', () => { 
-          currentLimit = limitSelect.value; 
-          currentPage = 1; 
-          fetchClientes(); 
-      });
-      paginationNav.addEventListener('click', (e) => { 
-          if (e.target.tagName === 'A' && !e.target.parentElement.classList.contains('disabled')) { 
-              e.preventDefault(); 
-              currentPage = Number(e.target.dataset.page); 
-              fetchClientes(); 
-          } 
-      });
+  // ========== restante do CRUD já existente ==========
+  function setupModal(cliente=null){
+    form.reset();
+    form.classList.remove('was-validated');
+    if (cliente){
+      modalTitle.textContent = 'Editar Cliente';
+      clienteIdField.value = cliente.id;
+      const tipoFront = fromApiTipo(cliente.tipo_pessoa || cliente.tipo || 'JURIDICA');
+      tipoPessoaSelect.value = tipoFront;
+      documentoInput.value   = formatarDocumento(cliente.documento || '');
+      nomeRazaoInput.value   = cliente.nome_razao_social || '';
+      emailInput.value       = cliente.email || '';
+      telefoneInput.value    = cliente.telefone || '';
+      tipoClienteSel.value   = cliente.tipo_cliente || 'Geral';
+      nomeRespInput.value    = cliente.nome_responsavel || '';
+      docRespInput.value     = formatarCPF(cliente.documento_responsavel || '');
+      cepInput.value         = cliente.cep || '';
+      logradouroInput.value  = cliente.logradouro || '';
+      numeroInput.value      = cliente.numero || '';
+      complInput.value       = cliente.complemento || '';
+      bairroInput.value      = cliente.bairro || '';
+      cidadeInput.value      = cliente.cidade || '';
+      ufInput.value          = cliente.uf || '';
+    } else {
+      modalTitle.textContent = 'Adicionar Novo Cliente';
+      clienteIdField.value = '';
+    }
+    aplicarMascaras();
+  }
+  document.getElementById('add-cliente-btn')?.addEventListener('click', ()=> setupModal(null));
 
-      // --- Lógica do Modal e Formulário (PRESERVADA) ---
-      let documentoMask, responsavelCpfMask, telefoneMask, cepMask;
-      const onlyDigits = v => (v||'').toString().replace(/\D/g,'');
+  tipoPessoaSelect.addEventListener('change', ()=> aplicarMascaras());
 
-      function aplicarMascaras(){
-        documentoMask && documentoMask.destroy();
-        responsavelCpfMask && responsavelCpfMask.destroy();
-        telefoneMask && telefoneMask.destroy();
-        cepMask && cepMask.destroy();
+  async function buscarCEP(cep){
+    const v = soDig(cep); if (v.length!==8) return null;
+    try{ const r=await fetch(`https://viacep.com.br/ws/${v}/json/`); if(!r.ok) return null; const j=await r.json(); return j.erro?null:j; }catch{ return null; }
+  }
+  async function buscarCNPJ(cnpj){
+    const v = soDig(cnpj); if (v.length!==14) return null;
+    try{ const r=await fetch(`https://brasilapi.com.br/api/cnpj/v1/${v}`); if(!r.ok) return null; return await r.json(); }catch{ return null; }
+  }
+  documentoInput.addEventListener('blur', async ()=>{
+    if (tipoPessoaSelect.value !== 'PJ') return;
+    const cnpjInfo = await buscarCNPJ(documentoInput.value);
+    if (!cnpjInfo) return;
+    if (!nomeRazaoInput.value) nomeRazaoInput.value = cnpjInfo.razao_social || cnpjInfo.nome_fantasia || '';
+    if (!telefoneInput.value && cnpjInfo.telefone) telefoneInput.value = cnpjInfo.telefone;
+    if (!cepInput.value && cnpjInfo.cep) cepInput.value = cnpjInfo.cep;
+    logradouroInput.value ||= cnpjInfo.logradouro || '';
+    numeroInput.value     ||= cnpjInfo.numero || '';
+    complInput.value      ||= cnpjInfo.complemento || '';
+    bairroInput.value     ||= cnpjInfo.bairro || '';
+    cidadeInput.value     ||= cnpjInfo.municipio || cnpjInfo.cidade || '';
+    ufInput.value         ||= cnpjInfo.uf || '';
+    aplicarMascaras();
+  });
+  cepInput.addEventListener('blur', async ()=>{
+    const data = await buscarCEP(cepInput.value);
+    if (!data) return;
+    logradouroInput.value ||= data.logradouro || '';
+    bairroInput.value     ||= data.bairro    || '';
+    cidadeInput.value     ||= data.localidade|| '';
+    ufInput.value         ||= data.uf        || '';
+    aplicarMascaras();
+  });
 
-        const tipo = tipoPessoaSelect.value;
-        responsavelGroup.style.display = tipo === 'PJ' ? 'block' : 'none';
-        documentoInput.placeholder = tipo === 'PJ' ? '00.000.000/0000-00' : '000.000.000-00';
-        documentoMask = IMask(documentoInput, { mask: tipo === 'PJ' ? '00.000.000/0000-00' : '000.000.000-00', lazy:false });
-        if (documentoInput.value) documentoMask.unmaskedValue = soDig(documentoInput.value);
-        if (tipo === 'PJ'){
-          responsavelCpfMask = IMask(docRespInput, { mask: '000.000.000-00', lazy:false });
-          if (docRespInput.value) responsavelCpfMask.unmaskedValue = soDig(docRespInput.value);
-        }
-        telefoneMask = IMask(telefoneInput, { mask: [{ mask: '(00) 0000-0000' }, { mask: '(00) 0 0000-0000' }], lazy:false });
-        if (telefoneInput.value) telefoneMask.unmaskedValue = soDig(telefoneInput.value);
-        cepMask = IMask(cepInput, { mask: '00000-000', lazy:false });
-        if (cepInput.value) cepMask.unmaskedValue = soDig(cepInput.value);
-      }
+  function soDigitos(v){ return (v||'').replace(/\D/g,''); }
+  function ehCPF(v){ return soDigitos(v).length===11; }
+  function ehCNPJ(v){ return soDigitos(v).length===14; }
+  function validarCamposCliente(){
+    const tipo = tipoPessoaSelect.value;
+    const doc  = soDigitos(documentoInput.value);
+    if (tipo==='PF' && !ehCPF(doc)){ alert('CPF inválido.'); documentoInput.focus(); return false; }
+    if (tipo==='PJ' && !ehCNPJ(doc)){ alert('CNPJ inválido.'); documentoInput.focus(); return false; }
+    const docResp = soDigitos(docRespInput.value);
+    if (tipo==='PJ' && docResp && !ehCPF(docResp)){ alert('CPF do responsável inválido.'); docRespInput.focus(); return false; }
+    if (!emailInput.value || !emailInput.checkValidity()){ alert('Informe um e-mail válido.'); emailInput.focus(); return false; }
+    return true;
+  }
 
-      async function buscarCEP(cep){
-        const soNum = onlyDigits(cep); if (soNum.length !== 8) return null;
-        try{ const r = await fetch(`https://viacep.com.br/ws/${soNum}/json/`); if (!r.ok) return null; const j = await r.json(); if (j.erro) return null; return j; }catch{ return null; }
-      }
-      async function buscarCNPJ(cnpj){
-        const soNum = onlyDigits(cnpj); if (soNum.length !== 14) return null;
-        try{ const r = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${soNum}`); if (!r.ok) return null; return await r.json(); }catch{ return null; }
-      }
-      
-      function setupModal(cliente=null){
-        form.reset(); form.classList.remove('was-validated');
-        if (cliente){
-            modalTitle.textContent = 'Editar Cliente';
-            clienteIdField.value = cliente.id;
-            tipoPessoaSelect.value = fromApiTipo(cliente.tipo_pessoa || cliente.tipo || 'JURIDICA');
-            documentoInput.value = cliente.documento || '';
-            nomeRazaoInput.value = cliente.nome_razao_social || '';
-            emailInput.value = cliente.email || '';
-            telefoneInput.value = cliente.telefone || '';
-            tipoClienteSel.value = cliente.tipo_cliente || 'Geral';
-            nomeRespInput.value = cliente.nome_responsavel || '';
-            docRespInput.value = cliente.documento_responsavel || '';
-            cepInput.value = cliente.cep || '';
-            logradouroInput.value = cliente.logradouro || '';
-            numeroInput.value = cliente.numero || '';
-            complInput.value = cliente.complemento || '';
-            bairroInput.value = cliente.bairro || '';
-            cidadeInput.value = cliente.cidade || '';
-            ufInput.value = cliente.uf || '';
-        } else {
-            modalTitle.textContent = 'Adicionar Novo Cliente';
-            clienteIdField.value = '';
-        }
-        aplicarMascaras();
-      }
-
-      document.getElementById('add-cliente-btn')?.addEventListener('click', ()=> setupModal(null));
-      tipoPessoaSelect.addEventListener('change', aplicarMascaras);
-      documentoInput.addEventListener('blur', async ()=>{
-        if (tipoPessoaSelect.value !== 'PJ') return;
-        const cnpjInfo = await buscarCNPJ(documentoInput.value);
-        if (!cnpjInfo) return;
-        if (!nomeRazaoInput.value) nomeRazaoInput.value = cnpjInfo.razao_social || cnpjInfo.nome_fantasia || '';
-        if (!telefoneInput.value && cnpjInfo.telefone) telefoneInput.value = cnpjInfo.telefone;
-        if (!cepInput.value && cnpjInfo.cep) cepInput.value = cnpjInfo.cep;
-        if (!logradouroInput.value) logradouroInput.value = cnpjInfo.logradouro || '';
-        if (!numeroInput.value)     numeroInput.value     = cnpjInfo.numero || '';
-        if (!complInput.value)      complInput.value      = cnpjInfo.complemento || '';
-        if (!bairroInput.value)     bairroInput.value     = cnpjInfo.bairro || '';
-        if (!cidadeInput.value)     cidadeInput.value     = cnpjInfo.municipio || cnpjInfo.cidade || '';
-        if (!ufInput.value)         ufInput.value         = cnpjInfo.uf || '';
-        aplicarMascaras();
-      });
-      cepInput.addEventListener('blur', async ()=>{
-        const data = await buscarCEP(cepInput.value);
-        if (!data) return;
-        logradouroInput.value = data.logradouro || logradouroInput.value;
-        bairroInput.value     = data.bairro     || bairroInput.value;
-        cidadeInput.value     = data.localidade || cidadeInput.value;
-        ufInput.value         = data.uf         || ufInput.value;
-        aplicarMascaras();
-      });
-
-      form.addEventListener('submit', async (e)=>{
-        e.preventDefault();
-        const tipoApi = toApiTipo(tipoPessoaSelect.value);
-        const docNum = soDig(documentoInput.value);
-        const docResp = soDig(docRespInput.value);
-        if (tipoApi === 'FISICA' && docNum.length !== 11){ alert('CPF inválido (11 dígitos).'); return; }
-        if (tipoApi === 'JURIDICA' && docNum.length !== 14){ alert('CNPJ inválido (14 dígitos).'); return; }
-        if (tipoApi === 'JURIDICA' && docResp && docResp.length !== 11){ alert('CPF do responsável inválido.'); return; }
-        if (!form.checkValidity()){ form.classList.add('was-validated'); return; }
-
-        const id = clienteIdField.value;
-        const url = id ? `${API_URL}/${id}` : API_URL;
-        const method = id ? 'PUT' : 'POST';
-        const body = {
-            nome_razao_social: nomeRazaoInput.value,
-            tipo_pessoa: tipoApi,
-            documento: docNum,
-            email: emailInput.value,
-            telefone: soDig(telefoneInput.value) || null,
-            nome_responsavel: nomeRespInput.value || null,
-            documento_responsavel: docResp || null,
-            tipo_cliente: tipoClienteSel.value,
-            cep: soDig(cepInput.value) || null,
-            logradouro: logradouroInput.value || null,
-            bairro: bairroInput.value || null,
-            cidade: cidadeInput.value || null,
-            uf: (ufInput.value||'').toUpperCase() || null,
-            numero: numeroInput.value || null,
-            complemento: complInput.value || null
-        };
-
-        submitBtn.disabled = true; submitBtn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Salvando...`;
-        try{
-            const r = await fetch(url, { method, headers: { 'Content-Type':'application/json', Authorization:`Bearer ${token}` }, body: JSON.stringify(body) });
-            const j = await r.json().catch(()=> ({}));
-            if (!r.ok) throw new Error(j.error || `Erro ${r.status}`);
-            alert(j.message || 'Cliente salvo com sucesso!');
-            clienteModal.hide();
-            fetchClientes(); // Atualiza a tabela
-        } catch(err){
-            alert(`Erro ao salvar: ${err.message}`);
-        } finally {
-            submitBtn.disabled=false; submitBtn.textContent='Salvar';
-        }
-      });
-      
-      tableBody.addEventListener('click', async (e)=>{
-        const btn = e.target.closest('button'); if (!btn) return;
-        const id  = btn.dataset.id;
-        
-        if (btn.classList.contains('btn-edit')){
-          const data = JSON.parse(btn.dataset.cliente);
-          setupModal(data); clienteModal.show(); return;
-        }
-        if (btn.classList.contains('btn-delete')){
-          if (!confirm('Excluir cliente?')) return;
-          try{
-            const r = await fetch(`${API_URL}/${id}`, { method:'DELETE', headers:{ Authorization:`Bearer ${token}` }});
-            const j = await r.json().catch(()=>({}));
-            if (!r.ok) throw new Error(j.error || `Erro ${r.status}`);
-            alert('Cliente excluído.'); fetchClientes();
-          }catch(err){ alert(`Erro ao excluir: ${err.message}`); }
-          return;
-        }
-        if (btn.classList.contains('btn-resend')){
-          const original = btn.innerHTML; btn.disabled = true; btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
-          try{
-            const r = await fetch(`${API_URL}/${id}/reenviar-senha`, { method:'POST', headers:{ Authorization:`Bearer ${token}` }});
-            const j = await r.json().catch(()=>({}));
-            if (!r.ok) throw new Error(j.error || `Erro ${r.status}`);
-            alert(j.message || 'E-mail enviado.');
-            btn.outerHTML = `<button class="btn btn-sm btn-outline-success" disabled title="E-mail enviado"><i class="bi bi-check-circle-fill"></i></button>`;
-          }catch(err){ alert(`Erro: ${err.message}`); btn.disabled=false; btn.innerHTML = original; }
-        }
-      });
-      
-      // --- Inicialização ---
+  form.addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    if (!validarCamposCliente()){ form.classList.add('was-validated'); return; }
+    const id     = clienteIdField.value;
+    const url    = id ? `${API_URL}/${id}` : API_URL;
+    const method = id ? 'PUT' : 'POST';
+    const tp = (tipoPessoaSelect.value || '').toUpperCase();
+    const tipoParaApi = tp === 'PF' ? 'FISICA' : (tp === 'PJ' ? 'JURIDICA' : tp);
+    const body = {
+      nome_razao_social: nomeRazaoInput.value,
+      tipo_pessoa: tipoParaApi,
+      documento: soDig(documentoInput.value),
+      email: emailInput.value,
+      telefone: soDig(telefoneInput.value) || null,
+      nome_responsavel: nomeRespInput.value || null,
+      documento_responsavel: soDig(docRespInput.value) || null,
+      tipo_cliente: tipoClienteSel.value,
+      cep: soDig(cepInput.value) || null,
+      logradouro: logradouroInput.value || null,
+      bairro: bairroInput.value || null,
+      cidade: cidadeInput.value || null,
+      uf: (ufInput.value||'').toUpperCase() || null,
+      numero: numeroInput.value || null,
+      complemento: complInput.value || null
+    };
+    submitBtn.disabled = true; submitBtn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Salvando...`;
+    try{
+      const r = await fetch(url, { method, headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${token}` }, body: JSON.stringify(body) });
+      const j = await r.json().catch(()=> ({}));
+      if (!r.ok) throw new Error(j.error || `Erro ${r.status}`);
+      alert(j.message || 'Cliente salvo com sucesso!');
+      clienteModal.hide();
+      setupModal(null);
       fetchClientes();
-      aplicarMascaras();
-    });
+    }catch(err){ alert(`Erro ao salvar: ${err.message}`); }
+    finally{ submitBtn.disabled=false; submitBtn.textContent='Salvar'; }
+  });
+
+  // ações da tabela
+  tableBody.addEventListener('click', async (e)=>{
+    const btn = e.target.closest('button'); if (!btn) return;
+    const id  = btn.dataset.id;
+
+    if (btn.classList.contains('btn-edit')){
+      const data = JSON.parse(btn.dataset.cliente);
+      setupModal(data); clienteModal.show(); return;
+    }
+    if (btn.classList.contains('btn-delete')){
+      if (!confirm('Excluir cliente?')) return;
+      try{
+        const r = await fetch(`${API_URL}/${id}`, { method:'DELETE', headers:{ Authorization:`Bearer ${token}` }});
+        const j = await r.json().catch(()=> ({}));
+        if (!r.ok) throw new Error(j.error || `Erro ${r.status}`);
+        alert('Cliente excluído.'); fetchClientes();
+      }catch(err){ alert(`Erro ao excluir: ${err.message}`); }
+      return;
+    }
+    if (btn.classList.contains('btn-resend')){
+      const original = btn.innerHTML; btn.disabled = true; btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
+      try{
+        const r = await fetch(`${API_URL}/${id}/reenviar-senha`, { method:'POST', headers:{ Authorization:`Bearer ${token}` }});
+        const j = await r.json().catch(()=> ({}));
+        if (!r.ok) throw new Error(j.error || `Erro ${r.status}`);
+        alert(j.message || 'E-mail enviado.');
+        btn.outerHTML = `<button class="btn btn-sm btn-outline-success" disabled title="E-mail enviado"><i class="bi bi-check-circle-fill"></i></button>`;
+      }catch(err){ alert(`Erro: ${err.message}`); btn.disabled=false; btn.innerHTML = original; }
+    }
+  });
+
+  // inicialização
+  aplicarMascaras();
+  fetchClientes();
+});
   </script>
 </body>
 </html>
