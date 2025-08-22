@@ -503,14 +503,10 @@ window.onload = () => {
       } 
   });
 
-  // --- TODA A SUA LÓGICA ORIGINAL DE MODAIS, FORMULÁRIOS E AÇÕES É PRESERVADA ABAIXO ---
-  // A única diferença é que chamadas a `carregarEventos()` foram substituídas por `fetchEventos()`
-  
   const API_CLIENTES_URL = '/api/admin/eventos-clientes';
   let clientesPromise = null;
   let clientesCarregados = false;
   async function carregarClientes(){
-    // ... SUA FUNÇÃO ORIGINAL COMPLETA ...
     clientesCarregados = false;
     try{
       const res = await fetch(API_CLIENTES_URL, { headers:{ Authorization:`Bearer ${token}` } });
@@ -529,143 +525,10 @@ window.onload = () => {
     }catch(e){ console.error(e); }
     return clientesCarregados;
   }
-  
-  // A sua função original `carregarEventos` foi substituída por `fetchEventos`
-  
-  function inicializarEventListeners(){
-    eventosTableBody.addEventListener('click', async (e)=>{
-      // ... SUA LÓGICA ORIGINAL COMPLETA ...
-      const btnApagar = e.target.closest('.btn-apagar');
-      if (btnApagar){
-        const eventoId = btnApagar.dataset.eventoId;
-        const nome = btnApagar.dataset.eventoNome || `#${eventoId}`;
-        if (!confirm(`Apagar o evento "${nome}" (ID: ${eventoId})?`)) return;
-        try{
-          const r = await fetch(`/api/admin/eventos/${eventoId}`, { method:'DELETE', headers: AUTH_HEADERS });
-          const j = await r.json().catch(()=> ({}));
-          if (!r.ok) throw new Error(j.error || `Erro ${r.status}`);
-          alert(j.message || 'Evento apagado.');
-          fetchEventos(); // ATUALIZADO AQUI
-        }catch(err){ alert(`Erro ao apagar: ${err.message}`); }
-      }
-      // ... O RESTO DA SUA LÓGICA DE CLIQUE ...
-    });
-    // ... O RESTO DA SUA FUNÇÃO inicializarEventListeners ...
-  }
 
   const form = document.getElementById('evento-form');
   let modoEdicao = false;
   let editEventoId = null;
-  form.addEventListener('submit', async (e)=>{
-    // ... SUA LÓGICA DE SUBMIT ORIGINAL COMPLETA ...
-    e.preventDefault();
-    // ... validações ...
-    try{
-      const url = modoEdicao ? `/api/admin/eventos/${editEventoId}` : '/api/admin/eventos';
-      const method = modoEdicao ? 'PUT' : 'POST';
-      // ... montagem do body ...
-      const r = await fetch(url, {
-        method,
-        // ... headers e body
-      });
-      const j = await r.json().catch(()=> ({}));
-      if (!r.ok) throw new Error(j.error || `Erro ${r.status}`);
-
-      alert(modoEdicao ? 'Evento atualizado com sucesso!' : 'Evento e DARs criados com sucesso!');
-      // ... reset do modal ...
-      fetchEventos(); // ATUALIZADO AQUI
-    }catch(err){
-      // ... tratamento de erro ...
-    }finally{
-      // ... reabilitar botão ...
-    }
-  });
-
-  // ... TODO O RESTANTE DO SEU CÓDIGO JS VEM AQUI, SEM MUDANÇAS ...
-  // Por exemplo: cálculos, flatpickr, parcelas, abrir modais, etc.
-  
-  // =======================
-  // Boot
-  // =======================
-  inicializarEventListeners(); // sua função original
-  carregarClientes();      // sua função original (necessária para o modal)
-  fetchEventos();            // nova função para carregar a tabela principal
-};
-
-  async function carregarEventos(){
-    try{
-      const r = await fetch('/api/admin/eventos', { headers: AUTH_HEADERS });
-      if (!r.ok) throw new Error('Falha ao buscar eventos');
-      const evs = await r.json();
-      eventosTableBody.innerHTML = '';
-      for (const ev of (evs||[])){
-        const id = evIdOf(ev);
-        const status = ev.status || 'Pendente';
-        const badge = status==='Pago' ? 'bg-success'
-                    : ['Emitido','Reemitido'].includes(status) ? 'bg-primary'
-                    : 'bg-warning text-dark';
-        const vfNum = typeof ev.valor_final==='number'
-          ? ev.valor_final
-          : parseFloat(String(ev.valor_final||'0').replace(/\./g,'').replace(',','.'))||0;
-
-        let btnAssinaturaDisabled = '';
-        let mostraBtnEnviar = true;
-        let signedUrl = '';
-        try {
-          const rMeta = await fetch(`/api/documentos/termo/${id}/meta`, { headers: AUTH_HEADERS });
-          if (!rMeta.ok) throw new Error('meta');
-          const meta = await rMeta.json();
-          if (meta.status !== 'gerado') btnAssinaturaDisabled = 'disabled';
-          if (meta.status === 'assinado' || meta.status === 'signed' || meta.signed_pdf_public_url) {
-            mostraBtnEnviar = false;
-            if (meta.signed_pdf_public_url) signedUrl = meta.signed_pdf_public_url;
-          }
-        } catch {
-          btnAssinaturaDisabled = 'disabled';
-        }
-
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td>${id}</td>
-          <td>${ev.nome_evento || ''}</td>
-          <td>${ev.nome_cliente || ''}</td>
-          <td>${formatNumeroProcesso(ev.numero_processo)}</td>
-          <td class="text-end">${fmtBRL(vfNum)}</td>
-          <td class="text-center"><span class="badge ${badge}">${status}</span></td>
-          <td class="text-center">
-            <button class="btn btn-sm btn-outline-primary btn-dars" title="Ver DARs"
-                    data-evento-id="${id}" data-evento-nome="${ev.nome_evento || ''}">
-              <i class="bi bi-file-earmark-arrow-down"></i>
-            </button>
-          </td>
-       <td class="text-center">
-        <div class="btn-group">
-          <button class="btn btn-sm btn-outline-success btn-termo" title="Emitir Termo"
-                  data-evento-id="${id}">
-            <i class="bi bi-file-earmark-text"></i>
-          </button>
-          ${mostraBtnEnviar ? `<button class="btn btn-sm btn-outline-primary btn-enviar-assinafy" title="Enviar p/ assinatura" data-evento-id="${id}" data-cliente-id="${ev.id_cliente}" ${btnAssinaturaDisabled}><i class="bi bi-pen"></i></button>` : ''}
-          ${signedUrl ? `<a class="btn btn-sm btn-outline-success btn-download-assinado" href="${signedUrl}" target="_blank" title="Download assinado"><i class="bi bi-download"></i></a>` : ''}
-        </div>
-      </td>
-                <td class="text-center">
-            <button class="btn btn-sm btn-outline-secondary btn-editar" title="Editar"
-                    data-evento-id="${id}">
-              <i class="bi bi-pencil"></i>
-            </button>
-            <button class="btn btn-sm btn-outline-danger btn-apagar" title="Apagar"
-                    data-evento-id="${id}" data-evento-nome="${ev.nome_evento || ''}">
-              <i class="bi bi-trash"></i>
-            </button>
-          </td>`;
-        eventosTableBody.appendChild(tr);
-      }
-    }catch(e){
-      console.error(e);
-      eventosTableBody.innerHTML = '<tr><td colspan="8" class="text-center text-danger">Erro ao carregar eventos.</td></tr>';
-    }
-  }
-
   function atualizarStatusNaTabelaEventos(eventoId, status){
     const trs = eventosTableBody.querySelectorAll('tr');
     trs.forEach(tr=>{
@@ -692,7 +555,7 @@ window.onload = () => {
         if (j.status === 'signed' || j.status === 'assinado'){
           clearInterval(assinafyPollers[assinafyId]);
           delete assinafyPollers[assinafyId];
-          carregarEventos();
+          fetchEventos();
         }
       }catch(e){
         console.error('Polling Assinafy status falhou', e);
@@ -1065,7 +928,7 @@ window.onload = () => {
           const j = await r.json().catch(()=> ({}));
           if (!r.ok) throw new Error(j.error || `Erro ${r.status}`);
           alert(j.message || 'Evento apagado.');
-          carregarEventos();
+          fetchEventos();
         }catch(err){ alert(`Erro ao apagar: ${err.message}`); }
       }
       if (btnEditar){
@@ -1099,7 +962,7 @@ window.onload = () => {
           const payload = await reemitirDAR(eventoId, darId);
           if (payload?.dar_pdf) baixarPdfBase64(payload.dar_pdf, `DAR-Evento-${eventoId}.pdf`);
           await abrirModalDARs(eventoId); // recarrega lista
-          await carregarEventos();        // atualiza status geral
+          await fetchEventos();        // atualiza status geral
         }catch(err){
           alert(err.message || 'Não foi possível reemitir.');
         }finally{
@@ -1195,7 +1058,7 @@ window.onload = () => {
       parcelasMasks.forEach(({valorMask,picker})=>{ try{valorMask.destroy()}catch{} try{picker.destroy()}catch{} });
       parcelasMasks=[]; modoEdicao=false; editEventoId=null;
       btn.textContent = 'Salvar Evento e Gerar DARs';
-      carregarEventos();
+      fetchEventos();
     }catch(err){
       formError.textContent = err.message;
       formError.classList.remove('d-none'); formError.style.display='block';
@@ -1247,6 +1110,7 @@ window.onload = () => {
   inicializarEventListeners();
   carregarClientes();
   fetchEventos();
+};
 </script>
 </body>
 </html>
