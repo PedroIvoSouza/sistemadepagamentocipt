@@ -1,5 +1,5 @@
 // src/services/assinafyService.js
-// Serviço de alto nível com fallback de assignments e utilitários.
+// Serviço de alto nível Assinafy: upload, signers, assignments (com fallback), waits e utilitários.
 
 const axios = require('axios');
 const FormData = require('form-data');
@@ -19,6 +19,7 @@ function authHeaders() {
   if (bearer) h.Authorization = `Bearer ${bearer}`;
   return h;
 }
+
 const http = axios.create({
   baseURL: BASE,
   timeout: TIMEOUT,
@@ -38,7 +39,7 @@ function ensureOk(resp, what='request') {
   throw err;
 }
 
-/* Upload */
+/* -------------------------------- Upload ----------------------------------- */
 async function uploadDocumentFromFile(filePath, filename) {
   const form = new FormData();
   form.append('file', fs.createReadStream(filePath), {
@@ -57,7 +58,7 @@ async function uploadDocumentFromFile(filePath, filename) {
   return ensureOk(resp, 'uploadDocumentFromFile');
 }
 
-/* Document */
+/* ------------------------------- Document ---------------------------------- */
 async function getDocument(documentId) {
   const url = `/documents/${encodeURIComponent(documentId)}`;
   const resp = await http.get(url);
@@ -65,23 +66,65 @@ async function getDocument(documentId) {
   return ensureOk(resp, 'getDocument');
 }
 
-const READY_STATUSES = new Set(['available','ready','waiting_for_assignments','pending_signature','certified','certificated']);
+/** Estados “prontos para criar assignment” */
+const READY_FOR_ASSIGNMENT = new Set([
+  'metadata_ready',     // <- essencial para sair do seu loop
+  'available',
+  'ready'
+]);
 
+/** Estados que indicam documento já esperando assinatura */
+const PENDING_SIGNATURE_STATES = new Set([
+  'pending_signature',
+  'waiting_for_signature',
+  'waiting_for_signatures'
+]);
+
+/** Estados finais/gerais que também tratamos como “ready o suficiente” */
+const GENERIC_READY = new Set([
+  ...READY_FOR_ASSIGNMENT,
+  'waiting_for_assignments', // ainda sem assignment
+  'pending_signature',
+  'certified',
+  'certificated'
+]);
+
+/** Compat: usado em outros pontos — agora mapeia para READY_FOR_ASSIGNMENT */
 async function waitForDocumentReady(documentId, { retries=20, intervalMs=3000 } = {}) {
+  return waitUntilReadyForAssignment(documentId, { retries, intervalMs });
+}
+
+/** 1ª espera: até o arquivo estar processado e pronto para criar assignment */
+async function waitUntilReadyForAssignment(documentId, { retries=20, intervalMs=3000 } = {}) {
   for (let i=0;i<retries;i++) {
     const data = await getDocument(documentId);
     const info = data?.data || data;
     const status = info?.status;
     console.log(`Assinafy document ${documentId} status (attempt ${i+1}/${retries}): ${status}`);
-    if (status && READY_STATUSES.has(status)) return info;
+    if (status && READY_FOR_ASSIGNMENT.has(status)) return info;
     await sleep(intervalMs);
   }
-  const err = new Error('Timeout ao aguardar processamento do documento.');
+  const err = new Error('Timeout ao aguardar documento ficar pronto para assignment.');
   err.timeout = true;
   throw err;
 }
 
-/* Signer */
+/** 2ª espera: após criar assignment, aguardar “pending_signature” */
+async function waitUntilPendingSignature(documentId, { retries=30, intervalMs=2000 } = {}) {
+  for (let i=0;i<retries;i++) {
+    const data = await getDocument(documentId);
+    const info = data?.data || data;
+    const status = info?.status;
+    console.log(`Assinafy document ${documentId} status (pending attempt ${i+1}/${retries}): ${status}`);
+    if (status && PENDING_SIGNATURE_STATES.has(status)) return info;
+    await sleep(intervalMs);
+  }
+  const err = new Error('Timeout ao aguardar documento ficar pending_signature.');
+  err.timeout = true;
+  throw err;
+}
+
+/* -------------------------------- Signer ----------------------------------- */
 async function createSigner({ full_name, email, government_id, phone }) {
   const url = `/accounts/${ACCOUNT_ID}/signers`;
   if (DEBUG) console.log('[ASSINAFY][POST]', BASE + url);
@@ -109,7 +152,7 @@ async function ensureSigner({ full_name, email, government_id, phone }) {
   }
 }
 
-/* Assignments com fallback */
+/* ---------------------------- Assignments c/fallback ------------------------ */
 async function requestSignatures(documentId, signerIds, { message, expires_at } = {}) {
   if (!Array.isArray(signerIds) || !signerIds.length) throw new Error('Informe ao menos um signerId.');
 
@@ -117,13 +160,13 @@ async function requestSignatures(documentId, signerIds, { message, expires_at } 
   if (message) body.message = message;
   if (expires_at) body.expires_at = expires_at;
 
-  // 1) tenta rota global
+  // 1) tenta rota GLOBAL
   let url = `/documents/${encodeURIComponent(documentId)}/assignments`;
   if (DEBUG) console.log('[ASSINAFY][POST try#1]', BASE + url, body);
   let resp = await http.post(url, body);
 
   if (resp.status === 404) {
-    // 2) tenta rota com account
+    // 2) fallback para rota com ACCOUNT
     url = `/accounts/${ACCOUNT_ID}/documents/${encodeURIComponent(documentId)}/assignments`;
     if (DEBUG) console.log('[ASSINAFY][POST try#2]', BASE + url, body);
     resp = await http.post(url, body);
@@ -163,7 +206,7 @@ async function getSigningUrl(documentId) {
   return null;
 }
 
-/* Artifacts */
+/* -------------------------------- Artifacts -------------------------------- */
 function pickBestArtifactUrl(documentData) {
   const d = documentData?.data || documentData;
   const artifacts = d?.artifacts || {};
@@ -173,16 +216,23 @@ function pickBestArtifactUrl(documentData) {
 module.exports = {
   uploadDocumentFromFile,
   getDocument,
-  waitForDocumentReady,
 
+  // waits
+  waitForDocumentReady,              // compat
+  waitUntilReadyForAssignment,       // novo
+  waitUntilPendingSignature,         // novo
+
+  // signers
   createSigner,
   findSignerByEmail,
   ensureSigner,
 
+  // assignments
   requestSignatures,
   listAssignments,
   getSigningUrl,
 
+  // utils
   pickBestArtifactUrl,
   onlyDigits,
 };
