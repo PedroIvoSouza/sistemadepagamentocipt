@@ -512,7 +512,6 @@ window.onload = () => {
       const res = await fetch(API_CLIENTES_URL, { headers:{ Authorization:`Bearer ${token}` } });
       const data = await res.json();
       clientes = data || [];
-      const clienteSelect = document.getElementById('cliente-select');
       clienteSelect.innerHTML = '<option value="">Selecione um cliente...</option>';
       clientes.forEach(c=>{
         const opt = document.createElement('option');
@@ -527,6 +526,8 @@ window.onload = () => {
   }
 
   const form = document.getElementById('evento-form');
+  const clienteSelect = document.getElementById('cliente-select');
+  const descontoManualInput = document.getElementById('desconto-manual');
   let modoEdicao = false;
   let editEventoId = null;
   function atualizarStatusNaTabelaEventos(eventoId, status){
