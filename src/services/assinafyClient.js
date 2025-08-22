@@ -309,6 +309,22 @@ async function waitForStatus(documentId, isDone, { intervalMs = 2000, maxMs = 12
   }
 }
 
+async function getStatusPlain(documentId) {
+  const d = await getDocumentStatus(documentId);
+  return d?.data?.status || d?.status || d?.data?.data?.status || null;
+}
+
+// só baixa se já estiver certificated; caso contrário, retorna null
+async function safeDownloadCertificatedOrNull(documentId) {
+  const s = await getStatusPlain(documentId);
+  if (s !== 'certificated') {
+    if (DEBUG) console.log('[ASSINAFY] safeDownload: status=', s, '— não vou baixar.');
+    return null;
+  }
+  return downloadSignedPdf(documentId);
+}
+
+
 // -----------------------------------------------------------------------------
 // Exports
 // -----------------------------------------------------------------------------
@@ -337,4 +353,8 @@ module.exports = {
 
   // helpers
   waitForStatus,
+
+  getStatusPlain,
+  safeDownloadCertificatedOrNull,
+};
 };
