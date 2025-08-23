@@ -1,6 +1,10 @@
 // src/api/adminEventosRoutes.js
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
+
 const adminAuthMiddleware = require('../middleware/adminAuthMiddleware');
+const db = require('../database/db');
 
 const { emitirGuiaSefaz } = require('../services/sefazService');
 const { gerarTokenDocumento, imprimirTokenEmPdf } = require('../utils/token');
@@ -12,36 +16,18 @@ const {
   requestSignatures,
   getDocument,
   pickBestArtifactUrl,
-  waitForDocumentReady,
+  waitUntilPendingSignature,
+  waitUntilReadyForAssignment,
   getSigningUrl,
   onlyDigits,
 } = require('../services/assinafyService');
 
-const fs = require('fs');
-const path = require('path');
-const db = require('../database/db');
-
-// Service correto para gerar o TERMO
 const { gerarTermoEventoPdfkitEIndexar } = require('../services/termoEventoPdfkitService');
 
 const router = express.Router();
 
 /* ========= Helpers ========= */
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-const soDigitos = (v='') => String(v).replace(/\D/g,'');
-const normalizeMsisdn = (v='') => soDigitos(v).replace(/^0+/, ''); // deixa só dígitos, sem zeros à esquerda
-
-// validações de e-mail
-const isValidEmail = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(s||'').toLowerCase());
-const isPlaceholderEmail = (s) => {
-  const v = String(s||'').toLowerCase();
-  return !v ||
-         /placeholder/.test(v) ||
-         /sem\.email/.test(v) ||
-         /\bnull\b/.test(v) ||
-         /importado\.placeholder/.test(v);
-};
-const pickEmailOrNull = (s) => (isValidEmail(s) && !isPlaceholderEmail(s)) ? s : null;
 
 /* ========= SQLite helpers com log ========= */
 const dbGet = (sql, p = [], ctx = '') =>
@@ -107,14 +93,14 @@ router.post('/', async (req, res) => {
 
 /* ===========================================================
    POST /api/admin/eventos/:id/termo/enviar-assinatura
-   Gera termo → upload → aguarda → ensureSigner → assignment
+   Gera termo → upload → aguarda → ensureSigner → assignment → salva assinatura_url (se houver)
    =========================================================== */
 router.post('/:id/termo/enviar-assinatura', async (req, res) => {
   const { id } = req.params;
   let { signerName, signerEmail, signerCpf, signerPhone, message, expiresAt } = req.body || {};
 
   try {
-    // 0) Dados do signatário: busca do banco se faltou algo
+    // 0) Dados do signatário (fallback do banco)
     if (!signerName || !signerEmail || !signerCpf || !signerPhone) {
       const sql = `
         SELECT c.nome_responsavel, c.nome_razao_social, c.email, c.telefone,
@@ -126,17 +112,13 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
       if (!row) return res.status(404).json({ ok: false, error: 'Evento ou permissionário não encontrado.' });
 
       signerName  = signerName  || row.nome_responsavel || row.nome_razao_social || 'Responsável';
-      signerEmail = signerEmail || pickEmailOrNull(row.email); // valida e bloqueia placeholder
+      signerEmail = signerEmail || row.email;
       signerCpf   = signerCpf   || onlyDigits(row.documento_responsavel || row.documento || '');
       signerPhone = signerPhone || row.telefone || '';
     }
 
-    // 0.1) Valida e-mail final
-    if (!isValidEmail(signerEmail) || isPlaceholderEmail(signerEmail)) {
-      return res.status(400).json({
-        ok: false,
-        error: 'E-mail do signatário não encontrado ou inválido. Envie "signerEmail" no body ou corrija o cadastro do cliente.'
-      });
+    if (!signerName || !signerEmail) {
+      return res.status(400).json({ ok: false, error: 'Nome e email do signatário são obrigatórios.' });
     }
 
     // 1) Gera/garante o termo
@@ -147,69 +129,58 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
     const assinafyDocId = uploaded?.id || uploaded?.data?.id;
     if (!assinafyDocId) return res.status(500).json({ ok: false, error: 'Falha no upload ao Assinafy.' });
 
-    // 3) Aguarda processamento
-    try {
-      await waitForDocumentReady(assinafyDocId, { retries: 20, intervalMs: 3000 });
-    } catch (err) {
-      if (err.timeout) return res.status(504).json({ ok: false, error: 'Tempo limite ao processar documento no Assinafy.' });
-      throw err;
-    }
+    // 3) Aguarda processamento para assignment
+    await waitUntilReadyForAssignment(assinafyDocId, { retries: 20, intervalMs: 3000 });
 
-    // 4) Ensure signer (com dados limpos)
+    // 4) Ensure signer
     const signer = await ensureSigner({
       full_name: signerName,
       email: signerEmail,
       government_id: onlyDigits(signerCpf || ''),
-      phone: `+55${normalizeMsisdn(signerPhone || '')}`,
+      phone: `+55${onlyDigits(signerPhone || '')}`,
     });
     const signerId = signer?.id || signer?.data?.id;
     if (!signerId) return res.status(500).json({ ok: false, error: 'Falha ao criar signatário no Assinafy.' });
 
-    // 5) Assignment (virtual) com retry básico
+    // 5) Assignment (virtual) com retry simples
     const maxRetries = 3;
-    let assigned = false;
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
         await requestSignatures(assinafyDocId, [signerId], { message, expires_at: expiresAt });
-        assigned = true;
-        break;
+        break; // sucesso
       } catch (err) {
         const status = err.response?.status;
         const assinafyMsg = err.response?.data?.message;
         if ((assinafyMsg === 'metadata_processing' || status === 400) && attempt < maxRetries - 1) {
-          await sleep(2000);
-          await waitForDocumentReady(assinafyDocId, { retries: 5, intervalMs: 1500 });
+          await sleep(1500);
           continue;
         }
-        if (status === 409) { assigned = true; break; } // já existe
+        if (status === 409) break; // já existe assignment
         throw err;
       }
     }
-    if (!assigned) return res.status(500).json({ ok: false, error: 'Não foi possível criar o assignment.' });
 
-    // 6) (Opcional) tentar link direto — pode não existir nessa conta
-    let assinaturaUrl = null;
-    try {
-      assinaturaUrl = await getSigningUrl(assinafyDocId);
-    } catch {}
+    // 6) Aguarda pending_signature (rápido)
+    await waitUntilPendingSignature(assinafyDocId, { retries: 8, intervalMs: 1500 }).catch(()=>{});
 
-    // 7) Atualiza metadados
+    // 7) Captura assinatura_url (se disponível) e persiste
+    let assinaturaUrl = await getSigningUrl(assinafyDocId);
     await dbRun(
-      `UPDATE documentos
-          SET assinafy_id = ?, status = 'pendente_assinatura', assinatura_url = ?
-        WHERE evento_id = ? AND tipo = 'termo_evento'`,
-      [assinafyDocId, assinaturaUrl || null, id],
+      `INSERT INTO documentos (tipo, token, permissionario_id, evento_id, pdf_url, pdf_public_url, status, created_at, assinafy_id, assinatura_url)
+       VALUES ('termo_evento', NULL, NULL, ?, ?, ?, 'pendente_assinatura', datetime('now'), ?, ?)
+       ON CONFLICT(evento_id, tipo) DO UPDATE SET
+         status = 'pendente_assinatura',
+         assinafy_id = excluded.assinafy_id,
+         assinatura_url = COALESCE(excluded.assinatura_url, assinatura_url)`,
+      [id, out.filePath, out.publicUrl || out.pdf_public_url || null, assinafyDocId, assinaturaUrl || null],
       'termo/assinafy-up'
     );
-
-    console.log(`[ASSINATURA] Enviado. Email usado: ${signerEmail}. DocID=${assinafyDocId}`);
 
     return res.json({
       ok: true,
       message: 'Documento enviado para assinatura (Assinafy).',
       assinafyDocId,
-      assinaturaUrl,
-      signerEmail
+      assinaturaUrl: assinaturaUrl || null,
     });
   } catch (err) {
     console.error('[assinafy] erro:', err.message, err.response?.data);
@@ -223,7 +194,7 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
 
 /* ===========================================================
    POST /api/admin/eventos/:id/termo/reativar-assinatura
-   Reenvia o convite de assinatura com o e-mail válido
+   Recria assignment para o e-mail atual (ou fornecido no body)
    =========================================================== */
 router.post('/:id/termo/reativar-assinatura', async (req, res) => {
   const { id } = req.params;
@@ -231,7 +202,7 @@ router.post('/:id/termo/reativar-assinatura', async (req, res) => {
 
   try {
     const row = await dbGet(
-      `SELECT assinafy_id, assinatura_url FROM documentos WHERE evento_id = ? AND tipo = 'termo_evento' ORDER BY id DESC LIMIT 1`,
+      `SELECT assinafy_id FROM documentos WHERE evento_id = ? AND tipo = 'termo_evento' ORDER BY id DESC LIMIT 1`,
       [id],
       'reativar/get-doc'
     );
@@ -240,36 +211,30 @@ router.post('/:id/termo/reativar-assinatura', async (req, res) => {
     }
     const assinafyDocId = row.assinafy_id;
 
+    // dados do signatário
     if (!signerName || !signerEmail || !signerCpf || !signerPhone) {
-      const sql = `
-        SELECT c.nome_responsavel, c.nome_razao_social, c.email, c.telefone,
-               c.documento_responsavel, c.documento
-          FROM Eventos e
-          JOIN Clientes_Eventos c ON c.id = e.id_cliente
-         WHERE e.id = ?`;
-      const p = await dbGet(sql, [id], 'reativar/default-signer');
+      const p = await dbGet(
+        `SELECT c.nome_responsavel, c.nome_razao_social, c.email, c.telefone, c.documento_responsavel, c.documento
+           FROM Eventos e
+           JOIN Clientes_Eventos c ON c.id = e.id_cliente
+          WHERE e.id = ?`,
+        [id],
+        'reativar/default-signer'
+      );
       if (!p) return res.status(404).json({ ok: false, error: 'Evento/permissionário não encontrado.' });
 
       signerName  = signerName  || p.nome_responsavel || p.nome_razao_social || 'Responsável';
-      signerEmail = signerEmail || pickEmailOrNull(p.email); // valida e bloqueia placeholder
+      signerEmail = signerEmail || p.email;
       signerCpf   = signerCpf   || onlyDigits(p.documento_responsavel || p.documento || '');
       signerPhone = signerPhone || p.telefone || '';
     }
-
-    if (!isValidEmail(signerEmail) || isPlaceholderEmail(signerEmail)) {
-      return res.status(400).json({
-        ok: false,
-        error: 'E-mail do signatário não encontrado ou inválido. Envie "signerEmail" no body ou corrija o cadastro.'
-      });
-    }
-
-    await waitForDocumentReady(assinafyDocId, { retries: 10, intervalMs: 2000 });
+    if (!signerEmail) return res.status(400).json({ ok: false, error: 'Email do signatário não encontrado.' });
 
     const signer = await ensureSigner({
       full_name: signerName,
       email: signerEmail,
       government_id: onlyDigits(signerCpf || ''),
-      phone: `+55${normalizeMsisdn(signerPhone || '')}`,
+      phone: `+55${onlyDigits(signerPhone || '')}`,
     });
     const signerId = signer?.id || signer?.data?.id;
     if (!signerId) return res.status(500).json({ ok: false, error: 'Falha ao criar signatário.' });
@@ -280,20 +245,19 @@ router.post('/:id/termo/reativar-assinatura', async (req, res) => {
       if (err.response?.status !== 409) throw err; // 409 = já existe
     }
 
-    let assinaturaUrl = await getSigningUrl(assinafyDocId).catch(() => null);
-    if (assinaturaUrl) {
-      await dbRun(
-        `UPDATE documentos
-            SET status = 'pendente_assinatura', assinatura_url = ?
-          WHERE evento_id = ? AND tipo = 'termo_evento'`,
-        [assinaturaUrl, id],
-        'reativar/update-doc'
-      );
-    }
+    await waitUntilPendingSignature(assinafyDocId, { retries: 8, intervalMs: 1500 }).catch(()=>{});
+    const assinaturaUrl = await getSigningUrl(assinafyDocId);
 
-    console.log(`[ASSINATURA] Reativado. Email usado: ${signerEmail}. DocID=${assinafyDocId}`);
+    await dbRun(
+      `UPDATE documentos
+          SET status = 'pendente_assinatura',
+              assinatura_url = COALESCE(?, assinatura_url)
+        WHERE evento_id = ? AND tipo = 'termo_evento'`,
+      [assinaturaUrl || null, id],
+      'reativar/update-doc'
+    );
 
-    return res.json({ ok: true, assinafyDocId, assinaturaUrl, signerEmail });
+    return res.json({ ok: true, assinafyDocId, assinaturaUrl: assinaturaUrl || null });
   } catch (err) {
     console.error('[reativar-assinatura] erro:', err.message, err.response?.data);
     return res.status(500).json({ ok: false, error: 'Falha ao reativar assinatura.' });
@@ -301,42 +265,102 @@ router.post('/:id/termo/reativar-assinatura', async (req, res) => {
 });
 
 /* ===========================================================
-   GET /api/admin/eventos/:id/termo/assinatura-url
+   POST /api/admin/eventos/:id/termo/assinafy/link
+   Força a obtenção do link (lê do documento e grava assinatura_url)
    =========================================================== */
-router.get('/:id/termo/assinatura-url', async (req, res) => {
+router.post('/:id/termo/assinafy/link', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const row = await dbGet(
+      `SELECT assinafy_id, assinatura_url FROM documentos
+        WHERE evento_id = ? AND tipo = 'termo_evento'
+     ORDER BY id DESC LIMIT 1`,
+      [id],
+      'admin/link/get-doc'
+    );
+    if (!row?.assinafy_id) return res.status(404).json({ ok:false, error:'Sem assinafy_id salvo para este termo.' });
+
+    // Se já temos, devolve
+    if (row.assinatura_url) {
+      return res.json({ ok:true, url: row.assinatura_url });
+    }
+
+    await waitUntilPendingSignature(row.assinafy_id, { retries: 8, intervalMs: 1500 }).catch(()=>{});
+
+    const assinaturaUrl = await getSigningUrl(row.assinafy_id);
+    if (assinaturaUrl) {
+      await dbRun(
+        `UPDATE documentos SET assinatura_url = ?, status = 'pendente_assinatura'
+          WHERE evento_id = ? AND tipo = 'termo_evento'`,
+        [assinaturaUrl, id],
+        'admin/link/update'
+      );
+      return res.json({ ok:true, url: assinaturaUrl });
+    }
+
+    return res.json({ ok:true, pending:true, message:'Link ainda não disponível.' });
+  } catch (e) {
+    console.error('[admin/link] erro:', e.message);
+    res.status(500).json({ ok:false, error:'Falha ao obter link.' });
+  }
+});
+
+/* ===========================================================
+   GET /api/admin/eventos/:id/termo/assinafy-status
+   Retorna status Assinafy + tenta materializar assinatura_url e salvar
+   =========================================================== */
+router.get('/:id/termo/assinafy-status', async (req, res) => {
   const { id } = req.params;
   try {
     const row = await dbGet(
       `SELECT assinafy_id, assinatura_url FROM documentos WHERE evento_id = ? AND tipo = 'termo_evento' ORDER BY id DESC LIMIT 1`,
       [id],
-      'assinatura-url/get'
+      'termo/assinafy-get'
     );
-    if (!row?.assinafy_id) {
-      return res.status(404).json({ ok: false, error: 'Sem assinafy_id salvo para este termo.' });
-    }
+    if (!row?.assinafy_id) return res.status(404).json({ ok: false, error: 'Sem assinafy_id para este termo.' });
 
-    let assinaturaUrl = row.assinatura_url;
+    const doc = await getDocument(row.assinafy_id);
+    const info = doc?.data || doc;
+    let assinaturaUrl = row.assinatura_url || null;
+
+    // se não temos, tenta buscar e persistir
     if (!assinaturaUrl) {
-      assinaturaUrl = await getSigningUrl(row.assinafy_id).catch(() => null);
+      await waitUntilPendingSignature(row.assinafy_id, { retries: 4, intervalMs: 1000 }).catch(()=>{});
+      assinaturaUrl = await getSigningUrl(row.assinafy_id);
       if (assinaturaUrl) {
         await dbRun(
           `UPDATE documentos SET assinatura_url = ? WHERE evento_id = ? AND tipo = 'termo_evento'`,
           [assinaturaUrl, id],
-          'assinatura-url/update'
+          'termo/assinafy-save-link'
         );
       }
     }
 
-    return res.json({ ok: true, assinaturaUrl });
+    // se já “certified”, salvar a URL assinada e data
+    if (info?.status === 'certified' || info?.status === 'certificated') {
+      const bestUrl = pickBestArtifactUrl(info);
+      await dbRun(
+        `UPDATE documentos
+             SET status = 'assinado',
+                 signed_pdf_public_url = COALESCE(signed_pdf_public_url, ?),
+                 signed_at = COALESCE(signed_at, datetime('now'))
+           WHERE evento_id = ? AND tipo = 'termo_evento'`,
+        [bestUrl || null, id],
+        'termo/assinafy-cert'
+      );
+    }
+
+    return res.json({ ok: true, assinafy: info, assinatura_url: assinaturaUrl || null });
   } catch (err) {
-    console.error('[assinatura-url] erro:', err.message);
-    return res.status(500).json({ ok: false, error: 'Falha ao obter assinatura_url.' });
+    console.error('[assinafy-status] erro:', err.message);
+    return res.status(500).json({ ok: false, error: 'Falha ao consultar status no Assinafy.' });
   }
 });
 
-/* ==================== Demais rotas originais (preservadas) ================== */
+/* ===========================================================
+   Rotas utilitárias já existentes (listar, detalhes, termo, etc.)
+   =========================================================== */
 
-/* GET /api/admin/eventos */
 router.get('/', async (_req, res) => {
   try {
     const sql = `
@@ -356,7 +380,6 @@ router.get('/', async (_req, res) => {
   }
 });
 
-/* GET DARs do evento */
 router.get('/:eventoId/dars', async (req, res) => {
   const { eventoId } = req.params;
   try {
@@ -380,7 +403,6 @@ router.get('/:eventoId/dars', async (req, res) => {
   }
 });
 
-/* GET detalhes do evento */
 router.get('/:id', async (req, res) => {
   const { id } = req.params;
 
@@ -455,7 +477,6 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-/* GET /api/admin/eventos/:id/termo (gera/serve termo) */
 router.get('/:id/termo', async (req, res) => {
   const { id } = req.params;
 
@@ -491,7 +512,6 @@ router.get('/:id/termo', async (req, res) => {
   }
 });
 
-/* POST /api/admin/eventos/:eventoId/termo/disponibilizar */
 router.post('/:eventoId/termo/disponibilizar', async (req, res) => {
   try {
     const { eventoId } = req.params;
@@ -513,7 +533,6 @@ router.post('/:eventoId/termo/disponibilizar', async (req, res) => {
   }
 });
 
-/* DELETE /api/admin/eventos/:eventoId */
 router.delete('/:eventoId', async (req, res) => {
   const { eventoId } = req.params;
   console.log(`[ADMIN] Apagar evento ID: ${eventoId}`);
