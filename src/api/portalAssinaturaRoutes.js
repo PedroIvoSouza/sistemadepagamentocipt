@@ -86,7 +86,12 @@ portalEventosAssinaturaRouter.post('/:eventoId/termo/assinafy/link', async (req,
     if (!row.assinafy_id) return res.status(409).json({ ok:false, error:'Termo ainda não enviado para assinatura.' });
 
     if (row.assinatura_url) {
-      return res.json({ ok:true, assinatura_url: row.assinatura_url, url: row.assinatura_url, status: row.status || 'pendente_assinatura' });
+      return res.json({
+        ok: true,
+        assinatura_url: row.assinatura_url,
+        url: row.assinatura_url,
+        status: row.status || 'pendente_assinatura',
+      });
     }
 
     return res.json({ ok:true, pending:true, status: row.status || 'pendente_assinatura' });
@@ -98,7 +103,7 @@ portalEventosAssinaturaRouter.post('/:eventoId/termo/assinafy/link', async (req,
 
 /**
  * GET /api/portal/eventos/:eventoId/termo/assinafy/link
- * (apenas consulta; não resolve automaticamente assinatura_url)
+ * Consulta e tenta materializar `assinatura_url` quando ausente.
  */
 portalEventosAssinaturaRouter.get('/:eventoId/termo/assinafy/link', async (req, res) => {
   const { eventoId } = req.params;
@@ -110,11 +115,33 @@ portalEventosAssinaturaRouter.get('/:eventoId/termo/assinafy/link', async (req, 
      ORDER BY id DESC LIMIT 1`,
       [eventoId]
     );
-    if (!row) return res.status(404).json({ ok:false, error:'Termo não encontrado.' });
-    if (!row.assinafy_id) return res.status(409).json({ ok:false, error:'Termo ainda não enviado para assinatura.' });
+      if (!row) return res.status(404).json({ ok:false, error:'Termo não encontrado.' });
+      if (!row.assinafy_id) return res.status(409).json({ ok:false, error:'Termo ainda não enviado para assinatura.' });
 
-    if (row.assinatura_url) {
-      return res.json({ ok:true, assinatura_url: row.assinatura_url, url: row.assinatura_url, status: row.status || 'pendente_assinatura' });
+      if (row.assinatura_url) {
+        return res.json({
+          ok: true,
+          assinatura_url: row.assinatura_url,
+          url: row.assinatura_url,
+          status: row.status || 'pendente_assinatura',
+        });
+      }
+
+      let assinaturaUrl = null;
+    for (let i = 0; i < 3 && !assinaturaUrl; i++) {
+      try {
+        assinaturaUrl = await getSigningUrl(row.assinafy_id);
+        if (!assinaturaUrl) await new Promise(r => setTimeout(r, 1000));
+      } catch {}
+    }
+
+    if (assinaturaUrl) {
+      await dbRun(
+        `UPDATE documentos SET assinatura_url = ?, status = 'pendente_assinatura'
+          WHERE evento_id = ? AND tipo = 'termo_evento'`,
+        [assinaturaUrl, eventoId],
+      );
+      return res.json({ ok:true, assinatura_url: assinaturaUrl, url: assinaturaUrl, status: 'pendente_assinatura' });
     }
 
     try {
