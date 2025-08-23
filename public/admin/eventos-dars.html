@@ -504,10 +504,38 @@ document.addEventListener('DOMContentLoaded', () => {
                   </td>
                   <td class="text-center">
                       <div class="btn-group">
-                          <button class="btn btn-sm btn-outline-success btn-termo" title="Emitir Termo" data-evento-id="${id}"><i class="bi bi-file-earmark-text"></i></button>
-                          ${mostraBtnEnviar ? `<button class="btn btn-sm btn-outline-primary btn-enviar-assinafy" title="Enviar p/ assinatura" data-evento-id="${id}" data-cliente-id="${ev.id_cliente}" ${btnAssinaturaDisabled}><i class="bi bi-pen"></i></button>` : ''}
-                          ${signedUrl ? `<a class="btn btn-sm btn-outline-success btn-download-assinado" href="${signedUrl}" target="_blank" title="Download assinado"><i class="bi bi-download"></i></a>` : ''}
+                        <button class="btn btn-sm btn-outline-success btn-termo" title="Emitir Termo" data-evento-id="${id}">
+                          <i class="bi bi-file-earmark-text"></i>
+                        </button>
+                      
+                        ${mostraBtnEnviar
+                          ? `<button class="btn btn-sm btn-outline-primary btn-enviar-assinafy" title="Enviar p/ assinatura"
+                               data-evento-id="${id}" data-cliente-id="${ev.id_cliente}" ${btnAssinaturaDisabled}>
+                               <i class="bi bi-pen"></i>
+                             </button>`
+                          : ''}
+                      
+                        ${meta?.assinatura_url
+                          ? `<button class="btn btn-sm btn-outline-warning btn-copiar-link"
+                               title="Copiar link de assinatura" data-evento-id="${id}"
+                               data-url="${meta.assinatura_url}">
+                               <i class="bi bi-clipboard"></i>
+                             </button>`
+                          : (meta?.assinafy_id && !meta?.signed_pdf_public_url
+                              ? `<button class="btn btn-sm btn-outline-warning btn-materializar-link"
+                                   title="Disponibilizar link de assinatura" data-evento-id="${id}">
+                                   <i class="bi bi-link-45deg"></i>
+                                 </button>`
+                              : '')}
+                      
+                        ${signedUrl
+                          ? `<a class="btn btn-sm btn-outline-success btn-download-assinado" href="${signedUrl}"
+                               target="_blank" title="Download assinado">
+                               <i class="bi bi-download"></i>
+                             </a>`
+                          : ''}
                       </div>
+
                   </td>
                   <td class="text-center">
                       <button class="btn btn-sm btn-outline-secondary btn-editar" title="Editar" data-evento-id="${id}"><i class="bi bi-pencil"></i></button>
@@ -624,6 +652,25 @@ document.addEventListener('DOMContentLoaded', () => {
     totalParceladoDisplay.textContent = fmtBRL(totalParcelado);
   }
 
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  
+  async function copiarParaClipboard(texto){
+    try {
+      await navigator.clipboard.writeText(texto);
+      alert('Link copiado para a área de transferência.');
+    } catch {
+      // fallback
+      const inp = document.createElement('input');
+      inp.value = texto;
+      document.body.appendChild(inp);
+      inp.select();
+      document.execCommand('copy');
+      inp.remove();
+      alert('Link copiado.');
+    }
+  }
+
+  
   function adicionarParcela(){
     const row = document.createElement('div');
     row.className = 'row g-2 align-items-end mb-2';
