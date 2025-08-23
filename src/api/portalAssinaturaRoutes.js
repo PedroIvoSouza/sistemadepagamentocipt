@@ -176,19 +176,25 @@ portalEventosAssinaturaRouter.get('/:eventoId/termo/assinafy/link', async (req, 
         });
       }
 
-      let assinaturaUrl = null;
-    for (let i = 0; i < 3 && !assinaturaUrl; i++) {
-      try {
-        const docInfo = await getDocument(row.assinafy_id);
-        assinaturaUrl = scanForSigningUrl(docInfo?.data || docInfo);
-        if (!assinaturaUrl) await new Promise(r => setTimeout(r, 1000));
-      } catch {}
-    }
+  let assinaturaUrl = null;
+  for (let i = 0; i < 3 && !assinaturaUrl; i++) {
+    try {
+      const docInfo = await getDocument(row.assinafy_id);
+      assinaturaUrl = scanForSigningUrl(docInfo?.data || docInfo);
+      if (!assinaturaUrl) await new Promise(r => setTimeout(r, 1000));
+    } catch {}
+  }
 
-    if (assinaturaUrl) {
-      await dbRun(
-        `UPDATE documentos SET assinatura_url = ?, status = 'pendente_assinatura'
-          WHERE evento_id = ? AND tipo = 'termo_evento'`,
+  if (!assinaturaUrl) {
+    try {
+      assinaturaUrl = await getSigningUrl(row.assinafy_id);
+    } catch {}
+  }
+
+  if (assinaturaUrl) {
+    await dbRun(
+      `UPDATE documentos SET assinatura_url = ?, status = 'pendente_assinatura'
+        WHERE evento_id = ? AND tipo = 'termo_evento'`,
         [assinaturaUrl, eventoId],
       );
       return res.json({ ok:true, assinatura_url: assinaturaUrl, url: assinaturaUrl, status: 'pendente_assinatura' });
