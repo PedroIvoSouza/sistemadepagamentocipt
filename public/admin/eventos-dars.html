@@ -942,7 +942,8 @@ async function carregarClientes(){
     let datas_evento = ev.datas_evento ?? ev.datas ?? ev.datasEvento ?? [];
     if (typeof datas_evento === 'string') datas_evento = datas_evento.split(',').map(s=>s.trim()).filter(Boolean);
     if (!Array.isArray(datas_evento)) datas_evento = [];
-    const parcelas = Array.isArray(ev.parcelas) ? ev.parcelas
+    const parcelas = Array.isArray(payload?.parcelas) ? payload.parcelas
+                  : Array.isArray(ev.parcelas) ? ev.parcelas
                   : Array.isArray(ev.DARs) ? ev.DARs
                   : [];
     const numero_oficio_sei = ev.numero_oficio_sei ?? ev.numeroOficioSei ?? '';
@@ -952,6 +953,15 @@ async function carregarClientes(){
     const hora_desmontagem = ev.hora_desmontagem ?? ev.horaDesmontagem ?? null;
     const evento_gratuito = ev.evento_gratuito ?? ev.eventoGratuito ?? false;
     const justificativa_gratuito = ev.justificativa_gratuito ?? ev.justificativaGratuito ?? '';
+    const valor_bruto = typeof ev.valor_bruto === 'number'
+      ? ev.valor_bruto
+      : parseFloat(String(ev.valor_bruto ?? ev.valorBruto ?? '0').replace(/\./g,'').replace(',','.')) || 0;
+    const valor_final = typeof ev.valor_final === 'number'
+      ? ev.valor_final
+      : parseFloat(String(ev.valor_final ?? ev.valorFinal ?? '0').replace(/\./g,'').replace(',','.')) || 0;
+    const total_diarias = typeof ev.total_diarias === 'number'
+      ? ev.total_diarias
+      : parseInt(ev.total_diarias ?? ev.totalDiarias ?? 0, 10) || 0;
     return {
       id_cliente,
       nome_evento,
@@ -970,7 +980,10 @@ async function carregarClientes(){
       numero_processo,
       numero_termo,
       evento_gratuito,
-      justificativa_gratuito
+      justificativa_gratuito,
+      valor_bruto,
+      valor_final,
+      total_diarias
     };
   }
 
@@ -1009,6 +1022,11 @@ async function carregarClientes(){
     if (Array.isArray(ev.datas_evento) && ev.datas_evento.length) fp.setDate(ev.datas_evento, true);
     tipoDescontoAutoDisplay.value = ev.tipo_desconto_auto || (clienteSelect.selectedOptions[0]?.dataset.tipo || '');
     descontoManualInput.value = ev.desconto_manual_percent || 0;
+
+    // Preenche valores calculados
+    if (ev.total_diarias !== undefined) totalDiariasDisplay.textContent = ev.total_diarias;
+    if (ev.valor_bruto !== undefined) valorBrutoDisplay.textContent = fmtBRL(ev.valor_bruto);
+    if (ev.valor_final !== undefined) valorFinalDisplay.textContent = fmtBRL(ev.valor_final);
 
     if (ev.parcelas && ev.parcelas.length){
       ev.parcelas.forEach((p,i)=>{
