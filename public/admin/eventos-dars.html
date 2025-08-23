@@ -78,7 +78,7 @@
       <main class="content">
         <div class="d-flex justify-content-between align-items-center mb-4">
           <h1 class="h2">DARs de Eventos</h1>
-          <button id="add-evento-btn" class="btn btn-primary">Novo Evento</button>
+          <button id="novo-evento-btn" class="btn btn-primary">Novo Evento</button>
         </div>
        <div class="card">
           <div class="card-body p-4">
@@ -419,7 +419,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const paginationNav = document.getElementById('paginationNav');
   const eventosTableBody = document.getElementById('eventos-table-body');
   // ... (todas as suas outras referências de elementos originais)
-  const addEventoBtn = document.getElementById('add-evento-btn');
+  const novoEventoBtn = document.getElementById('novo-evento-btn');
   const modal = document.getElementById('evento-modal');
   const darsModal = document.getElementById('dars-modal');
   const darsList  = document.getElementById('dars-list');
@@ -1276,33 +1276,33 @@ document.addEventListener('DOMContentLoaded', () => {
   // =======================
   // Abertura modal criação
   // =======================
-  addEventoBtn.addEventListener('click', () => {
-  form.reset();
-  fp.clear();
-  capacidadeEspacoDisplay.textContent = '';
-  espacoUtilizadoSelect.dispatchEvent(new Event('change'));
-  parcelasContainer.innerHTML = '';
-  if (parcelasMasks.length) {
-    parcelasMasks.forEach(({ valorMask, picker }) => { valorMask.destroy(); picker.destroy(); });
-  }
-  parcelasMasks = [];
-  numeroOficioSeiMask.value = '';
-  numeroProcessoMask.value  = '';
-  numeroTermoMask.value     = '';
-  eventoGratuitoInput.checked = false;
-  justificativaGratuitoTextarea.value = '';
-  justificativaGratuitoWrapper.classList.add('d-none');
-  parcelamentoFieldset.disabled = false;
-  adicionarParcela();
-  atualizarCalculos();
+  novoEventoBtn.addEventListener('click', () => {
+    modal.showModal();
+    form.reset();
+    fp.clear();
+    capacidadeEspacoDisplay.textContent = '';
+    espacoUtilizadoSelect.dispatchEvent(new Event('change'));
+    parcelasContainer.innerHTML = '';
+    if (parcelasMasks.length) {
+      parcelasMasks.forEach(({ valorMask, picker }) => { valorMask.destroy(); picker.destroy(); });
+    }
+    parcelasMasks = [];
+    numeroOficioSeiMask.value = '';
+    numeroProcessoMask.value  = '';
+    numeroTermoMask.value     = '';
+    eventoGratuitoInput.checked = false;
+    justificativaGratuitoTextarea.value = '';
+    justificativaGratuitoWrapper.classList.add('d-none');
+    parcelamentoFieldset.disabled = false;
+    adicionarParcela();
+    atualizarCalculos();
 
-  // garante modo criação
-  modoEdicao = false;
-  editEventoId = null;
-  document.getElementById('modal-title').textContent = 'Criar Novo Evento e Gerar DARs';
-  form.querySelector('button[type="submit"]').textContent = 'Salvar Evento e Gerar DARs';
-  modal.style.display = 'block';
-});
+    // garante modo criação
+    modoEdicao = false;
+    editEventoId = null;
+    document.getElementById('modal-title').textContent = 'Criar Novo Evento e Gerar DARs';
+    form.querySelector('button[type="submit"]').textContent = 'Salvar Evento e Gerar DARs';
+  });
 
   addParcelaBtn.addEventListener('click', adicionarParcela);
 
