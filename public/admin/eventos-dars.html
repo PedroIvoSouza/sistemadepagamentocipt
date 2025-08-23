@@ -478,70 +478,69 @@ document.addEventListener('DOMContentLoaded', () => {
           const badge = status==='Pago' ? 'bg-success' : ['Emitido','Reemitido'].includes(status) ? 'bg-primary' : 'bg-warning text-dark';
           const vfNum = typeof ev.valor_final === 'number' ? ev.valor_final : parseFloat(String(ev.valor_final||'0').replace(/\./g,'').replace(',','.'))||0;
 
-          // Metadados obtidos de forma concorrente
-          const meta = metas[index];
-          let btnAssinaturaDisabled = '';
-          let mostraBtnEnviar = true;
-          let signedUrl = '';
-          if (!meta || meta.status !== 'gerado') {
-              btnAssinaturaDisabled = 'disabled';
-          }
-          if (meta && (meta.status === 'assinado' || meta.status === 'signed' || meta.signed_pdf_public_url)) {
-              mostraBtnEnviar = false;
-              if (meta.signed_pdf_public_url) signedUrl = meta.signed_pdf_public_url;
-          }
+          // --- flags a partir do meta ---
+const meta = metas[index] || {};
+const assinado =
+  meta.status === 'assinado' || meta.status === 'signed' || !!meta.signed_pdf_public_url;
+const podeEnviar   = meta.status === 'gerado'; // só permite "Enviar" quando o termo acabou de ser gerado
+const podeReenviar = !!meta.assinafy_id && !assinado; // já foi enviado uma vez, ainda não assinou
+const signedUrl    = meta.signed_pdf_public_url || '';
 
-          tableHTML += `
-              <tr>
-                  <td>${id}</td>
-                  <td><strong>${ev.nome_evento || ''}</strong></td>
-                  <td>${ev.nome_cliente || ''}</td>
-                  <td>${formatNumeroProcesso(ev.numero_processo)}</td>
-                  <td>${fmtBRL(vfNum)}</td>
-                  <td><span class="badge ${badge}">${status}</span></td>
-                  <td class="text-center">
-                      <button class="btn btn-sm btn-outline-primary btn-dars" title="Ver DARs" data-evento-id="${id}" data-evento-nome="${ev.nome_evento || ''}"><i class="bi bi-file-earmark-arrow-down"></i></button>
-                  </td>
-                  <td class="text-center">
-                      <div class="btn-group">
-                        <button class="btn btn-sm btn-outline-success btn-termo" title="Emitir Termo" data-evento-id="${id}">
-                          <i class="bi bi-file-earmark-text"></i>
-                        </button>
-                      
-                        ${mostraBtnEnviar
-                          ? `<button class="btn btn-sm btn-outline-primary btn-enviar-assinafy" title="Enviar p/ assinatura"
-                               data-evento-id="${id}" data-cliente-id="${ev.id_cliente}" ${btnAssinaturaDisabled}>
-                               <i class="bi bi-pen"></i>
-                             </button>`
-                          : ''}
-                      
-                        ${meta?.assinatura_url
-                          ? `<button class="btn btn-sm btn-outline-warning btn-copiar-link"
-                               title="Copiar link de assinatura" data-evento-id="${id}"
-                               data-url="${meta.assinatura_url}">
-                               <i class="bi bi-clipboard"></i>
-                             </button>`
-                          : (meta?.assinafy_id && !meta?.signed_pdf_public_url
-                              ? `<button class="btn btn-sm btn-outline-warning btn-materializar-link"
-                                   title="Disponibilizar link de assinatura" data-evento-id="${id}">
-                                   <i class="bi bi-link-45deg"></i>
-                                 </button>`
-                              : '')}
-                      
-                        ${signedUrl
-                          ? `<a class="btn btn-sm btn-outline-success btn-download-assinado" href="${signedUrl}"
-                               target="_blank" title="Download assinado">
-                               <i class="bi bi-download"></i>
-                             </a>`
-                          : ''}
-                      </div>
+tableHTML += `
+  <tr>
+    <td>${id}</td>
+    <td><strong>${ev.nome_evento || ''}</strong></td>
+    <td>${ev.nome_cliente || ''}</td>
+    <td>${formatNumeroProcesso(ev.numero_processo)}</td>
+    <td>${fmtBRL(vfNum)}</td>
+    <td><span class="badge ${badge}">${status}</span></td>
 
-                  </td>
-                  <td class="text-center">
-                      <button class="btn btn-sm btn-outline-secondary btn-editar" title="Editar" data-evento-id="${id}"><i class="bi bi-pencil"></i></button>
-                      <button class="btn btn-sm btn-outline-danger btn-apagar" title="Apagar" data-evento-id="${id}" data-evento-nome="${ev.nome_evento || ''}"><i class="bi bi-trash"></i></button>
-                  </td>
-              </tr>`;
+    <td class="text-center">
+      <div class="btn-group">
+        <!-- Emitir/baixar termo (PDF local) -->
+        <button class="btn btn-sm btn-outline-success btn-termo" title="Emitir Termo" data-evento-id="${id}">
+          <i class="bi bi-file-earmark-text"></i>
+        </button>
+
+        <!-- Enviar p/ assinatura (somente se ainda não foi enviado) -->
+        ${podeEnviar ? `
+          <button class="btn btn-sm btn-outline-primary btn-enviar-assinafy"
+                  title="Enviar para assinatura (por e-mail)"
+                  data-evento-id="${id}" data-cliente-id="${ev.id_cliente}">
+            <i class="bi bi-pen"></i>
+          </button>` : ''}
+
+        <!-- Reenviar convite (admin não vê link; só dispara e-mail de novo) -->
+        ${podeReenviar ? `
+          <button class="btn btn-sm btn-outline-warning btn-reativar-assinatura"
+                  title="Reenviar convite de assinatura por e-mail"
+                  data-evento-id="${id}">
+            <i class="bi bi-envelope-arrow-up"></i>
+          </button>` : ''}
+
+        <!-- Download do termo assinado (quando já certificado) -->
+        ${assinado && signedUrl ? `
+          <a class="btn btn-sm btn-outline-success"
+             href="${signedUrl}" target="_blank"
+             title="Baixar termo assinado">
+            <i class="bi bi-download"></i>
+          </a>` : ''}
+      </div>
+
+      ${podeReenviar && !assinado ? `
+        <div class="small text-muted mt-1">Convite enviado — o responsável assina via e-mail.</div>` : ''}
+    </td>
+
+    <td class="text-center">
+      <button class="btn btn-sm btn-outline-secondary btn-editar" title="Editar" data-evento-id="${id}">
+        <i class="bi bi-pencil"></i>
+      </button>
+      <button class="btn btn-sm btn-outline-danger btn-apagar" title="Apagar" data-evento-id="${id}" data-evento-nome="${ev.nome_evento || ''}">
+        <i class="bi bi-trash"></i>
+      </button>
+    </td>
+  </tr>`;
+
       });
       eventosTableBody.innerHTML = tableHTML;
   }
@@ -1184,6 +1183,44 @@ document.addEventListener('DOMContentLoaded', () => {
           }
           return;
         }
+
+
+      // Reenviar convite (reativar assinatura) — admin só dispara e-mail de novo
+const btnReativar = e.target.closest('.btn-reativar-assinatura');
+if (btnReativar){
+  const eventoId = btnReativar.dataset.eventoId;
+  if (!eventoId){ alert('Evento inválido.'); return; }
+
+  // evita duplo clique
+  if (btnReativar.dataset.loading === '1') return;
+  const original = btnReativar.innerHTML;
+  btnReativar.dataset.loading = '1';
+  btnReativar.disabled = true;
+  btnReativar.setAttribute('aria-busy','true');
+  btnReativar.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span> Reenviando...`;
+
+  try{
+    // o endpoint no backend usa fallback para pegar o e-mail/cpf do responsável
+    const r = await fetch(`/api/admin/eventos/${eventoId}/termo/reativar-assinatura`, {
+      method: 'POST',
+      headers: { ...AUTH_HEADERS, 'Content-Type':'application/json' },
+      body: JSON.stringify({}) // vazio mesmo
+    });
+    const j = await r.json().catch(()=> ({}));
+    if (!r.ok || !j.ok) throw new Error(j.error || 'Falha ao reenviar convite.');
+    alert('Convite reenviado por e-mail ao responsável.');
+    // opcional: atualizar a tabela (status/ícones)
+    fetchEventos();
+  } catch(e){
+    alert(e.message || 'Falha ao reenviar convite.');
+  } finally {
+    btnReativar.dataset.loading = '0';
+    btnReativar.removeAttribute('aria-busy');
+    btnReativar.disabled = false;
+    btnReativar.innerHTML = original;
+  }
+  return;
+}
 
       
       if (btnApagar){
