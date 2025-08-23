@@ -384,9 +384,32 @@ router.get('/:id/termo/assinafy-status', async (req, res) => {
    Rotas utilitárias já existentes (listar, detalhes, termo, etc.)
    =========================================================== */
 
-router.get('/', async (_req, res) => {
+router.get('/', async (req, res) => {
   try {
-    const sql = `
+    const { search = '', page = 1, limit = 10 } = req.query;
+    const pageNum = parseInt(page, 10) || 1;
+    const limitNum = parseInt(limit, 10) || 10;
+    const offset = (pageNum - 1) * limitNum;
+
+    let whereClause = '';
+    const params = [];
+    if (search) {
+      const like = `%${search}%`;
+      whereClause =
+        'WHERE e.nome_evento LIKE ? OR c.nome_razao_social LIKE ? OR e.numero_processo LIKE ?';
+      params.push(like, like, like);
+    }
+
+    const countSql = `
+      SELECT COUNT(*) AS total
+        FROM Eventos e
+        JOIN Clientes_Eventos c ON e.id_cliente = c.id
+        ${whereClause}`;
+    const countRow = await dbGet(countSql, params, 'listar-eventos-count');
+    const total = countRow?.total || 0;
+    const totalPages = Math.ceil(total / limitNum);
+
+    const dataSql = `
       SELECT e.id, e.id_cliente, e.nome_evento, e.espaco_utilizado, e.area_m2,
              e.valor_final, e.status, e.data_vigencia_final,
              e.numero_oficio_sei, e.numero_processo, e.numero_termo,
@@ -394,9 +417,12 @@ router.get('/', async (_req, res) => {
              c.nome_razao_social AS nome_cliente
         FROM Eventos e
         JOIN Clientes_Eventos c ON e.id_cliente = c.id
-       ORDER BY e.id DESC`;
-    const rows = await dbAll(sql, [], 'listar-eventos');
-    res.json(rows);
+        ${whereClause}
+       ORDER BY e.id DESC
+       LIMIT ? OFFSET ?`;
+    const rows = await dbAll(dataSql, params.concat([limitNum, offset]), 'listar-eventos');
+
+    res.json({ eventos: rows, totalPages, currentPage: pageNum });
   } catch (err) {
     console.error('[admin/eventos] listar erro:', err.message);
     res.status(500).json({ error: 'Erro interno no servidor ao buscar eventos.' });
