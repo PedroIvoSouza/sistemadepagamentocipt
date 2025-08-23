@@ -117,16 +117,30 @@ async function getDocumentStatus(id) {
 
 async function downloadSignedPdf(id) {
   // nome do artefato varia entre 'certified' e 'certificated'; a URL oficial exposta costuma ser /artifacts/certified
-  const u = `/documents/${encodeURIComponent(id)}/artifacts/certified`;
-  const r = await axStream().get(u);
-  if (DEBUG) console.log('[ASSINAFY][GET]', BASE + u, r.status);
-  if (r.status >= 200 && r.status < 300) {
-    const chunks = [];
-    for await (const chunk of r.data) chunks.push(chunk);
-    return Buffer.concat(chunks);
+  const tries = [
+    `/documents/${encodeURIComponent(id)}/download/certificated`,
+    `/documents/${encodeURIComponent(id)}/artifacts/certified`,
+  ];
+
+  let lastResp = null;
+  for (const u of tries) {
+    const r = await axStream().get(u);
+    if (DEBUG) console.log('[ASSINAFY][GET]', BASE + u, r.status);
+    if (r.status >= 200 && r.status < 300) {
+      const chunks = [];
+      for await (const chunk of r.data) chunks.push(chunk);
+      return Buffer.concat(chunks);
+    }
+    if (r.status !== 404 && r.status !== 401) {
+      const err = new Error(`Erro ao baixar artefato (HTTP ${r.status})`);
+      err.response = r;
+      throw err;
+    }
+    lastResp = r;
   }
-  const err = new Error(`Erro ao baixar artefato (HTTP ${r.status})`);
-  err.response = r;
+
+  const err = new Error(`Erro ao baixar artefato (HTTP ${lastResp?.status || 'desconhecido'})`);
+  err.response = lastResp;
   throw err;
 }
 
