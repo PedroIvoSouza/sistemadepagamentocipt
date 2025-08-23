@@ -64,6 +64,8 @@ async function setupSchema(db) {
     status TEXT,
     mes_referencia INTEGER,
     ano_referencia INTEGER,
+    permissionario_id INTEGER,
+    tipo_permissionario TEXT,
     numero_documento TEXT,
     pdf_url TEXT
   );`);
