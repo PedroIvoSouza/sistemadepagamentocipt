@@ -1,7 +1,7 @@
 {
   "name": "sistemadepagamentocipt",
   "version": "1.0.0",
-  "type": "commonjs",
+  "type": "module",
   "scripts": {
     "test": "node test/TermoService.test.js"
   },

@@ -1,5 +1,6 @@
-const assert = require('assert');
-const TermoService = require('../src/services/TermoService');
+import assert from 'assert';
+import TermoService from '../src/services/TermoService.js';
+import { ESPACOS_INFO } from '../src/config/espacos.js';
 
 const template = `
 <html>
@@ -24,7 +25,9 @@ const resultado = TermoService.populateTemplate(template, dados);
 assert.ok(resultado.includes('12 de agosto de 2025'));
 assert.ok(resultado.includes('R$ 2.495,00'));
 
- (async () => {
+assert.deepStrictEqual(TermoService.getEspacoInfo('default'), ESPACOS_INFO.default);
+
+(async () => {
   const pdf = await TermoService.generatePdf(template, dados);
   assert.ok(Buffer.isBuffer(pdf) && pdf.length > 0);
 
@@ -37,4 +40,4 @@ assert.ok(resultado.includes('R$ 2.495,00'));
   assert.ok(erroCapturado, 'Deve lançar erro quando não há saldo de pagamento');
 
   console.log('Todos os testes passaram.');
- })();
+})();

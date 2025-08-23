@@ -1,4 +1,7 @@
-class TermoService {
+import puppeteer from 'puppeteer';
+import { ESPACOS_INFO } from '../config/espacos.js';
+
+export default class TermoService {
   static _formatCurrency(value) {
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
@@ -42,7 +45,6 @@ class TermoService {
 
     const content = this.populateTemplate(template, data);
 
-    const puppeteer = require('puppeteer');
     const browser = await puppeteer.launch({ args: ['--no-sandbox'] });
     try {
       const page = await browser.newPage();
@@ -61,6 +63,8 @@ class TermoService {
       await browser.close();
     }
   }
-}
 
-module.exports = TermoService;
+  static getEspacoInfo(nome) {
+    return ESPACOS_INFO[nome];
+  }
+}
