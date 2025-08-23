@@ -13,6 +13,9 @@ const ACCESS_TOKEN = (process.env.ASSINAFY_ACCESS_TOKEN || '').trim();
 const ACCOUNT_ID   = (process.env.ASSINAFY_ACCOUNT_ID || '').trim();
 const BASE         = (process.env.ASSINAFY_API_BASE || 'https://api.assinafy.com.br/v1').replace(/\/+$/, '');
 const INSECURE     = String(process.env.ASSINAFY_INSECURE || '') === '1';
+// Algumas contas antigas não possuem a rota /self/embedded/verify.
+// Por padrão tenta-se a rota nova; defina ASSINAFY_SELF_VERIFY=0 para usar /verify direto.
+const SELF_VERIFY  = String(process.env.ASSINAFY_SELF_VERIFY || '1') === '1';
 
 if (!ACCOUNT_ID) console.warn('[ASSINAFY] AVISO: ASSINAFY_ACCOUNT_ID vazio.');
 if (!API_KEY && !ACCESS_TOKEN) console.warn('[ASSINAFY] AVISO: configure ASSINAFY_API_KEY e/ou ASSINAFY_ACCESS_TOKEN.');
@@ -234,9 +237,18 @@ async function ensureSigner({ full_name, email, government_id, phone }) {
 
 /* ------------------------- Fluxo embedded self ------------------------- */
 async function verifySignerCode({ signer_access_code, verification_code }) {
-  const u = `/self/embedded/verify`;
+  const body = { signer_access_code, verification_code };
+  let u = SELF_VERIFY ? `/self/embedded/verify` : `/verify`;
   if (DEBUG) console.log('[ASSINAFY][POST]', BASE + u);
-  const r = await http.post(u, { signer_access_code, verification_code });
+  let r = await http.post(u, body);
+
+  // Caso a conta não possua a rota /self/embedded/verify, tenta /verify
+  if (r.status === 404 && SELF_VERIFY) {
+    u = `/verify`;
+    if (DEBUG) console.log('[ASSINAFY][POST fallback]', BASE + u);
+    r = await http.post(u, body);
+  }
+
   if (r.status >= 200 && r.status < 300) return r.data;
   const err = new Error(r.data?.message || `Falha ao verificar código (HTTP ${r.status}).`);
   err.response = r;
