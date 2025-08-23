@@ -1,51 +1,37 @@
 // src/api/portalAssinaturaRoutes.js
-// Rotas do PORTAL (cliente) para assinatura do termo via Assinafy
-// Exporta: { portalEventosAssinaturaRouter, documentosAssinafyPublicRouter }
+// Endpoints usados pelo FRONT do cliente (meus-eventos.html)
 
 const express = require('express');
 const path = require('path');
-const fs = require('fs');
 const sqlite3 = require('sqlite3').verbose();
-
-// Se você tem um middleware de auth do cliente, importe aqui
-// const clientAuthMiddleware = require('../middleware/clientAuthMiddleware');
 
 const {
   getDocument,
   getSigningUrl,
-  waitUntilPendingSignature, // se quiser aguardar um pouco
+  waitUntilPendingSignature,
+  pickBestArtifactUrl,
 } = require('../services/assinafyService');
 
 const DB_PATH = path.resolve(process.cwd(), process.env.SQLITE_STORAGE || './sistemacipt.db');
 const db = new sqlite3.Database(DB_PATH);
 
-// Helpers DB (promises + log leve)
+// Helpers DB
 const dbGet = (sql, p=[]) => new Promise((res, rej)=> db.get(sql, p, (e, r)=> e?rej(e):res(r)));
 const dbRun = (sql, p=[]) => new Promise((res, rej)=> db.run(sql, p, function(e){ e?rej(e):res(this); }));
 
-/* -----------------------------------------------------------------------------
-  Router do portal do cliente (fica montado em /api/portal/eventos no index.js)
------------------------------------------------------------------------------ */
 const portalEventosAssinaturaRouter = express.Router();
 
-// Se tiver auth do cliente, habilite:
-// portalEventosAssinaturaRouter.use(clientAuthMiddleware);
-
 /**
- * GET /api/portal/eventos/:eventoId/assinatura-url
- * Retorna a URL de assinatura para o cliente abrir (popup/iframe).
- * Estratégia:
- *  - Lê de documentos.assinatura_url se já existir
- *  - Se não existir, tenta extrair via getSigningUrl(documentId) e salva
- *  - Se mesmo assim não houver, retorna fallback_open para /api/documentos/assinafy/:id/open
+ * GET /api/portal/eventos/:eventoId/termo/meta
+ * Retorna metadados do termo para o portal (cliente).
+ * Compatível com o front (usa pdf_public_url/url_visualizacao e campos Assinafy).
  */
-portalEventosAssinaturaRouter.get('/:eventoId/assinatura-url', async (req, res) => {
+portalEventosAssinaturaRouter.get('/:eventoId/termo/meta', async (req, res) => {
   const { eventoId } = req.params;
-
   try {
-    // Busca o último termo do evento
     const row = await dbGet(
-      `SELECT assinafy_id, assinatura_url, status
+      `SELECT id, evento_id, tipo, pdf_url, pdf_public_url, signed_pdf_public_url,
+              assinafy_id, assinatura_url, status
          FROM documentos
         WHERE evento_id = ? AND tipo = 'termo_evento'
      ORDER BY id DESC LIMIT 1`,
@@ -53,65 +39,95 @@ portalEventosAssinaturaRouter.get('/:eventoId/assinatura-url', async (req, res) 
     );
 
     if (!row) {
-      return res.status(404).json({ ok:false, error: 'Nenhum termo encontrado para este evento.' });
+      return res.status(404).json({ ok:false, error:'Nenhum termo gerado ainda.' });
     }
 
-    const assinafyId = row.assinafy_id || null;
-
-    // se já temos assinatura_url salva, devolve
-    if (row.assinatura_url) {
-      return res.json({
-        ok: true,
-        assinatura_url: row.assinatura_url,
-        status: row.status || null,
-        assinafy_id: assinafyId,
-        fallback_open: assinafyId ? `/api/documentos/assinafy/${assinafyId}/open` : null,
-      });
+    // tenta enriquecer com status/artefato da Assinafy quando temos assinafy_id
+    let assinafy = null;
+    if (row.assinafy_id) {
+      try {
+        assinafy = await getDocument(row.assinafy_id);
+      } catch {}
     }
 
-    // se não temos assinatura_url na base
-    if (!assinafyId) {
-      return res.status(409).json({ ok:false, error: 'Termo ainda não foi enviado para assinatura.' });
-    }
-
-    // tenta garantir que o documento esteja pending_signature (rápido)
-    try {
-      await waitUntilPendingSignature(assinafyId, { retries: 4, intervalMs: 1000 });
-    } catch { /* segue mesmo assim */ }
-
-    // tenta extrair a URL do payload do documento e/ou de assignments (com fallback interno)
-    let assinaturaUrl = await getSigningUrl(assinafyId);
-
-    // salva se encontrou
-    if (assinaturaUrl) {
-      await dbRun(
-        `UPDATE documentos
-            SET assinatura_url = ?
-          WHERE evento_id = ? AND tipo = 'termo_evento'`,
-        [assinaturaUrl, eventoId]
-      );
-    }
+    const url_visualizacao = row.pdf_public_url || null;
+    const bestAssinado = row.signed_pdf_public_url || (assinafy ? pickBestArtifactUrl(assinafy) : null);
 
     return res.json({
       ok: true,
-      assinatura_url: assinaturaUrl || null,
-      assinafy_id: assinafyId,
-      status: row.status || null,
-      fallback_open: `/api/documentos/assinafy/${assinafyId}/open`
+      documento_id: row.id,
+      evento_id: row.evento_id,
+      status: row.status || assinafy?.status || 'gerado',
+      pdf_url: row.pdf_url || null,
+      pdf_public_url: row.pdf_public_url || null,
+      url_visualizacao,
+      assinafy_id: row.assinafy_id || null,
+      assinatura_url: row.assinatura_url || null,
+      signed_pdf_public_url: bestAssinado || null,
     });
-  } catch (err) {
-    console.error('[portal/assinatura-url] erro:', err.message);
-    return res.status(500).json({ ok:false, error: 'Falha ao obter URL de assinatura.' });
+  } catch (e) {
+    console.error('[portal termo/meta] erro:', e.message);
+    res.status(500).json({ ok:false, error:'Falha ao obter metadados.' });
   }
 });
 
 /**
- * GET /api/portal/eventos/:eventoId/termo/status
- * Retorna status do termo + algumas flags úteis para o front do cliente.
+ * POST /api/portal/eventos/:eventoId/termo/assinafy/link
+ * Tenta obter (ou materializar) a URL de assinatura e persiste em documentos.assinatura_url.
+ * NÃO cria signer nem assignment (isso é responsabilidade do admin).
  */
-portalEventosAssinaturaRouter.get('/:eventoId/termo/status', async (req, res) => {
+portalEventosAssinaturaRouter.post('/:eventoId/termo/assinafy/link', async (req, res) => {
   const { eventoId } = req.params;
+  try {
+    const row = await dbGet(
+      `SELECT assinafy_id, assinatura_url, status
+         FROM documentos
+        WHERE evento_id = ? AND tipo = 'termo_evento'
+     ORDER BY id DESC LIMIT 1`,
+      [eventoId]
+    );
+    if (!row) return res.status(404).json({ ok:false, error:'Termo não encontrado.' });
+    if (!row.assinafy_id) return res.status(409).json({ ok:false, error:'Termo ainda não enviado para assinatura.' });
 
+    // Se já temos, devolve direto
+    if (row.assinatura_url) {
+      return res.json({ ok:true, url: row.assinatura_url, status: row.status || 'pendente_assinatura' });
+    }
+
+    // Garante que esteja em pending_signature (rápido, best-effort)
+    await waitUntilPendingSignature(row.assinafy_id, { retries: 6, intervalMs: 1000 }).catch(()=> {});
+
+    // Extrai URL do payload (campo assignment etc.)
+    let assinaturaUrl = await getSigningUrl(row.assinafy_id);
+
+    if (assinaturaUrl) {
+      await dbRun(
+        `UPDATE documentos SET assinatura_url = ?, status = 'pendente_assinatura'
+          WHERE evento_id = ? AND tipo = 'termo_evento'`,
+        [assinaturaUrl, eventoId]
+      );
+      return res.json({ ok:true, url: assinaturaUrl, status: 'pendente_assinatura' });
+    }
+
+    // Se ainda não veio, retorna "pending" para o front fazer polling
+    return res.json({
+      ok: true,
+      pending: true,
+      message: 'Convite enviado. Aguardando geração do link de assinatura…',
+      status: row.status || 'pendente_assinatura'
+    });
+  } catch (e) {
+    console.error('[portal termo/link POST] erro:', e.message);
+    res.status(500).json({ ok:false, error:'Falha ao obter link de assinatura.' });
+  }
+});
+
+/**
+ * GET /api/portal/eventos/:eventoId/termo/assinafy/link
+ * Polling do front: tenta retornar a URL (sem efeitos colaterais).
+ */
+portalEventosAssinaturaRouter.get('/:eventoId/termo/assinafy/link', async (req, res) => {
+  const { eventoId } = req.params;
   try {
     const row = await dbGet(
       `SELECT assinafy_id, assinatura_url, status, signed_pdf_public_url
@@ -120,47 +136,40 @@ portalEventosAssinaturaRouter.get('/:eventoId/termo/status', async (req, res) =>
      ORDER BY id DESC LIMIT 1`,
       [eventoId]
     );
+    if (!row) return res.status(404).json({ ok:false, error:'Termo não encontrado.' });
+    if (!row.assinafy_id) return res.status(409).json({ ok:false, error:'Termo ainda não enviado para assinatura.' });
 
-    if (!row) {
-      return res.status(404).json({ ok:false, error: 'Nenhum termo encontrado.' });
+    if (row.assinatura_url) {
+      return res.json({ ok:true, url: row.assinatura_url, status: row.status || 'pendente_assinatura' });
     }
 
-    const assinafyId = row.assinafy_id || null;
+    // tenta de novo ler do doc
+    let assinaturaUrl = await getSigningUrl(row.assinafy_id);
+    if (assinaturaUrl) {
+      await dbRun(
+        `UPDATE documentos SET assinatura_url = ?, status = 'pendente_assinatura'
+          WHERE evento_id = ? AND tipo = 'termo_evento'`,
+        [assinaturaUrl, eventoId]
+      );
+      return res.json({ ok:true, url: assinaturaUrl, status: 'pendente_assinatura' });
+    }
 
-    return res.json({
-      ok: true,
-      status: row.status || null,
-      assinatura_disponivel: !!row.assinatura_url || !!assinafyId,
-      assinatura_url: row.assinatura_url || null,
-      assinafy_id: assinafyId,
-      has_signed_pdf: !!row.signed_pdf_public_url,
-      signed_pdf_public_url: row.signed_pdf_public_url || null,
-      fallback_open: assinafyId ? `/api/documentos/assinafy/${assinafyId}/open` : null,
-    });
-  } catch (err) {
-    console.error('[portal/termo/status] erro:', err.message);
-    return res.status(500).json({ ok:false, error: 'Falha ao obter status do termo.' });
-  }
-});
+    // se já estiver assinado, diga ao front
+    try {
+      const d = await getDocument(row.assinafy_id);
+      const st = d?.status;
+      if (st === 'certified' || st === 'certificated') {
+        return res.json({ ok:true, status:'assinado' });
+      }
+    } catch {}
 
-/* -----------------------------------------------------------------------------
-  Router público de utilidades de documento (se quiser expor algo público aqui)
-  Mantém a exportação para compat com seu index.js
------------------------------------------------------------------------------ */
-const documentosAssinafyPublicRouter = express.Router();
-
-// Exemplo de rota pública simples para testar se o doc existe (opcional)
-documentosAssinafyPublicRouter.get('/documentos/assinafy/:id/ping', async (req, res) => {
-  const id = req.params.id;
-  try {
-    const d = await getDocument(id);
-    return res.json({ ok:true, status: d?.data?.status || d?.status || null });
+    return res.json({ ok:true, pending:true, status: row.status || 'pendente_assinatura' });
   } catch (e) {
-    return res.status(404).json({ ok:false, error: 'Documento não encontrado.' });
+    console.error('[portal termo/link GET] erro:', e.message);
+    res.status(500).json({ ok:false, error:'Falha ao consultar link de assinatura.' });
   }
 });
 
 module.exports = {
   portalEventosAssinaturaRouter,
-  documentosAssinafyPublicRouter,
 };
