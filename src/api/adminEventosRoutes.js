@@ -92,6 +92,29 @@ router.post('/', async (req, res) => {
 });
 
 /* ===========================================================
+   PUT /api/admin/eventos/:id
+   Atualiza evento + reemitir DARs
+   =========================================================== */
+router.put('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await atualizarEventoComDars(
+      db,
+      id,
+      req.body,
+      { emitirGuiaSefaz, gerarTokenDocumento, imprimirTokenEmPdf }
+    );
+    res.json({ message: 'Evento atualizado com sucesso!' });
+  } catch (err) {
+    console.error('[ERRO] atualizar evento:', err.message);
+    let status = 500;
+    if (err.status) status = err.status;
+    else if (err.message) status = 400;
+    res.status(status).json({ error: err.message || 'Não foi possível atualizar o evento.' });
+  }
+});
+
+/* ===========================================================
    POST /api/admin/eventos/:id/termo/enviar-assinatura
    Gera termo → upload → aguarda → ensureSigner → assignment → salva assinatura_url (se houver)
    =========================================================== */
