@@ -17,8 +17,12 @@ const INSECURE     = String(process.env.ASSINAFY_INSECURE || '') === '1';
 // Por padrão tenta-se a rota nova; defina ASSINAFY_SELF_VERIFY=0 para usar /verify direto.
 const SELF_VERIFY  = String(process.env.ASSINAFY_SELF_VERIFY || '1') === '1';
 
-if (!ACCOUNT_ID) console.warn('[ASSINAFY] AVISO: ASSINAFY_ACCOUNT_ID vazio.');
-if (!API_KEY && !ACCESS_TOKEN) console.warn('[ASSINAFY] AVISO: configure ASSINAFY_API_KEY e/ou ASSINAFY_ACCESS_TOKEN.');
+if (!ACCOUNT_ID) {
+  throw new Error('[ASSINAFY] ASSINAFY_ACCOUNT_ID vazio.');
+}
+if (!API_KEY && !ACCESS_TOKEN) {
+  throw new Error('[ASSINAFY] configure ASSINAFY_API_KEY e/ou ASSINAFY_ACCESS_TOKEN.');
+}
 
 const httpsAgent = new https.Agent({
   keepAlive: true,
