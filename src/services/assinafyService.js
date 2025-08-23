@@ -180,18 +180,10 @@ async function requestSignatures(documentId, signerIds, { message, expires_at } 
 
   return ensureOk(resp, 'requestSignatures');
 }
-async function listAssignments(documentId) {
-  let url = `/documents/${encodeURIComponent(documentId)}/assignments`;
-  let resp = await http.get(url);
-  if (DEBUG) console.log('[ASSINAFY][GET try#1]', BASE + url, resp.status);
-  if (resp.status === 404) {
-    url = `/accounts/${ACCOUNT_ID}/documents/${encodeURIComponent(documentId)}/assignments`;
-    resp = await http.get(url);
-    if (DEBUG) console.log('[ASSINAFY][GET try#2]', BASE + url, resp.status);
-  }
-  if (resp.status === 404) return [];
-  const ok = ensureOk(resp, 'listAssignments');
-  return Array.isArray(ok) ? ok : (Array.isArray(ok?.data) ? ok.data : []);
+async function getAssignmentFromDocument(documentId) {
+  const doc = await getDocument(documentId);
+  const info = doc?.data || doc;
+  return info?.assignment || null;
 }
 
 /* ------------------------- URL de assinatura (robusto) ---------------------- */
@@ -316,6 +308,13 @@ async function getSigningUrl(documentId) {
     }
   } catch (e) {
     if (DEBUG) console.warn('[ASSINAFY][getSigningUrl] falha no getDocument:', e?.response?.status || e.message);
+async function getSigningUrl(documentId) {
+  try {
+    const assignment = await getAssignmentFromDocument(documentId);
+    const url = pickAssignmentUrl(assignment);
+    if (url && /^https?:\/\//i.test(url)) return url;
+  } catch (e) {
+    if (DEBUG) console.warn('[ASSINAFY][getSigningUrl] falha no getAssignmentFromDocument:', e?.response?.status || e.message);
   }
   return null;
 }
@@ -345,7 +344,7 @@ module.exports = {
 
   // assignments
   requestSignatures,
-  listAssignments,
+  getAssignmentFromDocument,
   getSigningUrl,
 
   // utils
