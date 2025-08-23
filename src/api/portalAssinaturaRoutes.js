@@ -32,6 +32,9 @@ function scanForSigningUrl(obj, depth = 0) {
   ].filter(Boolean);
   for (const c of candidates) {
     if (typeof c === 'string' && /^https?:\/\//i.test(c)) return c;
+    if (typeof c === 'string' && c.startsWith('/verify/')) {
+      return `https://app.assinafy.com.br${c}`;
+    }
   }
 
   if (obj.assignment) {
