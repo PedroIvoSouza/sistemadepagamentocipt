@@ -8,7 +8,6 @@ const sqlite3 = require('sqlite3').verbose();
 const {
   getDocument,
   getSigningUrl,
-  waitUntilPendingSignature,
   pickBestArtifactUrl,
 } = require('../services/assinafyService');
 
@@ -71,6 +70,7 @@ portalEventosAssinaturaRouter.get('/:eventoId/termo/meta', async (req, res) => {
 
 /**
  * POST /api/portal/eventos/:eventoId/termo/assinafy/link
+ * (mantido para compatibilidade, mas não tenta mais materializar assinatura_url)
  */
 portalEventosAssinaturaRouter.post('/:eventoId/termo/assinafy/link', async (req, res) => {
   const { eventoId } = req.params;
@@ -89,24 +89,7 @@ portalEventosAssinaturaRouter.post('/:eventoId/termo/assinafy/link', async (req,
       return res.json({ ok:true, url: row.assinatura_url, status: row.status || 'pendente_assinatura' });
     }
 
-    await waitUntilPendingSignature(row.assinafy_id, { retries: 6, intervalMs: 1000 }).catch(()=> {});
-    let assinaturaUrl = await getSigningUrl(row.assinafy_id);
-
-    if (assinaturaUrl) {
-      await dbRun(
-        `UPDATE documentos SET assinatura_url = ?, status = 'pendente_assinatura'
-          WHERE evento_id = ? AND tipo = 'termo_evento'`,
-        [assinaturaUrl, eventoId]
-      );
-      return res.json({ ok:true, url: assinaturaUrl, status: 'pendente_assinatura' });
-    }
-
-    return res.json({
-      ok: true,
-      pending: true,
-      message: 'Convite enviado. Aguardando geração do link de assinatura…',
-      status: row.status || 'pendente_assinatura'
-    });
+    return res.json({ ok:true, pending:true, status: row.status || 'pendente_assinatura' });
   } catch (e) {
     console.error('[portal termo/link POST] erro:', e.message);
     res.status(500).json({ ok:false, error:'Falha ao obter link de assinatura.' });
@@ -115,6 +98,7 @@ portalEventosAssinaturaRouter.post('/:eventoId/termo/assinafy/link', async (req,
 
 /**
  * GET /api/portal/eventos/:eventoId/termo/assinafy/link
+ * (apenas consulta; não resolve automaticamente assinatura_url)
  */
 portalEventosAssinaturaRouter.get('/:eventoId/termo/assinafy/link', async (req, res) => {
   const { eventoId } = req.params;
@@ -131,16 +115,6 @@ portalEventosAssinaturaRouter.get('/:eventoId/termo/assinafy/link', async (req, 
 
     if (row.assinatura_url) {
       return res.json({ ok:true, url: row.assinatura_url, status: row.status || 'pendente_assinatura' });
-    }
-
-    let assinaturaUrl = await getSigningUrl(row.assinafy_id);
-    if (assinaturaUrl) {
-      await dbRun(
-        `UPDATE documentos SET assinatura_url = ?, status = 'pendente_assinatura'
-          WHERE evento_id = ? AND tipo = 'termo_evento'`,
-        [assinaturaUrl, eventoId]
-      );
-      return res.json({ ok:true, url: assinaturaUrl, status: 'pendente_assinatura' });
     }
 
     try {
