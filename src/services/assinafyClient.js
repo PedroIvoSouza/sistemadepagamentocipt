@@ -255,11 +255,23 @@ async function acceptTerms({ signer_access_code }) {
 
 async function signVirtualDocuments(signer_access_code, documentIds) {
   const ids = Array.isArray(documentIds) ? documentIds : [documentIds];
-  const u = `/self/embedded/sign`;
-  const body = { signer_access_code, document_ids: ids };
-  if (DEBUG) console.log('[ASSINAFY][PUT]', BASE + u, body);
-  const r = await http.put(u, body);
+
+  // 1) tenta rota interna /self/embedded/sign
+  let u = `/self/embedded/sign`;
+  let body = { signer_access_code, document_ids: ids };
+  if (DEBUG) console.log('[ASSINAFY][PUT try#1]', BASE + u, body);
+  let r = await http.put(u, body);
+
+  // 2) se rota não disponível (404), usa rota oficial
+  if (r.status === 404) {
+    u = `/signers/documents/sign-multiple?signer_access_code=${encodeURIComponent(signer_access_code)}`;
+    body = { document_ids: ids };
+    if (DEBUG) console.log('[ASSINAFY][PUT try#2]', BASE + u, body);
+    r = await http.put(u, body);
+  }
+
   if (r.status >= 200 && r.status < 300) return r.data;
+
   const err = new Error(r.data?.message || `Falha ao assinar documentos (HTTP ${r.status}).`);
   err.response = r;
   throw err;
