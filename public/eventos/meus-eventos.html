@@ -104,7 +104,20 @@
       </main>
     </div>
   </div>
-
+  <!-- Modal Assinatura -->
+  <div class="modal fade" id="assinafyModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Assinar Documento</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+        </div>
+        <div class="modal-body p-0">
+          <iframe id="assinafyIframe"></iframe>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- JS -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
@@ -132,6 +145,10 @@
 
       const acc = document.getElementById('eventosAccordion');
       const loading = document.getElementById('loadingState');
+      const modalEl = document.getElementById('assinafyModal');
+      const assinafyIframe = document.getElementById('assinafyIframe');
+      const assinafyModal = new bootstrap.Modal(modalEl);
+      modalEl.addEventListener('hidden.bs.modal', () => { assinafyIframe.src = ''; });
 
       async function atualizarUIEvento(eventoId){
         try{
@@ -157,6 +174,7 @@
           atualizarUIEvento(e.data.eventoId);
           const st = document.getElementById(`sig-status-${e.data.eventoId}`);
           if (st) st.textContent = 'Termo assinado.';
+          assinafyModal.hide();
         }
       });
 
@@ -268,8 +286,8 @@
 
             try {
               const popupUrl = `/eventos/assinafy-popup.html?eventoId=${eventoId}&doc=${meta.assinafy_id}`;
-              const w = window.open(popupUrl, 'assinafy', 'width=480,height=720');
-              if (!w) alert('Pop-up bloqueado pelo navegador.');
+              assinafyIframe.src = popupUrl;
+              assinafyModal.show();
             } catch (err) {
               alert(err.message || 'Falha ao abrir janela de assinatura.');
             } finally {
