@@ -1,11 +1,11 @@
 // src/api/webhooksAssinafyRoutes.js
 const express = require('express');
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 const db = require('../database/db');
-const {
-  getDocument,
-  pickBestArtifactUrl,
-} = require('../services/assinafyService');
+const { getDocument } = require('../services/assinafyService');
+const { downloadSignedPdf } = require('../services/assinafyClient');
 
 const router = express.Router();
 
@@ -117,8 +117,21 @@ router.post('/', async (req, res) => {
       }
     }
 
-    const bestUrl = pickBestArtifactUrl({ artifacts });
     const assinado = status === 'certified' || status === 'signed' || status === 'completed';
+
+    let localUrl = null;
+    if (assinado) {
+      try {
+        const buffer = await downloadSignedPdf(documentId);
+        const dir = path.join(__dirname, '..', '..', 'public', 'documentos', 'assinados');
+        await fs.promises.mkdir(dir, { recursive: true });
+        const filename = `${documentId}.pdf`;
+        await fs.promises.writeFile(path.join(dir, filename), buffer);
+        localUrl = `/documentos/assinados/${filename}`;
+      } catch (e) {
+        console.error('[WEBHOOK] falha ao baixar PDF assinado:', e.message);
+      }
+    }
 
     // Atualiza a linha correspondente (idempotente)
     await dbRun(
@@ -132,7 +145,7 @@ router.post('/', async (req, res) => {
        WHERE assinafy_id = ?`,
       [
         assinado ? 'assinado' : status,
-        bestUrl || null,
+        localUrl || null,
         assinado ? 1 : 0,
         documentId,
       ],
