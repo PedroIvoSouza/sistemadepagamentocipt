@@ -124,21 +124,19 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
 
   try {
     // 0) Dados do signatário (fallback do banco)
-    if (!signerName || !signerEmail || !signerCpf || !signerPhone) {
-      const sql = `
-        SELECT c.nome_responsavel, c.nome_razao_social, c.email, c.telefone,
-               c.documento_responsavel, c.documento
-          FROM Eventos e
-          JOIN Clientes_Eventos c ON c.id = e.id_cliente
-         WHERE e.id = ?`;
-      const row = await dbGet(sql, [id], 'termo/default-signer');
-      if (!row) return res.status(404).json({ ok: false, error: 'Evento ou permissionário não encontrado.' });
+    const sql = `
+      SELECT c.nome_responsavel, c.nome_razao_social, c.email, c.telefone,
+             c.documento_responsavel, c.documento
+        FROM Eventos e
+        JOIN Clientes_Eventos c ON c.id = e.id_cliente
+       WHERE e.id = ?`;
+    const row = await dbGet(sql, [id], 'termo/default-signer');
+    if (!row) return res.status(404).json({ ok: false, error: 'Evento ou permissionário não encontrado.' });
 
-      signerName  = signerName  || row.nome_responsavel || row.nome_razao_social || 'Responsável';
-      signerEmail = signerEmail || row.email;
-      signerCpf   = signerCpf   || onlyDigits(row.documento_responsavel || row.documento || '');
-      signerPhone = signerPhone || row.telefone || '';
-    }
+    signerName  = signerName  || row.nome_responsavel || row.nome_razao_social || 'Responsável';
+    signerEmail = signerEmail || row.email;
+    signerCpf   = signerCpf   || onlyDigits(row.documento_responsavel || row.documento || '');
+    signerPhone = signerPhone || row.telefone || '';
 
     const emailDominio = signerEmail?.split('@')[1]?.toLowerCase() || '';
     if (!signerName || !signerEmail || emailDominio === 'importado.placeholder') {
