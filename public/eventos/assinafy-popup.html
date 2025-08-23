@@ -8,10 +8,11 @@
 </head>
 <body class="p-3">
   <h5 class="mb-3">Assinar Documento</h5>
-  <p>Informe o código enviado por e-mail para prosseguir com a assinatura.</p>
+  <p>Localize o e-mail enviado pela Assinafy e informe os códigos abaixo para concluir a assinatura.</p>
   <form id="codeForm" class="mb-3">
-    <input type="text" class="form-control" id="codeInput" placeholder="Código" required />
-    <button type="submit" class="btn btn-primary mt-2">Verificar e Assinar</button>
+    <input type="text" class="form-control mb-2" id="signerInput" placeholder="signer_access_code" required />
+    <input type="text" class="form-control mb-2" id="verificationInput" placeholder="verification_code" required />
+    <button type="submit" class="btn btn-primary">Verificar e Assinar</button>
   </form>
   <div id="status" class="small text-muted"></div>
 
@@ -19,19 +20,14 @@
     const params = new URLSearchParams(location.search);
     const documentId = params.get('doc');
     const eventoId = params.get('eventoId');
-    const assinaturaUrl = params.get('url');
-    let signerAccessCode = null;
-    try {
-      const u = new URL(assinaturaUrl);
-      signerAccessCode = u.searchParams.get('signer_access_code') || u.searchParams.get('c') || u.pathname.split('/').pop();
-    } catch {}
     const statusEl = document.getElementById('status');
 
     document.getElementById('codeForm').addEventListener('submit', async (e) => {
       e.preventDefault();
-      const verification_code = document.getElementById('codeInput').value.trim();
-      if (!signerAccessCode) {
-        statusEl.textContent = 'Código de acesso inválido.';
+      const signer_access_code = document.getElementById('signerInput').value.trim();
+      const verification_code = document.getElementById('verificationInput').value.trim();
+      if (!signer_access_code || !verification_code) {
+        statusEl.textContent = 'Preencha ambos os códigos.';
         return;
       }
       statusEl.textContent = 'Verificando código...';
@@ -39,7 +35,7 @@
         let r = await fetch('/api/embedded/verify', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ signer_access_code: signerAccessCode, verification_code })
+          body: JSON.stringify({ signer_access_code, verification_code })
         });
         let j = await r.json();
         if (!r.ok || !j.ok) throw new Error(j.error || 'Falha na verificação');
@@ -48,7 +44,7 @@
         r = await fetch('/api/embedded/accept-terms', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ signer_access_code: signerAccessCode })
+          body: JSON.stringify({ signer_access_code })
         });
         j = await r.json();
         if (!r.ok || !j.ok) throw new Error(j.error || 'Falha ao aceitar termos');
@@ -57,7 +53,7 @@
         r = await fetch('/api/embedded/sign', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ signer_access_code: signerAccessCode, document_id: documentId })
+          body: JSON.stringify({ signer_access_code, document_id: documentId })
         });
         j = await r.json();
         if (!r.ok || !j.ok) throw new Error(j.error || 'Falha ao assinar');

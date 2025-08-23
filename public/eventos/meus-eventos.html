@@ -258,10 +258,7 @@
               return;
             }
 
-            if (!meta.assinatura_url) {
-              alert('Link de assinatura indisponível. Verifique seu e-mail.');
-              return;
-            }
+            alert('Verifique seu e-mail: você precisará dos códigos enviados pela Assinafy para concluir a assinatura.');
 
             const original = btnAssinar.innerHTML;
             btnAssinar.disabled = true;
@@ -270,7 +267,7 @@
             statusEl.textContent = 'Assinatura em andamento...';
 
             try {
-              const popupUrl = `/eventos/assinafy-popup.html?eventoId=${eventoId}&doc=${meta.assinafy_id}&url=${encodeURIComponent(meta.assinatura_url)}`;
+              const popupUrl = `/eventos/assinafy-popup.html?eventoId=${eventoId}&doc=${meta.assinafy_id}`;
               const w = window.open(popupUrl, 'assinafy', 'width=480,height=720');
               if (!w) alert('Pop-up bloqueado pelo navegador.');
             } catch (err) {
