@@ -178,18 +178,10 @@ async function requestSignatures(documentId, signerIds, { message, expires_at } 
 
   return ensureOk(resp, 'requestSignatures');
 }
-async function listAssignments(documentId) {
-  let url = `/documents/${encodeURIComponent(documentId)}/assignments`;
-  let resp = await http.get(url);
-  if (DEBUG) console.log('[ASSINAFY][GET try#1]', BASE + url, resp.status);
-  if (resp.status === 404) {
-    url = `/accounts/${ACCOUNT_ID}/documents/${encodeURIComponent(documentId)}/assignments`;
-    resp = await http.get(url);
-    if (DEBUG) console.log('[ASSINAFY][GET try#2]', BASE + url, resp.status);
-  }
-  if (resp.status === 404) return [];
-  const ok = ensureOk(resp, 'listAssignments');
-  return Array.isArray(ok) ? ok : (Array.isArray(ok?.data) ? ok.data : []);
+async function getAssignmentFromDocument(documentId) {
+  const doc = await getDocument(documentId);
+  const info = doc?.data || doc;
+  return info?.assignment || null;
 }
 
 /* ------------------------- URL de assinatura (robusto) ---------------------- */
@@ -199,78 +191,14 @@ function pickAssignmentUrl(a) {
     a?.url || a?.link || a?.deep_link || a?.deeplink || a?.access_link || a?.public_link || null
   );
 }
-function scanForSigningUrl(obj, depth = 0) {
-  if (!obj || typeof obj !== 'object' || depth > 5) return null;
-
-  // chaves comuns
-  const candidates = [
-    obj.sign_url, obj.signer_url, obj.signerUrl, obj.signing_url,
-    obj.url, obj.link, obj.signUrl, obj.deep_link, obj.deeplink,
-    obj.access_link, obj.public_link
-  ].filter(Boolean);
-  for (const c of candidates) {
-    if (typeof c === 'string' && /^https?:\/\//i.test(c)) return c;
-  }
-
-  // alguns payloads trazem em doc.assignment.*
-  if (obj.assignment) {
-    const x = scanForSigningUrl(obj.assignment, depth + 1);
-    if (x) return x;
-  }
-  if (obj.assignments && Array.isArray(obj.assignments)) {
-    for (const it of obj.assignments) {
-      const x = scanForSigningUrl(it, depth + 1);
-      if (x) return x;
-    }
-  }
-
-  // arrays
-  if (Array.isArray(obj)) {
-    for (const it of obj) {
-      const found = scanForSigningUrl(it, depth + 1);
-      if (found) return found;
-    }
-    return null;
-  }
-
-  // objetos
-  const keys = Object.keys(obj);
-  for (const k of keys) {
-    if (/assign|sign/i.test(k)) {
-      const found = scanForSigningUrl(obj[k], depth + 1);
-      if (found) return found;
-    }
-  }
-  for (const k of keys) {
-    const val = obj[k];
-    if (val && typeof val === 'object') {
-      const found = scanForSigningUrl(val, depth + 1);
-      if (found) return found;
-    }
-  }
-  return null;
-}
 async function getSigningUrl(documentId) {
   try {
-    const doc = await getDocument(documentId);
-    const info = doc?.data || doc;
-    if (DEBUG) { try { console.log('[ASSINAFY][DOC keys]', Object.keys(info || {})); } catch {} }
-    const byDoc = scanForSigningUrl(info);
-    if (byDoc) return byDoc;
+    const assignment = await getAssignmentFromDocument(documentId);
+    const url = pickAssignmentUrl(assignment);
+    if (url && /^https?:\/\//i.test(url)) return url;
   } catch (e) {
-    if (DEBUG) console.warn('[ASSINAFY][getSigningUrl] falha no getDocument:', e?.response?.status || e.message);
+    if (DEBUG) console.warn('[ASSINAFY][getSigningUrl] falha no getAssignmentFromDocument:', e?.response?.status || e.message);
   }
-
-  try {
-    const list = await listAssignments(documentId); // pode retornar []
-    for (const a of list) {
-      const url = pickAssignmentUrl(a);
-      if (url && /^https?:\/\//i.test(url)) return url;
-    }
-  } catch (e) {
-    if (DEBUG) console.warn('[ASSINAFY][getSigningUrl] falha no listAssignments:', e?.response?.status || e.message);
-  }
-
   return null;
 }
 
@@ -299,7 +227,7 @@ module.exports = {
 
   // assignments
   requestSignatures,
-  listAssignments,
+  getAssignmentFromDocument,
   getSigningUrl,
 
   // utils

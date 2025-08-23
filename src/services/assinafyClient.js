@@ -181,21 +181,9 @@ async function createAssignment(documentId, signerId, opts = {}) {
   throw new Error(r.data?.message || `Falha ao criar assignment (HTTP ${r.status}).`);
 }
 
-async function listAssignments(documentId) {
-  // também com fallback
-  let u = `/accounts/${ACCOUNT_ID}/documents/${encodeURIComponent(documentId)}/assignments`;
-  let r = await http.get(u);
-  if (DEBUG) console.log('[ASSINAFY][GET try#1]', BASE + u, r.status);
-  if (r.status === 404) {
-    u = `/documents/${encodeURIComponent(documentId)}/assignments`;
-    r = await http.get(u);
-    if (DEBUG) console.log('[ASSINAFY][GET try#2]', BASE + u, r.status);
-  }
-  if (r.status === 204 || r.status === 404) return [];
-  if (r.status >= 200 && r.status < 300) {
-    return Array.isArray(r.data) ? r.data : (Array.isArray(r.data?.data) ? r.data.data : []);
-  }
-  return [];
+async function getAssignmentFromDocument(documentId) {
+  const doc = await getDocument(documentId);
+  return doc?.assignment || doc?.data?.assignment || null;
 }
 
 function _pickAssignmentUrl(a) {
@@ -203,11 +191,9 @@ function _pickAssignmentUrl(a) {
 }
 
 async function getBestSigningUrl(documentId) {
-  const list = await listAssignments(documentId);
-  for (const a of list) {
-    const link = _pickAssignmentUrl(a);
-    if (link && /^https?:\/\//i.test(link)) return link;
-  }
+  const assignment = await getAssignmentFromDocument(documentId);
+  const link = _pickAssignmentUrl(assignment);
+  if (link && /^https?:\/\//i.test(link)) return link;
   return null;
 }
 
@@ -350,7 +336,7 @@ module.exports = {
   downloadSignedPdf,
 
   // assignments
-  listAssignments,
+  getAssignmentFromDocument,
   getBestSigningUrl,
   createAssignment,
 
