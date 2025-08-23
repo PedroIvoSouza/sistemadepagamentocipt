@@ -416,13 +416,15 @@ router.get('/', async (req, res) => {
 
     const dataSql = `
       SELECT e.id, e.id_cliente, e.nome_evento, e.espaco_utilizado, e.area_m2,
-             e.valor_final, e.status, e.data_vigencia_final,
+             COALESCE(e.valor_final, SUM(de.valor_parcela)) AS valor_final, e.status, e.data_vigencia_final,
              e.numero_oficio_sei, e.numero_processo, e.numero_termo,
              e.hora_inicio, e.hora_fim, e.hora_montagem, e.hora_desmontagem,
              c.nome_razao_social AS nome_cliente
         FROM Eventos e
         JOIN Clientes_Eventos c ON e.id_cliente = c.id
+        LEFT JOIN DARs_Eventos de ON de.id_evento = e.id
         ${whereClause}
+       GROUP BY e.id
        ORDER BY e.id DESC
        LIMIT ? OFFSET ?`;
     const rows = await dbAll(dataSql, params.concat([limitNum, offset]), 'listar-eventos');
