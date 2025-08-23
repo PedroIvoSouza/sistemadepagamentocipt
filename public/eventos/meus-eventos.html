@@ -105,24 +105,6 @@
     </div>
   </div>
 
-  <!-- Modal: Assinatura Assinafy (iframe) -->
-  <div class="modal fade" id="assinafyModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-scrollable modal-xl">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title">Assinar Termo</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
-        </div>
-        <div class="modal-body p-0">
-          <iframe id="assinafyIframe" src="about:blank" title="Assinatura"></iframe>
-        </div>
-        <div class="modal-footer">
-          <small class="text-muted me-auto" id="assinafyStatus">Carregando…</small>
-          <button class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
-        </div>
-      </div>
-    </div>
-  </div>
 
   <!-- JS -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
@@ -138,20 +120,6 @@
     }
     const formatBRL = n => `R$ ${(Number(n)||0).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2})}`;
     const formatDateBR = iso => { if(!iso) return '-'; const d=new Date(iso+'T12:00:00'); return isNaN(d)?'-':d.toLocaleDateString('pt-BR'); };
-
-    // Modal helpers
-    let bsAssinafyModal = null;
-    function openAssinaturaModal(url){
-      const iframe = document.getElementById('assinafyIframe');
-      iframe.src = url;
-      document.getElementById('assinafyStatus').textContent = 'Abrindo Assinafy…';
-      if (!bsAssinafyModal) bsAssinafyModal = new bootstrap.Modal(document.getElementById('assinafyModal'));
-      bsAssinafyModal.show();
-    }
-    document.getElementById('assinafyModal')?.addEventListener('hidden.bs.modal', ()=>{
-      const iframe = document.getElementById('assinafyIframe');
-      iframe.src = 'about:blank';
-    });
 
     document.addEventListener('DOMContentLoaded', async () => {
       const token = localStorage.getItem('token_evento');
@@ -183,6 +151,14 @@
           `;
         }catch(e){ console.warn(e); }
       }
+
+      window.addEventListener('message', (e)=>{
+        if (e.data?.type === 'assinaturaConcluida' && e.data.eventoId) {
+          atualizarUIEvento(e.data.eventoId);
+          const st = document.getElementById(`sig-status-${e.data.eventoId}`);
+          if (st) st.textContent = 'Termo assinado.';
+        }
+      });
 
       try{
         // /me
@@ -266,13 +242,13 @@
             return;
           }
 
-           if (btnAssinar) {
+          if (btnAssinar) {
             const eventoId = btnAssinar.dataset.assinarTermo;
-        
-            // verifica metadados
+
+            let meta;
             try {
               const metaResp = await fetch(`/api/portal/eventos/${eventoId}/termo/meta`, { headers });
-              const meta = await metaResp.json().catch(() => ({}));
+              meta = await metaResp.json().catch(() => ({}));
               if (!meta?.assinafy_id) {
                 alert('Termo ainda não enviado para assinatura.');
                 return;
@@ -281,46 +257,24 @@
               alert('Falha ao verificar termo.');
               return;
             }
-        
+
+            if (!meta.assinatura_url) {
+              alert('Link de assinatura indisponível. Verifique seu e-mail.');
+              return;
+            }
+
             const original = btnAssinar.innerHTML;
             btnAssinar.disabled = true;
-            btnAssinar.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Verificando…`;
+            btnAssinar.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Abrindo…`;
             const statusEl = document.getElementById(`sig-status-${eventoId}`);
-            statusEl.textContent = '';
-        
+            statusEl.textContent = 'Assinatura em andamento...';
+
             try {
-              // pede ao servidor confirmar pending_signature
-              const r = await fetch(`/api/portal/eventos/${eventoId}/termo/assinafy/link`, { method:'POST', headers });
-              const j = await r.json().catch(()=> ({}));
-        
-              if (!r.ok) {
-                alert(j.error || 'Falha ao iniciar assinatura.');
-                return;
-              }
-        
-              if (j.url) {
-                // Caso futuro: se a API um dia retornar URL, abrimos em popup controlado
-                const w = window.open(j.url, '_blank', 'noopener,noreferrer,width=480,height=720');
-                if (!w) alert('Pop-up bloqueado pelo navegador. Verifique seu e-mail para assinar.');
-                statusEl.textContent = 'Assinatura iniciada.';
-                return;
-              }
-        
-              // Fluxo atual: via e-mail
-              statusEl.textContent = j.message || 'Convite enviado por e-mail. Verifique sua caixa de entrada.';
-              // polling leve só para detectar "assinado"
-              for (let i=0;i<6;i++){
-                await new Promise(r => setTimeout(r, 5000));
-                const r2 = await fetch(`/api/portal/eventos/${eventoId}/termo/assinafy/link`, { headers });
-                const j2 = await r2.json().catch(()=> ({}));
-                if (j2?.status === 'assinado') {
-                  statusEl.textContent = 'Termo assinado.';
-                  await atualizarUIEvento(eventoId);
-                  break;
-                }
-              }
+              const popupUrl = `/eventos/assinafy-popup.html?eventoId=${eventoId}&doc=${meta.assinafy_id}&url=${encodeURIComponent(meta.assinatura_url)}`;
+              const w = window.open(popupUrl, 'assinafy', 'width=480,height=720');
+              if (!w) alert('Pop-up bloqueado pelo navegador.');
             } catch (err) {
-              alert(err.message || 'Falha ao iniciar assinatura.');
+              alert(err.message || 'Falha ao abrir janela de assinatura.');
             } finally {
               btnAssinar.disabled = false;
               btnAssinar.innerHTML = original;
