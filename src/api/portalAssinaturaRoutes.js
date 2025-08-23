@@ -9,8 +9,8 @@ const {
   getDocument,
   getSigningUrl,
   pickBestArtifactUrl,
+  waitUntilPendingSignature,
 } = require('../services/assinafyService');
-const { scanForSigningUrl } = require('../services/assinafyUtils');
 
 const DB_PATH = path.resolve(process.cwd(), process.env.SQLITE_STORAGE || './sistemacipt.db');
 const db = new sqlite3.Database(DB_PATH);
@@ -117,41 +117,58 @@ portalEventosAssinaturaRouter.get('/:eventoId/termo/assinafy/link', async (req, 
      ORDER BY id DESC LIMIT 1`,
       [eventoId]
     );
-      if (!row) return res.status(404).json({ ok:false, error:'Termo não encontrado.' });
-      if (!row.assinafy_id) return res.status(409).json({ ok:false, error:'Termo ainda não enviado para assinatura.' });
+    if (!row) return res.status(404).json({ ok:false, error:'Termo não encontrado.' });
+    if (!row.assinafy_id) return res.status(409).json({ ok:false, error:'Termo ainda não enviado para assinatura.' });
 
-      if (row.assinatura_url) {
-        return res.json({
-          ok: true,
-          assinatura_url: row.assinatura_url,
-          url: row.assinatura_url,
-          status: row.status || 'pendente_assinatura',
-        });
+    if (row.assinatura_url) {
+      return res.json({
+        ok: true,
+        assinatura_url: row.assinatura_url,
+        url: row.assinatura_url,
+        status: row.status || 'pendente_assinatura',
+      });
+    }
+
+    const retries = Number(req.query.retries) || 3;
+    const intervalMs = Number(req.query.intervalMs || req.query.interval_ms || req.query.interval) || 1500;
+
+    let info;
+    try {
+      info = await waitUntilPendingSignature(row.assinafy_id, { retries, intervalMs });
+    } catch (err) {
+      let lastStatus = null;
+      try {
+        const d = await getDocument(row.assinafy_id);
+        lastStatus = d?.status || d?.data?.status || null;
+      } catch {}
+      console.log(`[portal termo/link GET] timeout aguardando pending_signature (status: ${lastStatus})`);
+      if (lastStatus === 'certified' || lastStatus === 'certificated') {
+        return res.json({ ok: true, status: 'assinado' });
       }
+      return res.json({ ok: true, pending: true, status: lastStatus || row.status || 'pendente_assinatura' });
+    }
 
-  let assinaturaUrl = null;
-  try {
-    assinaturaUrl = await getSigningUrl(row.assinafy_id);
-  } catch {}
+    let assinaturaUrl = null;
+    try {
+      assinaturaUrl = await getSigningUrl(row.assinafy_id);
+    } catch {}
 
-  if (assinaturaUrl) {
-    await dbRun(
-      `UPDATE documentos SET assinatura_url = ?, status = 'pendente_assinatura'
-        WHERE evento_id = ? AND tipo = 'termo_evento'`,
-        [assinaturaUrl, eventoId],
+    if (assinaturaUrl) {
+      await dbRun(
+        `UPDATE documentos SET assinatura_url = ?, status = 'pendente_assinatura'
+          WHERE evento_id = ? AND tipo = 'termo_evento'`,
+          [assinaturaUrl, eventoId],
       );
       return res.json({ ok:true, assinatura_url: assinaturaUrl, url: assinaturaUrl, status: 'pendente_assinatura' });
     }
 
-    try {
-      const d = await getDocument(row.assinafy_id);
-      const st = d?.status;
-      if (st === 'certified' || st === 'certificated') {
-        return res.json({ ok:true, status:'assinado' });
-      }
-    } catch {}
+    const st = info?.status;
+    if (st === 'certified' || st === 'certificated') {
+      return res.json({ ok:true, status:'assinado' });
+    }
 
-    return res.json({ ok:true, pending:true, status: row.status || 'pendente_assinatura' });
+    console.log(`[portal termo/link GET] assinatura_url indisponível (status: ${st})`);
+    return res.json({ ok:true, status: st || row.status || 'pendente_assinatura' });
   } catch (e) {
     console.error('[portal termo/link GET] erro:', e.message);
     res.status(500).json({ ok:false, error:'Falha ao consultar link de assinatura.' });
