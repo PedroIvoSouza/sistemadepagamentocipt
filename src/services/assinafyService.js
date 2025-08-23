@@ -308,13 +308,6 @@ async function getSigningUrl(documentId) {
     }
   } catch (e) {
     if (DEBUG) console.warn('[ASSINAFY][getSigningUrl] falha no getDocument:', e?.response?.status || e.message);
-async function getSigningUrl(documentId) {
-  try {
-    const assignment = await getAssignmentFromDocument(documentId);
-    const url = pickAssignmentUrl(assignment);
-    if (url && /^https?:\/\//i.test(url)) return url;
-  } catch (e) {
-    if (DEBUG) console.warn('[ASSINAFY][getSigningUrl] falha no getAssignmentFromDocument:', e?.response?.status || e.message);
   }
   return null;
 }
