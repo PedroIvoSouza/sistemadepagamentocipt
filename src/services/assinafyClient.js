@@ -124,6 +124,7 @@ async function downloadSignedPdf(id) {
   const tries = [
     `/documents/${encodeURIComponent(id)}/download/certificated`,
     `/documents/${encodeURIComponent(id)}/artifacts/certified`,
+    `/documents/${encodeURIComponent(id)}/artifacts/certificated`,
   ];
 
   let lastResp = null;
