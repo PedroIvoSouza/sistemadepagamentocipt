@@ -289,8 +289,13 @@
               if (!linkResp.ok || !assinaturaUrl) {
                 throw new Error(linkData.error || 'Link de assinatura ainda não disponível. Tente novamente mais tarde.');
               }
-              assinafyIframe.src = assinaturaUrl;
-              assinafyModal.show();
+              if (assinaturaUrl.includes('/verify/')) {
+                window.open(assinaturaUrl, '_blank', 'noopener');
+                alert('Uma nova janela foi aberta. Digite o código recebido por e-mail para prosseguir com a assinatura.');
+              } else {
+                assinafyIframe.src = assinaturaUrl;
+                assinafyModal.show();
+              }
             } catch (err) {
               const msg = err.message || 'Falha ao abrir janela de assinatura.';
               statusEl.textContent = msg;

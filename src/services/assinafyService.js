@@ -299,7 +299,20 @@ async function getSigningUrl(documentId) {
           resp = await http.post(url, body);
         }
         if (resp && [200,400,409].includes(resp.status)) {
-          const fromResp = scanForSigningUrl(resp.data) || pickAssignmentUrl(resp.data?.assignment);
+          let assignmentInfo = resp.data?.assignment;
+          if (!assignmentInfo) {
+            try {
+              assignmentInfo = await getAssignmentFromDocument(documentId);
+            } catch (e) {
+              if (DEBUG) console.warn('[ASSINAFY][getSigningUrl] falha ao consultar assignment:', e?.response?.status || e.message);
+            }
+          }
+
+          let fromResp = scanForSigningUrl(resp.data) || pickAssignmentUrl(assignmentInfo) || pickAssignmentUrl(resp.data?.assignment);
+          if (!fromResp && assignmentInfo?.token) {
+            fromResp = `https://app.assinafy.com.br/verify/${assignmentInfo.token}`;
+          }
+
           if (fromResp) {
             await saveAssinaturaUrl(documentId, fromResp);
             return fromResp;

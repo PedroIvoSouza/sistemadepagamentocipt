@@ -180,19 +180,9 @@ portalEventosAssinaturaRouter.get('/:eventoId/termo/assinafy/link', async (req, 
       }
 
   let assinaturaUrl = null;
-  for (let i = 0; i < 3 && !assinaturaUrl; i++) {
-    try {
-      const docInfo = await getDocument(row.assinafy_id);
-      assinaturaUrl = scanForSigningUrl(docInfo?.data || docInfo);
-      if (!assinaturaUrl) await new Promise(r => setTimeout(r, 1000));
-    } catch {}
-  }
-
-  if (!assinaturaUrl) {
-    try {
-      assinaturaUrl = await getSigningUrl(row.assinafy_id);
-    } catch {}
-  }
+  try {
+    assinaturaUrl = await getSigningUrl(row.assinafy_id);
+  } catch {}
 
   if (assinaturaUrl) {
     await dbRun(
