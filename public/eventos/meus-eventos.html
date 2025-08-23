@@ -286,14 +286,19 @@
               const linkResp = await fetch(`/api/portal/eventos/${eventoId}/termo/assinafy/link`, { headers });
               const linkData = await linkResp.json().catch(()=>({}));
               const assinaturaUrl = linkData.assinatura_url || linkData.url;
-              if (!linkResp.ok || !assinaturaUrl) throw new Error(linkData.error || 'Link de assinatura indisponível.');
+              if (!linkResp.ok || !assinaturaUrl) {
+                throw new Error(linkData.error || 'Link de assinatura ainda não disponível. Tente novamente mais tarde.');
+              }
               assinafyIframe.src = assinaturaUrl;
               assinafyModal.show();
             } catch (err) {
-              alert(err.message || 'Falha ao abrir janela de assinatura.');
+              const msg = err.message || 'Falha ao abrir janela de assinatura.';
+              statusEl.textContent = msg;
+              alert(msg);
             } finally {
               btnAssinar.disabled = false;
               btnAssinar.innerHTML = original;
+              if (statusEl.textContent === 'Assinatura em andamento...') statusEl.textContent = '';
             }
           }
         });
