@@ -1,4 +1,4 @@
-// Em: src/index.js
+// src/index.js
 require('dotenv').config();
 
 console.log('[BOT] BOT_SHARED_KEY len =', (process.env.BOT_SHARED_KEY || '').length);
@@ -73,7 +73,7 @@ app.use('/api/permissionarios',   permissionariosRoutes);
 
 // Portal de assinatura (cliente)
 app.use('/api/portal/eventos', portalEventosAssinaturaRouter); // exige auth do cliente
-app.use('/api', documentosAssinafyPublicRouter);               // público p/ abrir em nova aba
+app.use('/api', documentosAssinafyPublicRouter);               // público p/ abrir/status Assinafy
 
 // Administração Geral
 app.use('/api/admin/auth',        adminAuthRoutes);
@@ -155,8 +155,9 @@ function ensureEventosColumns(db) {
 }
 
 // Inicia o servidor e o agendador de tarefas
-const server = app.listen(PORT, () => {
-  console.log(`Servidor rodando na porta ${PORT}.`);
+const PORT_TO_USE = PORT;
+const server = app.listen(PORT_TO_USE, () => {
+  console.log(`Servidor rodando na porta ${PORT_TO_USE}.`);
   try {
     require('../cron/gerarDarsMensais.js');
     console.log('[INFO] Agendador de tarefas (cron) iniciado com sucesso.');
