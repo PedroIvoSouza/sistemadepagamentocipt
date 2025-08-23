@@ -79,7 +79,7 @@
       <main class="content">
         <div class="d-flex justify-content-between align-items-center mb-4">
           <h1 class="h2">DARs de Eventos</h1>
-          <button id="add-evento-btn" class="btn btn-primary">Novo Evento</button>
+          <button id="add-evento-btn" class="btn btn-primary fw-bold">Novo Evento</button>
         </div>
         <div class="card">
           <div class="card-body p-4">
@@ -200,7 +200,7 @@
             <label for="datas-evento" class="form-label">Datas do Evento *</label>
             <div class="input-group">
               <input type="text" class="form-control" id="datas-evento" placeholder="Clique para selecionar as datas..." required>
-              <button class="btn btn-outline-secondary" type="button" id="datas-helper-btn"><i class="bi bi-magic"></i> Gerador de Datas</button>
+              <button class="btn btn-outline-secondary fw-bold" type="button" id="datas-helper-btn"><i class="bi bi-magic"></i> Gerador de Datas</button>
             </div>
           </div>
           <div class="summary-row">
@@ -239,7 +239,7 @@
         <fieldset id="parcelamento-fieldset">
           <legend>4. Parcelamento</legend>
           <div id="parcelas-container" class="mb-3"></div>
-          <button type="button" id="add-parcela-btn" class="btn btn-sm btn-outline-secondary">Adicionar Parcela</button>
+          <button type="button" id="add-parcela-btn" class="btn btn-sm btn-outline-secondary fw-bold">Adicionar Parcela</button>
           <div class="summary-row mt-3">
             <span>Total Parcelado:</span> <strong id="total-parcelado">R$ 0,00</strong>
           </div>
@@ -248,7 +248,7 @@
         <div id="form-error" class="alert alert-danger d-none"></div>
 
         <div class="text-end">
-          <button type="submit" class="btn btn-primary">Salvar Evento e Gerar DARs</button>
+          <button type="submit" class="btn btn-primary fw-bold">Salvar Evento e Gerar DARs</button>
         </div>
       </form>
     </div>
@@ -262,8 +262,8 @@
       </header>
       <nav>
         <div class="nav nav-tabs" id="nav-tab" role="tablist">
-          <button class="nav-link active" id="nav-dias-semana-tab" data-bs-toggle="tab" data-bs-target="#nav-dias-semana" type="button">Gerar por Dias da Semana</button>
-          <button class="nav-link" id="nav-colar-datas-tab" data-bs-toggle="tab" data-bs-target="#nav-colar-datas" type="button">Colar Datas</button>
+          <button class="nav-link active fw-bold" id="nav-dias-semana-tab" data-bs-toggle="tab" data-bs-target="#nav-dias-semana" type="button">Gerar por Dias da Semana</button>
+          <button class="nav-link fw-bold" id="nav-colar-datas-tab" data-bs-toggle="tab" data-bs-target="#nav-colar-datas" type="button">Colar Datas</button>
         </div>
       </nav>
       <div class="tab-content p-3 border border-top-0" id="nav-tabContent">
@@ -282,16 +282,16 @@
             <div class="col"><input type="date" id="periodo-inicio" class="form-control"></div>
             <div class="col"><input type="date" id="periodo-fim" class="form-control"></div>
           </div>
-          <button id="gerar-datas-btn" class="btn btn-primary w-100 mt-3">Gerar</button>
+          <button id="gerar-datas-btn" class="btn btn-primary w-100 mt-3 fw-bold">Gerar</button>
         </div>
         <div class="tab-pane fade" id="nav-colar-datas">
           <p class="small text-muted">Cole uma lista de datas (ex: 25/12/2025, 01/01/2026), separadas por vírgula, espaço ou linha.</p>
           <textarea id="datas-textarea" class="form-control" rows="5"></textarea>
-          <button id="processar-datas-btn" class="btn btn-primary w-100 mt-3">Processar</button>
+          <button id="processar-datas-btn" class="btn btn-primary w-100 mt-3 fw-bold">Processar</button>
         </div>
       </div>
       <div class="text-end mt-3">
-        <button id="confirmar-datas-btn" class="btn btn-success">Confirmar Datas</button>
+        <button id="confirmar-datas-btn" class="btn btn-success fw-bold">Confirmar Datas</button>
       </div>
     </div>
   </div>
