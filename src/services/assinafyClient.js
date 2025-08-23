@@ -192,14 +192,27 @@ async function getAssignmentFromDocument(documentId) {
 }
 
 function _pickAssignmentUrl(a) {
-  return a?.sign_url || a?.signer_url || a?.signerUrl || a?.signing_url || a?.url || a?.link || null;
+  if (Array.isArray(a?.signers)) {
+    for (const s of a.signers) {
+      const c = s.sign_url || s.signer_url || s.link || s.public_link || s.url;
+      if (c) return c;
+    }
+  }
+  return (
+    a?.sign_url ||
+    a?.signer_url ||
+    a?.signerUrl ||
+    a?.signing_url ||
+    a?.url ||
+    a?.link ||
+    null
+  );
 }
 
 async function getBestSigningUrl(documentId) {
   const assignment = await getAssignmentFromDocument(documentId);
   const link = _pickAssignmentUrl(assignment);
-  if (link && /^https?:\/\//i.test(link)) return link;
-  return null;
+  return link || null;
 }
 
 /* ------------------------- Signatário ------------------------- */
