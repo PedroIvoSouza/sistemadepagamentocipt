@@ -35,6 +35,10 @@
     .accordion-button:not(.collapsed){ color:#fff; background:var(--cor-primaria); }
     .badge { font-size:.8rem; padding:.5em .8em; }
     .muted { color:#7a8594; }
+
+    /* Modal assinatura */
+    .modal-xl { --bs-modal-width: 1000px; }
+    #assinafyIframe { width:100%; height:80vh; border:0; border-radius: .5rem; background:#fff; }
   </style>
 </head>
 <body>
@@ -101,20 +105,19 @@
     </div>
   </div>
 
-  <!-- Modal DARs -->
-  <div class="modal fade" id="darsModal" tabindex="-1" aria-labelledby="darsModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-scrollable modal-lg">
+  <!-- Modal: Assinatura Assinafy (iframe) -->
+  <div class="modal fade" id="assinafyModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-scrollable modal-xl">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title" id="darsModalLabel">DARs do Evento</h5>
+          <h5 class="modal-title">Assinar Termo</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
         </div>
-        <div class="modal-body">
-          <div id="darsContent" class="table-responsive">
-            <div class="text-center py-4 text-muted">Carregando...</div>
-          </div>
+        <div class="modal-body p-0">
+          <iframe id="assinafyIframe" src="about:blank" title="Assinatura"></iframe>
         </div>
         <div class="modal-footer">
+          <small class="text-muted me-auto" id="assinafyStatus">Carregando…</small>
           <button class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
         </div>
       </div>
@@ -136,6 +139,20 @@
     const formatBRL = n => `R$ ${(Number(n)||0).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2})}`;
     const formatDateBR = iso => { if(!iso) return '-'; const d=new Date(iso+'T12:00:00'); return isNaN(d)?'-':d.toLocaleDateString('pt-BR'); };
 
+    // Modal helpers
+    let bsAssinafyModal = null;
+    function openAssinaturaModal(url){
+      const iframe = document.getElementById('assinafyIframe');
+      iframe.src = url;
+      document.getElementById('assinafyStatus').textContent = 'Abrindo Assinafy…';
+      if (!bsAssinafyModal) bsAssinafyModal = new bootstrap.Modal(document.getElementById('assinafyModal'));
+      bsAssinafyModal.show();
+    }
+    document.getElementById('assinafyModal')?.addEventListener('hidden.bs.modal', ()=>{
+      const iframe = document.getElementById('assinafyIframe');
+      iframe.src = 'about:blank';
+    });
+
     document.addEventListener('DOMContentLoaded', async () => {
       const token = localStorage.getItem('token_evento');
       if (!token) { window.location.href = '/eventos/login-eventos.html'; return; }
@@ -145,14 +162,33 @@
         e.preventDefault(); localStorage.removeItem('token_evento'); window.location.href='/eventos/login-eventos.html';
       });
 
-      // carrega /me
       const acc = document.getElementById('eventosAccordion');
       const loading = document.getElementById('loadingState');
 
+      async function atualizarUIEvento(eventoId){
+        try{
+          const r = await fetch(`/api/documentos/termo/${eventoId}/meta`, { headers });
+          if(!r.ok) return;
+          const meta = await r.json();
+          const btns = document.getElementById(`btns-${eventoId}`);
+          if(!btns) return;
+          const assinada = meta.status === 'assinado' || meta.status === 'signed' || !!meta.signed_pdf_public_url;
+          const signedUrl = meta.signed_pdf_public_url || '';
+          btns.innerHTML = `
+            <button class="btn btn-sm btn-outline-secondary" data-baixar-termo="${eventoId}">
+              <i class="bi bi-filetype-pdf"></i> Baixar Termo
+            </button>
+            ${assinada ? '' : `<button class="btn btn-sm btn-primary" data-assinar-termo="${eventoId}"><i class="bi bi-pen"></i> Assinar Termo</button>`}
+            ${assinada && signedUrl ? `<a class="btn btn-sm btn-success" href="${signedUrl}" target="_blank" rel="noopener"><i class="bi bi-download"></i> Termo Assinado</a>` : ''}
+          `;
+        }catch(e){ console.warn(e); }
+      }
+
       try{
+        // /me
         const r = await fetch('/api/portal/eventos/me', { headers });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        const { user, eventos, dars } = await r.json();
+        const { user, eventos } = await r.json();
 
         document.getElementById('userName').innerText = user?.nome_razao_social || 'Cliente';
         document.getElementById('userCnpj').innerText = formatarDocumento(user?.documento);
@@ -202,7 +238,7 @@
                     <i class="bi bi-filetype-pdf"></i> Baixar Termo
                   </button>
                   ${showAssinar ? `<button class="btn btn-sm btn-primary" data-assinar-termo="${evId}"><i class="bi bi-pen"></i> Assinar Termo</button>` : ''}
-                  ${signedUrl ? `<a class="btn btn-sm btn-success" href="${signedUrl}" target="_blank"><i class="bi bi-download"></i> Termo Assinado</a>` : ''}
+                  ${signedUrl ? `<a class="btn btn-sm btn-success" href="${signedUrl}" target="_blank" rel="noopener"><i class="bi bi-download"></i> Termo Assinado</a>` : ''}
                 </div>
                 <small class="ms-2 text-muted" id="sig-status-${evId}"></small>
               </div>
@@ -211,26 +247,7 @@
         }
         acc.innerHTML = partes.join('');
 
-        async function atualizarUIEvento(eventoId){
-          try{
-            const r = await fetch(`/api/documentos/termo/${eventoId}/meta`, { headers });
-            if(!r.ok) return;
-            const meta = await r.json();
-            const btns = document.getElementById(`btns-${eventoId}`);
-            if(!btns) return;
-            const assinada = meta.status === 'assinado' || meta.status === 'signed' || !!meta.signed_pdf_public_url;
-            const signedUrl = meta.signed_pdf_public_url || '';
-            btns.innerHTML = `
-              <button class="btn btn-sm btn-outline-secondary" data-baixar-termo="${eventoId}">
-                <i class="bi bi-filetype-pdf"></i> Baixar Termo
-              </button>
-              ${assinada ? '' : `<button class="btn btn-sm btn-primary" data-assinar-termo="${eventoId}"><i class="bi bi-pen"></i> Assinar Termo</button>`}
-              ${assinada && signedUrl ? `<a class="btn btn-sm btn-success" href="${signedUrl}" target="_blank"><i class="bi bi-download"></i> Termo Assinado</a>` : ''}
-            `;
-          }catch(e){ console.warn(e); }
-        }
-
-        // evento de clique
+        // Listener dos botões
         acc.addEventListener('click', async (e)=>{
           const btnAssinar = e.target.closest('button[data-assinar-termo]');
           const btnBaixar  = e.target.closest('button[data-baixar-termo]');
@@ -242,92 +259,71 @@
               const j = await r.json();
               const url = j.signed_pdf_public_url || j.url_visualizacao || j.pdf_public_url || j.pdf_url;
               if (!r.ok || !url) throw new Error(j.error || 'Termo indisponível.');
-              window.open(url, '_blank');
+              window.open(url, '_blank', 'noopener');
             }catch(err){
               alert(err.message || 'Não foi possível abrir o termo.');
             }
             return;
           }
 
-            if (btnAssinar) {
-              const eventoId = btnAssinar.dataset.assinarTermo;
+          if (btnAssinar) {
+            const eventoId = btnAssinar.dataset.assinarTermo;
+            const statusEl = document.getElementById(`sig-status-${eventoId}`);
+            const original = btnAssinar.innerHTML;
 
-              // verifica metadados do termo antes de iniciar a assinatura
-              try {
-                const metaResp = await fetch(`/api/portal/eventos/${eventoId}/termo/meta`, { headers });
-                const meta = await metaResp.json().catch(() => ({}));
-                if (!meta?.assinafy_id) {
-                  alert('Termo ainda não enviado para assinatura');
-                  return;
-                }
-              } catch (err) {
-                alert('Falha ao verificar termo.');
+            btnAssinar.disabled = true;
+            btnAssinar.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Preparando…`;
+            statusEl.textContent = '';
+
+            try {
+              // 1) meta: exige assinafy_id
+              const metaResp = await fetch(`/api/portal/eventos/${eventoId}/termo/meta`, { headers });
+              const meta = await metaResp.json().catch(() => ({}));
+              if (!metaResp.ok || !meta?.assinafy_id) {
+                alert('Termo ainda não enviado para assinatura');
                 return;
               }
 
-              // >>> abre a janela ANTES do fetch (evita bloqueio de pop-up)
-              const w = window.open('about:blank', '_blank');
-              const writeWait = (html) => { try{ w.document.body.innerHTML = html; }catch{} };
+              // 2) pede o link ao backend; se vier, abre modal; se pending, poll
+              const r = await fetch(`/api/portal/eventos/${eventoId}/termo/assinafy/link`, { method:'POST', headers });
+              const j = await r.json().catch(()=> ({}));
 
-              const original = btnAssinar.innerHTML;
-              btnAssinar.disabled = true;
-              btnAssinar.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Preparando...`;
-              document.getElementById(`sig-status-${eventoId}`).textContent = '';
-
-              try{
-                // solicita ao servidor o link de assinatura
-                const r = await fetch(`/api/portal/eventos/${eventoId}/termo/assinafy/link`, { method:'POST', headers });
-                const j = await r.json().catch(()=> ({}));
-
-                if (r.status === 409) {
-                  writeWait('<p style="font:14px/1.4 sans-serif">O termo ainda não foi disponibilizado para assinatura.</p>');
-                  document.getElementById(`sig-status-${eventoId}`).textContent = 'Termo ainda não disponível para assinatura.';
-                  try{ w.close(); }catch{}
-                  return;
-                }
-
-                  // se já vier url — abre na hora
-                  if (r.ok && j.url) {
-                    writeWait('<p style="font:14px/1.4 sans-serif">Redirecionando para a Assinafy…</p>');
-                    w.location = j.url;
-                    document.getElementById(`sig-status-${eventoId}`).textContent = 'Assinatura iniciada…';
-                  } else if (r.ok && j.pending) {
-                    // mostra mensagem amigável e faz polling por alguns segundos
-                    writeWait(`<p style="font:14px/1.4 sans-serif">${j.message || 'Convite enviado. Aguardando link de assinatura…'}</p>`);
-                    document.getElementById(`sig-status-${eventoId}`).textContent = j.message || 'Convite enviado. Aguardando link…';
-
-                    let opened = false;
-                    for (let i=0;i<6;i++){
-                      await new Promise(r => setTimeout(r, 4000)); // 4s
-                      const r2 = await fetch(`/api/portal/eventos/${eventoId}/termo/assinafy/link`, { headers });
-                      const j2 = await r2.json().catch(()=> ({}));
-                      if (r2.ok && j2.url) {
-                        w.location = j2.url;
-                        opened = true;
-                        document.getElementById(`sig-status-${eventoId}`).textContent = 'Assinatura iniciada…';
-                        break;
-                      }
-                      if (j2.status === 'signed' || j2.status === 'assinado') {
-                        document.getElementById(`sig-status-${eventoId}`).textContent = 'Termo assinado.';
-                        try { w.close(); } catch {}
-                        await atualizarUIEvento(eventoId);
-                        opened = true;
-                        break;
-                      }
-                    }
-                    if (!opened) {
-                      writeWait('<p style="font:14px/1.4 sans-serif">O link direto ainda não foi gerado. Verifique seu e-mail para assinar.</p>');
-                    }
-                  } else {
-                    writeWait('<p style="font:14px/1.4 sans-serif">Falha ao iniciar assinatura.</p>');
-                    alert(j.error || 'Falha ao iniciar assinatura.');
-                    try{ w.close(); }catch{}
+              if (r.ok && j.url) {
+                openAssinaturaModal(j.url);
+                statusEl.textContent = 'Assinatura iniciada…';
+              } else if (r.ok && j.pending) {
+                statusEl.textContent = j.message || 'Convite enviado. Aguardando link…';
+                // polling sem abrir janela
+                let opened = false;
+                for (let i=0;i<12;i++){ // ~48s (12 x 4s)
+                  await new Promise(r => setTimeout(r, 4000));
+                  const r2 = await fetch(`/api/portal/eventos/${eventoId}/termo/assinafy/link`, { headers });
+                  const j2 = await r2.json().catch(()=> ({}));
+                  if (r2.ok && j2.url) {
+                    openAssinaturaModal(j2.url);
+                    statusEl.textContent = 'Assinatura iniciada…';
+                    opened = true;
+                    break;
                   }
-            }catch(err){
-              writeWait('<p style="font:14px/1.4 sans-serif">Falha ao iniciar. Tente novamente em instantes.</p>');
+                  if (j2.status === 'signed' || j2.status === 'assinado') {
+                    statusEl.textContent = 'Termo assinado.';
+                    await atualizarUIEvento(eventoId);
+                    opened = true;
+                    break;
+                  }
+                }
+                if (!opened) {
+                  statusEl.textContent = 'Link direto indisponível no momento. Verifique seu e-mail para assinar.';
+                }
+              } else {
+                statusEl.textContent = 'Falha ao iniciar assinatura.';
+                alert(j.error || 'Falha ao iniciar assinatura.');
+              }
+            } catch (err) {
+              console.warn(err);
+              statusEl.textContent = 'Falha ao iniciar. Tente novamente em instantes.';
               alert(err.message || 'Falha ao iniciar assinatura.');
-              try{ w.close(); }catch{}
-            }finally{
+            } finally {
               btnAssinar.disabled = false;
               btnAssinar.innerHTML = original;
             }
