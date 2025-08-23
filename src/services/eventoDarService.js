@@ -137,8 +137,8 @@ async function criarEventoComDars(db, data, helpers) {
         const [ano, mes] = vencimentoISO.split('-');
         const darStmt = await dbRun(
           db,
-          `INSERT INTO dars (valor, data_vencimento, status, mes_referencia, ano_referencia)
-           VALUES (?, ?, 'Pendente', ?, ?)`,
+          `INSERT INTO dars (valor, data_vencimento, status, mes_referencia, ano_referencia, permissionario_id, tipo_permissionario)
+           VALUES (?, ?, 'Pendente', ?, ?, NULL, 'Evento')`,
           [valorParcela, vencimentoISO, Number(mes), Number(ano)]
         );
         const darId = darStmt.lastID;
@@ -330,8 +330,8 @@ async function atualizarEventoComDars(db, id, data, helpers) {
         const [ano, mes] = vencimentoISO.split('-');
         const darStmt = await dbRun(
           db,
-          `INSERT INTO dars (valor, data_vencimento, status, mes_referencia, ano_referencia)
-           VALUES (?, ?, 'Pendente', ?, ?)`,
+          `INSERT INTO dars (valor, data_vencimento, status, mes_referencia, ano_referencia, permissionario_id, tipo_permissionario)
+           VALUES (?, ?, 'Pendente', ?, ?, NULL, 'Evento')`,
           [valorParcela, vencimentoISO, Number(mes), Number(ano)]
         );
         const darId = darStmt.lastID;
