@@ -232,6 +232,39 @@ async function ensureSigner({ full_name, email, government_id, phone }) {
   }
 }
 
+/* ------------------------- Fluxo embedded self ------------------------- */
+async function verifySignerCode({ signer_access_code, verification_code }) {
+  const u = `/self/embedded/verify`;
+  if (DEBUG) console.log('[ASSINAFY][POST]', BASE + u);
+  const r = await http.post(u, { signer_access_code, verification_code });
+  if (r.status >= 200 && r.status < 300) return r.data;
+  const err = new Error(r.data?.message || `Falha ao verificar código (HTTP ${r.status}).`);
+  err.response = r;
+  throw err;
+}
+
+async function acceptTerms({ signer_access_code }) {
+  const u = `/self/embedded/accept-terms`;
+  if (DEBUG) console.log('[ASSINAFY][PUT]', BASE + u);
+  const r = await http.put(u, { signer_access_code });
+  if (r.status >= 200 && r.status < 300) return r.data;
+  const err = new Error(r.data?.message || `Falha ao aceitar termos (HTTP ${r.status}).`);
+  err.response = r;
+  throw err;
+}
+
+async function signVirtualDocuments(signer_access_code, documentIds) {
+  const ids = Array.isArray(documentIds) ? documentIds : [documentIds];
+  const u = `/self/embedded/sign`;
+  const body = { signer_access_code, document_ids: ids };
+  if (DEBUG) console.log('[ASSINAFY][PUT]', BASE + u, body);
+  const r = await http.put(u, body);
+  if (r.status >= 200 && r.status < 300) return r.data;
+  const err = new Error(r.data?.message || `Falha ao assinar documentos (HTTP ${r.status}).`);
+  err.response = r;
+  throw err;
+}
+
 /* ------------------------- Polling de status ------------------------- */
 async function waitForStatus(documentId, isDone, { intervalMs = 2000, maxMs = 120000 } = {}) {
   const start = Date.now();
@@ -276,6 +309,11 @@ module.exports = {
   createSigner,
   findSignerByEmail,
   ensureSigner,
+
+  // embedded
+  verifySignerCode,
+  acceptTerms,
+  signVirtualDocuments,
 
   // helpers
   waitForStatus,
