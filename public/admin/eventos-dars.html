@@ -794,9 +794,13 @@ async function carregarClientes(){
       const badge = status==='Pago' ? 'bg-success'
                   : ['Emitido','Reemitido'].includes(status) ? 'bg-primary'
                   : 'bg-warning text-dark';
-      const vfNum = typeof ev.valor_final==='number'
+      const parcelas = ev.parcelas || ev.DARs || [];
+      let vfNum = typeof ev.valor_final==='number'
         ? ev.valor_final
         : parseFloat(String(ev.valor_final||'0').replace(/\./g,'').replace(',','.'))||0;
+      if (ev.valor_final == null){
+        vfNum = parcelas.reduce((sum,p)=> sum + Number(p.valor_parcela || p.valor || 0), 0);
+      }
 
       let btnAssinaturaDisabled = '';
       let mostraBtnEnviar = true;
