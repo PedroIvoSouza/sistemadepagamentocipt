@@ -5,11 +5,13 @@ const axios = require('axios');
 const FormData = require('form-data');
 const fs = require('fs');
 const path = require('path');
+const sqlite3 = require('sqlite3').verbose();
 
 const DEBUG = String(process.env.ASSINAFY_DEBUG || '') === '1';
 const BASE  = (process.env.ASSINAFY_API_BASE || 'https://api.assinafy.com.br/v1').replace(/\/+$/, '');
 const ACCOUNT_ID = (process.env.ASSINAFY_ACCOUNT_ID || '').trim();
 const TIMEOUT = Number(process.env.ASSINAFY_TIMEOUT_MS || 90000);
+const DB_PATH = path.resolve(process.cwd(), process.env.SQLITE_STORAGE || './sistemacipt.db');
 
 function authHeaders() {
   const h = {};
@@ -250,6 +252,37 @@ function scanForSigningUrl(obj, depth = 0) {
   }
   return null;
 }
+function collectSignerIds(obj, depth = 0, set = new Set()) {
+  if (!obj || typeof obj !== 'object' || depth > 5) return set;
+  if (Array.isArray(obj)) {
+    for (const it of obj) collectSignerIds(it, depth + 1, set);
+    return set;
+  }
+  const candidate = obj.signer_id || obj.signerId || obj.signerID || obj.signer?.id || obj.signer?.signer_id || obj.signer?.signerId;
+  if (candidate) set.add(candidate);
+  for (const k of Object.keys(obj)) {
+    const val = obj[k];
+    if (val && typeof val === 'object') collectSignerIds(val, depth + 1, set);
+  }
+  return set;
+}
+function extractSignerIds(obj) {
+  return Array.from(collectSignerIds(obj));
+}
+function saveAssinaturaUrl(documentId, url) {
+  if (!url) return Promise.resolve();
+  const db = new sqlite3.Database(DB_PATH);
+  return new Promise((resolve) => {
+    db.run(
+      `UPDATE documentos SET assinatura_url = ?, status = COALESCE(status,'pendente_assinatura') WHERE assinafy_id = ?`,
+      [url, documentId],
+      () => {
+        db.close();
+        resolve();
+      }
+    );
+  });
+}
 async function getSigningUrl(documentId) {
   try {
     const doc = await getDocument(documentId);
@@ -257,20 +290,33 @@ async function getSigningUrl(documentId) {
     if (DEBUG) { try { console.log('[ASSINAFY][DOC keys]', Object.keys(info || {})); } catch {} }
     const byDoc = scanForSigningUrl(info);
     if (byDoc) return byDoc;
+
+    const signerIds = extractSignerIds(info);
+    if (signerIds.length) {
+      try {
+        let url = `/documents/${encodeURIComponent(documentId)}/assignments`;
+        const body = { method: 'virtual', signerIds };
+        if (DEBUG) console.log('[ASSINAFY][POST retry]', BASE + url, body);
+        let resp = await http.post(url, body);
+        if (resp.status === 404) {
+          url = `/accounts/${ACCOUNT_ID}/documents/${encodeURIComponent(documentId)}/assignments`;
+          if (DEBUG) console.log('[ASSINAFY][POST retry#2]', BASE + url, body);
+          resp = await http.post(url, body);
+        }
+        if (resp && [200,400,409].includes(resp.status)) {
+          const fromResp = scanForSigningUrl(resp.data) || pickAssignmentUrl(resp.data?.assignment);
+          if (fromResp) {
+            await saveAssinaturaUrl(documentId, fromResp);
+            return fromResp;
+          }
+        }
+      } catch (err) {
+        if (DEBUG) console.warn('[ASSINAFY][getSigningUrl] falha ao refazer assignment:', err?.response?.status || err.message);
+      }
+    }
   } catch (e) {
     if (DEBUG) console.warn('[ASSINAFY][getSigningUrl] falha no getDocument:', e?.response?.status || e.message);
   }
-
-  try {
-    const list = await listAssignments(documentId); // pode retornar []
-    for (const a of list) {
-      const url = pickAssignmentUrl(a);
-      if (url && /^https?:\/\//i.test(url)) return url;
-    }
-  } catch (e) {
-    if (DEBUG) console.warn('[ASSINAFY][getSigningUrl] falha no listAssignments:', e?.response?.status || e.message);
-  }
-
   return null;
 }
 
