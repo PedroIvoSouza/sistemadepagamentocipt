@@ -68,7 +68,7 @@ async function getDocument(documentId) {
 
 /** Estados “prontos para criar assignment” */
 const READY_FOR_ASSIGNMENT = new Set([
-  'metadata_ready',     // <- essencial para sair do loop
+  'metadata_ready',
   'available',
   'ready'
 ]);
@@ -80,7 +80,7 @@ const PENDING_SIGNATURE_STATES = new Set([
   'waiting_for_signatures'
 ]);
 
-/** Estados finais/gerais que tratamos como “ready o suficiente” */
+/** Estados gerais tratados como “ok” em algum estágio */
 const GENERIC_READY = new Set([
   ...READY_FOR_ASSIGNMENT,
   'waiting_for_assignments',
@@ -180,14 +180,21 @@ async function requestSignatures(documentId, signerIds, { message, expires_at } 
   return ensureOk(resp, 'requestSignatures');
 }
 
+/** GET assignments — se 404, não lança erro: retorna [] */
 async function listAssignments(documentId) {
+  // try #1
   let url = `/documents/${encodeURIComponent(documentId)}/assignments`;
   let resp = await http.get(url);
   if (DEBUG) console.log('[ASSINAFY][GET try#1]', BASE + url, resp.status);
   if (resp.status === 404) {
+    // try #2
     url = `/accounts/${ACCOUNT_ID}/documents/${encodeURIComponent(documentId)}/assignments`;
     resp = await http.get(url);
     if (DEBUG) console.log('[ASSINAFY][GET try#2]', BASE + url, resp.status);
+  }
+  if (resp.status === 404) {
+    // algumas contas não expõem esta listagem; não quebre o fluxo
+    return [];
   }
   const ok = ensureOk(resp, 'listAssignments');
   return Array.isArray(ok) ? ok : (Array.isArray(ok?.data) ? ok.data : []);
@@ -197,12 +204,70 @@ function pickAssignmentUrl(a) {
   return a?.sign_url || a?.signer_url || a?.signerUrl || a?.signing_url || a?.url || a?.link || null;
 }
 
-async function getSigningUrl(documentId) {
-  const list = await listAssignments(documentId);
-  for (const a of list) {
-    const u = pickAssignmentUrl(a);
-    if (u && /^https?:\/\//i.test(u)) return u;
+/** Varre recursivamente um objeto procurando campos de URL de assinatura */
+function scanForSigningUrl(obj, depth = 0) {
+  if (!obj || typeof obj !== 'object' || depth > 4) return null;
+  // chaves comuns
+  const candidates = [
+    obj.sign_url, obj.signer_url, obj.signerUrl, obj.signing_url, obj.url, obj.link, obj.signUrl
+  ].filter(Boolean);
+  for (const c of candidates) {
+    if (typeof c === 'string' && /^https?:\/\//i.test(c)) return c;
   }
+  // arrays
+  if (Array.isArray(obj)) {
+    for (const it of obj) {
+      const found = scanForSigningUrl(it, depth + 1);
+      if (found) return found;
+    }
+  } else {
+    // objetos
+    for (const k of Object.keys(obj)) {
+      // se a chave parecer "assignment"/"sign", priorize
+      if (/assign|sign/i.test(k)) {
+        const found = scanForSigningUrl(obj[k], depth + 1);
+        if (found) return found;
+      }
+    }
+    // fallback: percorre tudo
+    for (const k of Object.keys(obj)) {
+      const val = obj[k];
+      if (val && typeof val === 'object') {
+        const found = scanForSigningUrl(val, depth + 1);
+        if (found) return found;
+      }
+    }
+  }
+  return null;
+}
+
+/** Busca URL de assinatura: 1) document payload; 2) assignments (se expostos) */
+async function getSigningUrl(documentId) {
+  try {
+    const doc = await getDocument(documentId);
+    const info = doc?.data || doc;
+    if (DEBUG) {
+      try {
+        console.log('[ASSINAFY][DOC keys]', Object.keys(info || {}));
+      } catch {}
+    }
+    const byDoc = scanForSigningUrl(info);
+    if (byDoc) return byDoc;
+  } catch (e) {
+    // segue para tentar assignments
+    if (DEBUG) console.warn('[ASSINAFY][getSigningUrl] falha no getDocument:', e?.response?.status || e.message);
+  }
+
+  try {
+    const list = await listAssignments(documentId); // pode retornar []
+    for (const a of list) {
+      const url = pickAssignmentUrl(a);
+      if (url && /^https?:\/\//i.test(url)) return url;
+    }
+  } catch (e) {
+    if (DEBUG) console.warn('[ASSINAFY][getSigningUrl] falha no listAssignments:', e?.response?.status || e.message);
+  }
+
   return null;
 }
 
@@ -219,8 +284,8 @@ module.exports = {
 
   // waits
   waitForDocumentReady,              // compat
-  waitUntilReadyForAssignment,       // novo
-  waitUntilPendingSignature,         // novo
+  waitUntilReadyForAssignment,
+  waitUntilPendingSignature,
 
   // signers
   createSigner,
