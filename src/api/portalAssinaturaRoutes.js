@@ -21,6 +21,55 @@ const dbRun = (sql, p=[]) => new Promise((res, rej)=> db.run(sql, p, function(e)
 const portalEventosAssinaturaRouter = express.Router();
 const documentosAssinafyPublicRouter = express.Router();
 
+// Procura por um link de assinatura dentro de um objeto retornado pelo getDocument
+function scanForSigningUrl(obj, depth = 0) {
+  if (!obj || typeof obj !== 'object' || depth > 5) return null;
+
+  const candidates = [
+    obj.sign_url, obj.signer_url, obj.signerUrl, obj.signing_url,
+    obj.url, obj.link, obj.signUrl, obj.deep_link, obj.deeplink,
+    obj.access_link, obj.public_link,
+  ].filter(Boolean);
+  for (const c of candidates) {
+    if (typeof c === 'string' && /^https?:\/\//i.test(c)) return c;
+  }
+
+  if (obj.assignment) {
+    const x = scanForSigningUrl(obj.assignment, depth + 1);
+    if (x) return x;
+  }
+  if (Array.isArray(obj.assignments)) {
+    for (const it of obj.assignments) {
+      const x = scanForSigningUrl(it, depth + 1);
+      if (x) return x;
+    }
+  }
+
+  if (Array.isArray(obj)) {
+    for (const it of obj) {
+      const found = scanForSigningUrl(it, depth + 1);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  const keys = Object.keys(obj);
+  for (const k of keys) {
+    if (/assign|sign/i.test(k)) {
+      const found = scanForSigningUrl(obj[k], depth + 1);
+      if (found) return found;
+    }
+  }
+  for (const k of keys) {
+    const val = obj[k];
+    if (val && typeof val === 'object') {
+      const found = scanForSigningUrl(val, depth + 1);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
 /**
  * GET /api/portal/eventos/:eventoId/termo/meta
  */
@@ -130,7 +179,8 @@ portalEventosAssinaturaRouter.get('/:eventoId/termo/assinafy/link', async (req, 
       let assinaturaUrl = null;
     for (let i = 0; i < 3 && !assinaturaUrl; i++) {
       try {
-        assinaturaUrl = await getSigningUrl(row.assinafy_id);
+        const docInfo = await getDocument(row.assinafy_id);
+        assinaturaUrl = scanForSigningUrl(docInfo?.data || docInfo);
         if (!assinaturaUrl) await new Promise(r => setTimeout(r, 1000));
       } catch {}
     }
