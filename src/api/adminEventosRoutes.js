@@ -282,19 +282,50 @@ router.get('/:id/termo/assinatura-url', async (req, res) => {
 /* ===========================================================
    GET /api/admin/eventos
    =========================================================== */
-router.get('/', async (_req, res) => {
+router.get('/', async (req, res) => {
   try {
-    const sql = `
+    // Pagination and search params
+    let page = parseInt(req.query.page, 10);
+    let limit = parseInt(req.query.limit, 10);
+    page = Number.isInteger(page) && page > 0 ? page : 1;
+    limit = Number.isInteger(limit) && limit > 0 ? limit : 10;
+    let search = (req.query.search || '').toString().trim();
+    search = search.replace(/[%_]/g, '');
+
+    const offset = (page - 1) * limit;
+
+    const baseSql = `
+      FROM Eventos e
+      JOIN Clientes_Eventos c ON e.id_cliente = c.id`;
+
+    let whereClause = '';
+    const params = [];
+    if (search) {
+      whereClause = ` WHERE e.nome_evento LIKE ? OR c.nome_razao_social LIKE ? OR e.numero_processo LIKE ?`;
+      const like = `%${search}%`;
+      params.push(like, like, like);
+    }
+
+    const countSql = `SELECT COUNT(*) AS total ${baseSql}${whereClause}`;
+    const countRow = await dbGet(countSql, params, 'eventos/count');
+    const totalCount = countRow?.total || 0;
+
+    const listSql = `
       SELECT e.id, e.id_cliente, e.nome_evento, e.espaco_utilizado, e.area_m2,
              e.valor_final, e.status, e.data_vigencia_final,
              e.numero_oficio_sei, e.numero_processo, e.numero_termo,
              e.hora_inicio, e.hora_fim, e.hora_montagem, e.hora_desmontagem,
              c.nome_razao_social AS nome_cliente
-        FROM Eventos e
-        JOIN Clientes_Eventos c ON e.id_cliente = c.id
-       ORDER BY e.id DESC`;
-    const rows = await dbAll(sql, [], 'listar-eventos');
-    res.json(rows);
+        ${baseSql}${whereClause}
+       ORDER BY e.id DESC
+       LIMIT ? OFFSET ?`;
+    const listParams = [...params, limit, offset];
+    const eventos = await dbAll(listSql, listParams, 'listar-eventos');
+
+    const totalPages = Math.ceil(totalCount / limit);
+    const currentPage = page;
+
+    res.json({ eventos, totalPages, currentPage });
   } catch (err) {
     console.error('[admin/eventos] listar erro:', err.message);
     res.status(500).json({ error: 'Erro interno no servidor ao buscar eventos.' });
