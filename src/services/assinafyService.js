@@ -114,13 +114,41 @@ async function findSignerByEmail(email) {
   const arr = Array.isArray(ok) ? ok : ok?.data;
   return Array.isArray(arr) && arr.length ? arr[0] : null;
 }
+async function findSignerByGovernmentId(government_id) {
+  const url = `/accounts/${ACCOUNT_ID}/signers`;
+  const resp = await http.get(url, { params: { government_id } });
+  const ok = ensureOk(resp, 'findSignerByGovernmentId');
+  const arr = Array.isArray(ok) ? ok : ok?.data;
+  return Array.isArray(arr) && arr.length ? arr[0] : null;
+}
+async function updateSignerEmail(id, email) {
+  const url = `/accounts/${ACCOUNT_ID}/signers/${encodeURIComponent(id)}`;
+  if (DEBUG) console.log('[ASSINAFY][PUT]', BASE + url, { email });
+  const resp = await http.put(url, { email });
+  return ensureOk(resp, 'updateSignerEmail');
+}
 async function ensureSigner({ full_name, email, government_id, phone }) {
-  try { return await createSigner({ full_name, email, government_id, phone }); }
-  catch (e) {
+  try {
+    return await createSigner({ full_name, email, government_id, phone });
+  } catch (e) {
     const msg = e?.response?.data?.message || e?.message || '';
     if (/já existe/i.test(msg) || /already exists/i.test(msg) || e?.response?.status === 400) {
-      const found = await findSignerByEmail(email);
-      if (found) return found;
+      let found = await findSignerByEmail(email);
+      if (!found && government_id) {
+        found = await findSignerByGovernmentId(government_id);
+      }
+      if (found) {
+        const domain = found.email?.split('@')[1]?.toLowerCase();
+        if (email && domain === 'importado.placeholder' && found.id) {
+          try {
+            await updateSignerEmail(found.id, email);
+            found.email = email;
+          } catch (err) {
+            if (DEBUG) console.warn('[ASSINAFY] updateSignerEmail falhou:', err.response?.status || err.message);
+          }
+        }
+        return found;
+      }
     }
     throw e;
   }
@@ -265,6 +293,8 @@ module.exports = {
   // signers
   createSigner,
   findSignerByEmail,
+  findSignerByGovernmentId,
+  updateSignerEmail,
   ensureSigner,
 
   // assignments

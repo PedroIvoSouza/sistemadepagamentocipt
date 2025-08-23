@@ -167,6 +167,7 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
       government_id: onlyDigits(signerCpf || ''),
       phone: `+55${onlyDigits(signerPhone || '')}`,
     });
+    console.log('Using signer', signer.email);
     const signerId = signer?.id || signer?.data?.id;
     if (!signerId) return res.status(500).json({ ok: false, error: 'Falha ao criar signatário no Assinafy.' });
 
@@ -269,6 +270,7 @@ router.post('/:id/termo/reativar-assinatura', async (req, res) => {
       government_id: onlyDigits(signerCpf || ''),
       phone: `+55${onlyDigits(signerPhone || '')}`,
     });
+    console.log('Using signer', signer.email);
     const signerId = signer?.id || signer?.data?.id;
     if (!signerId) return res.status(500).json({ ok: false, error: 'Falha ao criar signatário.' });
 
