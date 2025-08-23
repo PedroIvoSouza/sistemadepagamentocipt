@@ -140,8 +140,12 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
       signerPhone = signerPhone || row.telefone || '';
     }
 
-    if (!signerName || !signerEmail) {
-      return res.status(400).json({ ok: false, error: 'Nome e email do signatário são obrigatórios.' });
+    const emailDominio = signerEmail?.split('@')[1]?.toLowerCase() || '';
+    if (!signerName || !signerEmail || emailDominio === 'importado.placeholder') {
+      return res.status(400).json({
+        ok: false,
+        error: 'Nome e e-mail válidos do signatário são obrigatórios.'
+      });
     }
 
     // 1) Gera/garante o termo
@@ -251,7 +255,10 @@ router.post('/:id/termo/reativar-assinatura', async (req, res) => {
       signerCpf   = signerCpf   || onlyDigits(p.documento_responsavel || p.documento || '');
       signerPhone = signerPhone || p.telefone || '';
     }
-    if (!signerEmail) return res.status(400).json({ ok: false, error: 'Email do signatário não encontrado.' });
+    const emailDominio = signerEmail?.split('@')[1]?.toLowerCase() || '';
+    if (!signerEmail || emailDominio === 'importado.placeholder') {
+      return res.status(400).json({ ok: false, error: 'Email válido do signatário é obrigatório.' });
+    }
 
     const signer = await ensureSigner({
       full_name: signerName,
