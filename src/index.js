@@ -1,16 +1,33 @@
 // src/index.js
 require('dotenv').config();
 
-console.log('[BOT] BOT_SHARED_KEY len =', (process.env.BOT_SHARED_KEY || '').length);
+console.log('[BOOT] BOT_SHARED_KEY len =', (process.env.BOT_SHARED_KEY || '').length);
 
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const { scheduleConciliacao } = require('../cron/conciliarPagamentos');
 const db = require('./database/db');
+
+// ===== Helpers de boot =====
+function assertRouter(name, r) {
+  const ok = r && (typeof r === 'function' || typeof r.use === 'function');
+  if (!ok) {
+    console.error(`[BOOT][FATAL] "${name}" não é um express.Router. Valor:`, r);
+    console.error('[BOOT][HINT] Verifique o module.exports do arquivo correspondente.');
+    process.exit(1);
+  }
+}
+function mount(pathPrefix, name, router, app) {
+  assertRouter(name, router);
+  app.use(pathPrefix, router);
+  console.log(`[MOUNT] ${name} em ${pathPrefix}`);
+}
+
+// ===== Agendadores =====
 scheduleConciliacao();
 
-// --- Importação das Rotas ---
+// ===== Importação das Rotas =====
 const authRoutes            = require('./api/authRoutes');
 const userRoutes            = require('./api/userRoutes');
 const darsRoutes            = require('./api/darsRoutes');
@@ -22,10 +39,10 @@ const adminOficiosRoutes    = require('./api/adminOficiosRoutes');
 const permissionariosRoutes = require('./api/permissionariosRoutes');
 const botRoutes             = require('./api/botRoutes');
 
-const {
-  portalEventosAssinaturaRouter,
-  documentosAssinafyPublicRouter
-} = require('./api/portalAssinaturaRoutes');
+// Routers de assinatura do portal (exporta 2 routers)
+const portalAssin = require('./api/portalAssinaturaRoutes');
+const portalEventosAssinaturaRouter  = portalAssin.portalEventosAssinaturaRouter;
+const documentosAssinafyPublicRouter = portalAssin.documentosAssinafyPublicRouter;
 
 // Routers de eventos (desestruturados)
 const {
@@ -35,90 +52,80 @@ const {
 } = require('./api/eventosClientesRoutes');
 
 const eventosRoutes          = require('./api/eventosRoutes');
-// NOVA ROTA: eventos admin
-const adminEventosRoutes     = require('./api/adminEventosRoutes');
-// NOVA ROTA: webhooks Assinafy
+const adminEventosRoutes     = require('./api/adminEventosRoutes');   // inclui /:id/termo
 const webhooksAssinafyRoutes = require('./api/webhooksAssinafyRoutes');
-// NOVAS ROTAS: preparar/embedded Assinafy (conforme arquivos enviados)
-const assinafyRoutes         = require('./routes/assinafy');
+const assinafyRoutes         = require('./routes/assinafy');           // preparar/embedded
+const documentosRoutes       = require('./api/documentosRoutes');
 
-const documentosRoutes = require('./api/documentosRoutes');
-
+// ===== App =====
 const app  = express();
 app.use(cors({
-  origin: '*', // ⚠️ Em produção, restrinja para seus domínios
+  origin: '*',               // ⚠️ restrinja em produção
   credentials: true
 }));
 const PORT = process.env.PORT || 3000;
 
-// Habilita JSON e guarda o rawBody (para validar assinatura HMAC do webhook)
+// Guarda rawBody (webhook HMAC)
 app.use(express.json({
   verify: (req, _res, buf) => { req.rawBody = buf; }
 }));
 app.use(express.urlencoded({ extended: false }));
 
-// Servir arquivos estáticos da pasta 'public'
+// Arquivos estáticos
 const publicPath = path.join(__dirname, '..', 'public');
-console.log(`Servindo arquivos estáticos da pasta: ${publicPath}`);
+console.log(`[STATIC] Servindo arquivos de: ${publicPath}`);
 app.use('/', express.static(publicPath));
 
-// --- Uso das Rotas da API ---
-// Autenticação e usuário (Permissionários)
-app.use('/api/auth',              authRoutes);
-app.use('/api/user',              userRoutes);
+// ===== Uso das Rotas da API =====
+// Autenticação & Permissionários
+mount('/api/auth',  'authRoutes',  authRoutes,  app);
+mount('/api/user',  'userRoutes',  userRoutes,  app);
 
 // DARs para permissionários
-app.use('/api/dars',              darsRoutes);
-app.use('/api/permissionarios',   permissionariosRoutes);
+mount('/api/dars',            'darsRoutes',            darsRoutes,            app);
+mount('/api/permissionarios', 'permissionariosRoutes', permissionariosRoutes, app);
 
-// Portal de assinatura (cliente)
-app.use('/api/portal/eventos', portalEventosAssinaturaRouter); // exige auth do cliente
-app.use('/api', documentosAssinafyPublicRouter);               // público p/ abrir/status Assinafy
+// Portal do cliente (assinaturas/termo)
+mount('/api/portal/eventos', 'portalEventosAssinaturaRouter',  portalEventosAssinaturaRouter,  app); // requer auth no router
+mount('/api',                'documentosAssinafyPublicRouter', documentosAssinafyPublicRouter, app); // público p/ status/artefatos
 
-// Administração Geral
-app.use('/api/admin/auth',        adminAuthRoutes);
-app.use('/api/admin/dars',        adminDarsRoutes);
-app.use('/api/admins',            adminManagementRoutes);
-app.use('/api/admin',             adminRoutes);          // Rota para permissionários no painel admin
-app.use('/api/admin',             adminOficiosRoutes);
+// Administração
+mount('/api/admin/auth',        'adminAuthRoutes',       adminAuthRoutes,       app);
+mount('/api/admin/dars',        'adminDarsRoutes',       adminDarsRoutes,       app);
+mount('/api/admins',            'adminManagementRoutes', adminManagementRoutes, app);
+mount('/api/admin',             'adminRoutes',           adminRoutes,           app);
+mount('/api/admin',             'adminOficiosRoutes',    adminOficiosRoutes,    app);
 
-// Webhook da Assinafy
-app.use('/api/webhooks/assinafy', webhooksAssinafyRoutes);
+// Webhook Assinafy
+mount('/api/webhooks/assinafy', 'webhooksAssinafyRoutes', webhooksAssinafyRoutes, app);
 
-// === Assinafy: preparar documento e fluxo embedded ===
-// (inclui: POST /api/eventos/:id/termo/preparar e /api/embedded/*)
-app.use('/api', assinafyRoutes);
+// Assinafy: preparar/embedded
+mount('/api', 'assinafyRoutes', assinafyRoutes, app);
 
-// --- Rotas de eventos (cada uma com seu prefixo) ---
-// 1. Rotas PÚBLICAS para clientes de eventos (login, definir senha)
-app.use('/api/eventos/clientes',  eventosClientesPublicRoutes);
-// 2. Rotas do PORTAL DO CLIENTE de eventos (cliente logado)
-app.use('/api/portal/eventos',    eventosClientesClientRoutes);
-// 3. Rotas de ADMINISTRAÇÃO de clientes de eventos (painel)
-app.use('/api/admin/eventos-clientes', eventosClientesAdminRoutes);
-// 4. Rotas de eventos para admin (inclui /:id/termo)
-app.use('/api/admin/eventos',     adminEventosRoutes);
+// Eventos (família)
+mount('/api/eventos/clientes',       'eventosClientesPublicRoutes',  eventosClientesPublicRoutes,  app);
+mount('/api/portal/eventos',         'eventosClientesClientRoutes',  eventosClientesClientRoutes,  app);
+mount('/api/admin/eventos-clientes', 'eventosClientesAdminRoutes',   eventosClientesAdminRoutes,   app);
+mount('/api/admin/eventos',          'adminEventosRoutes',           adminEventosRoutes,           app);
 
-// Eventos (gerenciamento geral de eventos)
-app.use('/api/eventos',           eventosRoutes);
-app.use('/api/documentos',        documentosRoutes);
+mount('/api/eventos',   'eventosRoutes',   eventosRoutes,   app);
+mount('/api/documentos','documentosRoutes',documentosRoutes,app);
 
 // Bot
-app.use('/api/bot',               botRoutes);
+mount('/api/bot', 'botRoutes', botRoutes, app);
 
-// Catch-all para servir a página de login do admin quando uma rota /admin/... não for encontrada
+// Catch-all para /admin
 app.use('/admin', (req, res) => {
   res.sendFile(path.join(publicPath, 'admin', 'login.html'));
 });
 
-// Conexão com o Banco de Dados (SQLite)
+// ===== Migrações rápidas (garante colunas) =====
 ensureClientesEventosColumns(db);
 ensureEventosColumns(db);
 
-// Função para garantir colunas que seu update precisa
 function ensureClientesEventosColumns(db) {
   db.all(`PRAGMA table_info(Clientes_Eventos)`, [], (err, cols) => {
-    if (err) { console.error('[DB] PRAGMA table_info falhou:', err.message); return; }
+    if (err) { console.error('[DB] PRAGMA Clientes_Eventos falhou:', err.message); return; }
     const names = new Set((cols || []).map(c => c.name.toLowerCase()));
 
     const adds = [];
@@ -143,7 +150,7 @@ function ensureClientesEventosColumns(db) {
 
 function ensureEventosColumns(db) {
   db.all(`PRAGMA table_info(Eventos)`, [], (err, cols) => {
-    if (err) { console.error('[DB] PRAGMA table_info Eventos falhou:', err.message); return; }
+    if (err) { console.error('[DB] PRAGMA Eventos falhou:', err.message); return; }
     const names = new Set((cols || []).map(c => c.name.toLowerCase()));
     if (!names.has('data_vigencia_final')) {
       db.run(`ALTER TABLE Eventos ADD COLUMN data_vigencia_final TEXT`, [], e => {
@@ -154,10 +161,9 @@ function ensureEventosColumns(db) {
   });
 }
 
-// Inicia o servidor e o agendador de tarefas
-const PORT_TO_USE = PORT;
-const server = app.listen(PORT_TO_USE, () => {
-  console.log(`Servidor rodando na porta ${PORT_TO_USE}.`);
+// ===== Start =====
+const server = app.listen(PORT, () => {
+  console.log(`Servidor rodando na porta ${PORT}.`);
   try {
     require('../cron/gerarDarsMensais.js');
     console.log('[INFO] Agendador de tarefas (cron) iniciado com sucesso.');
