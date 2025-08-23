@@ -162,13 +162,19 @@ portalEventosAssinaturaRouter.get('/:eventoId/termo/assinafy/link', async (req, 
       return res.json({ ok:true, assinatura_url: assinaturaUrl, url: assinaturaUrl, status: 'pendente_assinatura' });
     }
 
-    const st = info?.status;
-    if (st === 'certified' || st === 'certificated') {
+    let lastStatus = info?.status || null;
+    if (!lastStatus) {
+      try {
+        const d = await getDocument(row.assinafy_id);
+        lastStatus = d?.status || d?.data?.status || null;
+      } catch {}
+    }
+    if (lastStatus === 'certified' || lastStatus === 'certificated') {
       return res.json({ ok:true, status:'assinado' });
     }
 
-    console.log(`[portal termo/link GET] assinatura_url indisponível (status: ${st})`);
-    return res.json({ ok:true, status: st || row.status || 'pendente_assinatura' });
+    console.log(`[portal termo/link GET] assinatura_url indisponível (status: ${lastStatus})`);
+    return res.json({ ok:true, status: lastStatus || row.status || 'pendente_assinatura' });
   } catch (e) {
     console.error('[portal termo/link GET] erro:', e.message);
     res.status(500).json({ ok:false, error:'Falha ao consultar link de assinatura.' });

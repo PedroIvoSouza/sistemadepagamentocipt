@@ -179,7 +179,32 @@ async function requestSignatures(documentId, signerIds, { message, expires_at } 
     return resp.data || { reused: true };
   }
 
-  return ensureOk(resp, 'requestSignatures');
+  const ok = ensureOk(resp, 'requestSignatures');
+
+  // Tentativa imediata de obter sign_url/public_link/token do assignment criado
+  try {
+    const assignmentId = ok?.assignment?.id || ok?.id;
+    if (assignmentId) {
+      const urlA = `/assignments/${encodeURIComponent(assignmentId)}`;
+      if (DEBUG) console.log('[ASSINAFY][GET assignment]', BASE + urlA);
+      const aResp = await http.get(urlA);
+      const aOk = ensureOk(aResp, 'getAssignment');
+      const a = aOk?.data || aOk;
+      let link = pickAssignmentUrl(a);
+      if (!link && a?.token) {
+        link = `https://app.assinafy.com.br/verify/${a.token}`;
+      }
+      ok.assignment = a;
+      ok.assinatura_url = link || null;
+      if (!link) {
+        console.log(`[ASSINAFY][requestSignatures] nenhuma URL de assinatura retornada (status: ${a?.status})`);
+      }
+    }
+  } catch (err) {
+    if (DEBUG) console.warn('[ASSINAFY][requestSignatures] falha ao obter assignment:', err?.response?.status || err.message);
+  }
+
+  return ok;
 }
 async function getAssignmentFromDocument(documentId) {
   const doc = await getDocument(documentId);
