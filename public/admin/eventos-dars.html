@@ -722,9 +722,15 @@ async function carregarClientes(){
   async function fetchEventos(){
     eventosTableBody.innerHTML = '<tr><td colspan="9" class="text-center">Carregando...</td></tr>';
     try{
-      const r = await fetch(`/api/admin/eventos?search=${encodeURIComponent(currentSearch)}&page=${currentPage}&limit=${currentLimit}`, { headers: AUTH_HEADERS });
+      const params = new URLSearchParams({
+        search: currentSearch,
+        page: currentPage,
+        limit: currentLimit
+      });
+      const r = await fetch(`/api/admin/eventos?${params.toString()}`, { headers: AUTH_HEADERS });
       if (!r.ok) throw new Error('Falha ao buscar eventos');
       const data = await r.json();
+      currentPage = data.currentPage;
       await renderTable(data.eventos);
       renderPagination(data.totalPages, data.currentPage);
     }catch(e){
