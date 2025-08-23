@@ -266,62 +266,60 @@
             return;
           }
 
-          if (btnAssinar) {
+           if (btnAssinar) {
             const eventoId = btnAssinar.dataset.assinarTermo;
-            const statusEl = document.getElementById(`sig-status-${eventoId}`);
-            const original = btnAssinar.innerHTML;
-
-            btnAssinar.disabled = true;
-            btnAssinar.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Preparando…`;
-            statusEl.textContent = '';
-
+        
+            // verifica metadados
             try {
-              // 1) meta: exige assinafy_id
               const metaResp = await fetch(`/api/portal/eventos/${eventoId}/termo/meta`, { headers });
               const meta = await metaResp.json().catch(() => ({}));
-              if (!metaResp.ok || !meta?.assinafy_id) {
-                alert('Termo ainda não enviado para assinatura');
+              if (!meta?.assinafy_id) {
+                alert('Termo ainda não enviado para assinatura.');
                 return;
               }
-
-              // 2) pede o link ao backend; se vier, abre modal; se pending, poll
+            } catch {
+              alert('Falha ao verificar termo.');
+              return;
+            }
+        
+            const original = btnAssinar.innerHTML;
+            btnAssinar.disabled = true;
+            btnAssinar.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Verificando…`;
+            const statusEl = document.getElementById(`sig-status-${eventoId}`);
+            statusEl.textContent = '';
+        
+            try {
+              // pede ao servidor confirmar pending_signature
               const r = await fetch(`/api/portal/eventos/${eventoId}/termo/assinafy/link`, { method:'POST', headers });
               const j = await r.json().catch(()=> ({}));
-
-              if (r.ok && j.url) {
-                openAssinaturaModal(j.url);
-                statusEl.textContent = 'Assinatura iniciada…';
-              } else if (r.ok && j.pending) {
-                statusEl.textContent = j.message || 'Convite enviado. Aguardando link…';
-                // polling sem abrir janela
-                let opened = false;
-                for (let i=0;i<12;i++){ // ~48s (12 x 4s)
-                  await new Promise(r => setTimeout(r, 4000));
-                  const r2 = await fetch(`/api/portal/eventos/${eventoId}/termo/assinafy/link`, { headers });
-                  const j2 = await r2.json().catch(()=> ({}));
-                  if (r2.ok && j2.url) {
-                    openAssinaturaModal(j2.url);
-                    statusEl.textContent = 'Assinatura iniciada…';
-                    opened = true;
-                    break;
-                  }
-                  if (j2.status === 'signed' || j2.status === 'assinado') {
-                    statusEl.textContent = 'Termo assinado.';
-                    await atualizarUIEvento(eventoId);
-                    opened = true;
-                    break;
-                  }
-                }
-                if (!opened) {
-                  statusEl.textContent = 'Link direto indisponível no momento. Verifique seu e-mail para assinar.';
-                }
-              } else {
-                statusEl.textContent = 'Falha ao iniciar assinatura.';
+        
+              if (!r.ok) {
                 alert(j.error || 'Falha ao iniciar assinatura.');
+                return;
+              }
+        
+              if (j.url) {
+                // Caso futuro: se a API um dia retornar URL, abrimos em popup controlado
+                const w = window.open(j.url, '_blank', 'noopener,noreferrer,width=480,height=720');
+                if (!w) alert('Pop-up bloqueado pelo navegador. Verifique seu e-mail para assinar.');
+                statusEl.textContent = 'Assinatura iniciada.';
+                return;
+              }
+        
+              // Fluxo atual: via e-mail
+              statusEl.textContent = j.message || 'Convite enviado por e-mail. Verifique sua caixa de entrada.';
+              // polling leve só para detectar "assinado"
+              for (let i=0;i<6;i++){
+                await new Promise(r => setTimeout(r, 5000));
+                const r2 = await fetch(`/api/portal/eventos/${eventoId}/termo/assinafy/link`, { headers });
+                const j2 = await r2.json().catch(()=> ({}));
+                if (j2?.status === 'assinado') {
+                  statusEl.textContent = 'Termo assinado.';
+                  await atualizarUIEvento(eventoId);
+                  break;
+                }
               }
             } catch (err) {
-              console.warn(err);
-              statusEl.textContent = 'Falha ao iniciar. Tente novamente em instantes.';
               alert(err.message || 'Falha ao iniciar assinatura.');
             } finally {
               btnAssinar.disabled = false;
