@@ -276,8 +276,6 @@
               return;
             }
 
-            alert('Verifique seu e-mail: você precisará dos códigos enviados pela Assinafy para concluir a assinatura.');
-
             const original = btnAssinar.innerHTML;
             btnAssinar.disabled = true;
             btnAssinar.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Abrindo…`;
@@ -285,8 +283,11 @@
             statusEl.textContent = 'Assinatura em andamento...';
 
             try {
-              const popupUrl = `/eventos/assinafy-popup.html?eventoId=${eventoId}&doc=${meta.assinafy_id}`;
-              assinafyIframe.src = popupUrl;
+              const linkResp = await fetch(`/api/portal/eventos/${eventoId}/termo/assinafy/link`, { headers });
+              const linkData = await linkResp.json().catch(()=>({}));
+              const assinaturaUrl = linkData.assinatura_url || linkData.url;
+              if (!linkResp.ok || !assinaturaUrl) throw new Error(linkData.error || 'Link de assinatura indisponível.');
+              assinafyIframe.src = assinaturaUrl;
               assinafyModal.show();
             } catch (err) {
               alert(err.message || 'Falha ao abrir janela de assinatura.');

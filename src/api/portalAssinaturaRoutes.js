@@ -86,7 +86,7 @@ portalEventosAssinaturaRouter.post('/:eventoId/termo/assinafy/link', async (req,
     if (!row.assinafy_id) return res.status(409).json({ ok:false, error:'Termo ainda não enviado para assinatura.' });
 
     if (row.assinatura_url) {
-      return res.json({ ok:true, url: row.assinatura_url, status: row.status || 'pendente_assinatura' });
+      return res.json({ ok:true, assinatura_url: row.assinatura_url, url: row.assinatura_url, status: row.status || 'pendente_assinatura' });
     }
 
     return res.json({ ok:true, pending:true, status: row.status || 'pendente_assinatura' });
@@ -114,7 +114,7 @@ portalEventosAssinaturaRouter.get('/:eventoId/termo/assinafy/link', async (req, 
     if (!row.assinafy_id) return res.status(409).json({ ok:false, error:'Termo ainda não enviado para assinatura.' });
 
     if (row.assinatura_url) {
-      return res.json({ ok:true, url: row.assinatura_url, status: row.status || 'pendente_assinatura' });
+      return res.json({ ok:true, assinatura_url: row.assinatura_url, url: row.assinatura_url, status: row.status || 'pendente_assinatura' });
     }
 
     try {
