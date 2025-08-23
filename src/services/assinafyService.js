@@ -11,6 +11,7 @@ const BASE  = (process.env.ASSINAFY_API_BASE || 'https://api.assinafy.com.br/v1'
 const ACCOUNT_ID = (process.env.ASSINAFY_ACCOUNT_ID || '').trim();
 const TIMEOUT = Number(process.env.ASSINAFY_TIMEOUT_MS || 90000);
 
+/* ------------------------------ Headers/Auth ------------------------------- */
 function authHeaders() {
   const h = {};
   const apiKey = (process.env.ASSINAFY_API_KEY || '').trim();
@@ -19,7 +20,11 @@ function authHeaders() {
   if (bearer) h.Authorization = `Bearer ${bearer}`;
   return h;
 }
+function assertAccount() {
+  if (!ACCOUNT_ID) throw new Error('ASSINAFY_ACCOUNT_ID não configurado.');
+}
 
+/* --------------------------------- HTTP ----------------------------------- */
 const http = axios.create({
   baseURL: BASE,
   timeout: TIMEOUT,
@@ -41,6 +46,7 @@ function ensureOk(resp, what='request') {
 
 /* -------------------------------- Upload ----------------------------------- */
 async function uploadDocumentFromFile(filePath, filename) {
+  assertAccount();
   const form = new FormData();
   form.append('file', fs.createReadStream(filePath), {
     filename: filename || path.basename(filePath),
@@ -126,6 +132,7 @@ async function waitUntilPendingSignature(documentId, { retries=30, intervalMs=20
 
 /* -------------------------------- Signer ----------------------------------- */
 async function createSigner({ full_name, email, government_id, phone }) {
+  assertAccount();
   const url = `/accounts/${ACCOUNT_ID}/signers`;
   if (DEBUG) console.log('[ASSINAFY][POST]', BASE + url);
   const resp = await http.post(url, { full_name, email, government_id, telephone: phone });
@@ -133,6 +140,7 @@ async function createSigner({ full_name, email, government_id, phone }) {
 }
 
 async function findSignerByEmail(email) {
+  assertAccount();
   const url = `/accounts/${ACCOUNT_ID}/signers`;
   const resp = await http.get(url, { params: { email } });
   const ok = ensureOk(resp, 'findSignerByEmail');
@@ -167,6 +175,7 @@ async function requestSignatures(documentId, signerIds, { message, expires_at } 
 
   if (resp.status === 404) {
     // 2) fallback para rota com ACCOUNT
+    assertAccount();
     url = `/accounts/${ACCOUNT_ID}/documents/${encodeURIComponent(documentId)}/assignments`;
     if (DEBUG) console.log('[ASSINAFY][POST try#2]', BASE + url, body);
     resp = await http.post(url, body);
@@ -188,6 +197,7 @@ async function listAssignments(documentId) {
   if (DEBUG) console.log('[ASSINAFY][GET try#1]', BASE + url, resp.status);
   if (resp.status === 404) {
     // try #2
+    assertAccount();
     url = `/accounts/${ACCOUNT_ID}/documents/${encodeURIComponent(documentId)}/assignments`;
     resp = await http.get(url);
     if (DEBUG) console.log('[ASSINAFY][GET try#2]', BASE + url, resp.status);
@@ -300,4 +310,5 @@ module.exports = {
   // utils
   pickBestArtifactUrl,
   onlyDigits,
+  sleep,
 };
