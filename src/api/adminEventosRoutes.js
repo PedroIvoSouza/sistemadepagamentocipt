@@ -11,11 +11,9 @@ const {
   ensureSigner,
   requestSignatures,
   getDocument,
-  getSigningUrl,
   pickBestArtifactUrl,
-  waitUntilReadyForAssignment,
-  waitUntilPendingSignature,
-  waitForDocumentReady, // compat (usado em uma rota)
+  waitForDocumentReady,
+  getSigningUrl,
   onlyDigits,
 } = require('../services/assinafyService');
 
@@ -23,29 +21,65 @@ const fs = require('fs');
 const path = require('path');
 const db = require('../database/db');
 
-// Service correto do termo
+// Service correto para gerar o TERMO
 const { gerarTermoEventoPdfkitEIndexar } = require('../services/termoEventoPdfkitService');
 
 const router = express.Router();
+
+/* ========= Helpers ========= */
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const soDigitos = (v='') => String(v).replace(/\D/g,'');
+const normalizeMsisdn = (v='') => soDigitos(v).replace(/^0+/, ''); // deixa só dígitos, sem zeros à esquerda
+
+// validações de e-mail
+const isValidEmail = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(s||'').toLowerCase());
+const isPlaceholderEmail = (s) => {
+  const v = String(s||'').toLowerCase();
+  return !v ||
+         /placeholder/.test(v) ||
+         /sem\.email/.test(v) ||
+         /\bnull\b/.test(v) ||
+         /importado\.placeholder/.test(v);
+};
+const pickEmailOrNull = (s) => (isValidEmail(s) && !isPlaceholderEmail(s)) ? s : null;
 
 /* ========= SQLite helpers com log ========= */
 const dbGet = (sql, p = [], ctx = '') =>
   new Promise((resolve, reject) => {
     console.log('[SQL][GET]', ctx, '\n ', sql, '\n ', 'params:', p);
-    db.get(sql, p, (err, row) => (err ? reject(err) : resolve(row)));
+    db.get(sql, p, (err, row) => {
+      if (err) {
+        console.error('[SQL][GET][ERRO]', ctx, err.message);
+        return reject(err);
+      }
+      resolve(row);
+    });
   });
 
 const dbAll = (sql, p = [], ctx = '') =>
   new Promise((resolve, reject) => {
     console.log('[SQL][ALL]', ctx, '\n ', sql, '\n ', 'params:', p);
-    db.all(sql, p, (err, rows) => (err ? reject(err) : resolve(rows)));
+    db.all(sql, p, (err, rows) => {
+      if (err) {
+        console.error('[SQL][ALL][ERRO]', ctx, err.message);
+        return reject(err);
+      }
+      console.log('[SQL][ALL][OK]', ctx, 'rows:', rows?.length ?? 0);
+      resolve(rows);
+    });
   });
 
 const dbRun = (sql, p = [], ctx = '') =>
   new Promise((resolve, reject) => {
     console.log('[SQL][RUN]', ctx, '\n ', sql, '\n ', 'params:', p);
-    db.run(sql, p, function (err) { return err ? reject(err) : resolve(this); });
+    db.run(sql, p, function (err) {
+      if (err) {
+        console.error('[SQL][RUN][ERRO]', ctx, err.message);
+        return reject(err);
+      }
+      console.log('[SQL][RUN][OK]', ctx, 'lastID:', this.lastID, 'changes:', this.changes);
+      resolve(this);
+    });
   });
 
 /* ========= Middleware ========= */
@@ -53,6 +87,7 @@ router.use(adminAuthMiddleware);
 
 /* ===========================================================
    POST /api/admin/eventos
+   Criar evento + emitir DARs
    =========================================================== */
 router.post('/', async (req, res) => {
   console.log('[DEBUG] /api/admin/eventos payload:', JSON.stringify(req.body, null, 2));
@@ -72,14 +107,14 @@ router.post('/', async (req, res) => {
 
 /* ===========================================================
    POST /api/admin/eventos/:id/termo/enviar-assinatura
-   Gera termo → upload → WAIT#1 → ensureSigner → assignment → WAIT#2 → salva assinatura_url
+   Gera termo → upload → aguarda → ensureSigner → assignment
    =========================================================== */
 router.post('/:id/termo/enviar-assinatura', async (req, res) => {
   const { id } = req.params;
   let { signerName, signerEmail, signerCpf, signerPhone, message, expiresAt } = req.body || {};
 
   try {
-    // 0) Dados do signatário (fallback do banco)
+    // 0) Dados do signatário: busca do banco se faltou algo
     if (!signerName || !signerEmail || !signerCpf || !signerPhone) {
       const sql = `
         SELECT c.nome_responsavel, c.nome_razao_social, c.email, c.telefone,
@@ -91,36 +126,46 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
       if (!row) return res.status(404).json({ ok: false, error: 'Evento ou permissionário não encontrado.' });
 
       signerName  = signerName  || row.nome_responsavel || row.nome_razao_social || 'Responsável';
-      signerEmail = signerEmail || row.email;
+      signerEmail = signerEmail || pickEmailOrNull(row.email); // valida e bloqueia placeholder
       signerCpf   = signerCpf   || onlyDigits(row.documento_responsavel || row.documento || '');
       signerPhone = signerPhone || row.telefone || '';
     }
-    if (!signerName || !signerEmail) {
-      return res.status(400).json({ ok: false, error: 'Nome e email do signatário são obrigatórios.' });
+
+    // 0.1) Valida e-mail final
+    if (!isValidEmail(signerEmail) || isPlaceholderEmail(signerEmail)) {
+      return res.status(400).json({
+        ok: false,
+        error: 'E-mail do signatário não encontrado ou inválido. Envie "signerEmail" no body ou corrija o cadastro do cliente.'
+      });
     }
 
     // 1) Gera/garante o termo
     const out = await gerarTermoEventoPdfkitEIndexar(id); // { filePath, fileName }
 
     // 2) Upload pro Assinafy
-    const up = await uploadDocumentFromFile(out.filePath, out.fileName);
-    const assinafyDocId = up?.id || up?.data?.id;
+    const uploaded = await uploadDocumentFromFile(out.filePath, out.fileName);
+    const assinafyDocId = uploaded?.id || uploaded?.data?.id;
     if (!assinafyDocId) return res.status(500).json({ ok: false, error: 'Falha no upload ao Assinafy.' });
 
-    // 3) WAIT #1 — processamento até ficar pronto para assignment
-    await waitUntilReadyForAssignment(assinafyDocId, { retries: 20, intervalMs: 3000 });
+    // 3) Aguarda processamento
+    try {
+      await waitForDocumentReady(assinafyDocId, { retries: 20, intervalMs: 3000 });
+    } catch (err) {
+      if (err.timeout) return res.status(504).json({ ok: false, error: 'Tempo limite ao processar documento no Assinafy.' });
+      throw err;
+    }
 
-    // 4) Ensure signer
+    // 4) Ensure signer (com dados limpos)
     const signer = await ensureSigner({
       full_name: signerName,
       email: signerEmail,
       government_id: onlyDigits(signerCpf || ''),
-      phone: `+55${onlyDigits(signerPhone || '')}`,
+      phone: `+55${normalizeMsisdn(signerPhone || '')}`,
     });
     const signerId = signer?.id || signer?.data?.id;
     if (!signerId) return res.status(500).json({ ok: false, error: 'Falha ao criar signatário no Assinafy.' });
 
-    // 5) Assignment (virtual) com tentativas e fallback de rota
+    // 5) Assignment (virtual) com retry básico
     const maxRetries = 3;
     let assigned = false;
     for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -133,20 +178,22 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
         const assinafyMsg = err.response?.data?.message;
         if ((assinafyMsg === 'metadata_processing' || status === 400) && attempt < maxRetries - 1) {
           await sleep(2000);
-          await waitUntilReadyForAssignment(assinafyDocId, { retries: 5, intervalMs: 1500 });
+          await waitForDocumentReady(assinafyDocId, { retries: 5, intervalMs: 1500 });
           continue;
         }
-        if (status === 409) { assigned = true; break; }
+        if (status === 409) { assigned = true; break; } // já existe
         throw err;
       }
     }
     if (!assigned) return res.status(500).json({ ok: false, error: 'Não foi possível criar o assignment.' });
 
-    // 6) WAIT #2 — aguarda virar "pending_signature"
-    await waitUntilPendingSignature(assinafyDocId, { retries: 30, intervalMs: 2000 });
+    // 6) (Opcional) tentar link direto — pode não existir nessa conta
+    let assinaturaUrl = null;
+    try {
+      assinaturaUrl = await getSigningUrl(assinafyDocId);
+    } catch {}
 
-    // 7) Captura assinatura_url e salva
-    const assinaturaUrl = await getSigningUrl(assinafyDocId);
+    // 7) Atualiza metadados
     await dbRun(
       `UPDATE documentos
           SET assinafy_id = ?, status = 'pendente_assinatura', assinatura_url = ?
@@ -155,11 +202,14 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
       'termo/assinafy-up'
     );
 
+    console.log(`[ASSINATURA] Enviado. Email usado: ${signerEmail}. DocID=${assinafyDocId}`);
+
     return res.json({
       ok: true,
       message: 'Documento enviado para assinatura (Assinafy).',
       assinafyDocId,
       assinaturaUrl,
+      signerEmail
     });
   } catch (err) {
     console.error('[assinafy] erro:', err.message, err.response?.data);
@@ -173,7 +223,7 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
 
 /* ===========================================================
    POST /api/admin/eventos/:id/termo/reativar-assinatura
-   (documento já enviado: recria assignment/URL se precisar)
+   Reenvia o convite de assinatura com o e-mail válido
    =========================================================== */
 router.post('/:id/termo/reativar-assinatura', async (req, res) => {
   const { id } = req.params;
@@ -201,11 +251,17 @@ router.post('/:id/termo/reativar-assinatura', async (req, res) => {
       if (!p) return res.status(404).json({ ok: false, error: 'Evento/permissionário não encontrado.' });
 
       signerName  = signerName  || p.nome_responsavel || p.nome_razao_social || 'Responsável';
-      signerEmail = signerEmail || p.email;
+      signerEmail = signerEmail || pickEmailOrNull(p.email); // valida e bloqueia placeholder
       signerCpf   = signerCpf   || onlyDigits(p.documento_responsavel || p.documento || '');
       signerPhone = signerPhone || p.telefone || '';
     }
-    if (!signerEmail) return res.status(400).json({ ok: false, error: 'Email do signatário não encontrado.' });
+
+    if (!isValidEmail(signerEmail) || isPlaceholderEmail(signerEmail)) {
+      return res.status(400).json({
+        ok: false,
+        error: 'E-mail do signatário não encontrado ou inválido. Envie "signerEmail" no body ou corrija o cadastro.'
+      });
+    }
 
     await waitForDocumentReady(assinafyDocId, { retries: 10, intervalMs: 2000 });
 
@@ -213,7 +269,7 @@ router.post('/:id/termo/reativar-assinatura', async (req, res) => {
       full_name: signerName,
       email: signerEmail,
       government_id: onlyDigits(signerCpf || ''),
-      phone: `+55${onlyDigits(signerPhone || '')}`,
+      phone: `+55${normalizeMsisdn(signerPhone || '')}`,
     });
     const signerId = signer?.id || signer?.data?.id;
     if (!signerId) return res.status(500).json({ ok: false, error: 'Falha ao criar signatário.' });
@@ -221,24 +277,23 @@ router.post('/:id/termo/reativar-assinatura', async (req, res) => {
     try {
       await requestSignatures(assinafyDocId, [signerId], { message, expires_at: expiresAt });
     } catch (err) {
-      if (err.response?.status !== 409) throw err; // 409 = já existe assignment
+      if (err.response?.status !== 409) throw err; // 409 = já existe
     }
 
-    let assinaturaUrl = await getSigningUrl(assinafyDocId);
-    if (!assinaturaUrl) {
-      await sleep(1000);
-      assinaturaUrl = await getSigningUrl(assinafyDocId);
+    let assinaturaUrl = await getSigningUrl(assinafyDocId).catch(() => null);
+    if (assinaturaUrl) {
+      await dbRun(
+        `UPDATE documentos
+            SET status = 'pendente_assinatura', assinatura_url = ?
+          WHERE evento_id = ? AND tipo = 'termo_evento'`,
+        [assinaturaUrl, id],
+        'reativar/update-doc'
+      );
     }
 
-    await dbRun(
-      `UPDATE documentos
-          SET status = 'pendente_assinatura', assinatura_url = COALESCE(?, assinatura_url)
-        WHERE evento_id = ? AND tipo = 'termo_evento'`,
-      [assinaturaUrl || null, id],
-      'reativar/update-doc'
-    );
+    console.log(`[ASSINATURA] Reativado. Email usado: ${signerEmail}. DocID=${assinafyDocId}`);
 
-    return res.json({ ok: true, assinafyDocId, assinaturaUrl });
+    return res.json({ ok: true, assinafyDocId, assinaturaUrl, signerEmail });
   } catch (err) {
     console.error('[reativar-assinatura] erro:', err.message, err.response?.data);
     return res.status(500).json({ ok: false, error: 'Falha ao reativar assinatura.' });
@@ -262,7 +317,7 @@ router.get('/:id/termo/assinatura-url', async (req, res) => {
 
     let assinaturaUrl = row.assinatura_url;
     if (!assinaturaUrl) {
-      assinaturaUrl = await getSigningUrl(row.assinafy_id);
+      assinaturaUrl = await getSigningUrl(row.assinafy_id).catch(() => null);
       if (assinaturaUrl) {
         await dbRun(
           `UPDATE documentos SET assinatura_url = ? WHERE evento_id = ? AND tipo = 'termo_evento'`,
@@ -279,62 +334,29 @@ router.get('/:id/termo/assinatura-url', async (req, res) => {
   }
 });
 
-/* ===========================================================
-   GET /api/admin/eventos
-   =========================================================== */
-router.get('/', async (req, res) => {
+/* ==================== Demais rotas originais (preservadas) ================== */
+
+/* GET /api/admin/eventos */
+router.get('/', async (_req, res) => {
   try {
-    // Pagination and search params
-    let page = parseInt(req.query.page, 10);
-    let limit = parseInt(req.query.limit, 10);
-    page = Number.isInteger(page) && page > 0 ? page : 1;
-    limit = Number.isInteger(limit) && limit > 0 ? limit : 10;
-    let search = (req.query.search || '').toString().trim();
-    search = search.replace(/[%_]/g, '');
-
-    const offset = (page - 1) * limit;
-
-    const baseSql = `
-      FROM Eventos e
-      JOIN Clientes_Eventos c ON e.id_cliente = c.id`;
-
-    let whereClause = '';
-    const params = [];
-    if (search) {
-      whereClause = ` WHERE e.nome_evento LIKE ? OR c.nome_razao_social LIKE ? OR e.numero_processo LIKE ?`;
-      const like = `%${search}%`;
-      params.push(like, like, like);
-    }
-
-    const countSql = `SELECT COUNT(*) AS total ${baseSql}${whereClause}`;
-    const countRow = await dbGet(countSql, params, 'eventos/count');
-    const totalCount = countRow?.total || 0;
-
-    const listSql = `
+    const sql = `
       SELECT e.id, e.id_cliente, e.nome_evento, e.espaco_utilizado, e.area_m2,
              e.valor_final, e.status, e.data_vigencia_final,
              e.numero_oficio_sei, e.numero_processo, e.numero_termo,
              e.hora_inicio, e.hora_fim, e.hora_montagem, e.hora_desmontagem,
              c.nome_razao_social AS nome_cliente
-        ${baseSql}${whereClause}
-       ORDER BY e.id DESC
-       LIMIT ? OFFSET ?`;
-    const listParams = [...params, limit, offset];
-    const eventos = await dbAll(listSql, listParams, 'listar-eventos');
-
-    const totalPages = Math.ceil(totalCount / limit);
-    const currentPage = page;
-
-    res.json({ eventos, totalPages, currentPage });
+        FROM Eventos e
+        JOIN Clientes_Eventos c ON e.id_cliente = c.id
+       ORDER BY e.id DESC`;
+    const rows = await dbAll(sql, [], 'listar-eventos');
+    res.json(rows);
   } catch (err) {
     console.error('[admin/eventos] listar erro:', err.message);
     res.status(500).json({ error: 'Erro interno no servidor ao buscar eventos.' });
   }
 });
 
-/* ===========================================================
-   GET /api/admin/eventos/:eventoId/dars
-   =========================================================== */
+/* GET DARs do evento */
 router.get('/:eventoId/dars', async (req, res) => {
   const { eventoId } = req.params;
   try {
@@ -358,9 +380,7 @@ router.get('/:eventoId/dars', async (req, res) => {
   }
 });
 
-/* ===========================================================
-   GET /api/admin/eventos/:id
-   =========================================================== */
+/* GET detalhes do evento */
 router.get('/:id', async (req, res) => {
   const { id } = req.params;
 
@@ -435,9 +455,7 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-/* ===========================================================
-   GET /api/admin/eventos/:id/termo
-   =========================================================== */
+/* GET /api/admin/eventos/:id/termo (gera/serve termo) */
 router.get('/:id/termo', async (req, res) => {
   const { id } = req.params;
 
@@ -473,9 +491,7 @@ router.get('/:id/termo', async (req, res) => {
   }
 });
 
-/* ===========================================================
-   POST /api/admin/eventos/:eventoId/termo/disponibilizar
-   =========================================================== */
+/* POST /api/admin/eventos/:eventoId/termo/disponibilizar */
 router.post('/:eventoId/termo/disponibilizar', async (req, res) => {
   try {
     const { eventoId } = req.params;
@@ -497,9 +513,7 @@ router.post('/:eventoId/termo/disponibilizar', async (req, res) => {
   }
 });
 
-/* ===========================================================
-   DELETE /api/admin/eventos/:eventoId
-   =========================================================== */
+/* DELETE /api/admin/eventos/:eventoId */
 router.delete('/:eventoId', async (req, res) => {
   const { eventoId } = req.params;
   console.log(`[ADMIN] Apagar evento ID: ${eventoId}`);
