@@ -12,8 +12,9 @@ async function verifyController(req, res) {
   try {
     const { signer_access_code, verification_code } = req.body || {};
     if (!signer_access_code || !verification_code) throw new Error('Informe signer_access_code e verification_code.');
-    const r = await verifySignerCode({ signer_access_code, verification_code });
-    res.json({ ok: true, data: r });
+    const result = await verifySignerCode({ signer_access_code, verification_code });
+    // Se /verify retornar 204, result será undefined, então normalizamos para null
+    res.json({ ok: true, data: result || null });
   } catch (e) {
     res.status(400).json({ ok: false, error: e.message });
   }
