@@ -121,6 +121,7 @@ router.put('/:id', async (req, res) => {
 router.post('/:id/termo/enviar-assinatura', async (req, res) => {
   const { id } = req.params;
   let { signerName, signerEmail, signerCpf, signerPhone, message, expiresAt } = req.body || {};
+  console.log(req.body);
 
   try {
     // 0) Dados do signatário (fallback do banco)
@@ -134,12 +135,14 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
     if (!row) return res.status(404).json({ ok: false, error: 'Evento ou permissionário não encontrado.' });
 
     signerName  = signerName  || row.nome_responsavel || row.nome_razao_social || 'Responsável';
-    signerEmail = signerEmail || row.email;
+    if (!signerEmail) {
+      return res.status(400).json({ ok:false, error:'E-mail do signatário é obrigatório.' });
+    }
     signerCpf   = signerCpf   || onlyDigits(row.documento_responsavel || row.documento || '');
     signerPhone = signerPhone || row.telefone || '';
 
     const emailDominio = signerEmail?.split('@')[1]?.toLowerCase() || '';
-    if (!signerName || !signerEmail || emailDominio === 'importado.placeholder') {
+    if (!signerName || emailDominio === 'importado.placeholder') {
       return res.status(400).json({
         ok: false,
         error: 'Nome e e-mail válidos do signatário são obrigatórios.'
@@ -249,12 +252,14 @@ router.post('/:id/termo/reativar-assinatura', async (req, res) => {
       if (!p) return res.status(404).json({ ok: false, error: 'Evento/permissionário não encontrado.' });
 
       signerName  = signerName  || p.nome_responsavel || p.nome_razao_social || 'Responsável';
-      signerEmail = signerEmail || p.email;
+      if (!signerEmail) {
+        return res.status(400).json({ ok:false, error:'E-mail do signatário é obrigatório.' });
+      }
       signerCpf   = signerCpf   || onlyDigits(p.documento_responsavel || p.documento || '');
       signerPhone = signerPhone || p.telefone || '';
     }
     const emailDominio = signerEmail?.split('@')[1]?.toLowerCase() || '';
-    if (!signerEmail || emailDominio === 'importado.placeholder') {
+    if (emailDominio === 'importado.placeholder') {
       return res.status(400).json({ ok: false, error: 'Email válido do signatário é obrigatório.' });
     }
 
