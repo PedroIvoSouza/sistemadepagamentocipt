@@ -244,12 +244,23 @@ async function verifySignerCode({ signer_access_code, verification_code }) {
 }
 
 async function acceptTerms({ signer_access_code }) {
-  const u = `/self/embedded/accept-terms`;
-  if (DEBUG) console.log('[ASSINAFY][PUT]', BASE + u);
-  const r = await http.put(u, { signer_access_code });
-  if (r.status >= 200 && r.status < 300) return r.data;
-  const err = new Error(r.data?.message || `Falha ao aceitar termos (HTTP ${r.status}).`);
-  err.response = r;
+  if (!signer_access_code) throw new Error('signer_access_code é obrigatório.');
+
+  let url = `/self/embedded/accept-terms`;
+  let body = { signer_access_code };
+  if (DEBUG) console.log('[ASSINAFY][PUT try#1]', BASE + url);
+  let resp = await http.put(url, body);
+
+  if (resp.status === 404) {
+    url = `/signers/accept-terms`;
+    body = { signer_access_code, 'signer-access-code': signer_access_code };
+    if (DEBUG) console.log('[ASSINAFY][PUT try#2]', BASE + url);
+    resp = await http.put(url, body);
+  }
+
+  if (resp.status >= 200 && resp.status < 300) return resp.data;
+  const err = new Error(resp.data?.message || `Falha ao aceitar termos (HTTP ${resp.status}).`);
+  err.response = resp;
   throw err;
 }
 
