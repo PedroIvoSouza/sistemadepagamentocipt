@@ -756,7 +756,65 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }, 5000);
   }
+  async function materializarLinkAssinatura(eventoId, btn){
+  const setLoading = (on) => {
+    if (!btn) return;
+    if (on){
+      btn.disabled = true;
+      btn.dataset.loading = '1';
+      btn.setAttribute('aria-busy','true');
+      btn._old = btn._old || btn.innerHTML;
+      btn.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span> Gerando link...`;
+    } else {
+      btn.disabled = false;
+      btn.dataset.loading = '0';
+      btn.removeAttribute('aria-busy');
+      if (btn._old) btn.innerHTML = btn._old;
+    }
+  };
 
+  try{
+    setLoading(true);
+
+    // 1) tenta materializar agora
+    let r = await fetch(`/api/portal/eventos/${eventoId}/termo/assinafy/link`, {
+      method:'POST', headers: AUTH_HEADERS
+    });
+    let j = await r.json().catch(()=> ({}));
+    if (j.url){
+      await copiarParaClipboard(j.url);
+      await fetchEventos();
+      return;
+    }
+
+    // 2) poll curto até surgir
+    for (let i=0;i<10;i++){
+      await sleep(3000);
+      const r2 = await fetch(`/api/portal/eventos/${eventoId}/termo/assinafy/link`, { headers: AUTH_HEADERS });
+      const j2 = await r2.json().catch(()=> ({}));
+      if (j2.url){
+        await copiarParaClipboard(j2.url);
+        await fetchEventos();
+        return;
+      }
+      // já assinado? só atualiza UI
+      if (j2.status === 'assinado' || j2.status === 'signed'){
+        await fetchEventos();
+        alert('Documento já assinado.');
+        return;
+      }
+    }
+
+    alert('Ainda gerando o link… tente novamente em instantes.');
+  } catch (e){
+    alert(e.message || 'Falha ao disponibilizar o link.');
+  } finally {
+    setLoading(false);
+  }
+}
+
+  
+  
   // =======================
   // Editar evento (fetch/normalização)
   // =======================
@@ -1002,6 +1060,21 @@ document.addEventListener('DOMContentLoaded', () => {
       const btnTermo  = e.target.closest('.btn-termo');
       const btnApagar = e.target.closest('.btn-apagar');
       const btnEditar = e.target.closest('.btn-editar');
+      const btnCopiar = e.target.closest('.btn-copiar-link');
+
+      const btnMat = e.target.closest('.btn-materializar-link');
+      if (btnMat){
+        const eventoId = btnMat.dataset.eventoId;
+        if (!eventoId){ alert('Evento inválido.'); return; }
+        materializarLinkAssinatura(eventoId, btnMat);
+        return;
+      }
+      if (btnCopiar){
+        const url = btnCopiar.dataset.url;
+        if (!url){ alert('Link indisponível no momento.'); return; }
+        copiarParaClipboard(url);
+        return;
+      }
 
       if (btnDars){
         const eventoId = btnDars.dataset.eventoId;
