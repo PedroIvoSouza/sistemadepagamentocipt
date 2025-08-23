@@ -1,234 +1,166 @@
 // src/api/portalAssinaturaRoutes.js
-// Rotas do Portal p/ termo + Assinafy (abrir, criar, polling, stream)
-
-require('dotenv').config();
+// Rotas do PORTAL (cliente) para assinatura do termo via Assinafy
+// Exporta: { portalEventosAssinaturaRouter, documentosAssinafyPublicRouter }
 
 const express = require('express');
-const fs      = require('fs');
-const https   = require('https');
+const path = require('path');
+const fs = require('fs');
 const sqlite3 = require('sqlite3').verbose();
-const axios   = require('axios');
-const path    = require('path');
 
-const authMiddleware  = require('../middleware/authMiddleware');
-const authorizeRole   = require('../middleware/roleMiddleware');
+// Se você tem um middleware de auth do cliente, importe aqui
+// const clientAuthMiddleware = require('../middleware/clientAuthMiddleware');
 
 const {
   getDocument,
-  getBestSigningUrl,
-  listAssignments,
-} = require('../services/assinafyClient');
-
-const router = express.Router();
-
-const DEBUG   = String(process.env.ASSINAFY_DEBUG || '') === '1';
-const TIMEOUT = Number(process.env.ASSINAFY_TIMEOUT_MS || 90000);
-const BASE    = (process.env.ASSINAFY_API_BASE || 'https://api.assinafy.com.br/v1').replace(/\/+$/, '');
-const API_KEY = (process.env.ASSINAFY_API_KEY || '').trim();
-const ACCESS_TOKEN = (process.env.ASSINAFY_ACCESS_TOKEN || '').trim();
-const INSECURE = String(process.env.ASSINAFY_INSECURE || '') === '1';
-
-const httpsAgent = new https.Agent({
-  keepAlive: false,
-  rejectUnauthorized: !INSECURE,
-});
-
-function apiHeaders() {
-  const h = {};
-  if (API_KEY) {
-    h['X-Api-Key'] = API_KEY;
-    h['X-API-KEY'] = API_KEY;
-    h['x-api-key'] = API_KEY;
-  }
-  if (ACCESS_TOKEN) h.Authorization = `Bearer ${ACCESS_TOKEN}`;
-  return h;
-}
+  getSigningUrl,
+  waitUntilPendingSignature, // se quiser aguardar um pouco
+} = require('../services/assinafyService');
 
 const DB_PATH = path.resolve(process.cwd(), process.env.SQLITE_STORAGE || './sistemacipt.db');
 const db = new sqlite3.Database(DB_PATH);
 
-const dbGet = (sql, p=[]) => new Promise((res, rej) => db.get(sql, p, (e, r) => e ? rej(e) : res(r)));
+// Helpers DB (promises + log leve)
+const dbGet = (sql, p=[]) => new Promise((res, rej)=> db.get(sql, p, (e, r)=> e?rej(e):res(r)));
+const dbRun = (sql, p=[]) => new Promise((res, rej)=> db.run(sql, p, function(e){ e?rej(e):res(this); }));
 
-async function assertEventoDoCliente(eventoId, clienteId) {
-  const row = await dbGet(`SELECT 1 FROM Eventos WHERE id=? AND id_cliente=?`, [eventoId, clienteId]);
-  if (!row) {
-    const ex = await dbGet(`SELECT 1 FROM Eventos WHERE id=?`, [eventoId]);
-    const e = new Error(ex ? 'Você não tem acesso a este evento.' : 'Evento não encontrado.');
-    e.status = ex ? 403 : 404;
-    throw e;
-  }
-}
+/* -----------------------------------------------------------------------------
+  Router do portal do cliente (fica montado em /api/portal/eventos no index.js)
+----------------------------------------------------------------------------- */
+const portalEventosAssinaturaRouter = express.Router();
 
-async function findTermoDocumento(eventoId){
-  return await dbGet(
-    `SELECT * FROM documentos WHERE evento_id=? AND (tipo='termo_evento' OR tipo='termo') ORDER BY id DESC`,
-    [eventoId]
-  );
-}
+// Se tiver auth do cliente, habilite:
+// portalEventosAssinaturaRouter.use(clientAuthMiddleware);
 
-// helpers removidos: a criação de signatário agora é feita apenas no painel
-// do administrador, então o portal do cliente não precisa conhecer os dados
-// completos do cliente para iniciar a assinatura.
+/**
+ * GET /api/portal/eventos/:eventoId/assinatura-url
+ * Retorna a URL de assinatura para o cliente abrir (popup/iframe).
+ * Estratégia:
+ *  - Lê de documentos.assinatura_url se já existir
+ *  - Se não existir, tenta extrair via getSigningUrl(documentId) e salva
+ *  - Se mesmo assim não houver, retorna fallback_open para /api/documentos/assinafy/:id/open
+ */
+portalEventosAssinaturaRouter.get('/:eventoId/assinatura-url', async (req, res) => {
+  const { eventoId } = req.params;
 
-// ------------------------- 1) META do termo (baixar PDF) -------------------------
-router.get(
-  '/:id/termo/meta',
-  authMiddleware,
-  authorizeRole(['CLIENTE_EVENTO']),
-  async (req, res) => {
-    const eventoId = req.params.id;
-    try {
-      await assertEventoDoCliente(eventoId, req.user.id);
-      const doc = await findTermoDocumento(eventoId);
-      if (!doc) return res.status(404).json({ error: 'Termo não localizado.' });
+  try {
+    // Busca o último termo do evento
+    const row = await dbGet(
+      `SELECT assinafy_id, assinatura_url, status
+         FROM documentos
+        WHERE evento_id = ? AND tipo = 'termo_evento'
+     ORDER BY id DESC LIMIT 1`,
+      [eventoId]
+    );
 
-      const out = {};
-      if (doc.signed_pdf_public_url) {
-        out.signed_pdf_public_url = doc.signed_pdf_public_url;
-      } else if (doc.assinafy_id) {
-        out.url_visualizacao = `/api/documentos/assinafy/${encodeURIComponent(doc.assinafy_id)}/open`;
-      } else if (doc.pdf_public_url) {
-        out.pdf_public_url = doc.pdf_public_url;
-      } else if (doc.pdf_url && fs.existsSync(doc.pdf_url)) {
-        out.pdf_url = doc.pdf_url; // servidor deve expor estaticamente se quiser
-      }
-
-      if (!out.signed_pdf_public_url && !out.url_visualizacao && !out.pdf_public_url && !out.pdf_url) {
-        return res.status(409).json({ error: 'Termo ainda não disponível.' });
-      }
-      res.json(out);
-    } catch (e) {
-      res.status(e.status || 500).json({ error: e.message || 'Erro ao buscar metadados do termo.' });
+    if (!row) {
+      return res.status(404).json({ ok:false, error: 'Nenhum termo encontrado para este evento.' });
     }
-  }
-);
 
-// ------------------------- 2) POST iniciar assinatura (cria tudo e tenta url) -------------------------
-router.post(
-  '/:id/termo/assinafy/link',
-  authMiddleware,
-  authorizeRole(['CLIENTE_EVENTO']),
-  async (req, res) => {
-    const eventoId = req.params.id;
-    try {
-      await assertEventoDoCliente(eventoId, req.user.id);
+    const assinafyId = row.assinafy_id || null;
 
-      // 2.1 busca o documento e verifica se já foi enviado para assinatura
-      const doc = await findTermoDocumento(eventoId);
-      if (!doc || !doc.assinafy_id) {
-        return res.status(409).json({ error: 'Termo ainda não disponível para assinatura.' });
-      }
-
-      // 2.2 tenta obter o link de assinatura
-      const link = await getBestSigningUrl(doc.assinafy_id);
-      if (link) {
-        return res.json({ ok: true, url: link });
-      }
-
-      // Se não houver link ainda, informa que há uma assinatura pendente
-      const items = await listAssignments(doc.assinafy_id);
-      const has = items && items.length > 0;
+    // se já temos assinatura_url salva, devolve
+    if (row.assinatura_url) {
       return res.json({
         ok: true,
-        pending: true,
-        has_assignment: has,
-        message: has
-          ? 'Convite enviado. Verifique seu e-mail para assinar.'
-          : 'Aguardando processamento do termo na Assinafy.'
+        assinatura_url: row.assinatura_url,
+        status: row.status || null,
+        assinafy_id: assinafyId,
+        fallback_open: assinafyId ? `/api/documentos/assinafy/${assinafyId}/open` : null,
       });
-    } catch (e) {
-      if (DEBUG) console.error('[PORTAL] assinafy link erro:', e?.response?.data || e);
-      const msg = e?.message || 'Falha ao iniciar assinatura.';
-      res.status(500).json({ error: msg });
     }
-  }
-);
 
-// ------------------------- 2b) GET polling do link -------------------------
-router.get(
-  '/:id/termo/assinafy/link',
-  authMiddleware,
-  authorizeRole(['CLIENTE_EVENTO']),
-  async (req, res) => {
-    const eventoId = req.params.id;
+    // se não temos assinatura_url na base
+    if (!assinafyId) {
+      return res.status(409).json({ ok:false, error: 'Termo ainda não foi enviado para assinatura.' });
+    }
+
+    // tenta garantir que o documento esteja pending_signature (rápido)
     try {
-      await assertEventoDoCliente(eventoId, req.user.id);
-      const doc = await findTermoDocumento(eventoId);
-      if (!doc?.assinafy_id) return res.status(409).json({ error: 'Termo ainda não disponível para assinatura.' });
+      await waitUntilPendingSignature(assinafyId, { retries: 4, intervalMs: 1000 });
+    } catch { /* segue mesmo assim */ }
 
-      const link = await getBestSigningUrl(doc.assinafy_id);
-      if (link) return res.json({ ok:true, url: link });
+    // tenta extrair a URL do payload do documento e/ou de assignments (com fallback interno)
+    let assinaturaUrl = await getSigningUrl(assinafyId);
 
-      // fallback: vê se há assignments ao menos
-      const items = await listAssignments(doc.assinafy_id);
-      const has = items && items.length > 0;
-      return res.json({ ok:true, pending: true, has_assignment: has });
-    } catch (e) {
-      if (DEBUG) console.error('[ASSINAFY][POLL LINK] erro:', e?.message || e);
-      res.status(500).json({ error: 'Não foi possível consultar o link de assinatura.' });
+    // salva se encontrou
+    if (assinaturaUrl) {
+      await dbRun(
+        `UPDATE documentos
+            SET assinatura_url = ?
+          WHERE evento_id = ? AND tipo = 'termo_evento'`,
+        [assinaturaUrl, eventoId]
+      );
     }
-  }
-);
 
-// ------------------------- 3) Público: stream do PDF (original/certificado) -------------------------
-router.get('/documentos/assinafy/:id/open', async (req, res) => {
-  const id = req.params.id;
-  try {
-    const doc = await getDocument(id);
-    const info = doc?.data || doc;
-    const artifacts = info?.artifacts || {};
-    const fileUrl = artifacts.certified || artifacts.original;
-    if (!fileUrl) return res.status(404).send('Documento sem artefato disponível.');
-
-    const r = await axios.request({
-      method: 'GET',
-      url: fileUrl,
-      responseType: 'stream',
-      headers: { ...apiHeaders(), Accept: '*/*', Connection: 'close' },
-      httpsAgent,
-      timeout: TIMEOUT,
-      proxy: false,
-      validateStatus: () => true,
+    return res.json({
+      ok: true,
+      assinatura_url: assinaturaUrl || null,
+      assinafy_id: assinafyId,
+      status: row.status || null,
+      fallback_open: `/api/documentos/assinafy/${assinafyId}/open`
     });
+  } catch (err) {
+    console.error('[portal/assinatura-url] erro:', err.message);
+    return res.status(500).json({ ok:false, error: 'Falha ao obter URL de assinatura.' });
+  }
+});
 
-    if (r.status < 200 || r.status >= 300) {
-      let msg = 'Não foi possível abrir o documento agora.';
-      try {
-        const chunks = [];
-        for await (const c of r.data) chunks.push(c);
-        const body = Buffer.concat(chunks).toString('utf8');
-        const maybe = JSON.parse(body);
-        if (maybe?.message) msg = maybe.message;
-      } catch {}
-      const hint = r.status === 401 ? ' (credenciais inválidas no servidor)' : '';
-      return res.status(502).send(`${msg}${hint}`);
+/**
+ * GET /api/portal/eventos/:eventoId/termo/status
+ * Retorna status do termo + algumas flags úteis para o front do cliente.
+ */
+portalEventosAssinaturaRouter.get('/:eventoId/termo/status', async (req, res) => {
+  const { eventoId } = req.params;
+
+  try {
+    const row = await dbGet(
+      `SELECT assinafy_id, assinatura_url, status, signed_pdf_public_url
+         FROM documentos
+        WHERE evento_id = ? AND tipo = 'termo_evento'
+     ORDER BY id DESC LIMIT 1`,
+      [eventoId]
+    );
+
+    if (!row) {
+      return res.status(404).json({ ok:false, error: 'Nenhum termo encontrado.' });
     }
 
-    res.setHeader('Content-Type', 'application/pdf');
-    const safeName = (info?.name || `documento-${id}`).replace(/[^a-zA-Z0-9_.-]+/g, '_');
-    res.setHeader('Content-Disposition', `inline; filename="${safeName}.pdf"`);
-    r.data.pipe(res);
-  } catch (e) {
-    if (DEBUG) console.error('[DOC/OPEN] erro inesperado:', e?.message || e);
-    res.status(502).send('Não foi possível abrir o documento agora.');
+    const assinafyId = row.assinafy_id || null;
+
+    return res.json({
+      ok: true,
+      status: row.status || null,
+      assinatura_disponivel: !!row.assinatura_url || !!assinafyId,
+      assinatura_url: row.assinatura_url || null,
+      assinafy_id: assinafyId,
+      has_signed_pdf: !!row.signed_pdf_public_url,
+      signed_pdf_public_url: row.signed_pdf_public_url || null,
+      fallback_open: assinafyId ? `/api/documentos/assinafy/${assinafyId}/open` : null,
+    });
+  } catch (err) {
+    console.error('[portal/termo/status] erro:', err.message);
+    return res.status(500).json({ ok:false, error: 'Falha ao obter status do termo.' });
   }
 });
 
-// ------------------------- 4) Diagnóstico opcional -------------------------
-router.get('/documentos/assinafy/:id/status', async (req, res) => {
+/* -----------------------------------------------------------------------------
+  Router público de utilidades de documento (se quiser expor algo público aqui)
+  Mantém a exportação para compat com seu index.js
+----------------------------------------------------------------------------- */
+const documentosAssinafyPublicRouter = express.Router();
+
+// Exemplo de rota pública simples para testar se o doc existe (opcional)
+documentosAssinafyPublicRouter.get('/documentos/assinafy/:id/ping', async (req, res) => {
   const id = req.params.id;
   try {
-    const doc = await getDocument(id);
-    res.json(doc?.data || doc);
+    const d = await getDocument(id);
+    return res.json({ ok:true, status: d?.data?.status || d?.status || null });
   } catch (e) {
-    const st = e?.response?.status || 500;
-    res.status(st).json(e?.response?.data || { error: e.message || 'Erro ao consultar status.' });
+    return res.status(404).json({ ok:false, error: 'Documento não encontrado.' });
   }
 });
 
-// exporta como função (Router)…
-module.exports = router;
-
-// …e também como “named exports” para quem usa destructuring
-module.exports.portalEventosAssinaturaRouter = router;
-module.exports.documentosAssinafyPublicRouter = router;
+module.exports = {
+  portalEventosAssinaturaRouter,
+  documentosAssinafyPublicRouter,
+};
