@@ -1,5 +1,5 @@
 // src/api/portalAssinaturaRoutes.js
-// Endpoints usados pelo FRONT do cliente (meus-eventos.html)
+// Endpoints usados pelo FRONT do cliente (meus-eventos.html) e utilidades públicas da Assinafy.
 
 const express = require('express');
 const path = require('path');
@@ -16,9 +16,12 @@ const DB_PATH = path.resolve(process.cwd(), process.env.SQLITE_STORAGE || './sis
 const db = new sqlite3.Database(DB_PATH);
 
 // Helpers DB
-const dbGet = (sql, p=[]) => new Promise((res, rej)=> db.get(sql, p, (e, r)=> e?rej(e):res(r)));
-const dbRun = (sql, p=[]) => new Promise((res, rej)=> db.run(sql, p, function(e){ e?rej(e):res(this); }));
+const dbGet = (sql, p = []) => new Promise((res, rej) => db.get(sql, p, (e, r) => e ? rej(e) : res(r)));
+const dbRun = (sql, p = []) => new Promise((res, rej) => db.run(sql, p, function (e) { e ? rej(e) : res(this); }));
 
+/* ===========================================================================
+   Router do Portal (cliente)
+   =========================================================================== */
 const portalEventosAssinaturaRouter = express.Router();
 
 /**
@@ -34,30 +37,32 @@ portalEventosAssinaturaRouter.get('/:eventoId/termo/meta', async (req, res) => {
               assinafy_id, assinatura_url, status
          FROM documentos
         WHERE evento_id = ? AND tipo = 'termo_evento'
-     ORDER BY id DESC LIMIT 1`,
+        ORDER BY id DESC LIMIT 1`,
       [eventoId]
     );
 
     if (!row) {
-      return res.status(404).json({ ok:false, error:'Nenhum termo gerado ainda.' });
+      return res.status(404).json({ ok: false, error: 'Nenhum termo gerado ainda.' });
     }
 
     // tenta enriquecer com status/artefato da Assinafy quando temos assinafy_id
-    let assinafy = null;
+    let assinafyDoc = null;
     if (row.assinafy_id) {
       try {
-        assinafy = await getDocument(row.assinafy_id);
-      } catch {}
+        const d = await getDocument(row.assinafy_id);
+        assinafyDoc = d?.data || d;
+      } catch { /* segue sem travar */ }
     }
 
+    const status = row.status || assinafyDoc?.status || 'gerado';
     const url_visualizacao = row.pdf_public_url || null;
-    const bestAssinado = row.signed_pdf_public_url || (assinafy ? pickBestArtifactUrl(assinafy) : null);
+    const bestAssinado = row.signed_pdf_public_url || (assinafyDoc ? pickBestArtifactUrl(assinafyDoc) : null);
 
     return res.json({
       ok: true,
       documento_id: row.id,
       evento_id: row.evento_id,
-      status: row.status || assinafy?.status || 'gerado',
+      status,
       pdf_url: row.pdf_url || null,
       pdf_public_url: row.pdf_public_url || null,
       url_visualizacao,
@@ -67,7 +72,7 @@ portalEventosAssinaturaRouter.get('/:eventoId/termo/meta', async (req, res) => {
     });
   } catch (e) {
     console.error('[portal termo/meta] erro:', e.message);
-    res.status(500).json({ ok:false, error:'Falha ao obter metadados.' });
+    res.status(500).json({ ok: false, error: 'Falha ao obter metadados.' });
   }
 });
 
@@ -83,19 +88,20 @@ portalEventosAssinaturaRouter.post('/:eventoId/termo/assinafy/link', async (req,
       `SELECT assinafy_id, assinatura_url, status
          FROM documentos
         WHERE evento_id = ? AND tipo = 'termo_evento'
-     ORDER BY id DESC LIMIT 1`,
+        ORDER BY id DESC LIMIT 1`,
       [eventoId]
     );
-    if (!row) return res.status(404).json({ ok:false, error:'Termo não encontrado.' });
-    if (!row.assinafy_id) return res.status(409).json({ ok:false, error:'Termo ainda não enviado para assinatura.' });
+
+    if (!row) return res.status(404).json({ ok: false, error: 'Termo não encontrado.' });
+    if (!row.assinafy_id) return res.status(409).json({ ok: false, error: 'Termo ainda não enviado para assinatura.' });
 
     // Se já temos, devolve direto
     if (row.assinatura_url) {
-      return res.json({ ok:true, url: row.assinatura_url, status: row.status || 'pendente_assinatura' });
+      return res.json({ ok: true, url: row.assinatura_url, status: row.status || 'pendente_assinatura' });
     }
 
-    // Garante que esteja em pending_signature (rápido, best-effort)
-    await waitUntilPendingSignature(row.assinafy_id, { retries: 6, intervalMs: 1000 }).catch(()=> {});
+    // Best-effort: garante que esteja em pending_signature
+    await waitUntilPendingSignature(row.assinafy_id, { retries: 6, intervalMs: 1000 }).catch(() => {});
 
     // Extrai URL do payload (campo assignment etc.)
     let assinaturaUrl = await getSigningUrl(row.assinafy_id);
@@ -106,7 +112,7 @@ portalEventosAssinaturaRouter.post('/:eventoId/termo/assinafy/link', async (req,
           WHERE evento_id = ? AND tipo = 'termo_evento'`,
         [assinaturaUrl, eventoId]
       );
-      return res.json({ ok:true, url: assinaturaUrl, status: 'pendente_assinatura' });
+      return res.json({ ok: true, url: assinaturaUrl, status: 'pendente_assinatura' });
     }
 
     // Se ainda não veio, retorna "pending" para o front fazer polling
@@ -114,11 +120,11 @@ portalEventosAssinaturaRouter.post('/:eventoId/termo/assinafy/link', async (req,
       ok: true,
       pending: true,
       message: 'Convite enviado. Aguardando geração do link de assinatura…',
-      status: row.status || 'pendente_assinatura'
+      status: row.status || 'pendente_assinatura',
     });
   } catch (e) {
     console.error('[portal termo/link POST] erro:', e.message);
-    res.status(500).json({ ok:false, error:'Falha ao obter link de assinatura.' });
+    res.status(500).json({ ok: false, error: 'Falha ao obter link de assinatura.' });
   }
 });
 
@@ -133,17 +139,18 @@ portalEventosAssinaturaRouter.get('/:eventoId/termo/assinafy/link', async (req, 
       `SELECT assinafy_id, assinatura_url, status, signed_pdf_public_url
          FROM documentos
         WHERE evento_id = ? AND tipo = 'termo_evento'
-     ORDER BY id DESC LIMIT 1`,
+        ORDER BY id DESC LIMIT 1`,
       [eventoId]
     );
-    if (!row) return res.status(404).json({ ok:false, error:'Termo não encontrado.' });
-    if (!row.assinafy_id) return res.status(409).json({ ok:false, error:'Termo ainda não enviado para assinatura.' });
+
+    if (!row) return res.status(404).json({ ok: false, error: 'Termo não encontrado.' });
+    if (!row.assinafy_id) return res.status(409).json({ ok: false, error: 'Termo ainda não enviado para assinatura.' });
 
     if (row.assinatura_url) {
-      return res.json({ ok:true, url: row.assinatura_url, status: row.status || 'pendente_assinatura' });
+      return res.json({ ok: true, url: row.assinatura_url, status: row.status || 'pendente_assinatura' });
     }
 
-    // tenta de novo ler do doc
+    // tenta de novo ler do doc/assignments
     let assinaturaUrl = await getSigningUrl(row.assinafy_id);
     if (assinaturaUrl) {
       await dbRun(
@@ -151,25 +158,69 @@ portalEventosAssinaturaRouter.get('/:eventoId/termo/assinafy/link', async (req, 
           WHERE evento_id = ? AND tipo = 'termo_evento'`,
         [assinaturaUrl, eventoId]
       );
-      return res.json({ ok:true, url: assinaturaUrl, status: 'pendente_assinatura' });
+      return res.json({ ok: true, url: assinaturaUrl, status: 'pendente_assinatura' });
     }
 
     // se já estiver assinado, diga ao front
     try {
       const d = await getDocument(row.assinafy_id);
-      const st = d?.status;
+      const doc = d?.data || d;
+      const st = doc?.status;
       if (st === 'certified' || st === 'certificated') {
-        return res.json({ ok:true, status:'assinado' });
+        return res.json({ ok: true, status: 'assinado' });
       }
-    } catch {}
+    } catch { /* noop */ }
 
-    return res.json({ ok:true, pending:true, status: row.status || 'pendente_assinatura' });
+    return res.json({ ok: true, pending: true, status: row.status || 'pendente_assinatura' });
   } catch (e) {
     console.error('[portal termo/link GET] erro:', e.message);
-    res.status(500).json({ ok:false, error:'Falha ao consultar link de assinatura.' });
+    res.status(500).json({ ok: false, error: 'Falha ao consultar link de assinatura.' });
+  }
+});
+
+/* ===========================================================================
+   Router público para utilidades de Assinafy (evita erro no app.use('/api', ...))
+   =========================================================================== */
+const documentosAssinafyPublicRouter = express.Router();
+
+/**
+ * GET /api/assinafy/:id/open
+ * Redireciona para a URL de assinatura (quando disponível) ou retorna JSON de status.
+ */
+documentosAssinafyPublicRouter.get('/assinafy/:id/open', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const url = await getSigningUrl(id);
+    if (url) return res.redirect(url);
+
+    const d = await getDocument(id);
+    const doc = d?.data || d;
+    if (doc?.status === 'certified' || doc?.status === 'certificated') {
+      return res.json({ ok: true, status: 'assinado' });
+    }
+    return res.json({ ok: true, status: doc?.status || 'desconhecido' });
+  } catch (e) {
+    const st = e?.response?.status || 500;
+    return res.status(st).json({ ok: false, error: e?.message || 'Falha ao abrir assinatura.' });
+  }
+});
+
+/**
+ * GET /api/assinafy/:id/status
+ * Devolve o payload bruto do documento na Assinafy (para debug/diagnóstico).
+ */
+documentosAssinafyPublicRouter.get('/assinafy/:id/status', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const d = await getDocument(id);
+    return res.json({ ok: true, data: d?.data || d });
+  } catch (e) {
+    const st = e?.response?.status || 500;
+    return res.status(st).json({ ok: false, error: e?.message || 'Falha ao consultar status.' });
   }
 });
 
 module.exports = {
   portalEventosAssinaturaRouter,
+  documentosAssinafyPublicRouter,
 };
