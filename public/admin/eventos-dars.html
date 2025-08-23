@@ -586,6 +586,17 @@ window.onload = () => {
   const parcelasContainer = document.getElementById('parcelas-container');
   const addParcelaBtn = document.getElementById('add-parcela-btn');
   const formError = document.getElementById('form-error');
+
+  const espacoUtilizadoSelect       = document.getElementById('espaco-utilizado');
+  const capacidadeEspacoDisplay     = document.getElementById('capacidade-espaco');
+  const areaM2Input                 = document.getElementById('area-m2');
+  const horaInicioInput             = document.getElementById('hora-inicio');
+  const horaFimInput                = document.getElementById('hora-fim');
+  const horaMontagemInput           = document.getElementById('hora-montagem');
+  const horaDesmontagemInput        = document.getElementById('hora-desmontagem');
+  const eventoGratuitoInput         = document.getElementById('evento-gratuito');
+  const justificativaGratuitoWrapper= document.getElementById('justificativa-gratuito-wrapper');
+  const justificativaGratuitoTextarea=document.getElementById('justificativa-gratuito');
   let parcelasMasks = [];
   const fp = flatpickr('#datas-evento', {
     mode: 'multiple',
