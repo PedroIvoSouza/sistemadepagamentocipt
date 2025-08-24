@@ -110,7 +110,6 @@ portalEventosAssinaturaRouter.post('/:eventoId/termo/assinafy/link', async (req,
 portalEventosAssinaturaRouter.get('/:eventoId/termo/assinafy/link', async (req, res) => {
   const { eventoId } = req.params;
   try {
-    return res.json({ ok: false, error: 'PROVA: A ROTA NOVA ESTÁ SENDO EXECUTADA.' });
     const row = await dbGet(
       `SELECT assinafy_id, assinatura_url, status
          FROM documentos
