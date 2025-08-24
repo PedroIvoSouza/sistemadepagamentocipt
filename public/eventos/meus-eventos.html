@@ -260,50 +260,65 @@
             return;
           }
 
-          if (btnAssinar) {
+if (btnAssinar) {
             const eventoId = btnAssinar.dataset.assinarTermo;
+            const originalHtml = btnAssinar.innerHTML;
+            const statusEl = document.getElementById(`sig-status-${eventoId}`);
 
-            let meta;
-            try {
-              const metaResp = await fetch(`/api/portal/eventos/${eventoId}/termo/meta`, { headers });
-              meta = await metaResp.json().catch(() => ({}));
-              if (!meta?.assinafy_id) {
-                alert('Termo ainda não enviado para assinatura.');
-                return;
-              }
-            } catch {
-              alert('Falha ao verificar termo.');
-              return;
-            }
-
-            const original = btnAssinar.innerHTML;
             btnAssinar.disabled = true;
             btnAssinar.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Abrindo…`;
-            const statusEl = document.getElementById(`sig-status-${eventoId}`);
-            statusEl.textContent = 'Assinatura em andamento...';
+            if (statusEl) statusEl.textContent = 'Verificando documento...';
 
             try {
+              // PASSO 1: Chamada ao backend, que agora tem a nova lógica
               const linkResp = await fetch(`/api/portal/eventos/${eventoId}/termo/assinafy/link`, { headers });
-              const linkData = await linkResp.json().catch(()=>({}));
-              const assinaturaUrl = linkData.assinatura_url || linkData.url;
-              if (!linkResp.ok || !assinaturaUrl) {
-                throw new Error(linkData.error || 'Link de assinatura ainda não disponível. Tente novamente mais tarde.');
+              const linkData = await linkResp.json();
+
+              if (!linkResp.ok || !linkData.ok) {
+                throw new Error(linkData.error || 'Não foi possível obter os dados da assinatura.');
               }
-              if (assinaturaUrl.includes('/verify/')) {
-                window.open(assinaturaUrl, '_blank', 'noopener');
-                alert('Uma nova janela foi aberta. Digite o código recebido por e-mail para prosseguir com a assinatura.');
-              } else {
-                assinafyIframe.src = assinaturaUrl;
-                assinafyModal.show();
+
+              // PASSO 2: Tratar os diferentes status retornados pelo backend
+              switch (linkData.status) {
+                case 'aguardando_token':
+                  // SUCESSO! Abre a página de verificação da Assinafy em nova aba.
+                  if (statusEl) statusEl.textContent = 'Aguardando verificação...';
+                  window.open(linkData.url, '_blank', 'noopener');
+                  alert('A página de assinatura foi aberta em uma nova aba. Por favor, insira o código que você recebeu por e-mail para continuar.');
+                  break;
+
+                case 'pendente_assinatura':
+                  // Caso de assinatura embedded (sem token), abre no modal/iframe.
+                  if (statusEl) statusEl.textContent = 'Assinatura em andamento...';
+                  assinafyIframe.src = linkData.url;
+                  assinafyModal.show();
+                  break;
+
+                case 'assinado':
+                  // O documento já está assinado.
+                  if (statusEl) statusEl.textContent = 'Documento já assinado.';
+                  alert('Este documento já foi assinado com sucesso!');
+                  // Atualiza a UI para remover o botão de assinar e mostrar o de download
+                  atualizarUIEvento(eventoId);
+                  break;
+                
+                default:
+                  // Outros casos, como processando ou erro.
+                  throw new Error(linkData.message || 'O link de assinatura não está disponível no momento. Tente novamente mais tarde.');
               }
+
             } catch (err) {
-              const msg = err.message || 'Falha ao abrir janela de assinatura.';
-              statusEl.textContent = msg;
+              const msg = err.message || 'Falha ao iniciar o processo de assinatura.';
+              if (statusEl) statusEl.textContent = msg;
               alert(msg);
             } finally {
+              // Restaura o botão ao estado original
               btnAssinar.disabled = false;
-              btnAssinar.innerHTML = original;
-              if (statusEl.textContent === 'Assinatura em andamento...') statusEl.textContent = '';
+              btnAssinar.innerHTML = originalHtml;
+              // Limpa a mensagem de status se ela não for de erro
+              if (statusEl && (statusEl.textContent === 'Verificando documento...' || statusEl.textContent === 'Aguardando verificação...')) {
+                statusEl.textContent = '';
+              }
             }
           }
         });
