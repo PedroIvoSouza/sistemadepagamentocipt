@@ -110,44 +110,47 @@ portalEventosAssinaturaRouter.post('/:eventoId/termo/assinafy/link', async (req,
 portalEventosAssinaturaRouter.get('/:eventoId/termo/assinafy/link', async (req, res) => {
   const { eventoId } = req.params;
   try {
+    // A consulta ao banco de dados
     const row = await dbGet(
       `SELECT assinafy_id, assinatura_url, status
          FROM documentos
-        WHERE eventoId = ? AND tipo = 'termo_evento'
+        WHERE evento_id = ? AND tipo = 'termo_evento' -- << CORREÇÃO APLICADA AQUI (era eventoId)
      ORDER BY id DESC LIMIT 1`,
       [eventoId]
     );
 
-    if (!row) return res.status(404).json({ ok:false, error:'Termo não encontrado.' });
+    // Adicionando um log para vermos exatamente o que o banco retornou
+    console.log('[DEBUG ROTA NOVA] Dados retornados do banco:', row);
+
+    if (!row) return res.status(404).json({ ok:false, error:'Termo não encontrado no banco de dados.' });
     if (!row.assinafy_id) return res.status(409).json({ ok:false, error:'Termo ainda não foi enviado para assinatura.' });
 
-    // 1. Se o documento já foi assinado, informa o frontend.
-    if (row.status === 'assinado' || row.status === 'certificated' || row.status === 'certified') {
+    // 1. Se o documento já foi assinado
+    const status_lower = (row.status || '').toLowerCase();
+    if (status_lower === 'assinado' || status_lower === 'certificated' || status_lower === 'certified') {
       return res.json({ ok: true, status: 'assinado', message: 'Este documento já foi assinado.' });
     }
 
-    // 2. Se já temos um link de assinatura direto salvo, o retornamos.
+    // 2. Se já temos um link de assinatura direto salvo
     if (row.assinatura_url) {
       return res.json({
         ok: true,
-        url: row.assinatura_url, // URL direta para assinar
-        status: row.status || 'pendente_assinatura',
+        url: row.assinatura_url,
+        status: 'pendente_assinatura',
       });
     }
 
-    // 3. Se está pendente mas sem link, retornamos a URL de VERIFICAÇÃO.
-    //    É aqui que o usuário colocará o token recebido por e-mail.
-    if (row.status === 'pendente_assinatura' || row.status === 'pending_signature') {
+    // 3. Se está pendente mas sem link, retornamos a URL de VERIFICAÇÃO
+    if (status_lower === 'pendente_assinatura' || status_lower === 'pending_signature') {
       return res.json({
         ok: true,
-        // A URL que o frontend deve abrir. O usuário irá inserir o token nesta página.
         url: 'https://app.assinafy.com.br/verify',
         status: 'aguardando_token',
       });
     }
 
-    // 4. Fallback: Se o status for outro, informa que está pendente.
-    console.log(`[portal termo/link GET] Status inesperado ou ainda em processamento: ${row.status}`);
+    // 4. Fallback
+    console.log(`[portal termo/link GET] Status inesperado ou em processamento: ${row.status}`);
     return res.json({
       ok: true,
       pending: true,
