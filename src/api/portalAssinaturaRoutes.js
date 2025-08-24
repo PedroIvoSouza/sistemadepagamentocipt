@@ -111,70 +111,50 @@ portalEventosAssinaturaRouter.get('/:eventoId/termo/assinafy/link', async (req, 
   const { eventoId } = req.params;
   try {
     const row = await dbGet(
-      `SELECT assinafy_id, assinatura_url, status, signed_pdf_public_url
+      `SELECT assinafy_id, assinatura_url, status
          FROM documentos
-        WHERE evento_id = ? AND tipo = 'termo_evento'
+        WHERE eventoId = ? AND tipo = 'termo_evento'
      ORDER BY id DESC LIMIT 1`,
       [eventoId]
     );
-    if (!row) return res.status(404).json({ ok:false, error:'Termo não encontrado.' });
-    if (!row.assinafy_id) return res.status(409).json({ ok:false, error:'Termo ainda não enviado para assinatura.' });
 
+    if (!row) return res.status(404).json({ ok:false, error:'Termo não encontrado.' });
+    if (!row.assinafy_id) return res.status(409).json({ ok:false, error:'Termo ainda não foi enviado para assinatura.' });
+
+    // 1. Se o documento já foi assinado, informa o frontend.
+    if (row.status === 'assinado' || row.status === 'certificated' || row.status === 'certified') {
+      return res.json({ ok: true, status: 'assinado', message: 'Este documento já foi assinado.' });
+    }
+
+    // 2. Se já temos um link de assinatura direto salvo, o retornamos.
     if (row.assinatura_url) {
       return res.json({
         ok: true,
-        assinatura_url: row.assinatura_url,
-        url: row.assinatura_url,
+        url: row.assinatura_url, // URL direta para assinar
         status: row.status || 'pendente_assinatura',
       });
     }
 
-    const retries = Number(req.query.retries) || 3;
-    const intervalMs = Number(req.query.intervalMs || req.query.interval_ms || req.query.interval) || 1500;
-
-    let info;
-    try {
-      info = await waitUntilPendingSignature(row.assinafy_id, { retries, intervalMs });
-    } catch (err) {
-      let lastStatus = null;
-      try {
-        const d = await getDocument(row.assinafy_id);
-        lastStatus = d?.status || d?.data?.status || null;
-      } catch {}
-      console.log(`[portal termo/link GET] timeout aguardando pending_signature (status: ${lastStatus})`);
-      if (lastStatus === 'certified' || lastStatus === 'certificated') {
-        return res.json({ ok: true, status: 'assinado' });
-      }
-      return res.json({ ok: true, pending: true, status: lastStatus || row.status || 'pendente_assinatura' });
+    // 3. Se está pendente mas sem link, retornamos a URL de VERIFICAÇÃO.
+    //    É aqui que o usuário colocará o token recebido por e-mail.
+    if (row.status === 'pendente_assinatura' || row.status === 'pending_signature') {
+      return res.json({
+        ok: true,
+        // A URL que o frontend deve abrir. O usuário irá inserir o token nesta página.
+        url: 'https://app.assinafy.com.br/verify',
+        status: 'aguardando_token',
+      });
     }
 
-    let assinaturaUrl = null;
-    try {
-      assinaturaUrl = await getSigningUrl(row.assinafy_id);
-    } catch {}
+    // 4. Fallback: Se o status for outro, informa que está pendente.
+    console.log(`[portal termo/link GET] Status inesperado ou ainda em processamento: ${row.status}`);
+    return res.json({
+      ok: true,
+      pending: true,
+      status: row.status || 'processando',
+      message: 'O documento está sendo processado. Tente novamente em alguns instantes.',
+    });
 
-    if (assinaturaUrl) {
-      await dbRun(
-        `UPDATE documentos SET assinatura_url = ?, status = 'pendente_assinatura'
-          WHERE evento_id = ? AND tipo = 'termo_evento'`,
-          [assinaturaUrl, eventoId],
-      );
-      return res.json({ ok:true, assinatura_url: assinaturaUrl, url: assinaturaUrl, status: 'pendente_assinatura' });
-    }
-
-    let lastStatus = info?.status || null;
-    if (!lastStatus) {
-      try {
-        const d = await getDocument(row.assinafy_id);
-        lastStatus = d?.status || d?.data?.status || null;
-      } catch {}
-    }
-    if (lastStatus === 'certified' || lastStatus === 'certificated') {
-      return res.json({ ok:true, status:'assinado' });
-    }
-
-    console.log(`[portal termo/link GET] assinatura_url indisponível (status: ${lastStatus})`);
-    return res.json({ ok:true, status: lastStatus || row.status || 'pendente_assinatura' });
   } catch (e) {
     console.error('[portal termo/link GET] erro:', e.message);
     res.status(500).json({ ok:false, error:'Falha ao consultar link de assinatura.' });
