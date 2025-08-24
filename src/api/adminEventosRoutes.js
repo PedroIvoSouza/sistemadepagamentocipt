@@ -175,7 +175,7 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
     const maxRetries = 3;
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
-        await requestSignatures(assinafyDocId, [signerId], { message, expires_at: expiresAt });
+        const resp = await requestSignatures(assinafyDocId, [signerId], { message, expires_at: expiresAt }); let assinaturaUrl = resp.assinatura_url || null;
         break; // sucesso
       } catch (err) {
         const status = err.response?.status;
@@ -275,7 +275,7 @@ router.post('/:id/termo/reativar-assinatura', async (req, res) => {
     if (!signerId) return res.status(500).json({ ok: false, error: 'Falha ao criar signatário.' });
 
     try {
-      await requestSignatures(assinafyDocId, [signerId], { message, expires_at: expiresAt });
+      const resp = await requestSignatures(assinafyDocId, [signerId], { message, expires_at: expiresAt }); let assinaturaUrl = resp.assinatura_url || null;
     } catch (err) {
       if (err.response?.status !== 409) throw err; // 409 = já existe
     }
