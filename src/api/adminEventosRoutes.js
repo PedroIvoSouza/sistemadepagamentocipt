@@ -121,7 +121,7 @@ router.put('/:id', async (req, res) => {
 router.post('/:id/termo/enviar-assinatura', async (req, res) => {
   const { id } = req.params;
   let { signerName, signerEmail, signerCpf, signerPhone, message, expiresAt } = req.body || {};
-  console.log(req.body);
+  console.log('Iniciando envio para assinatura do evento:', id, 'com dados:', req.body);
 
   try {
     // 0) Dados do signatário (fallback do banco)
@@ -135,6 +135,7 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
     if (!row) return res.status(404).json({ ok: false, error: 'Evento ou permissionário não encontrado.' });
 
     signerName  = signerName  || row.nome_responsavel || row.nome_razao_social || 'Responsável';
+    signerEmail = signerEmail || row.email; // Adicionado para garantir que o email do banco seja usado se não for fornecido
     if (!signerEmail) {
       return res.status(400).json({ ok:false, error:'E-mail do signatário é obrigatório.' });
     }
@@ -150,7 +151,7 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
     }
 
     // 1) Gera/garante o termo
-    const out = await gerarTermoEventoPdfkitEIndexar(id); // { filePath, fileName }
+    const out = await gerarTermoEventoPdfkitEIndexar(id);
 
     // 2) Upload pro Assinafy
     const uploaded = await uploadDocumentFromFile(out.filePath, out.fileName);
@@ -160,7 +161,7 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
     // 3) Aguarda processamento para assignment
     await waitUntilReadyForAssignment(assinafyDocId, { retries: 20, intervalMs: 3000 });
 
-    // 4) Ensure signer
+    // 4) Garante que o signatário existe na Assinafy
     const signer = await ensureSigner({
       full_name: signerName,
       email: signerEmail,
@@ -171,48 +172,52 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
     const signerId = signer?.id || signer?.data?.id;
     if (!signerId) return res.status(500).json({ ok: false, error: 'Falha ao criar signatário no Assinafy.' });
 
-    // 5) Assignment (virtual) com retry simples
-    const maxRetries = 3;
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-      try {
-        const resp = await requestSignatures(assinafyDocId, [signerId], { message, expires_at: expiresAt }); let assinaturaUrl = resp.assinatura_url || null;
-        break; // sucesso
-      } catch (err) {
-        const status = err.response?.status;
-        const assinafyMsg = err.response?.data?.message;
-        if ((assinafyMsg === 'metadata_processing' || status === 400) && attempt < maxRetries - 1) {
-          await sleep(1500);
-          continue;
-        }
-        if (status === 409) break; // já existe assignment
-        throw err;
+    // 5) Solicita a assinatura (Assignment)
+    await requestSignatures(assinafyDocId, [signerId], { message, expires_at: expiresAt });
+    
+    // ================== CÓDIGO CORRIGIDO E NO LUGAR CERTO ==================
+    // 6) Tenta capturar a URL de assinatura com token de forma robusta
+    console.log('[ASSINAFY] Aguardando e tentando capturar a URL de assinatura com token...');
+    let assinaturaUrl = null;
+    const maxTentativasUrl = 5; // Tenta por até 10 segundos
+    for (let i = 0; i < maxTentativasUrl; i++) {
+      assinaturaUrl = await getSigningUrl(assinafyDocId);
+      if (assinaturaUrl && assinaturaUrl.includes('/verify/')) {
+        console.log(`[ASSINAFY] URL de assinatura com token capturada com sucesso na tentativa ${i + 1}!`);
+        break; // Sai do loop se encontrou a URL com token
       }
+      console.log(`[ASSINAFY] Tentativa ${i + 1}/${maxTentativasUrl}: URL com token ainda não disponível, aguardando 2 segundos...`);
+      await sleep(2000); // Espera 2 segundos antes de tentar de novo
     }
 
-    // 6) Aguarda pending_signature (rápido)
-    await waitUntilPendingSignature(assinafyDocId, { retries: 8, intervalMs: 1500 }).catch(()=>{});
+    if (!assinaturaUrl) {
+      console.warn(`[ASSINAFY] ATENÇÃO: Não foi possível capturar a URL de assinatura com token após ${maxTentativasUrl} tentativas. O usuário dependerá do e-mail.`);
+    }
+    // =======================================================================
 
-    // 7) Captura assinatura_url (se disponível) e persiste
-    let assinaturaUrl = await getSigningUrl(assinafyDocId);
+    // 7) Persiste o resultado no banco (agora com a URL completa, se encontrada)
     await dbRun(
       `INSERT INTO documentos (tipo, token, permissionario_id, evento_id, pdf_url, pdf_public_url, status, created_at, assinafy_id, assinatura_url)
        VALUES ('termo_evento', NULL, NULL, ?, ?, ?, 'pendente_assinatura', datetime('now'), ?, ?)
        ON CONFLICT(evento_id, tipo) DO UPDATE SET
          status = 'pendente_assinatura',
          assinafy_id = excluded.assinafy_id,
-         assinatura_url = COALESCE(excluded.assinatura_url, assinatura_url)`,
-      [id, out.filePath, out.publicUrl || out.pdf_public_url || null, assinafyDocId, assinaturaUrl || null],
+         assinatura_url = ?`, // Simplificado para sempre sobrescrever com a URL mais recente
+      [id, out.filePath, out.publicUrl || out.pdf_public_url || null, assinafyDocId, assinaturaUrl || null, assinaturaUrl || null],
       'termo/assinafy-up'
     );
 
+    // 8) Envia a resposta de volta para o navegador do admin
     return res.json({
       ok: true,
       message: 'Documento enviado para assinatura (Assinafy).',
       assinafyDocId,
       assinaturaUrl: assinaturaUrl || null,
     });
+
   } catch (err) {
-    console.error('[assinafy] erro:', err.message, err.response?.data);
+    // Bloco para capturar qualquer erro no processo e responder ao navegador
+    console.error('[assinafy] erro no fluxo de enviar-assinatura:', err.message, err.response?.data);
     return res.status(500).json({
       ok: false,
       error: err.message || 'Falha ao enviar para assinatura.',
