@@ -135,7 +135,7 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
     if (!row) return res.status(404).json({ ok: false, error: 'Evento ou permissionário não encontrado.' });
 
     signerName  = signerName  || row.nome_responsavel || row.nome_razao_social || 'Responsável';
-    signerEmail = signerEmail || row.email; // Adicionado para garantir que o email do banco seja usado se não for fornecido
+    signerEmail = signerEmail || row.email;
     if (!signerEmail) {
       return res.status(400).json({ ok:false, error:'E-mail do signatário é obrigatório.' });
     }
@@ -144,10 +144,7 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
 
     const emailDominio = signerEmail?.split('@')[1]?.toLowerCase() || '';
     if (!signerName || emailDominio === 'importado.placeholder') {
-      return res.status(400).json({
-        ok: false,
-        error: 'Nome e e-mail válidos do signatário são obrigatórios.'
-      });
+      return res.status(400).json({ ok: false, error: 'Nome e e-mail válidos do signatário são obrigatórios.' });
     }
 
     // 1) Gera/garante o termo
@@ -175,7 +172,6 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
     // 5) Solicita a assinatura (Assignment)
     await requestSignatures(assinafyDocId, [signerId], { message, expires_at: expiresAt });
     
-    // ================== CÓDIGO CORRIGIDO E NO LUGAR CERTO ==================
     // 6) Tenta capturar a URL de assinatura com token de forma robusta
     console.log('[ASSINAFY] Aguardando e tentando capturar a URL de assinatura com token...');
     let assinaturaUrl = null;
@@ -191,20 +187,18 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
     }
 
     if (!assinaturaUrl) {
-      console.warn(`[ASSINAFY] ATENÇÃO: Não foi possível capturar a URL de assinatura com token após ${maxTentativasUrl} tentativas. O usuário dependerá do e-mail.`);
+      console.warn(`[ASSINAFY] ATENÇÃO: Não foi possível capturar a URL de assinatura com token. O usuário dependerá do e-mail.`);
     }
-    // =======================================================================
 
     // 7) Persiste o resultado no banco (agora com a URL completa, se encontrada)
     await dbRun(
-      `INSERT INTO documentos (tipo, token, permissionario_id, evento_id, pdf_url, pdf_public_url, status, created_at, assinafy_id, assinatura_url)
-       VALUES ('termo_evento', NULL, NULL, ?, ?, ?, 'pendente_assinatura', datetime('now'), ?, ?)
+      `INSERT INTO documentos (tipo, evento_id, pdf_url, pdf_public_url, status, created_at, assinafy_id, assinatura_url)
+       VALUES ('termo_evento', ?, ?, ?, 'pendente_assinatura', datetime('now'), ?, ?)
        ON CONFLICT(evento_id, tipo) DO UPDATE SET
          status = 'pendente_assinatura',
          assinafy_id = excluded.assinafy_id,
-         assinatura_url = ?`, // Simplificado para sempre sobrescrever com a URL mais recente
-      [id, out.filePath, out.publicUrl || out.pdf_public_url || null, assinafyDocId, assinaturaUrl || null, assinaturaUrl || null],
-      'termo/assinafy-up'
+         assinatura_url = excluded.assinatura_url`,
+      [id, out.filePath, out.publicUrl || out.pdf_public_url || null, assinafyDocId, assinaturaUrl || null]
     );
 
     // 8) Envia a resposta de volta para o navegador do admin
@@ -216,7 +210,6 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
     });
 
   } catch (err) {
-    // Bloco para capturar qualquer erro no processo e responder ao navegador
     console.error('[assinafy] erro no fluxo de enviar-assinatura:', err.message, err.response?.data);
     return res.status(500).json({
       ok: false,
