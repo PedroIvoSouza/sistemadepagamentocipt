@@ -169,7 +169,7 @@
       const infoModal = new bootstrap.Modal(document.getElementById('infoModal'));
       modalEl.addEventListener('hidden.bs.modal', () => { assinafyIframe.src = ''; });
 
-async function atualizarUIEvento(eventoId){
+      async function atualizarUIEvento(eventoId){
         try{
           // 1. Busca os metadados mais recentes do documento
           const r = await fetch(`/api/documentos/termo/${eventoId}/meta`, { headers });
@@ -178,16 +178,13 @@ async function atualizarUIEvento(eventoId){
           const btns = document.getElementById(`btns-${eventoId}`);
           if(!btns) return;
 
-          // 2. Verifica se o documento está assinado
-          const estaAssinado = meta.status === 'assinado' 
-                            || meta.status === 'signed' 
-                            || meta.status === 'certificated' 
-                            || !!meta.signed_pdf_public_url;
+          // 2. Verifica se o documento está assinado, usando o status do seu banco
+          const estaAssinado = meta.status === 'assinado';
 
-          // 3. Constrói a URL de download segura que aponta para o SEU servidor
+          // 3. Constrói a URL de download SEGURA, que aponta para o SEU servidor
           const urlDownloadSegura = `/api/documentos/assinafy/${meta.assinafy_id}/download-signed`;
 
-          // 4. Monta os botões com a lógica correta e a URL segura
+          // 4. Monta os botões com a lógica correta e a URL SEGURA
           btns.innerHTML = `
             <button class="btn btn-sm btn-outline-secondary" data-baixar-termo="${eventoId}">
               <i class="bi bi-filetype-pdf"></i> Baixar Termo Original
