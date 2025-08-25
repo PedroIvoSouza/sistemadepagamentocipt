@@ -195,6 +195,7 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
 /* ===========================================================
    POST /api/admin/eventos/:id/termo/reativar-assinatura
    Recria assignment para o e-mail atual (ou fornecido no body)
+   VERSÃO CORRIGIDA
    =========================================================== */
 router.post('/:id/termo/reativar-assinatura', async (req, res) => {
   const { id } = req.params;
@@ -211,7 +212,7 @@ router.post('/:id/termo/reativar-assinatura', async (req, res) => {
     }
     const assinafyDocId = row.assinafy_id;
 
-    // dados do signatário
+    // Obtenção dos dados do signatário (lógica mantida)
     if (!signerName || !signerEmail || !signerCpf || !signerPhone) {
       const p = await dbGet(
         `SELECT c.nome_responsavel, c.nome_razao_social, c.email, c.telefone, c.documento_responsavel, c.documento
@@ -224,46 +225,49 @@ router.post('/:id/termo/reativar-assinatura', async (req, res) => {
       if (!p) return res.status(404).json({ ok: false, error: 'Evento/permissionário não encontrado.' });
 
       signerName  = signerName  || p.nome_responsavel || p.nome_razao_social || 'Responsável';
+      signerEmail = signerEmail || p.email;
       if (!signerEmail) {
         return res.status(400).json({ ok:false, error:'E-mail do signatário é obrigatório.' });
       }
       signerCpf   = signerCpf   || onlyDigits(p.documento_responsavel || p.documento || '');
       signerPhone = signerPhone || p.telefone || '';
     }
-    const emailDominio = signerEmail?.split('@')[1]?.toLowerCase() || '';
-    if (emailDominio === 'importado.placeholder') {
-      return res.status(400).json({ ok: false, error: 'Email válido do signatário é obrigatório.' });
-    }
-
+    
+    // Garante que o signatário existe na Assinafy (lógica mantida)
     const signer = await ensureSigner({
       full_name: signerName,
       email: signerEmail,
       government_id: onlyDigits(signerCpf || ''),
       phone: `+55${onlyDigits(signerPhone || '')}`,
     });
-    console.log('Using signer', signer.email);
+    console.log('Using signer for reactivation', signer.email);
     const signerId = signer?.id || signer?.data?.id;
     if (!signerId) return res.status(500).json({ ok: false, error: 'Falha ao criar signatário.' });
 
+    // Tenta (re)criar o assignment. A API da Assinafy se encarrega de reenviar o e-mail.
     try {
-      const resp = await requestSignatures(assinafyDocId, [signerId], { message, expires_at: expiresAt }); let assinaturaUrl = resp.assinatura_url || null;
+      await requestSignatures(assinafyDocId, [signerId], { message, expires_at: expiresAt });
     } catch (err) {
-      if (err.response?.status !== 409) throw err; // 409 = já existe
+      // Ignoramos o erro 409 (conflito), que significa que um assignment já existe.
+      // A Assinafy pode não recriar, mas o importante é garantir que o processo está ativo.
+      if (err.response?.status !== 409) throw err;
     }
 
-    await waitUntilPendingSignature(assinafyDocId, { retries: 8, intervalMs: 1500 }).catch(()=>{});
-    const assinaturaUrl = await getSigningUrl(assinafyDocId);
+    // REMOVEMOS A BUSCA PELA URL. Não precisamos mais dela.
 
+    // Apenas atualizamos o status no nosso banco, garantindo que a URL antiga (se houver) seja limpa.
     await dbRun(
       `UPDATE documentos
           SET status = 'pendente_assinatura',
-              assinatura_url = COALESCE(?, assinatura_url)
+              assinatura_url = NULL
         WHERE evento_id = ? AND tipo = 'termo_evento'`,
-      [assinaturaUrl || null, id],
+      [id],
       'reativar/update-doc'
     );
+    
+    // Retornamos sucesso para o Admin.
+    return res.json({ ok: true, message: 'Solicitação de assinatura reenviada com sucesso.' });
 
-    return res.json({ ok: true, assinafyDocId, assinaturaUrl: assinaturaUrl || null });
   } catch (err) {
     console.error('[reativar-assinatura] erro:', err.message, err.response?.data);
     return res.status(500).json({ ok: false, error: 'Falha ao reativar assinatura.' });
