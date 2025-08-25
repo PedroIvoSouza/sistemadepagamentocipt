@@ -389,7 +389,7 @@ router.get('/', async (req, res) => {
   try {
     const { 
       search = '', page = 1, limit = 10,
-      sort = 'id', order = 'desc', filter = 'todos'
+      sort = 'data_vigencia_final', order = 'asc', filter = 'todos'
     } = req.query;
 
     const pageNum = parseInt(page, 10) || 1;
