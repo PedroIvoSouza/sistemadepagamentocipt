@@ -72,17 +72,17 @@
         <div class="card consulta-card">
             <div class="card-body">
                 <div class="text-center mb-4">
-                    <h1 class="h4">Recuperar Acesso</h1>
-                    <p class="text-muted">Digite seu CNPJ para receber um código de verificação por e-mail.</p>
+                    <h1 class="h4">Consultar E-mail</h1>
+                    <p class="text-muted">Digite seu CNPJ ou CPF para ver o e-mail cadastrado em nosso sistema.</p>
                 </div>
                 
                 <form id="consulta-form" novalidate>
                     <div class="mb-3">
-                        <label for="documento" class="form-label">CNPJ</label>
-                        <input type="text" class="form-control form-control-lg" id="documento" required placeholder="00.000.000/0000-00">
+                        <label for="documento" class="form-label">CNPJ ou CPF</label>
+                        <input type="text" class="form-control form-control-lg" id="documento" required placeholder="Digite o documento">
                     </div>
                     <button type="submit" id="btn-consultar" class="btn btn-primary w-100 fw-bold btn-lg mt-3">
-                        <span id="btn-text">Enviar Código</span>
+                        <span id="btn-text">Consultar</span>
                         <span id="btn-spinner" class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
                     </button>
                 </form>
@@ -169,7 +169,8 @@
                 } catch (error) {
                     alert(`Erro: ${error.message}`);
                 } finally {
-                    btnText.textContent = 'Enviar Código';
+                    // Texto do botão corrigido
+                    btnText.textContent = 'Consultar';
                     btnSpinner.classList.add('d-none');
                     btnConsultar.disabled = false;
                 }
