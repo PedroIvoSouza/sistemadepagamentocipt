@@ -378,53 +378,48 @@ router.get('/', async (req, res) => {
       params.push(like, like, like);
     }
 
-    const countSql = `
-      SELECT COUNT(*) AS total
-        FROM Eventos e
-        JOIN Clientes_Eventos c ON e.id_cliente = c.id
-        ${whereClause}`;
-    const countRow = await dbGet(countSql, params, 'listar-eventos-count');
+    const countSql = `SELECT COUNT(*) AS total FROM Eventos e JOIN Clientes_Eventos c ON e.id_cliente = c.id ${whereClause}`;
+    const countRow = await dbGet(countSql, params);
     const total = countRow?.total || 0;
     const totalPages = Math.ceil(total / limitNum);
 
-    // 1. CONSULTA SQL SIMPLIFICADA E RÁPIDA
-    // Apenas pega os dados brutos, sem cálculos complexos.
+    // Consulta SQL simples e rápida para buscar os dados brutos
     const dataSql = `
-      SELECT e.*, c.nome_razao_social AS nome_cliente
+      SELECT e.*, c.nome_razao_social AS nome_cliente, c.tipo_cliente
         FROM Eventos e
         JOIN Clientes_Eventos c ON e.id_cliente = c.id
         ${whereClause}
        ORDER BY e.id DESC
        LIMIT ? OFFSET ?`;
-    const rows = await dbAll(dataSql, params.concat([limitNum, offset]), 'listar-eventos');
+    const rows = await dbAll(dataSql, params.concat([limitNum, offset]));
 
-    // 2. ENRIQUECIMENTO DOS DADOS COM JAVASCRIPT
-    // Percorremos cada evento para garantir que os dados estejam corretos.
+    // Lógica final para enriquecer e corrigir os dados antigos
     for (const evento of rows) {
-      // Garante que o valor_final esteja correto
-      if (!evento.valor_final || evento.valor_final === 0) {
-        const totalParcelasRow = await dbGet(
-          `SELECT SUM(valor_parcela) as total FROM DARs_Eventos WHERE id_evento = ?`,
-          [evento.id]
-        );
-        if (totalParcelasRow?.total > 0) {
-          evento.valor_final = totalParcelasRow.total;
+      // 1. Corrige o valor final de eventos antigos/importados
+      if (evento.evento_gratuito == 0 && (!evento.valor_final || evento.valor_final === 0)) {
+        let datas = [];
+        if (typeof evento.datas_evento === 'string') {
+          try {
+            // Tenta ler o formato JSON ["2025-03-20"]
+            datas = JSON.parse(evento.datas_evento);
+          } catch {
+            // Se falhar, tenta ler o formato "2025-03-20"
+            datas = evento.datas_evento.split(',').map(s => s.trim()).filter(Boolean);
+          }
+        }
+        
+        if (Array.isArray(datas) && datas.length > 0) {
+            const numDiarias = datas.length;
+            const valorBrutoRecalculado = calcularValorBruto(numDiarias);
+            const tipoCliente = evento.tipo_cliente || 'Geral';
+            // USA O NOME CORRETO DA COLUNA QUE DESCOBRIMOS:
+            const descontoManual = evento.percentual_desconto_manual || 0; 
+            evento.valor_final = calcularValorFinal(valorBrutoRecalculado, tipoCliente, descontoManual);
         }
       }
-
-      // Garante que o status esteja correto
-      const darsStatus = await dbGet(
-        `SELECT
-           COUNT(*) as total,
-           SUM(CASE WHEN d.status = 'Pago' THEN 1 ELSE 0 END) as pagas
-         FROM DARs_Eventos de
-         JOIN dars d ON d.id = de.id_dar
-         WHERE de.id_evento = ?`,
-        [evento.id]
-      );
-      if (darsStatus && darsStatus.total > 0 && darsStatus.total === darsStatus.pagas) {
-        evento.status = 'Pago';
-      }
+      
+      // 2. Garante que a flag de gratuito seja um booleano (true/false) para o frontend
+      evento.evento_gratuito = !!evento.evento_gratuito;
     }
 
     res.json({ eventos: rows, totalPages, currentPage: pageNum });
@@ -434,6 +429,8 @@ router.get('/', async (req, res) => {
     res.status(500).json({ error: 'Erro interno no servidor ao buscar eventos.' });
   }
 });
+
+
 
 router.get('/:eventoId/dars', async (req, res) => {
   const { eventoId } = req.params;
