@@ -383,7 +383,7 @@ function calcularValorFinal(vb, tipo, dm = 0) {
 }
 
 /* ===========================================================
-   GET /api/admin/eventos (Rota Principal de Listagem)
+   GET /api/admin/eventos (Rota Principal de Listagem - VERSÃO FINAL)
    =========================================================== */
 router.get('/', async (req, res) => {
   try {
@@ -391,8 +391,8 @@ router.get('/', async (req, res) => {
       search = '', 
       page = 1, 
       limit = 10,
-      sort = 'data_vigencia_final', // Ordenação padrão por data
-      order = 'asc',                 // Ordem padrão ascendente (mais antigo primeiro)
+      sort = 'data_vigencia_final', // Padrão: ordenar por data
+      order = 'asc',                 // Padrão: do mais antigo para o mais novo
       filter = 'todos'
     } = req.query;
 
@@ -416,8 +416,6 @@ router.get('/', async (req, res) => {
       whereClause += 'e.evento_gratuito = 1';
     }
 
-    // --- AQUI ESTÁ A CORREÇÃO PRINCIPAL ---
-    // Garantimos que a coluna de data está na lista de permissões.
     const colunasPermitidas = ['id', 'nome_evento', 'data_vigencia_final']; 
     const sortColumn = colunasPermitidas.includes(sort) ? sort : 'id';
     const sortOrder = ['asc', 'desc'].includes(order.toLowerCase()) ? order : 'desc';
@@ -462,7 +460,6 @@ router.get('/', async (req, res) => {
     res.status(500).json({ error: 'Erro interno no servidor ao buscar eventos.' });
   }
 });
-
 
 router.get('/:eventoId/dars', async (req, res) => {
   const { eventoId } = req.params;
