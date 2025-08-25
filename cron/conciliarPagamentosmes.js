@@ -152,9 +152,12 @@ async function conciliarPagamentosDoMes() {
 
   // Se alguma das tentativas funcionou, contabiliza e informa.
   if (changes > 0) {
-    console.log(`--> SUCESSO: Pagamento referente à Guia ${numeroGuia} foi vinculado e atualizado para 'Pago'.`);
-    totalAtualizados += 1;
-  }
+  console.log(`--> SUCESSO: Pagamento referente à Guia ${numeroGuia || numeroDocOrigem} foi vinculado e atualizado para 'Pago'.`);
+  totalAtualizados += 1;
+} else {
+  // ADICIONE ESTE BLOCO 'ELSE'
+  console.warn(`--> ALERTA: Não foi possível vincular o pagamento da SEFAZ. DADOS: Guia=${numeroGuia}, DocOrigem=${numeroDocOrigem}, CodBarras=${codigoBarras}`);
+}
 }
     }
   }
