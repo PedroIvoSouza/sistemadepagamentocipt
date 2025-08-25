@@ -1,6 +1,4 @@
 // Em: cron/conciliarPagamentosmes.js
-console.log('[DEBUG] Ponto 1: Script iniciado.');
-
 require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
 const sqlite3 = require('sqlite3').verbose();
 const cron = require('node-cron');
@@ -10,10 +8,8 @@ const {
   listarPagamentosPorDataInclusao,
 } = require('../src/services/sefazService');
 
-console.log('[DEBUG] Ponto 2: Módulos carregados.');
-
 // ======= DB =======
-const DB_PATH = process.env.SQLITE_STORAGE || require('path').resolve(__dirname, '../sistemacipt.db');
+const DB_PATH = process.env.SQLITE_STORAGE || require('path').resolve(__dirname, '../sistemadepagamentocipt.db');
 const db = new sqlite3.Database(DB_PATH);
 
 function dbRun(sql, params = []) {
@@ -59,8 +55,8 @@ function receitasAtivas() {
 }
 
 // ======= Conciliação =======
-async function conciliarPagamentosD1() {
-  console.log('[DEBUG] Ponto 3: Função conciliarPagamentosD1 chamada.');
+async function conciliarPagamentosDoMes() {
+  console.log(`[CONCILIA] Iniciando conciliação do Mês Atual... DB=${DB_PATH}`);
 
   const receitas = receitasAtivas();
   if (receitas.length === 0) {
@@ -75,12 +71,7 @@ async function conciliarPagamentosD1() {
   let totalEncontrados = 0;
   let totalAtualizados = 0;
 
-  console.log(`[DEBUG] Limite Inferior do Loop: ${primeiroDiaDoMes.toISOString()}`);
-  console.log(`[DEBUG] Limite Superior do Loop: ${ultimoDiaParaBuscar.toISOString()}`);
-  console.log('[DEBUG] Ponto 4: Prestes a iniciar o loop de dias.');
-
   for (let diaCorrente = new Date(primeiroDiaDoMes); diaCorrente <= ultimoDiaParaBuscar; diaCorrente.setDate(diaCorrente.getDate() + 1)) {
-    console.log(`[DEBUG] Ponto 5: Processando dia ${ymd(diaCorrente)}`);
     
     const dataDia = ymd(diaCorrente);
     const dtIniDia = toDateTimeISO(diaCorrente, 0, 0, 0);
@@ -88,12 +79,14 @@ async function conciliarPagamentosD1() {
 
     for (const cod of receitas) {
       console.log(`[CONCILIA] Buscando pagamentos de ${dataDia} para receita ${cod}...`);
+      
       let itens = [];
       try {
         itens = await listarPagamentosPorDataArrecadacao(dataDia, dataDia, cod);
       } catch (e) {
         console.warn(`[CONCILIA] Falha no por-data-arrecadacao: ${e.message || e}`);
       }
+      
       if (!Array.isArray(itens) || itens.length === 0) {
         try {
           itens = await listarPagamentosPorDataInclusao(dtIniDia, dtFimDia, cod);
@@ -101,74 +94,74 @@ async function conciliarPagamentosD1() {
           console.warn(`[CONCILIA] Falha no por-data-inclusao: ${e.message || e}`);
         }
       }
+      
       if (itens.length > 0) {
         console.log(`[CONCILIA] Receita ${cod} em ${dataDia}: retornados ${itens.length} registros.`);
       }
+
       for (const it of itens) {
-      const numeroGuia = String(it.numeroGuia || '').trim();
-      const numeroDocOrigem = String(it.numeroDocOrigem || '').trim();
+        const numeroGuia = String(it.numeroGuia || '').trim();
+        const numeroDocOrigem = String(it.numeroDocOrigem || '').trim();
 
-      // Se não houver nenhum identificador, pula para o próximo
-      if (!numeroGuia && !numeroDocOrigem) continue;
+        if (!numeroGuia && !numeroDocOrigem) continue;
 
-      totalEncontrados += 1;
-      let changes = 0;
+        let changes = 0;
 
-      // --- NOVA LÓGICA DE VINCULAÇÃO ---
-
-      // TENTATIVA 1: Usar o Documento de Origem (o mais confiável para boletos antigos)
-      // Compara o 'numeroDocumentoOrigem' da SEFAZ com o 'id' da sua tabela local 'dars'
-      if (numeroDocOrigem) {
-        const r1 = await dbRun(
-          `UPDATE dars
-              SET status = 'Pago',
-                  data_pagamento = COALESCE(?, data_pagamento),
-                  numero_documento = COALESCE(numero_documento, ?)
-            WHERE id = ?`,
-          [it.dataPagamento || null, numeroGuia || null, numeroDocOrigem]
-        );
-        changes = r1?.changes || 0;
-      }
-
-      // TENTATIVAS DE FALLBACK (se a primeira falhar ou não existir doc de origem)
-      if (changes === 0 && numeroGuia) {
-        // Tentativa 2: por numero_documento
-        const r2 = await dbRun(
-          `UPDATE dars SET status = 'Pago', data_pagamento = COALESCE(?, data_pagamento) WHERE numero_documento = ?`,
-          [it.dataPagamento || null, numeroGuia]
-        );
-        changes = r2?.changes || 0;
-
-        // Tentativa 3: por codigo_barras
-        if (changes === 0) {
-          const r3 = await dbRun(
-            `UPDATE dars SET status = 'Pago', data_pagamento = COALESCE(?, data_pagamento), numero_documento = COALESCE(numero_documento, codigo_barras) WHERE codigo_barras = ? AND (numero_documento IS NULL OR numero_documento = '')`,
-            [it.dataPagamento || null, numeroGuia]
+        // TENTATIVA 1: Usar o Documento de Origem (o mais confiável para boletos antigos)
+        if (numeroDocOrigem) {
+          const r1 = await dbRun(
+            `UPDATE dars
+                SET status = 'Pago',
+                    data_pagamento = COALESCE(?, data_pagamento),
+                    numero_documento = COALESCE(numero_documento, ?)
+              WHERE id = ?`,
+            [it.dataPagamento || null, numeroGuia || null, numeroDocOrigem]
           );
-          changes = r3?.changes || 0;
+          changes = r1?.changes || 0;
         }
 
-        // Tentativa 4: por linha_digitavel
-        if (changes === 0) {
-          const r4 = await dbRun(
-            `UPDATE dars SET status = 'Pago', data_pagamento = COALESCE(?, data_pagamento) WHERE linha_digitavel = ?`,
+        // TENTATIVAS DE FALLBACK (se a primeira falhar ou não existir doc de origem)
+        if (changes === 0 && numeroGuia) {
+          // Tentativa 2: por numero_documento
+          const r2 = await dbRun(
+            `UPDATE dars SET status = 'Pago', data_pagamento = COALESCE(?, data_pagamento) WHERE numero_documento = ?`,
             [it.dataPagamento || null, numeroGuia]
           );
-          changes = r4?.changes || 0;
-        }
-      }
+          changes = r2?.changes || 0;
 
-      if (changes > 0) {
-        totalAtualizados += 1;
+          // Tentativa 3: por codigo_barras
+          if (changes === 0) {
+            const r3 = await dbRun(
+              `UPDATE dars SET status = 'Pago', data_pagamento = COALESCE(?, data_pagamento), numero_documento = COALESCE(numero_documento, codigo_barras) WHERE codigo_barras = ? AND (numero_documento IS NULL OR numero_documento = '')`,
+              [it.dataPagamento || null, numeroGuia]
+            );
+            changes = r3?.changes || 0;
+          }
+
+          // Tentativa 4: por linha_digitavel
+          if (changes === 0) {
+            const r4 = await dbRun(
+              `UPDATE dars SET status = 'Pago', data_pagamento = COALESCE(?, data_pagamento) WHERE linha_digitavel = ?`,
+              [it.dataPagamento || null, numeroGuia]
+            );
+            changes = r4?.changes || 0;
+          }
+        }
+
+        if (changes > 0) {
+          totalEncontrados += 1; // Contabiliza apenas os que foram encontrados e vinculados
+          totalAtualizados += 1;
+        }
       }
     }
+  }
 
-  console.log(`[CONCILIA] Finalizado. Registros retornados no período todo: ${totalEncontrados}. DARs atualizados: ${totalAtualizados}.`);
+  console.log(`[CONCILIA] Finalizado. Registros retornados e vinculados no período: ${totalAtualizados}.`);
 }
 
 // ======= Agendamento diário (02:05 America/Maceio) =======
 function scheduleConciliacao() {
-  cron.schedule('5 2 * * *', conciliarPagamentosD1, {
+  cron.schedule('5 2 * * *', conciliarPagamentosDoMes, {
     scheduled: true,
     timezone: 'America/Maceio',
   });
@@ -177,16 +170,15 @@ function scheduleConciliacao() {
 
 // Se rodar diretamente: executa uma vez
 if (require.main === module) {
-  conciliarPagamentosD1()
+  conciliarPagamentosDoMes()
     .catch((e) => {
       console.error('[CONCILIA] ERRO:', e.message || e);
       process.exit(1);
     })
     .finally(() => {
-      console.log('[DEBUG] Ponto 6: Processo finalizado, fechando DB.');
       db.close();
     });
 } else {
   // exporta para ser usado pelo seu index/boot
-  module.exports = { scheduleConciliacao, conciliarPagamentosD1 };
+  module.exports = { scheduleConciliacao, conciliarPagamentosDoMes };
 }
