@@ -62,51 +62,62 @@ router.get(
   [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN'])],
   async (req, res) => {
     try {
-      const isoToday = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+      // ⚠️ Não usamos UTC aqui; deixamos as comparações de data
+      // para o SQLite com DATE('now','localtime').
 
+      // Total de permissionários
       const totalPermissionarios = (await dbGet(
         `SELECT COUNT(*) AS count FROM permissionarios`
       )).count;
 
+      // Cards: DARs pendentes e Receita pendente
+      // Somente status realmente cobrados (exclui Cancelado/Reemitido/etc.)
       const pendRow = await dbGet(
         `SELECT COUNT(*) AS qnt, COALESCE(SUM(valor),0) AS valor
-         FROM dars
-         WHERE status <> 'Pago'`
+           FROM dars
+          WHERE status IN ('Pendente','Emitido','Vencido')`
       );
       const darsPendentes   = pendRow?.qnt ?? 0;
       const receitaPendente = Number(pendRow?.valor ?? 0);
 
+      // Card: DARs vencidas (comparação em horário local)
       const vencRow = await dbGet(
         `SELECT COUNT(*) AS qnt
-         FROM dars
-         WHERE status <> 'Pago'
-           AND data_vencimento < ?`,
-        [isoToday]
+           FROM dars
+          WHERE status IN ('Pendente','Emitido','Vencido')
+            AND DATE(data_vencimento) < DATE('now','localtime')`
       );
       const darsVencidos = vencRow?.qnt ?? 0;
 
+      // Resumo mensal por competência (ano/mes de referência), não por data_vencimento
       const resumoMensal = await dbAll(
         `SELECT
-            CAST(strftime('%Y', data_vencimento) AS INTEGER) AS ano_referencia,
-            CAST(strftime('%m', data_vencimento) AS INTEGER) AS mes_referencia,
-            COUNT(*)                                                  AS emitidas,
-            SUM(CASE WHEN status = 'Pago' THEN 1 ELSE 0 END)          AS pagas,
-            SUM(CASE WHEN status <> 'Pago' AND data_vencimento < ? THEN 1 ELSE 0 END) AS vencidas
+            ano_referencia,
+            mes_referencia,
+            COUNT(*) AS emitidas,
+            SUM(CASE WHEN status = 'Pago' THEN 1 ELSE 0 END) AS pagas,
+            SUM(
+              CASE
+                WHEN status IN ('Pendente','Emitido','Vencido')
+                 AND DATE(data_vencimento) < DATE('now','localtime')
+                THEN 1 ELSE 0
+              END
+            ) AS vencidas
          FROM dars
          GROUP BY ano_referencia, mes_referencia
          ORDER BY ano_referencia DESC, mes_referencia DESC
-         LIMIT 6`,
-        [isoToday]
+         LIMIT 6`
       );
 
+      // Maiores devedores (apenas títulos cobrados e vencidos)
       const maioresDevedores = await dbAll(
         `SELECT
             p.nome_empresa,
             SUM(d.valor) AS total_devido
          FROM dars d
          JOIN permissionarios p ON p.id = d.permissionario_id
-         WHERE d.status <> 'Pago'
-           AND DATE(d.data_vencimento) < DATE('now')
+         WHERE d.status IN ('Pendente','Emitido','Vencido')
+           AND DATE(d.data_vencimento) < DATE('now','localtime')
          GROUP BY p.id, p.nome_empresa
          HAVING total_devido > 0
          ORDER BY total_devido DESC
@@ -117,7 +128,7 @@ router.get(
         totalPermissionarios,
         darsPendentes,
         darsVencidos,
-        receitaPendente: receitaPendente.toFixed(2),
+        receitaPendente: receitaPendente.toFixed(2), // mantém compatibilidade com o front
         resumoMensal,
         maioresDevedores,
       });
