@@ -803,7 +803,7 @@ async function carregarClientes(){
     }
   }
 
-  async function renderTable(eventos){
+async function renderTable(eventos){
     if (!Array.isArray(eventos) || eventos.length === 0){
       eventosTableBody.innerHTML = '<tr><td colspan="9" class="text-center">Nenhum evento encontrado.</td></tr>';
       return;
@@ -823,15 +823,18 @@ async function carregarClientes(){
         vfNum = parcelas.reduce((sum,p)=> sum + Number(p.valor_parcela || p.valor || 0), 0);
       }
 
-      // Lógica limpa para decidir quais botões do Termo mostrar
+      // LÓGICA CORRIGIDA: Busca o status mais recente direto da Assinafy
       let mostraBtnEnviar = true;
       let assinafyIdDoMeta = '';
       try {
-        const rMeta = await fetch(`/api/documentos/termo/${id}/meta`, { headers: AUTH_HEADERS });
+        // Usamos a rota mais inteligente que busca o status real na Assinafy
+        const rMeta = await fetch(`/api/admin/eventos/${id}/termo/assinafy-status`, { headers: AUTH_HEADERS });
         if (rMeta.ok) {
           const meta = await rMeta.json();
-          assinafyIdDoMeta = meta.assinafy_id;
-          if (meta.status === 'assinado' || meta.status === 'signed' || meta.status === 'certificated' || meta.signed_pdf_public_url) {
+          assinafyIdDoMeta = meta?.assinafy?.id || meta?.assinafy_id;
+          const statusReal = meta?.assinafy?.status;
+          
+          if (statusReal === 'assinado' || statusReal === 'signed' || statusReal === 'certificated' || meta.signed_pdf_public_url) {
             mostraBtnEnviar = false;
           }
         }
@@ -855,11 +858,11 @@ async function carregarClientes(){
           <div class="btn-group">
             <button class="btn btn-sm btn-outline-secondary btn-termo" title="Baixar Termo Original"
                     data-evento-id="${id}">
-              <i class="bi bi-file-earmark-text"></i> Original
+              <i class="bi bi-file-earmark-text"></i>
             </button>
             ${mostraBtnEnviar 
-              ? `<button class="btn btn-sm btn-primary btn-enviar-assinafy" title="Enviar para Assinatura" data-evento-id="${id}" data-cliente-id="${ev.id_cliente}"><i class="bi bi-pen"></i> Enviar</button>` 
-              : `<a class="btn btn-sm btn-success" href="/api/documentos/assinafy/${assinafyIdDoMeta}/download-signed" target="_blank" rel="noopener" title="Baixar Termo Assinado"><i class="bi bi-download"></i> Assinado</a>`
+              ? `<button class="btn btn-sm btn-primary btn-enviar-assinafy" title="Enviar para Assinatura" data-evento-id="${id}" data-cliente-id="${ev.id_cliente}"><i class="bi bi-pen"></i></button>` 
+              : `<a class="btn btn-sm btn-success" href="/api/documentos/assinafy/${assinafyIdDoMeta}/download-signed" target="_blank" rel="noopener" title="Baixar Termo Assinado"><i class="bi bi-download"></i></a>`
             }
           </div>
         </td>
