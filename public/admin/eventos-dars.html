@@ -425,9 +425,7 @@ window.onload = () => {
     const d = new Date(iso + 'T12:00:00'); 
     return isNaN(d) ? '-' : d.toLocaleDateString('pt-BR'); 
   };
-  
-  const evIdOf = ev => ev?.id || ev?.evento_id || ev?.id_evento || ev?.eventoId;
-  // =======================
+    // =======================
   // Topo / menu
   // =======================
   (function bootMenu(){
