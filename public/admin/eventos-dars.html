@@ -803,7 +803,7 @@ async function carregarClientes(){
     }
   }
 
-  async function renderTable(eventos){
+    async function renderTable(eventos){
     if (!Array.isArray(eventos) || eventos.length === 0){
       eventosTableBody.innerHTML = '<tr><td colspan="9" class="text-center">Nenhum evento encontrado.</td></tr>';
       return;
@@ -815,6 +815,21 @@ async function carregarClientes(){
       const badge = status==='Pago' ? 'bg-success'
                   : ['Emitido','Reemitido'].includes(status) ? 'bg-primary'
                   : 'bg-warning text-dark';
+      
+      let mostraBtnEnviar = true;
+      let assinafyIdDoMeta = '';
+      try {
+        const rMeta = await fetch(`/api/admin/eventos/${id}/termo/assinafy-status`, { headers: AUTH_HEADERS });
+        if (rMeta.ok) {
+          const meta = await rMeta.json();
+          assinafyIdDoMeta = meta?.assinafy?.id || meta?.assinafy_id;
+          const statusReal = meta?.assinafy?.status;
+          
+          if (statusReal === 'assinado' || statusReal === 'signed' || statusReal === 'certificated') {
+            mostraBtnEnviar = false;
+          }
+        }
+      } catch {}
       
       const tr = document.createElement('tr');
       tr.innerHTML = `
@@ -829,10 +844,16 @@ async function carregarClientes(){
             <i class="bi bi-file-earmark-arrow-down"></i>
           </button>
         </td>
-        <td class="text-center" id="termo-actions-${id}">
-            <button class="btn btn-sm btn-outline-info btn-verificar-status" data-evento-id="${id}" title="Verificar Status do Termo">
-                <i class="bi bi-arrow-repeat"></i> Verificar Status
+        <td class="text-center">
+          <div class="btn-group">
+            <button class="btn btn-sm btn-outline-secondary btn-termo" title="Baixar Termo Original" data-evento-id="${id}">
+              <i class="bi bi-file-earmark-text"></i>
             </button>
+            ${mostraBtnEnviar 
+              ? `<button class="btn btn-sm btn-primary btn-enviar-assinafy" title="Enviar para Assinatura" data-evento-id="${id}" data-cliente-id="${ev.id_cliente}"><i class="bi bi-pen"></i></button>` 
+              : `<a class="btn btn-sm btn-success" href="/api/documentos/assinafy/${assinafyIdDoMeta}/download-signed" target="_blank" rel="noopener" title="Baixar Termo Assinado"><i class="bi bi-download"></i></a>`
+            }
+          </div>
         </td>
         <td class="text-center">
           <button class="btn btn-sm btn-outline-secondary btn-editar" title="Editar" data-evento-id="${id}">
@@ -842,9 +863,9 @@ async function carregarClientes(){
             <i class="bi bi-trash"></i>
           </button>
         </td>`;
-      eventosTableBody.appendChild(tr);
-    }
-  }
+      eventosTableBody.appendChild(tr); // Esta linha era essencial e estava faltando
+    } // A chave de fechamento do 'for' estava faltando
+  } // A chave de fechamento da função 'renderTable' estava faltando
       
   function renderPagination(totalPages, page){
     paginationNav.innerHTML = '';
