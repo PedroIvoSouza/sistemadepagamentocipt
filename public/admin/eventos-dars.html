@@ -418,7 +418,15 @@ window.onload = () => {
     a.href = href; a.download = nome || 'DAR.pdf'; a.click();
   }
   window.baixarPdfBase64 = baixarPdfBase64; // usado no onclick gerado
-
+ 
+  // A FUNÇÃO QUE FALTAVA:
+  const formatDateBR = iso => {
+    if (!iso || !String(iso).includes('-')) return '-'; // Garante que a data não é nula
+    const d = new Date(iso + 'T12:00:00'); 
+    return isNaN(d) ? '-' : d.toLocaleDateString('pt-BR'); 
+  };
+  
+  const evIdOf = ev => ev?.id || ev?.evento_id || ev?.id_evento || ev?.eventoId;
   // =======================
   // Topo / menu
   // =======================
