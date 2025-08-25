@@ -22,6 +22,18 @@ const {
   SEFAZ_RETRIES = '5',          // 1 tentativa + 5 retries
 } = process.env;
 
+
+// ==========================================================
+// === CÓDIGO DE VERIFICAÇÃO ADICIONADO AQUI ===
+// ==========================================================
+console.log('\n--- VERIFICANDO VARIÁVEIS DE AMBIENTE CARREGADAS ---');
+console.log(`SEFAZ_MODE: [${process.env.SEFAZ_MODE}]`);
+console.log(`SEFAZ_TLS_INSECURE: [${process.env.SEFAZ_TLS_INSECURE}]`);
+console.log(`SEFAZ_APP_TOKEN (primeiros 5 caracteres): [${String(process.env.SEFAZ_APP_TOKEN || '').slice(0, 5)}...]`);
+console.log('----------------------------------------------------\n');
+// ==========================================================
+
+
 const BASE_URL = (SEFAZ_MODE || 'hom').toLowerCase() === 'prod'
   ? SEFAZ_API_URL_PROD
   : SEFAZ_API_URL_HOM;
@@ -43,6 +55,7 @@ const sefaz = axios.create({
      Accept: 'application/json',
    },
 });
+
 
 // ==========================
 // Helpers
