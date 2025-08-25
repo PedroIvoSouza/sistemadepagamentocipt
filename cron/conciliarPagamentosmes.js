@@ -100,6 +100,7 @@ async function conciliarPagamentosDoMes() {
       }
 
       for (const it of itens) {
+        console.log('[DADO RECEBIDO DA SEFAZ]:', JSON.stringify(it));
         const numeroGuia = String(it.numeroGuia || '').trim();
         const numeroDocOrigem = String(it.numeroDocOrigem || '').trim();
 
