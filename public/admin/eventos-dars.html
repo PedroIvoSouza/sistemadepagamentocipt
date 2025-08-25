@@ -803,18 +803,18 @@ async function carregarClientes(){
     }
   }
 
-  async function renderTable(eventos){
+async function renderTable(eventos){
     if (!Array.isArray(eventos) || eventos.length === 0){
       eventosTableBody.innerHTML = '<tr><td colspan="9" class="text-center">Nenhum evento encontrado.</td></tr>';
       return;
     }
     eventosTableBody.innerHTML = '';
     for (const ev of eventos){
-      // 1. NORMALIZAÇÃO DOS DADOS (AQUI ESTÁ A CORREÇÃO PRINCIPAL)
-      // Usamos a mesma função do "Editar" para garantir consistência
+      // 1. NORMALIZAÇÃO DOS DADOS (AQUI ESTÁ A CORREÇÃO)
+      // Usamos a mesma função do "Editar" para garantir consistência em toda a aplicação.
       const evNormalizado = normalizarEvento(ev);
       
-      const id = evIdOf(ev); // Usamos o ID original para as ações
+      const id = evIdOf(ev);
       const status = evNormalizado.status || 'Pendente';
       const badge = status==='Pago' ? 'bg-success'
                   : ['Emitido','Reemitido'].includes(status) ? 'bg-primary'
@@ -836,7 +836,7 @@ async function carregarClientes(){
       } catch {}
       
       const tr = document.createElement('tr');
-      // 2. Usamos os dados normalizados para exibir na tabela
+      // 2. Usamos os dados normalizados (evNormalizado) para exibir na tabela
       tr.innerHTML = `
         <td>${id}</td>
         <td><strong class="text-capitalize">${evNormalizado.nome_evento || ''}</strong></td>
