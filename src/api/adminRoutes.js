@@ -54,6 +54,9 @@ async function ensureIndexes() {
 }
 ensureIndexes().catch(e => console.error('[adminRoutes] ensureIndexes error:', e.message));
 
+// Status em aberto (considera masculino e feminino)
+const OPEN_STATUSES = `('Pendente','Emitido','Emitida','Vencido','Vencida')`;
+
 /* ===========================================================
    GET /api/admin/dashboard-stats
    =========================================================== */
@@ -62,34 +65,30 @@ router.get(
   [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN'])],
   async (req, res) => {
     try {
-      // ⚠️ Não usamos UTC aqui; deixamos as comparações de data
-      // para o SQLite com DATE('now','localtime').
-
       // Total de permissionários
       const totalPermissionarios = (await dbGet(
         `SELECT COUNT(*) AS count FROM permissionarios`
       )).count;
 
-      // Cards: DARs pendentes e Receita pendente
-      // Somente status realmente cobrados (exclui Cancelado/Reemitido/etc.)
+      // Cards do topo: DARs pendentes e Receita pendente (tudo em aberto)
       const pendRow = await dbGet(
         `SELECT COUNT(*) AS qnt, COALESCE(SUM(valor),0) AS valor
            FROM dars
-          WHERE status IN ('Pendente','Emitido','Vencido')`
+          WHERE status IN ${OPEN_STATUSES}`
       );
       const darsPendentes   = pendRow?.qnt ?? 0;
       const receitaPendente = Number(pendRow?.valor ?? 0);
 
-      // Card: DARs vencidas (comparação em horário local)
+      // Card: DARs vencidas (em horário local)
       const vencRow = await dbGet(
         `SELECT COUNT(*) AS qnt
            FROM dars
-          WHERE status IN ('Pendente','Emitido','Vencido')
+          WHERE status IN ${OPEN_STATUSES}
             AND DATE(data_vencimento) < DATE('now','localtime')`
       );
       const darsVencidos = vencRow?.qnt ?? 0;
 
-      // Resumo mensal por competência (ano/mes de referência), não por data_vencimento
+      // Resumo mensal por competência (usa ano/mes de referência)
       const resumoMensal = await dbAll(
         `SELECT
             ano_referencia,
@@ -98,7 +97,7 @@ router.get(
             SUM(CASE WHEN status = 'Pago' THEN 1 ELSE 0 END) AS pagas,
             SUM(
               CASE
-                WHEN status IN ('Pendente','Emitido','Vencido')
+                WHEN status IN ${OPEN_STATUSES}
                  AND DATE(data_vencimento) < DATE('now','localtime')
                 THEN 1 ELSE 0
               END
@@ -109,30 +108,39 @@ router.get(
          LIMIT 6`
       );
 
-      // Maiores devedores (apenas títulos cobrados e vencidos)
+      // Maiores devedores (todas as competências)
+      // Ranking por QUANTIDADE de DARs em aberto; chip mostra SOMENTE o valor vencido
       const maioresDevedores = await dbAll(
-  `SELECT
-      p.nome_empresa,
-      COUNT(*) AS qtd_vencidos,                                -- nº de DARs vencidas (em aberto)
-      COALESCE(SUM(d.valor), 0) AS total_vencido,              -- R$ vencido
-      -- aliases p/ compat com o front (badge usa "valor"):
-      COALESCE(SUM(d.valor), 0) AS total_devido,
-      COALESCE(SUM(d.valor), 0) AS valor
-   FROM dars d
-   JOIN permissionarios p ON p.id = d.permissionario_id
-   WHERE d.status IN ('Pendente','Emitido','Vencido')          -- só títulos cobrados
-     AND DATE(d.data_vencimento) < DATE('now','localtime')     -- apenas VENCIDAS
-   GROUP BY p.id, p.nome_empresa
-   HAVING total_vencido > 0
-   ORDER BY qtd_vencidos DESC, total_vencido DESC
-   LIMIT 5`
-);
+        `SELECT
+            p.nome_empresa,
+            COUNT(*) AS qtd_debitos,  -- DARs em aberto (pendente/emitido/emitida/vencido/vencida)
+            SUM(CASE WHEN DATE(d.data_vencimento) < DATE('now','localtime') THEN 1 ELSE 0 END) AS qtd_vencidos,
+            COALESCE(SUM(d.valor), 0) AS total_aberto,  -- vencido + a vencer
+            COALESCE(SUM(CASE
+                    WHEN DATE(d.data_vencimento) < DATE('now','localtime')
+                    THEN d.valor ELSE 0 END), 0) AS total_vencido,  -- só vencido
+            -- aliases usados pelo front para o "badge" vermelho:
+            COALESCE(SUM(CASE
+                    WHEN DATE(d.data_vencimento) < DATE('now','localtime')
+                    THEN d.valor ELSE 0 END), 0) AS total_devido,
+            COALESCE(SUM(CASE
+                    WHEN DATE(d.data_vencimento) < DATE('now','localtime')
+                    THEN d.valor ELSE 0 END), 0) AS valor
+         FROM dars d
+         JOIN permissionarios p ON p.id = d.permissionario_id
+         WHERE d.status IN ${OPEN_STATUSES}
+           AND d.permissionario_id IS NOT NULL
+         GROUP BY p.id, p.nome_empresa
+         HAVING COUNT(*) > 0
+         ORDER BY qtd_debitos DESC, total_vencido DESC
+         LIMIT 5`
+      );
 
       res.status(200).json({
         totalPermissionarios,
         darsPendentes,
         darsVencidos,
-        receitaPendente: receitaPendente.toFixed(2), // mantém compatibilidade com o front
+        receitaPendente: receitaPendente.toFixed(2),
         resumoMensal,
         maioresDevedores,
       });

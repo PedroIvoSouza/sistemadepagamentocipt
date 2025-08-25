@@ -482,10 +482,12 @@ async function listarPagamentosPorDataArrecadacao(dataInicioISO, dataFimISO, cod
 
   const lista = Array.isArray(data) ? data : (data?.itens || data?.content || []);
  return lista.map(it => ({
-  numeroGuia: it.numeroGuia || it.numero || it.codigoBarras || it.linhaDigitavel || null,
+  numeroGuia: it.numeroGuia || null,
+  codigoBarras: it.numCodigoBarras || it.codigoBarras || null,
+  linhaDigitavel: it.linhaDigitavel || null,
   dataPagamento: it.dataPagamento || it.dtPagamento || null,
   valorPago: it.valorPago || it.valor || null,
-  numeroDocOrigem: it.numeroDocumentoOrigem || null, // <<< GARANTA QUE ESTA LINHA EXISTE
+  numeroDocOrigem: it.numeroDocumentoOrigem || null,
   raw: it,
 }));
 }
@@ -511,10 +513,12 @@ async function listarPagamentosPorDataInclusao(dataInicioISODateTime, dataFimISO
 
   const lista = Array.isArray(data) ? data : (data?.itens || data?.content || []);
   return lista.map(it => ({
-  numeroGuia: it.numeroGuia || it.numero || it.codigoBarras || it.linhaDigitavel || null,
+  numeroGuia: it.numeroGuia || null,
+  codigoBarras: it.numCodigoBarras || it.codigoBarras || null,
+  linhaDigitavel: it.linhaDigitavel || null,
   dataPagamento: it.dataPagamento || it.dtPagamento || null,
   valorPago: it.valorPago || it.valor || null,
-  numeroDocOrigem: it.numeroDocumentoOrigem || null, // <<< GARANTA QUE ESTA LINHA EXISTE
+  numeroDocOrigem: it.numeroDocumentoOrigem || null,
   raw: it,
 }));
 }
