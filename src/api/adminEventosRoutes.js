@@ -317,31 +317,6 @@ router.post('/:id/termo/assinafy/link', async (req, res) => {
 
 /* ===========================================================
    GET /api/admin/eventos/:id/termo/assinafy-status
-   Retorna status Assinafy + tenta materializar assinatura_url e salvar
-   =========================================================== */
-Ok, peço desculpas pela frustração. Vamos resolver isso de forma definitiva agora.
-
-O erro 401 Credenciais inválidas continua porque, como vimos, o link no botão do cliente ainda está apontando para a URL direta da API da Assinafy. A correção que fizemos antes no arquivo meus-eventos.html não está sendo refletida, possivelmente por um problema de cache ou algum outro detalhe.
-
-Para garantir que o erro seja eliminado de vez, vamos fazer uma correção em dois lugares:
-
-Na Origem (Backend): Vamos impedir que a URL errada seja salva no banco de dados.
-
-No Destino (Frontend): Vamos substituir o script inteiro da página meus-eventos.html para garantir que ele use a lógica 100% correta.
-
-Passo 1: Corrigindo a Origem do Problema (Backend)
-Vamos ajustar a rota do admin que consulta o status para que ela nunca mais salve o link direto da Assinafy no seu banco de dados.
-
-Abra o arquivo src/api/adminEventosRoutes.js.
-
-Localize a rota que começa com router.get('/:id/termo/assinafy-status', ....
-
-Substitua a função inteira pela versão abaixo.
-
-JavaScript
-
-/* ===========================================================
-   GET /api/admin/eventos/:id/termo/assinafy-status
    VERSÃO CORRIGIDA: Não salva mais a URL pública insegura
    =========================================================== */
 router.get('/:id/termo/assinafy-status', async (req, res) => {
