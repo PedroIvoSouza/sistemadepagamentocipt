@@ -188,7 +188,42 @@ documentosAssinafyPublicRouter.get('/documentos/assinafy/status/:documentId', as
     return res.status(500).json({ ok:false, error:'Falha ao consultar status.' });
   }
 });
+/* ===========================================================
+   POST /api/portal/consultar-email
+   Busca o e-mail de um permissionário ou cliente de evento pelo CNPJ/CPF.
+   =========================================================== */
+portalEventosAssinaturaRouter.post('/consultar-email', async (req, res) => {
+  const { documento } = req.body;
+  if (!documento) {
+    return res.status(400).json({ ok: false, error: 'Documento (CNPJ/CPF) é obrigatório.' });
+  }
 
+  const docLimpo = String(documento).replace(/\D/g, '');
+
+  try {
+    // Procura primeiro na tabela de Permissionários (se existir)
+    let sql = `SELECT email FROM permissionarios WHERE cnpj = ?`;
+    let row = await dbGet(sql, [docLimpo]);
+
+    // Se não encontrar, procura na tabela de Clientes de Eventos
+    if (!row) {
+      sql = `SELECT email FROM Clientes_Eventos WHERE documento = ?`;
+      row = await dbGet(sql, [docLimpo]);
+    }
+
+    if (row && row.email) {
+      res.json({ ok: true, email: row.email });
+    } else {
+      res.status(404).json({ ok: false, error: 'Nenhum cadastro encontrado para o documento informado.' });
+    }
+  } catch (err) {
+    console.error('[consultar-email] erro:', err.message);
+    res.status(500).json({ ok: false, error: 'Ocorreu um erro interno. Tente novamente mais tarde.' });
+  }
+});
+
+
+// A LINHA DE EXPORTAÇÃO CORRETA PARA ESTE ARQUIVO:
 module.exports = {
   portalEventosAssinaturaRouter,
   documentosAssinafyPublicRouter,
