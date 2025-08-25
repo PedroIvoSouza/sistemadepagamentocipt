@@ -336,7 +336,25 @@
       </form>
     </div>
   </div>
-
+  <div class="modal fade" id="adminSuccessModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header border-0">
+          <h5 class="modal-title w-100 text-center">
+            <i class="bi bi-check-circle-fill text-success" style="font-size: 3rem;"></i>
+          </h5>
+        </div>
+        <div class="modal-body text-center">
+          <h5 class="mb-3">Enviado com Sucesso!</h5>
+          <p class="mb-0">O termo foi enviado para assinatura. O cliente será notificado por e-mail com as instruções para assinar.</p>
+        </div>
+        <div class="modal-footer border-0 justify-content-center">
+          <button type="button" class="btn btn-success" data-bs-dismiss="modal">Fechar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
   <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/pt.js"></script>
@@ -529,6 +547,9 @@ window.onload = () => {
   const assinafySignerPhoneInput = document.getElementById('assinafy-signer-phone');
   const assinafyCpfMask = IMask(assinafySignerCpfInput, { mask: '000.000.000-00' });
   const assinafyPhoneMask = IMask(assinafySignerPhoneInput, { mask: '(00) 00000-0000' });
+
+  const adminSuccessModalEl = document.getElementById('adminSuccessModal');
+  const successModal = adminSuccessModalEl ? new bootstrap.Modal(adminSuccessModalEl) : null;
 
   closeModalBtn?.addEventListener('click', ()=> modal.style.display='none');
   closeDarsModalBtn?.addEventListener('click', ()=> darsModal.style.display='none');
@@ -1276,18 +1297,20 @@ async function carregarClientes(){
       const { btn, original, eventoId } = assinafyContext || {};
       if (!btn) return;
       if (btn.dataset.loading === '1') return;
-
+    
       const signerName = assinafySignerNameInput.value.trim();
       const signerEmail = assinafySignerEmailInput.value.trim();
       const signerCpf = assinafySignerCpfInput.value.replace(/\D/g,'');
       const signerPhone = assinafySignerPhoneInput.value.replace(/\D/g,'');
-
-      btn.dataset.loading = '1';
-      btn.disabled = true;
-      btn.setAttribute('aria-busy','true');
-      btn.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span> Enviando...`;
-
-      let sucesso = false;
+    
+      // Pega referências do botão de envio DENTRO do modal do signatário
+      const submitBtn = ev.target.querySelector('button[type="submit"]');
+      const originalSubmitText = submitBtn.innerHTML;
+    
+      // --- Inicia o estado de carregamento ---
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = `<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Enviando...`;
+    
       try {
         const r = await fetch(`/api/admin/eventos/${eventoId}/termo/enviar-assinatura`, {
           method: 'POST',
@@ -1296,21 +1319,23 @@ async function carregarClientes(){
         });
         const j = await r.json().catch(()=> ({}));
         if (!r.ok || !j.ok) throw new Error(j.error || 'Falha no envio');
-        sucesso = true;
-        const assinafyId = j.assinafyDocId || j.assinafy_id || j.id;
-        alert('Documento enviado para assinatura com sucesso!');
-        btn.style.display = 'none';
+    
+        // --- SUCESSO! Esconde o modal de formulário e mostra o pop-up de sucesso ---
         assinafyModal.style.display = 'none';
-        startAssinafyPolling(assinafyId, eventoId);
+        if (successModal) successModal.show();
+    
+        // Esconde o botão "Enviar p/ Assinatura" original na tabela para evitar reenvio
+        if (btn) btn.style.display = 'none'; 
+    
+        // Atualiza a tabela para refletir a mudança (opcional, mas recomendado)
+        carregarEventos();
+    
       } catch (err) {
         alert(`Erro: ${err.message}`);
       } finally {
-        btn.dataset.loading = '0';
-        btn.removeAttribute('aria-busy');
-        if (!sucesso) {
-          btn.disabled = false;
-          btn.innerHTML = original;
-        }
+        // --- Restaura o botão do formulário ao estado original ---
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalSubmitText;
       }
     });
 
