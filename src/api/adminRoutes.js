@@ -111,41 +111,40 @@ router.get(
 
       // Maiores devedores (apenas títulos cobrados e vencidos)
       const maioresDevedores = await dbAll(
-        `WITH abertas AS (
-          SELECT
-            d.permissionario_id,
-            COUNT(*) AS qtd_debitos,                                                -- nº de DARs em aberto
-            SUM(CASE
-                  WHEN DATE(d.data_vencimento) < DATE('now','localtime')
-                  THEN 1 ELSE 0
-                END) AS qtd_vencidos,                                               -- nº de DARs vencidas
-            COALESCE(SUM(d.valor), 0) AS total_aberto,                              -- R$ aberto (vencido + a vencer)
-            COALESCE(SUM(CASE
-                  WHEN DATE(d.data_vencimento) < DATE('now','localtime')
-                  THEN d.valor ELSE 0
-                END), 0) AS total_vencido                                           -- R$ vencido
-          FROM dars d
-          WHERE d.status IN ('Pendente','Emitido','Vencido')                        -- só títulos cobrados
-            AND d.permissionario_id IS NOT NULL
-          GROUP BY d.permissionario_id
-        )
+      `WITH abertas AS (
         SELECT
-          p.nome_empresa,
-          a.qtd_debitos,
-          a.qtd_vencidos,
-          a.total_aberto,
-          a.total_vencido,
-          (a.total_aberto - a.total_vencido) AS total_a_vencer,
-          -- compat com o front atual:
-          a.total_aberto AS total_devido,
-          a.total_aberto AS valor
-        FROM abertas a
-        JOIN permissionarios p ON p.id = a.permissionario_id
-        WHERE a.qtd_debitos > 0
-        ORDER BY a.qtd_debitos DESC, a.total_aberto DESC
-        LIMIT 5`
-      );
-
+          d.permissionario_id,
+          COUNT(*) AS qtd_debitos,                                                -- DARs em aberto (vencidas + a vencer)
+          SUM(CASE
+                WHEN DATE(d.data_vencimento) < DATE('now','localtime')
+                THEN 1 ELSE 0
+              END) AS qtd_vencidos,                                               -- DARs vencidas
+          COALESCE(SUM(d.valor), 0) AS total_aberto,                              -- R$ aberto (vencido + a vencer)
+          COALESCE(SUM(CASE
+                WHEN DATE(d.data_vencimento) < DATE('now','localtime')
+                THEN d.valor ELSE 0
+              END), 0) AS total_vencido                                           -- R$ vencido
+        FROM dars d
+        WHERE d.status IN ('Pendente','Emitido','Vencido')                        -- só títulos cobrados
+          AND d.permissionario_id IS NOT NULL
+        GROUP BY d.permissionario_id
+      )
+      SELECT
+        p.nome_empresa,
+        a.qtd_debitos,
+        a.qtd_vencidos,
+        a.total_aberto,
+        a.total_vencido,
+        (a.total_aberto - a.total_vencido) AS total_a_vencer,
+        -- ⚠️ compat com o front: chip usa "valor" / "total_devido"
+        a.total_vencido AS total_devido,
+        a.total_vencido AS valor
+      FROM abertas a
+      JOIN permissionarios p ON p.id = a.permissionario_id
+      WHERE a.qtd_vencidos > 0                                                   -- só mostra quem tem algo vencido
+      ORDER BY a.qtd_vencidos DESC, a.total_vencido DESC                          -- ranking por quantidade de vencidas
+      LIMIT 5`
+    );
 
       res.status(200).json({
         totalPermissionarios,

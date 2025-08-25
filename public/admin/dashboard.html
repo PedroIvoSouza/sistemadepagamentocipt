@@ -238,16 +238,23 @@ window.onload = async () => {
     }
 
     const devedoresList = document.getElementById('maiores-devedores-list');
-    if (stats.maioresDevedores && stats.maioresDevedores.length > 0) {
-      devedoresList.innerHTML = stats.maioresDevedores.map(item => `
-        <li class="list-group-item d-flex justify-content-between align-items-center">
-          <small>${item.nome_empresa}</small>
-          <span class="badge bg-danger rounded-pill">R$ ${Number(item.total_devido || 0).toFixed(2).replace('.',',')}</span>
-        </li>
-      `).join('');
-    } else {
-      devedoresList.innerHTML = '<li class="list-group-item text-muted text-center">Nenhum devedor encontrado.</li>';
-    }
+      if (stats.maioresDevedores && stats.maioresDevedores.length > 0) {
+        // filtra só quem tem vencido > 0 (se quiser listar todos, remova o filter)
+        const lista = (stats.maioresDevedores || []).filter(item => Number(item.total_vencido ?? item.total_devido ?? 0) > 0);
+
+        devedoresList.innerHTML = (lista.length ? lista : stats.maioresDevedores).map(item => {
+          // usa vencido se disponível; senão, cai para total_devido (compat)
+          const vencido = Number(item.total_vencido ?? item.total_devido ?? 0);
+          return `
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+              <small>${item.nome_empresa}</small>
+              <span class="badge bg-danger rounded-pill">R$ ${vencido.toFixed(2).replace('.',',')}</span>
+            </li>
+          `;
+        }).join('');
+      } else {
+        devedoresList.innerHTML = '<li class="list-group-item text-muted text-center">Nenhum devedor encontrado.</li>';
+      }
 
   } catch (error) {
     console.error('--- ERRO DETALHADO AO CARREGAR DASHBOARD ---');
