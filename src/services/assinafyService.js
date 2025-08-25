@@ -252,39 +252,47 @@ function saveAssinaturaUrl(documentId, url) {
 }
 
 // ==============================================================================
-//           ↓↓↓ SUBSTITUA A SUA FUNÇÃO getSigningUrl POR ESTA VERSÃO FINAL ↓↓↓
+//           ↓↓↓ SUBSTITUA A SUA FUNÇÃO getSigningUrl POR ESTA VERSÃO DE DEBUG ↓↓↓
 // ==============================================================================
 async function getSigningUrl(documentId) {
   try {
-    // A estratégia correta é fazer polling no endpoint principal do documento,
-    // que é a fonte de verdade mais confiável.
-    for (let i = 0; i < 5; i++) { // Tenta por aproximadamente 10 segundos
-      if (i > 0) await sleep(2000); // Espera 2 segundos entre as tentativas
+    console.log(`[DEBUG] Iniciando busca de token para o Documento ID: ${documentId}`);
+    
+    for (let i = 0; i < 5; i++) {
+      if (i > 0) await sleep(2500); // Aumentamos um pouco a espera para 2.5 segundos
 
       const doc = await getDocument(documentId);
       const assignment = doc?.data?.assignment || doc?.assignment;
 
-      // Procuramos pelo campo "token" DENTRO do objeto "assignment"
+      // ========================== DEBUG LOG DETALHADO ==========================
+      // Esta é a parte mais importante. Vamos imprimir o objeto 'assignment' inteiro.
+      console.log(`\n===== [DEBUG][TENTATIVA ${i + 1}/5] para Documento ${documentId} =====`);
+      console.log("Conteúdo COMPLETO do objeto 'assignment' recebido da API:");
+      console.log(JSON.stringify(assignment, null, 2)); // Imprime o JSON formatado
+      console.log("================================================================\n");
+      // =======================================================================
+
+      // A lógica para encontrar o token continua a mesma
       if (assignment?.token) {
         const url = `https://app.assinafy.com.br/verify/${assignment.token}`;
-        console.log(`[ASSINAFY][getSigningUrl] SUCESSO! Token encontrado no documento na tentativa ${i + 1}.`);
-        await saveAssinaturaUrl(documentId, url); // Salva proativamente no banco
+        console.log(`[ASSINAFY][getSigningUrl] SUCESSO! Token encontrado.`);
+        await saveAssinaturaUrl(documentId, url);
         return url;
       }
     }
 
-    // Se o loop terminar sem encontrar, registramos um aviso claro.
-    console.warn(`[ASSINAFY][getSigningUrl] AVISO: Não foi possível encontrar o 'token' no objeto do documento ${documentId} após várias tentativas.`);
+    console.warn(`[ASSINAFY][getSigningUrl] AVISO: Não foi possível encontrar o 'token' no objeto do documento ${documentId} após 5 tentativas.`);
     return null;
 
   } catch (e) {
-    if (DEBUG) console.warn('[ASSINAFY][getSigningUrl] Falha ao buscar documento para obter token:', e?.response?.data?.message || e.message);
+    console.error('[ASSINAFY][getSigningUrl] ERRO CRÍTICO:', e?.response?.data || e.message);
     return null;
   }
 }
 // ==============================================================================
 //           ↑↑↑ A SUBSTITUIÇÃO TERMINA AQUI ↑↑↑
 // ==============================================================================
+
 /* -------------------------------- Artifacts -------------------------------- */
 function pickBestArtifactUrl(documentData) {
   const d = documentData?.data || documentData;
