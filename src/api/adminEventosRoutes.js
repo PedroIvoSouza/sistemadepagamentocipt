@@ -363,6 +363,7 @@ router.get('/:id/termo/assinafy-status', async (req, res) => {
    Rotas utilitárias já existentes (listar, detalhes, termo, etc.)
    =========================================================== */
 
+// Funções de cálculo de valor
 const precosPorDia = [2495.00, 1996.00, 1596.80, 1277.44, 1277.44];
 function calcularValorBruto(n) {
   if (n <= 0) return 0;
@@ -386,21 +387,15 @@ function calcularValorFinal(vb, tipo, dm = 0) {
    =========================================================== */
 router.get('/', async (req, res) => {
   try {
-    // 1. CAPTURA NOVOS PARÂMETROS de ordenação e filtro
     const { 
-      search = '', 
-      page = 1, 
-      limit = 10,
-      sort = 'id',       // Coluna padrão para ordenar
-      order = 'desc',    // Ordem padrão
-      filter = 'todos'   // Filtro padrão
+      search = '', page = 1, limit = 10,
+      sort = 'id', order = 'desc', filter = 'todos'
     } = req.query;
 
     const pageNum = parseInt(page, 10) || 1;
     const limitNum = parseInt(limit, 10) || 10;
     const offset = (pageNum - 1) * limitNum;
 
-    // --- Lógica do Filtro ---
     let whereClause = '';
     const params = [];
     if (search) {
@@ -410,20 +405,18 @@ router.get('/', async (req, res) => {
     }
 
     if (filter === 'pago') {
-      whereClause += search ? ' AND ' : 'WHERE ';
+      whereClause += whereClause ? ' AND ' : 'WHERE ';
       whereClause += 'e.evento_gratuito = 0';
     } else if (filter === 'gratuito') {
-      whereClause += search ? ' AND ' : 'WHERE ';
+      whereClause += whereClause ? ' AND ' : 'WHERE ';
       whereClause += 'e.evento_gratuito = 1';
     }
 
-    // --- Lógica da Ordenação (com segurança) ---
     const colunasPermitidas = ['id', 'nome_evento', 'data_vigencia_final'];
     const sortColumn = colunasPermitidas.includes(sort) ? sort : 'id';
     const sortOrder = ['asc', 'desc'].includes(order.toLowerCase()) ? order : 'desc';
     const orderByClause = `ORDER BY ${sortColumn} ${sortOrder}`;
 
-    // --- Execução das Consultas ---
     const countSql = `SELECT COUNT(*) AS total FROM Eventos e JOIN Clientes_Eventos c ON e.id_cliente = c.id ${whereClause}`;
     const countRow = await dbGet(countSql, params);
     const total = countRow?.total || 0;
@@ -438,8 +431,24 @@ router.get('/', async (req, res) => {
        LIMIT ? OFFSET ?`;
     const rows = await dbAll(dataSql, params.concat([limitNum, offset]));
 
-    // O enriquecimento dos dados continua o mesmo
-    for (const evento of rows) { /* ... seu código de enriquecimento existente ... */ }
+    for (const evento of rows) {
+      if (evento.evento_gratuito == 0 && (!evento.valor_final || evento.valor_final === 0)) {
+        let datas = [];
+        if (typeof evento.datas_evento === 'string') {
+          try { datas = JSON.parse(evento.datas_evento); } 
+          catch { datas = evento.datas_evento.split(',').map(s => s.trim()).filter(Boolean); }
+        }
+        
+        if (Array.isArray(datas) && datas.length > 0) {
+            const numDiarias = datas.length;
+            const valorBrutoRecalculado = calcularValorBruto(numDiarias);
+            const tipoCliente = evento.tipo_cliente || 'Geral';
+            const descontoManual = evento.percentual_desconto_manual || 0; 
+            evento.valor_final = calcularValorFinal(valorBrutoRecalculado, tipoCliente, descontoManual);
+        }
+      }
+      evento.evento_gratuito = !!evento.evento_gratuito;
+    }
 
     res.json({ eventos: rows, totalPages, currentPage: pageNum });
 
@@ -448,7 +457,6 @@ router.get('/', async (req, res) => {
     res.status(500).json({ error: 'Erro interno no servidor ao buscar eventos.' });
   }
 });
-
 
 
 router.get('/:eventoId/dars', async (req, res) => {
