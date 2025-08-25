@@ -319,42 +319,70 @@ router.post('/:id/termo/assinafy/link', async (req, res) => {
    GET /api/admin/eventos/:id/termo/assinafy-status
    Retorna status Assinafy + tenta materializar assinatura_url e salvar
    =========================================================== */
+Ok, peço desculpas pela frustração. Vamos resolver isso de forma definitiva agora.
+
+O erro 401 Credenciais inválidas continua porque, como vimos, o link no botão do cliente ainda está apontando para a URL direta da API da Assinafy. A correção que fizemos antes no arquivo meus-eventos.html não está sendo refletida, possivelmente por um problema de cache ou algum outro detalhe.
+
+Para garantir que o erro seja eliminado de vez, vamos fazer uma correção em dois lugares:
+
+Na Origem (Backend): Vamos impedir que a URL errada seja salva no banco de dados.
+
+No Destino (Frontend): Vamos substituir o script inteiro da página meus-eventos.html para garantir que ele use a lógica 100% correta.
+
+Passo 1: Corrigindo a Origem do Problema (Backend)
+Vamos ajustar a rota do admin que consulta o status para que ela nunca mais salve o link direto da Assinafy no seu banco de dados.
+
+Abra o arquivo src/api/adminEventosRoutes.js.
+
+Localize a rota que começa com router.get('/:id/termo/assinafy-status', ....
+
+Substitua a função inteira pela versão abaixo.
+
+JavaScript
+
+/* ===========================================================
+   GET /api/admin/eventos/:id/termo/assinafy-status
+   VERSÃO CORRIGIDA: Não salva mais a URL pública insegura
+   =========================================================== */
 router.get('/:id/termo/assinafy-status', async (req, res) => {
   const { id } = req.params;
   try {
     const row = await dbGet(
-      `SELECT assinafy_id, assinatura_url, signed_pdf_public_url FROM documentos WHERE evento_id = ? AND tipo = 'termo_evento' ORDER BY id DESC LIMIT 1`,
+      `SELECT assinafy_id FROM documentos WHERE evento_id = ? AND tipo = 'termo_evento' ORDER BY id DESC LIMIT 1`,
       [id]
     );
     if (!row?.assinafy_id) {
-      return res.json({ ok: true, local: { status: 'nao_enviado' } });
+      // Se não foi enviado, retorna um status local claro
+      return res.json({ ok: true, assinafy: { status: 'nao_enviado' } });
     }
 
+    // Busca o status mais recente na Assinafy
     const doc = await getDocument(row.assinafy_id);
     const info = doc?.data || doc;
     const statusReal = info?.status;
 
-    // Se o documento já foi certificado, apenas atualizamos nosso status no banco.
-    // NÃO salvamos mais a URL direta da Assinafy.
+    // Se o documento foi assinado/certificado, atualizamos nosso status no banco.
+    // Note que NÃO salvamos mais a URL da Assinafy aqui.
     if (statusReal === 'certified' || statusReal === 'certificated') {
       await dbRun(
         `UPDATE documentos
            SET status = 'assinado',
                signed_at = COALESCE(signed_at, datetime('now'))
-         WHERE evento_id = ? AND tipo = 'termo_evento' AND status != 'assinado'`, // Evita updates desnecessários
+         WHERE evento_id = ? AND tipo = 'termo_evento' AND status != 'assinado'`,
         [id]
       );
     }
 
     return res.json({ 
       ok: true, 
-      assinafy: info
+      assinafy: info // Retorna o status real para o admin
     });
   } catch (err) {
     console.error(`[assinafy-status] erro para evento ${id}:`, err.message);
     return res.status(500).json({ ok: false, error: 'Falha ao consultar status no Assinafy.' });
   }
 });
+
 
 /* ===========================================================
    Rotas utilitárias já existentes (listar, detalhes, termo, etc.)
