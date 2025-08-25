@@ -14,12 +14,6 @@
   <link rel="stylesheet" href="/css/mobile-tweaks.css">
 
   <style>
-  eventos-table-body td .btn-group {
-  flex-wrap: nowrap; /* Impede que os botões quebrem a linha */
-    }
-  eventos-table-body td .btn {
-      padding: 0.2rem 0.5rem; /* Deixa os botões mais compactos */
-    }
     :root {
       --cor-primaria: #0056a0;
       --cor-sidebar: #004480;
@@ -49,6 +43,35 @@
     .summary-row { display: flex; justify-content: space-between; font-size: 1.1rem; padding: .5rem 0; }
     .final-value { font-size: 1.3rem; font-weight: 700; color: #198754; }
     .text-capitalize { text-transform: capitalize; }
+    .sortable { cursor: pointer; }
+    .sortable:hover { background-color: #e9ecef; }
+
+    /* --- Estilos para Harmonização da Tabela de Eventos --- */
+    
+    /* Ajuste geral para todas as células da tabela */
+    .table-light th, #eventos-table-body td {
+        padding: 0.75rem 0.5rem; /* Espaçamento interno das células */
+        vertical-align: middle;
+        font-size: 0.9rem; /* Tamanho da fonte */
+    }
+
+    /* Larguras específicas para cada coluna */
+    .table-light th:nth-child(1) { width: 4%; }  /* ID */
+    .table-light th:nth-child(2) { width: 22%; } /* Nome do Evento */
+    .table-light th:nth-child(3) { width: 20%; } /* Cliente */
+    .table-light th:nth-child(4) { width: 12%; } /* Nº Processo */
+    .table-light th:nth-child(5) { width: 10%; } /* Valor Final */
+    .table-light th:nth-child(6) { width: 8%; }  /* Data Final */
+    .table-light th:nth-child(7) { width: 8%; }  /* Status */
+    .table-light th:nth-child(8) { width: 5%; }  /* DAR */
+    .table-light th:nth-child(9) { width: 5%; }  /* Termo */
+    .table-light th:nth-child(10){ width: 6%; }  /* Ações */
+
+    /* Garante que os grupos de botões não quebrem a linha e fiquem centralizados */
+    #eventos-table-body .btn-group {
+        flex-wrap: nowrap;
+        justify-content: center;
+    }
   </style>
 </head>
 <body>
