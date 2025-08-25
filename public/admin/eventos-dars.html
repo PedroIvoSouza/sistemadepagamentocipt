@@ -111,11 +111,12 @@
                 </colgroup>
                 <thead class="table-light">
                   <tr>
-                    <th>ID</th>
-                    <th>Nome do Evento</th>
+                    <th data-sort="id" class="sortable">ID <i class="bi bi-arrow-down-up small"></i></th>
+                    <th data-sort="nome_evento" class="sortable">Nome do Evento <i class="bi bi-arrow-down-up small"></i></th>
                     <th>Cliente</th>
                     <th>Nº Processo</th>
                     <th class="text-end">Valor Final</th>
+                    <th data-sort="data_vigencia_final" class="sortable">Data Final <i class="bi bi-arrow-down-up small"></i></th>
                     <th class="text-center">Status</th>
                     <th class="text-center">DAR</th>
                     <th class="text-center">Termo</th>
@@ -131,7 +132,22 @@
       </main>
     </div>
   </div>
-
+  <div class="row g-3 mb-4">
+  <div class="col-md-6">
+    <input type="text" id="searchInput" ...>
+  </div>
+  <div class="col-md-3">
+    <select id="filterSelect" class="form-select">
+      <option value="todos" selected>Todos os Eventos</option>
+      <option value="pago">Apenas Pagos</option>
+      <option value="gratuito">Apenas Gratuitos</option>
+    </select>
+  </div>
+  <div class="col-md-2">
+    <select id="limitSelect" ...>
+      </select>
+  </div>
+  </div>
   <div id="evento-modal" class="modal">
     <div class="modal-content">
       <header class="d-flex justify-content-between align-items-center mb-3">
@@ -522,6 +538,9 @@ window.onload = () => {
   let currentPage = 1;
   let currentSearch = '';
   let currentLimit = Number(limitSelect?.value || 10);
+  let currentSort = 'id';
+  let currentOrder = 'desc';
+  let currentFilter = 'todos';
   let searchTimeout;
 
   // Modal de assistente de datas
@@ -785,27 +804,31 @@ async function carregarClientes(){
 }
 
   async function fetchEventos(){
-    eventosTableBody.innerHTML = '<tr><td colspan="9" class="text-center">Carregando...</td></tr>';
-    try{
-      const params = new URLSearchParams({
-        search: currentSearch,
-        page: currentPage,
-        limit: currentLimit
-      });
-      const r = await fetch(`/api/admin/eventos?${params.toString()}`, { headers: AUTH_HEADERS });
-      if (!r.ok) throw new Error('Falha ao buscar eventos');
-      const data = await r.json();
-      currentPage = data.currentPage;
-      await renderTable(data.eventos);
-      renderPagination(data.totalPages, data.currentPage);
-    }catch(e){
-      eventosTableBody.innerHTML = `<tr><td colspan="9" class="text-center text-danger">${e.message}</td></tr>`;
-    }
+  eventosTableBody.innerHTML = '<tr><td colspan="10" class="text-center">Carregando...</td></tr>'; // colspan agora é 10
+  try{
+    const params = new URLSearchParams({
+      search: currentSearch,
+      page: currentPage,
+      limit: currentLimit,
+      sort: currentSort,
+      order: currentOrder,
+      filter: currentFilter
+    });
+    const r = await fetch(`/api/admin/eventos?${params.toString()}`, { headers: AUTH_HEADERS });
+    if (!r.ok) throw new Error('Falha ao buscar eventos');
+    const data = await r.json();
+    currentPage = data.currentPage;
+    await renderTable(data.eventos);
+    renderPagination(data.totalPages, data.currentPage);
+  }catch(e){
+    eventosTableBody.innerHTML = `<tr><td colspan="10" class="text-center text-danger">${e.message}</td></tr>`;
   }
+}
 
-async function renderTable(eventos){
+ async function renderTable(eventos){
     if (!Array.isArray(eventos) || eventos.length === 0){
-      eventosTableBody.innerHTML = '<tr><td colspan="9" class="text-center">Nenhum evento encontrado.</td></tr>';
+      // Corrigido para 10 colunas
+      eventosTableBody.innerHTML = '<tr><td colspan="10" class="text-center">Nenhum evento encontrado.</td></tr>';
       return;
     }
 
@@ -821,7 +844,7 @@ async function renderTable(eventos){
 
     // 3. Agora, monta a tabela com todos os dados em mãos
     const tableRowsHtml = eventos.map((ev, index) => {
-      const meta = resultadosDeStatus[index]; // Pega o status correspondente
+      const meta = resultadosDeStatus[index];
       const evNormalizado = normalizarEvento(ev);
       const id = evIdOf(ev);
       const status = ev.status || 'Pendente';
@@ -851,6 +874,7 @@ async function renderTable(eventos){
               : fmtBRL(evNormalizado.valor_final)
             }
           </td>
+          <td>${formatDateBR(evNormalizado.data_vigencia_final)}</td>
           <td class="text-center"><span class="badge ${badge}">${status}</span></td>
           <td class="text-center">
             <button class="btn btn-sm btn-outline-primary btn-dars" title="Ver DARs" data-evento-id="${id}" data-evento-nome="${evNormalizado.nome_evento || ''}">
@@ -1488,6 +1512,28 @@ async function renderTable(eventos){
     currentLimit = limitSelect.value;
     currentPage = 1;
     fetchEventos();
+  });
+  const thead = document.querySelector('#eventos-table-body').parentElement.querySelector('thead');
+  const filterSelect = document.getElementById('filterSelect');
+  
+  filterSelect.addEventListener('change', () => {
+      currentFilter = filterSelect.value;
+      currentPage = 1;
+      fetchEventos();
+  });
+  
+  thead.addEventListener('click', (e) => {
+      const th = e.target.closest('th[data-sort]');
+      if (!th) return;
+  
+      const sortKey = th.dataset.sort;
+      if (currentSort === sortKey) {
+          currentOrder = currentOrder === 'asc' ? 'desc' : 'asc';
+      } else {
+          currentSort = sortKey;
+          currentOrder = 'desc';
+      }
+      fetchEventos();
   });
   paginationNav.addEventListener('click', (e) => {
     if (e.target.tagName === 'A' && !e.target.parentElement.classList.contains('disabled')) {
