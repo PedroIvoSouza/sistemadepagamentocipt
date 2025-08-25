@@ -810,8 +810,12 @@ async function carregarClientes(){
     }
     eventosTableBody.innerHTML = '';
     for (const ev of eventos){
-      const id = evIdOf(ev);
-      const status = ev.status || 'Pendente';
+      // 1. NORMALIZAÇÃO DOS DADOS (AQUI ESTÁ A CORREÇÃO PRINCIPAL)
+      // Usamos a mesma função do "Editar" para garantir consistência
+      const evNormalizado = normalizarEvento(ev);
+      
+      const id = evIdOf(ev); // Usamos o ID original para as ações
+      const status = evNormalizado.status || 'Pendente';
       const badge = status==='Pago' ? 'bg-success'
                   : ['Emitido','Reemitido'].includes(status) ? 'bg-primary'
                   : 'bg-warning text-dark';
@@ -832,15 +836,16 @@ async function carregarClientes(){
       } catch {}
       
       const tr = document.createElement('tr');
+      // 2. Usamos os dados normalizados para exibir na tabela
       tr.innerHTML = `
         <td>${id}</td>
-        <td><strong class="text-capitalize">${ev.nome_evento || ''}</strong></td>
+        <td><strong class="text-capitalize">${evNormalizado.nome_evento || ''}</strong></td>
         <td><strong class="text-capitalize">${ev.nome_cliente || ''}</strong></td>
-        <td>${formatNumeroProcesso(ev.numero_processo)}</td>
-        <td class="text-end">${fmtBRL(ev.valor_final)}</td>
+        <td>${formatNumeroProcesso(evNormalizado.numero_processo)}</td>
+        <td class="text-end">${fmtBRL(evNormalizado.valor_final)}</td>
         <td class="text-center"><span class="badge ${badge}">${status}</span></td>
         <td class="text-center">
-          <button class="btn btn-sm btn-outline-primary btn-dars" title="Ver DARs" data-evento-id="${id}" data-evento-nome="${ev.nome_evento || ''}">
+          <button class="btn btn-sm btn-outline-primary btn-dars" title="Ver DARs" data-evento-id="${id}" data-evento-nome="${evNormalizado.nome_evento || ''}">
             <i class="bi bi-file-earmark-arrow-down"></i>
           </button>
         </td>
@@ -859,7 +864,7 @@ async function carregarClientes(){
           <button class="btn btn-sm btn-outline-secondary btn-editar" title="Editar" data-evento-id="${id}">
             <i class="bi bi-pencil"></i>
           </button>
-          <button class="btn btn-sm btn-outline-danger btn-apagar" title="Apagar" data-evento-id="${id}" data-evento-nome="${ev.nome_evento || ''}">
+          <button class="btn btn-sm btn-outline-danger btn-apagar" title="Apagar" data-evento-id="${id}" data-evento-nome="${evNormalizado.nome_evento || ''}">
             <i class="bi bi-trash"></i>
           </button>
         </td>`;
