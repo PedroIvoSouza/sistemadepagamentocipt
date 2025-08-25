@@ -803,7 +803,7 @@ async function carregarClientes(){
     }
   }
 
-    async function renderTable(eventos){
+  async function renderTable(eventos){
     if (!Array.isArray(eventos) || eventos.length === 0){
       eventosTableBody.innerHTML = '<tr><td colspan="9" class="text-center">Nenhum evento encontrado.</td></tr>';
       return;
@@ -863,9 +863,9 @@ async function carregarClientes(){
             <i class="bi bi-trash"></i>
           </button>
         </td>`;
-      eventosTableBody.appendChild(tr); // Adiciona a linha na tabela
-    } // Fecha o loop for
-  } // Fecha a função renderTable
+      eventosTableBody.appendChild(tr);
+    }
+  }
       
   function renderPagination(totalPages, page){
     paginationNav.innerHTML = '';
@@ -1172,74 +1172,54 @@ async function carregarClientes(){
   }
 
   // Delegação de eventos da TABELA e do MODAL de DARs
-  function inicializarEventListeners(){
-
-    // Tabela principal
+   function inicializarEventListeners(){
+    // Listener de clique para a tabela inteira
     eventosTableBody.addEventListener('click', async (e)=>{
-      const btnDars   = e.target.closest('.btn-dars');
-      const btnVerificarStatus = e.target.closest('.btn-verificar-status');
-      const btnTermo  = e.target.closest('.btn-termo');
-      const btnApagar = e.target.closest('.btn-apagar');
-      const btnEditar = e.target.closest('.btn-editar');
+      // Identifica qual botão foi clicado
+      const btnDars     = e.target.closest('.btn-dars');
+      const btnTermo    = e.target.closest('.btn-termo');
+      const btnAssinafy = e.target.closest('.btn-enviar-assinafy');
+      const btnApagar   = e.target.closest('.btn-apagar');
+      const btnEditar   = e.target.closest('.btn-editar');
 
+      // Ação para o botão "Ver DARs"
       if (btnDars){
         const eventoId = btnDars.dataset.eventoId;
         const eventoNome = btnDars.dataset.eventoNome || `#${eventoId}`;
         abrirModalDARs(eventoId, eventoNome);
+        return; // Encerra a execução aqui
       }
+      
+      // Ação para o botão "Baixar Termo Original"
       if (btnTermo){
-  const eventoId = btnTermo.dataset.eventoId;
-
-  // evita múltiplos cliques
+        const eventoId = btnTermo.dataset.eventoId;
         if (btnTermo.dataset.loading === '1') return;
         const original = btnTermo.innerHTML;
-        btnTermo.dataset.loading = '1';
         btnTermo.disabled = true;
-        btnTermo.setAttribute('aria-busy', 'true');
-        btnTermo.innerHTML = `
-          <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
-          Gerando...
-        `;
+        btnTermo.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
 
-        try{
-          let meta;
-          try {
-            const rMeta = await fetch(`/api/documentos/termo/${eventoId}/meta`, { headers: AUTH_HEADERS, cache: 'no-store' });
-            if (rMeta.ok) meta = await rMeta.json();
-          } catch {}
-
-          if (meta?.signed_pdf_public_url) {
-            const a = document.createElement('a');
-            a.href = meta.signed_pdf_public_url;
-            a.download = `termo_evento_${eventoId}.pdf`;
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-            return;
-          }
-
+        try {
           const r = await fetch(`/api/admin/eventos/${eventoId}/termo`, { headers: AUTH_HEADERS, cache: 'no-store' });
           if (!r.ok) throw new Error('Falha ao gerar termo');
           const blob = await r.blob();
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.href = url;
-          a.download = `termo_evento_${eventoId}.pdf`;
+          a.download = `termo_original_evento_${eventoId}.pdf`;
           document.body.appendChild(a);
           a.click();
           a.remove();
           URL.revokeObjectURL(url);
-        }catch(err){
-          alert(`Erro ao gerar termo: ${err.message}`);
-        }finally{
-          // restaura o botão
+        } catch(err) {
+          alert(`Erro ao baixar termo original: ${err.message}`);
+        } finally {
           btnTermo.disabled = false;
-          btnTermo.dataset.loading = '0';
-          btnTermo.removeAttribute('aria-busy');
           btnTermo.innerHTML = original;
         }
+        return;
       }
-      const btnAssinafy = e.target.closest('.btn-enviar-assinafy');
+      
+      // Ação para o botão "Enviar para Assinatura"
       if (btnAssinafy) {
         const eventoId = btnAssinafy.dataset.eventoId;
         const clienteId = btnAssinafy.dataset.clienteId;
@@ -1265,48 +1245,7 @@ async function carregarClientes(){
         return;
       }
 
-      if (btnVerificarStatus) {
-    const eventoId = btnVerificarStatus.dataset.eventoId;
-    const originalHtml = btnVerificarStatus.innerHTML;
-    btnVerificarStatus.disabled = true;
-    btnVerificarStatus.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
-
-    try {
-        const rMeta = await fetch(`/api/admin/eventos/${eventoId}/termo/assinafy-status`, { headers: AUTH_HEADERS });
-        const meta = await rMeta.json();
-
-        if (!rMeta.ok || !meta.ok) {
-            throw new Error(meta.error || 'Falha ao buscar status');
-        }
-
-        const assinafyId = meta?.assinafy?.id;
-        const statusReal = meta?.assinafy?.status;
-        let mostraBtnEnviar = true;
-        if (statusReal === 'assinado' || statusReal === 'signed' || statusReal === 'certificated' || meta.signed_pdf_public_url) {
-            mostraBtnEnviar = false;
-        }
-
-        const container = document.getElementById(`termo-actions-${eventoId}`);
-        container.innerHTML = `
-          <div class="btn-group">
-            <button class="btn btn-sm btn-outline-secondary btn-termo" title="Baixar Termo Original" data-evento-id="${eventoId}">
-              <i class="bi bi-file-earmark-text"></i>
-            </button>
-            ${mostraBtnEnviar 
-              ? `<button class="btn btn-sm btn-primary btn-enviar-assinafy" title="Enviar para Assinatura" data-evento-id="${eventoId}" data-cliente-id="${e.target.closest('tr').querySelector('.btn-enviar-assinafy')?.dataset.clienteId || ''}"><i class="bi bi-pen"></i></button>` 
-              : `<a class="btn btn-sm btn-success" href="/api/documentos/assinafy/${assinafyId}/download-signed" target="_blank" rel="noopener" title="Baixar Termo Assinado"><i class="bi bi-download"></i></a>`
-            }
-          </div>
-        `;
-    } catch (err) {
-        alert(err.message);
-        btnVerificarStatus.disabled = false;
-        btnVerificarStatus.innerHTML = originalHtml;
-    }
-  }
-});
-
-      
+      // Ação para o botão "Apagar"
       if (btnApagar){
         const eventoId = btnApagar.dataset.eventoId;
         const nome = btnApagar.dataset.eventoNome || `#${eventoId}`;
@@ -1318,59 +1257,56 @@ async function carregarClientes(){
           alert(j.message || 'Evento apagado.');
           carregarEventos();
         }catch(err){ alert(`Erro ao apagar: ${err.message}`); }
+        return;
       }
+      
+      // Ação para o botão "Editar"
       if (btnEditar){
         const eventoId = btnEditar.dataset.eventoId;
         editarEvento(eventoId);
+        return;
       }
     });
 
+    // Listener para o formulário de envio para Assinafy (já estava correto)
     assinafyForm?.addEventListener('submit', async (ev) => {
-  ev.preventDefault();
-  const { eventoId } = assinafyContext || {};
-  if (!eventoId) return;
+      ev.preventDefault();
+      const { eventoId } = assinafyContext || {};
+      if (!eventoId) return;
 
-  const submitBtn = ev.target.querySelector('button[type="submit"]');
-  const originalSubmitText = submitBtn.innerHTML;
+      const submitBtn = ev.target.querySelector('button[type="submit"]');
+      const originalSubmitText = submitBtn.innerHTML;
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = `<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Enviando...`;
 
-  // --- Inicia o estado de carregamento ---
-  submitBtn.disabled = true;
-  submitBtn.innerHTML = `<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Enviando...`;
+      try {
+        const signerName = assinafySignerNameInput.value.trim();
+        const signerEmail = assinafySignerEmailInput.value.trim();
+        const signerCpf = assinafySignerCpfInput.value.replace(/\D/g,'');
+        const signerPhone = assinafySignerPhoneInput.value.replace(/\D/g,'');
 
-  try {
-    const signerName = assinafySignerNameInput.value.trim();
-    const signerEmail = assinafySignerEmailInput.value.trim();
-    const signerCpf = assinafySignerCpfInput.value.replace(/\D/g,'');
-    const signerPhone = assinafySignerPhoneInput.value.replace(/\D/g,'');
+        const response = await fetch(`/api/admin/eventos/${eventoId}/termo/enviar-assinatura`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...AUTH_HEADERS },
+          body: JSON.stringify({ signerName, signerEmail, signerCpf, signerPhone })
+        });
 
-    const response = await fetch(`/api/admin/eventos/${eventoId}/termo/enviar-assinatura`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...AUTH_HEADERS },
-      body: JSON.stringify({ signerName, signerEmail, signerCpf, signerPhone })
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Falha no envio');
+
+        if (assinafyModalInstance) assinafyModalInstance.hide();
+        if (successModal) successModal.show();
+        
+        carregarEventos();
+
+      } catch (error) {
+        alert(`Erro: ${error.message}`);
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalSubmitText;
+      }
     });
 
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.error || 'Falha no envio');
-
-    // --- SUCESSO! ---
-    // 1. Usamos o comando .hide() para fechar o modal do formulário CORRETAMENTE
-    if (assinafyModalInstance) assinafyModalInstance.hide();
-
-    // 2. Mostramos o modal de sucesso
-    if (successModal) successModal.show();
-    
-    // 3. Atualizamos a tabela de eventos em segundo plano
-    carregarEventos();
-
-  } catch (error) {
-    console.error('Erro ao enviar para assinatura:', error);
-    alert(`Erro: ${error.message}`);
-  } finally {
-    // --- Restaura o botão do formulário ao estado original ---
-    submitBtn.disabled = false;
-    submitBtn.innerHTML = originalSubmitText;
-  }
-});
 
     // Ações dentro do modal de DARs (delegadas)
     darsList.addEventListener('click', async (e)=>{
