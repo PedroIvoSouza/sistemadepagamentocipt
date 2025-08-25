@@ -117,6 +117,13 @@
               <div class="col-md-6">
                 <input type="text" id="searchInput" class="form-control text-capitalize" placeholder="Buscar por nome ou cliente...">
               </div>
+              <div class="col-md-3">
+                <select id="filterSelect" class="form-select">
+                  <option value="todos" selected>Todos os Eventos</option>
+                  <option value="pago">Apenas Pagos</option>
+                  <option value="gratuito">Apenas Gratuitos</option>
+                </select>
+              </div>
               <div class="col-md-2">
                 <select id="limitSelect" class="form-select">
                   <option value="10" selected>10 por página</option>
@@ -160,22 +167,6 @@
         </div>
       </main>
     </div>
-  </div>
-  <div class="row g-3 mb-4">
-  <div class="col-md-6">
-    <input type="text" id="searchInput" ...>
-  </div>
-  <div class="col-md-3">
-    <select id="filterSelect" class="form-select">
-      <option value="todos" selected>Todos os Eventos</option>
-      <option value="pago">Apenas Pagos</option>
-      <option value="gratuito">Apenas Gratuitos</option>
-    </select>
-  </div>
-  <div class="col-md-2">
-    <select id="limitSelect" ...>
-      </select>
-  </div>
   </div>
   <div id="evento-modal" class="modal">
     <div class="modal-content">
@@ -1251,10 +1242,10 @@ function normalizarEvento(payload){
     throw new Error('Não foi possível reemitir a DAR.');
   }
 
-  // Delegação de eventos da TABELA e do MODAL de DARs
-      function inicializarEventListeners(){
+  function inicializarEventListeners(){
     // Listener de clique para a tabela inteira
     eventosTableBody.addEventListener('click', async (e)=>{
+      // Identifica qual botão foi clicado
       const btnDars     = e.target.closest('.btn-dars');
       const btnTermo    = e.target.closest('.btn-termo');
       const btnAssinafy = e.target.closest('.btn-enviar-assinafy');
