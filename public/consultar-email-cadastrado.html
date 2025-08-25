@@ -156,7 +156,7 @@
                 btnConsultar.disabled = true;
                 
                 try {
-                    const response = await fetch('/api/portal/consultar-email', {
+                    const response = await fetch('/api/portal/eventos/consultar-email', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ documento: mask.unmaskedValue })
