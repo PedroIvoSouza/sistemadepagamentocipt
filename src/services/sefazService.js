@@ -482,11 +482,12 @@ async function listarPagamentosPorDataArrecadacao(dataInicioISO, dataFimISO, cod
 
   const lista = Array.isArray(data) ? data : (data?.itens || data?.content || []);
   return lista.map(it => ({
-    numeroGuia: it.numeroGuia || it.numero || it.codigoBarras || it.linhaDigitavel || null,
-    dataPagamento: it.dataPagamento || it.dtPagamento || null,
-    valorPago: it.valorPago || it.valor || null,
-    raw: it,
-  }));
+  numeroGuia: it.numeroGuia || it.numero || it.codigoBarras || it.linhaDigitavel || null,
+  dataPagamento: it.dataPagamento || it.dtPagamento || null,
+  valorPago: it.valorPago || it.valor || null,
+  numeroDocOrigem: it.numeroDocumentoOrigem || null, // <<< ADICIONE ESTA LINHA
+  raw: it,
+}));
 }
 
 /**
