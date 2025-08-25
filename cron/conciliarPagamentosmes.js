@@ -9,7 +9,7 @@ const {
 } = require('../src/services/sefazService');
 
 // ======= DB =======
-const DB_PATH = process.env.SQLITE_STORAGE || require('path').resolve(__dirname, '../sistemadepagamentocipt.db');
+const DB_PATH = '/home/pedroivodesouza/sistemadepagamentocipt/sistemacipt.db';
 const db = new sqlite3.Database(DB_PATH);
 
 function dbRun(sql, params = []) {
