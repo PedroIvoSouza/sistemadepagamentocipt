@@ -374,8 +374,7 @@ router.get('/', async (req, res) => {
     const params = [];
     if (search) {
       const like = `%${search}%`;
-      whereClause =
-        'WHERE e.nome_evento LIKE ? OR c.nome_razao_social LIKE ? OR e.numero_processo LIKE ?';
+      whereClause = 'WHERE e.nome_evento LIKE ? OR c.nome_razao_social LIKE ? OR e.numero_processo LIKE ?';
       params.push(like, like, like);
     }
 
@@ -388,31 +387,48 @@ router.get('/', async (req, res) => {
     const total = countRow?.total || 0;
     const totalPages = Math.ceil(total / limitNum);
 
-     const dataSql = `
-      SELECT 
-        e.id, 
-        e.id_cliente, 
-        e.nome_evento, 
-        e.espaco_utilizado, 
-        e.area_m2,
-        e.numero_processo,
-        e.numero_termo,
-        c.nome_razao_social AS nome_cliente,
-        COALESCE(e.valor_final, (SELECT SUM(de_sum.valor_parcela) FROM DARs_Eventos de_sum WHERE de_sum.id_evento = e.id), 0) AS valor_final,
-        CASE 
-          WHEN (SELECT COUNT(*) FROM DARs_Eventos de_total WHERE de_total.id_evento = e.id) = 0 THEN 'Pendente'
-          WHEN (SELECT COUNT(*) FROM DARs_Eventos de_paid JOIN dars d_paid ON d_paid.id = de_paid.id_dar WHERE de_paid.id_evento = e.id AND d_paid.status = 'Pago') = (SELECT COUNT(*) FROM DARs_Eventos de_total WHERE de_total.id_evento = e.id) THEN 'Pago'
-          ELSE 'Pendente'
-        END AS status
-      FROM Eventos e
-      JOIN Clientes_Eventos c ON e.id_cliente = c.id
-      ${whereClause}
-      GROUP BY e.id
-      ORDER BY e.id DESC
-      LIMIT ? OFFSET ?`;
+    // 1. CONSULTA SQL SIMPLIFICADA E RÁPIDA
+    // Apenas pega os dados brutos, sem cálculos complexos.
+    const dataSql = `
+      SELECT e.*, c.nome_razao_social AS nome_cliente
+        FROM Eventos e
+        JOIN Clientes_Eventos c ON e.id_cliente = c.id
+        ${whereClause}
+       ORDER BY e.id DESC
+       LIMIT ? OFFSET ?`;
     const rows = await dbAll(dataSql, params.concat([limitNum, offset]), 'listar-eventos');
 
+    // 2. ENRIQUECIMENTO DOS DADOS COM JAVASCRIPT
+    // Percorremos cada evento para garantir que os dados estejam corretos.
+    for (const evento of rows) {
+      // Garante que o valor_final esteja correto
+      if (!evento.valor_final || evento.valor_final === 0) {
+        const totalParcelasRow = await dbGet(
+          `SELECT SUM(valor_parcela) as total FROM DARs_Eventos WHERE id_evento = ?`,
+          [evento.id]
+        );
+        if (totalParcelasRow?.total > 0) {
+          evento.valor_final = totalParcelasRow.total;
+        }
+      }
+
+      // Garante que o status esteja correto
+      const darsStatus = await dbGet(
+        `SELECT
+           COUNT(*) as total,
+           SUM(CASE WHEN d.status = 'Pago' THEN 1 ELSE 0 END) as pagas
+         FROM DARs_Eventos de
+         JOIN dars d ON d.id = de.id_dar
+         WHERE de.id_evento = ?`,
+        [evento.id]
+      );
+      if (darsStatus && darsStatus.total > 0 && darsStatus.total === darsStatus.pagas) {
+        evento.status = 'Pago';
+      }
+    }
+
     res.json({ eventos: rows, totalPages, currentPage: pageNum });
+
   } catch (err) {
     console.error('[admin/eventos] listar erro:', err.message);
     res.status(500).json({ error: 'Erro interno no servidor ao buscar eventos.' });
