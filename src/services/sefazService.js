@@ -465,11 +465,18 @@ async function consultarReceita(codigo) {
  * Lista pagamentos por DATA DE ARRECADAÇÃO (YYYY-MM-DD a YYYY-MM-DD)
  */
 async function listarPagamentosPorDataArrecadacao(dataInicioISO, dataFimISO, codigoReceita) {
-  const params = { dataInicio: dataInicioISO, dataFim: dataFimISO };
-  if (codigoReceita) params.codigoReceita = normalizeCodigoReceita(codigoReceita);
+  // Payload com os nomes de campo corretos, conforme o manual
+  const payload = {
+    dataInicioArrecadacao: dataInicioISO,
+    dataFimArrecadacao: dataFimISO,
+  };
+  if (codigoReceita) {
+    payload.codigoReceita = normalizeCodigoReceita(codigoReceita);
+  }
 
+  // Requisição CORRIGIDA para POST e com o endpoint da v2, conforme o manual
   const { data } = await reqWithRetry(
-    () => sefaz.get('/api/public/pagamento/por-data-arrecadacao', { params }),
+    () => sefaz.post('/api/public/v2/guia/pagamento/por-data-arrecadacao', payload),
     'pagamento/por-data-arrecadacao'
   );
 
@@ -483,14 +490,21 @@ async function listarPagamentosPorDataArrecadacao(dataInicioISO, dataFimISO, cod
 }
 
 /**
- * Lista pagamentos por DATA DE INCLUSÃO (YYYY-MM-DDTHH:mm:ss a YYYY-MM-DDTHH:mm:ss)
+ * Lista pagamentos por DATA DE INCLUSÃO (YYYY-MM-DD HH:mm:ss a YYYY-MM-DD HH:mm:ss)
  */
 async function listarPagamentosPorDataInclusao(dataInicioISODateTime, dataFimISODateTime, codigoReceita) {
-  const params = { dataInicio: dataInicioISODateTime, dataFim: dataFimISODateTime };
-  if (codigoReceita) params.codigoReceita = normalizeCodigoReceita(codigoReceita);
+  // Payload com os nomes de campo e formato de data corretos, conforme o manual
+  const payload = {
+    dataHoraInicioInclusao: dataInicioISODateTime.replace('T', ' '),
+    dataHoraFimInclusao: dataFimISODateTime.replace('T', ' '),
+  };
+  if (codigoReceita) {
+    payload.codigoReceita = normalizeCodigoReceita(codigoReceita);
+  }
 
+  // Requisição CORRIGIDA para POST e com o endpoint da v2, conforme o manual
   const { data } = await reqWithRetry(
-    () => sefaz.get('/api/public/pagamento/por-data-inclusao', { params }),
+    () => sefaz.post('/api/public/v2/guia/pagamento/por-data-inclusao', payload),
     'pagamento/por-data-inclusao'
   );
 
@@ -502,7 +516,6 @@ async function listarPagamentosPorDataInclusao(dataInicioISODateTime, dataFimISO
     raw: it,
   }));
 }
-
 // ==========================
 // Exports
 // ==========================
