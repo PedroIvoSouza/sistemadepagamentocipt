@@ -808,46 +808,78 @@ async function renderTable(eventos){
       eventosTableBody.innerHTML = '<tr><td colspan="9" class="text-center">Nenhum evento encontrado.</td></tr>';
       return;
     }
-    eventosTableBody.innerHTML = '';
-    for (const ev of eventos){
+
+    // 1. Cria uma lista de "promessas" para buscar o status de todos os eventos em paralelo
+    const promessasDeStatus = eventos.map(ev => 
+        fetch(`/api/admin/eventos/${evIdOf(ev)}/termo/assinafy-status`, { headers: AUTH_HEADERS })
+            .then(res => res.ok ? res.json() : null)
+            .catch(() => null)
+    );
+
+    // 2. Espera todas as buscas de status terminarem
+    const resultadosDeStatus = await Promise.all(promessasDeStatus);
+
+    // 3. Agora, monta a tabela com todos os dados em mãos
+    const tableRowsHtml = eventos.map((ev, index) => {
+      const meta = resultadosDeStatus[index]; // Pega o status correspondente
       const evNormalizado = normalizarEvento(ev);
       const id = evIdOf(ev);
-      const status = evNormalizado.status || 'Pendente';
-      const badge = status==='Pago' ? 'bg-success'
+      const status = ev.status || 'Pendente';
+      const badge = status === 'Pago' ? 'bg-success'
                   : ['Emitido','Reemitido'].includes(status) ? 'bg-primary'
                   : 'bg-warning text-dark';
       
-      const tr = document.createElement('tr');
-      // Guarda o ID do cliente no próprio elemento da linha para uso posterior
-      tr.dataset.clienteId = ev.id_cliente; 
+      let mostraBtnEnviar = true;
+      let assinafyIdDoMeta = '';
+      if (meta && meta.ok) {
+          assinafyIdDoMeta = meta?.assinafy?.id;
+          const statusReal = meta?.assinafy?.status;
+          if (statusReal === 'assinado' || statusReal === 'signed' || statusReal === 'certificated') {
+              mostraBtnEnviar = false;
+          }
+      }
       
-      tr.innerHTML = `
-        <td>${id}</td>
-        <td><strong class="text-capitalize">${evNormalizado.nome_evento || ''}</strong></td>
-        <td><strong class="text-capitalize">${ev.nome_cliente || ''}</strong></td>
-        <td>${formatNumeroProcesso(evNormalizado.numero_processo)}</td>
-        <td class="text-end">${fmtBRL(evNormalizado.valor_final)}</td>
-        <td class="text-center"><span class="badge ${badge}">${status}</span></td>
-        <td class="text-center">
-          <button class="btn btn-sm btn-outline-primary btn-dars" title="Ver DARs" data-evento-id="${id}" data-evento-nome="${evNormalizado.nome_evento || ''}">
-            <i class="bi bi-file-earmark-arrow-down"></i>
-          </button>
-        </td>
-        <td class="text-center" id="termo-actions-${id}">
-            <button class="btn btn-sm btn-outline-info btn-verificar-status" data-evento-id="${id}" title="Verificar Status do Termo">
-                <i class="bi bi-arrow-repeat"></i> Verificar Status
+      return `
+        <tr>
+          <td>${id}</td>
+          <td><strong class="text-capitalize">${evNormalizado.nome_evento || ''}</strong></td>
+          <td><strong class="text-capitalize">${ev.nome_cliente || ''}</strong></td>
+          <td>${formatNumeroProcesso(evNormalizado.numero_processo)}</td>
+          <td class="text-end">
+            ${evNormalizado.evento_gratuito
+              ? `<span class="badge bg-info">Gratuito</span>`
+              : fmtBRL(evNormalizado.valor_final)
+            }
+          </td>
+          <td class="text-center"><span class="badge ${badge}">${status}</span></td>
+          <td class="text-center">
+            <button class="btn btn-sm btn-outline-primary btn-dars" title="Ver DARs" data-evento-id="${id}" data-evento-nome="${evNormalizado.nome_evento || ''}">
+              <i class="bi bi-file-earmark-arrow-down"></i>
             </button>
-        </td>
-        <td class="text-center">
-          <button class="btn btn-sm btn-outline-secondary btn-editar" title="Editar" data-evento-id="${id}">
-            <i class="bi bi-pencil"></i>
-          </button>
-          <button class="btn btn-sm btn-outline-danger btn-apagar" title="Apagar" data-evento-id="${id}" data-evento-nome="${evNormalizado.nome_evento || ''}">
-            <i class="bi bi-trash"></i>
-          </button>
-        </td>`;
-      eventosTableBody.appendChild(tr);
-    }
+          </td>
+          <td class="text-center">
+            <div class="btn-group">
+              <button class="btn btn-sm btn-outline-secondary btn-termo" title="Baixar Termo Original" data-evento-id="${id}">
+                <i class="bi bi-file-earmark-text"></i>
+              </button>
+              ${mostraBtnEnviar 
+                ? `<button class="btn btn-sm btn-primary btn-enviar-assinafy" title="Enviar para Assinatura" data-evento-id="${id}" data-cliente-id="${ev.id_cliente}"><i class="bi bi-pen"></i></button>` 
+                : `<a class="btn btn-sm btn-success" href="/api/documentos/assinafy/${assinafyIdDoMeta}/download-signed" target="_blank" rel="noopener" title="Baixar Termo Assinado"><i class="bi bi-download"></i></a>`
+              }
+            </div>
+          </td>
+          <td class="text-center">
+            <button class="btn btn-sm btn-outline-secondary btn-editar" title="Editar" data-evento-id="${id}">
+              <i class="bi bi-pencil"></i>
+            </button>
+            <button class="btn btn-sm btn-outline-danger btn-apagar" title="Apagar" data-evento-id="${id}" data-evento-nome="${evNormalizado.nome_evento || ''}">
+              <i class="bi bi-trash"></i>
+            </button>
+          </td>
+        </tr>`;
+    }).join('');
+    
+    eventosTableBody.innerHTML = tableRowsHtml;
   }
   
   function renderPagination(totalPages, page){
@@ -1156,84 +1188,67 @@ async function renderTable(eventos){
   }
 
   // Delegação de eventos da TABELA e do MODAL de DARs
-    function inicializarEventListeners(){
+      function inicializarEventListeners(){
+    // Listener de clique para a tabela inteira
     eventosTableBody.addEventListener('click', async (e)=>{
-      const btnDars = e.target.closest('.btn-dars');
-      const btnTermo = e.target.closest('.btn-termo');
+      const btnDars     = e.target.closest('.btn-dars');
+      const btnTermo    = e.target.closest('.btn-termo');
       const btnAssinafy = e.target.closest('.btn-enviar-assinafy');
-      const btnApagar = e.target.closest('.btn-apagar');
-      const btnEditar = e.target.closest('.btn-editar');
-      const btnVerificarStatus = e.target.closest('.btn-verificar-status');
+      const btnApagar   = e.target.closest('.btn-apagar');
+      const btnEditar   = e.target.closest('.btn-editar');
 
-      if (btnVerificarStatus) {
-        const eventoId = btnVerificarStatus.dataset.eventoId;
-        const originalHtml = btnVerificarStatus.innerHTML;
-        btnVerificarStatus.disabled = true;
-        btnVerificarStatus.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
+      if (btnDars){
+        const eventoId = btnDars.dataset.eventoId;
+        const eventoNome = btnDars.dataset.eventoNome || `#${eventoId}`;
+        abrirModalDARs(eventoId, eventoNome);
+        return;
+      }
+      
+      if (btnTermo){
+        const eventoId = btnTermo.dataset.eventoId;
+        if (btnTermo.dataset.loading === '1') return;
+        const original = btnTermo.innerHTML;
+        btnTermo.disabled = true;
+        btnTermo.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
 
         try {
-            const rMeta = await fetch(`/api/admin/eventos/${eventoId}/termo/assinafy-status`, { headers: AUTH_HEADERS });
-            const meta = await rMeta.json();
-
-            if (!rMeta.ok || !meta.ok) throw new Error(meta.error || 'Falha ao buscar status');
-
-            const assinafyId = meta?.assinafy?.id;
-            const statusReal = meta?.assinafy?.status;
-            let mostraBtnEnviar = true;
-            if (statusReal === 'assinado' || statusReal === 'signed' || statusReal === 'certificated') {
-                mostraBtnEnviar = false;
-            }
-
-            // Pega o ID do cliente guardado no elemento <tr> da tabela
-            const clienteId = e.target.closest('tr')?.dataset.clienteId || '';
-
-            const container = document.getElementById(`termo-actions-${eventoId}`);
-            container.innerHTML = `
-              <div class="btn-group">
-                <button class="btn btn-sm btn-outline-secondary btn-termo" title="Baixar Termo Original" data-evento-id="${eventoId}">
-                  <i class="bi bi-file-earmark-text"></i>
-                </button>
-                ${mostraBtnEnviar 
-                  ? `<button class="btn btn-sm btn-primary btn-enviar-assinafy" title="Enviar para Assinatura" data-evento-id="${eventoId}" data-cliente-id="${clienteId}"><i class="bi bi-pen"></i></button>` 
-                  : `<a class="btn btn-sm btn-success" href="/api/documentos/assinafy/${assinafyId}/download-signed" target="_blank" rel="noopener" title="Baixar Termo Assinado"><i class="bi bi-download"></i></a>`
-                }
-              </div>
-            `;
-        } catch (err) {
-            alert(err.message);
-            btnVerificarStatus.disabled = false;
-            btnVerificarStatus.innerHTML = originalHtml;
+          const r = await fetch(`/api/admin/eventos/${eventoId}/termo`, { headers: AUTH_HEADERS, cache: 'no-store' });
+          if (!r.ok) throw new Error('Falha ao gerar termo');
+          const blob = await r.blob();
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `termo_original_evento_${eventoId}.pdf`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(url);
+        } catch(err) {
+          alert(`Erro ao baixar termo original: ${err.message}`);
+        } finally {
+          btnTermo.disabled = false;
+          btnTermo.innerHTML = original;
         }
         return;
       }
       
-      // Ação para o botão "Enviar para Assinatura"
       if (btnAssinafy) {
         const eventoId = btnAssinafy.dataset.eventoId;
         const clienteId = btnAssinafy.dataset.clienteId;
-
         assinafyContext = { btn: btnAssinafy, original: btnAssinafy.innerHTML, eventoId, clienteId };
 
         if (!clientesCarregados) await carregarClientes();
-        let signerName='', signerEmail='', signerCpf='', signerPhone='';
         const cliente = clientes.find(c => String(c.id) === String(clienteId));
         if (cliente) {
-          signerName  = cliente.nome_responsavel || cliente.nome_razao_social || '';
-          signerEmail = cliente.email || '';
-          signerCpf   = (cliente.documento_responsavel || cliente.documento || '').replace(/\D/g,'');
-          signerPhone = (cliente.telefone || '').replace(/\D/g,'');
+          assinafySignerNameInput.value = cliente.nome_responsavel || cliente.nome_razao_social || '';
+          assinafySignerEmailInput.value = cliente.email || '';
+          assinafyCpfMask.unmaskedValue = (cliente.documento_responsavel || cliente.documento || '').replace(/\D/g,'');
+          assinafyPhoneMask.unmaskedValue = (cliente.telefone || '').replace(/\D/g,'');
         }
-
-        assinafySignerNameInput.value = signerName;
-        assinafySignerEmailInput.value = signerEmail;
-        assinafyCpfMask.unmaskedValue = signerCpf;
-        assinafyPhoneMask.unmaskedValue = signerPhone;
-
         assinafyModal.style.display = 'block';
         return;
       }
 
-      // Ação para o botão "Apagar"
       if (btnApagar){
         const eventoId = btnApagar.dataset.eventoId;
         const nome = btnApagar.dataset.eventoNome || `#${eventoId}`;
@@ -1248,7 +1263,6 @@ async function renderTable(eventos){
         return;
       }
       
-      // Ação para o botão "Editar"
       if (btnEditar){
         const eventoId = btnEditar.dataset.eventoId;
         editarEvento(eventoId);
