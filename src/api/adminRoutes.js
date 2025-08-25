@@ -113,15 +113,31 @@ router.get(
       const maioresDevedores = await dbAll(
         `SELECT
             p.nome_empresa,
-            COUNT(*) AS qtd_dars_vencidas,
-            SUM(d.valor) AS total_vencido
+            COUNT(*) AS qtd_dars,
+            COALESCE(SUM(d.valor), 0) AS total_aberto,
+            COALESCE(SUM(CASE
+                    WHEN DATE(d.data_vencimento) < DATE('now','localtime')
+                    THEN d.valor ELSE 0
+                  END), 0) AS total_vencido,
+            COALESCE(SUM(CASE
+                    WHEN DATE(d.data_vencimento) >= DATE('now','localtime')
+                    THEN d.valor ELSE 0
+                  END), 0) AS total_a_vencer,
+            -- aliases para o front atual:
+            COALESCE(SUM(CASE
+                    WHEN DATE(d.data_vencimento) < DATE('now','localtime')
+                    THEN d.valor ELSE 0
+                  END), 0) AS total_devido,
+            COALESCE(SUM(CASE
+                    WHEN DATE(d.data_vencimento) < DATE('now','localtime')
+                    THEN d.valor ELSE 0
+                  END), 0) AS valor
         FROM dars d
         JOIN permissionarios p ON p.id = d.permissionario_id
         WHERE d.status IN ('Pendente','Emitido','Vencido')
-          AND DATE(d.data_vencimento) < DATE('now','localtime')
         GROUP BY p.id, p.nome_empresa
-        HAVING total_vencido > 0
-        ORDER BY total_vencido DESC
+        HAVING COALESCE(SUM(d.valor), 0) > 0
+        ORDER BY total_devido DESC
         LIMIT 5`
       );
 

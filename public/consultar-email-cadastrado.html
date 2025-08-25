@@ -140,14 +140,24 @@
             });
 
             function anonimizarEmail(email) {
-                if (!email || !email.includes('@')) return 'E-mail inválido';
-                const [local, dominio] = email.split('@');
-                if (!dominio.includes('.')) return 'E-mail inválido';
-                const [provedor, ext] = dominio.split('.');
-                const anonLocal = local.length > 2 ? local[0] + '***' + local[local.length - 1] : '***';
-                const anonProvedor = provedor.length > 2 ? provedor[0] + '***' + provedor[provedor.length - 1] : '***';
-                return `${anonLocal}@${anonProvedor}.${ext}`;
+            if (!email || !email.includes('@')) {
+                return 'E-mail inválido';
             }
+            
+            const [local, dominio] = email.split('@');
+            let anonLocal;
+
+            if (local.length <= 3) {
+                // Para nomes curtos, exibe o primeiro caractere e esconde o resto
+                anonLocal = local.charAt(0) + '*****';
+            } else {
+                // Para nomes mais longos, exibe os 3 primeiros caracteres
+                anonLocal = local.substring(0, 3) + '*****';
+            }
+            
+            // Retorna o nome parcialmente anônimo com o domínio completo
+            return `${anonLocal}@${dominio}`;
+        }
 
             form.addEventListener('submit', async (e) => {
                 e.preventDefault();
