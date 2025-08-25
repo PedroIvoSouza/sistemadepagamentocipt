@@ -63,7 +63,10 @@ const sefaz = axios.create({
 // Helpers
 // ==========================
 
-const cleanHeaderValue = (s) => (s ?? '').toString().replace(/[\r\n]/g, '').trim();
+function cleanHeaderValue(s) {
+  return (s ?? '').toString().replace(/[\r\n]/g, '').trim();
+}
+
 function getAppTokenStrict() {
   const v = cleanHeaderValue(process.env.SEFAZ_APP_TOKEN);
   if (!v) throw new Error('SEFAZ_APP_TOKEN não configurado no .env.');
