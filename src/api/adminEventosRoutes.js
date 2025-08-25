@@ -363,6 +363,27 @@ router.get('/:id/termo/assinafy-status', async (req, res) => {
    Rotas utilitárias já existentes (listar, detalhes, termo, etc.)
    =========================================================== */
 
+const precosPorDia = [2495.00, 1996.00, 1596.80, 1277.44, 1277.44];
+function calcularValorBruto(n) {
+  if (n <= 0) return 0;
+  let v = 0;
+  if (n >= 1) v += precosPorDia[0];
+  if (n >= 2) v += precosPorDia[1];
+  if (n >= 3) v += precosPorDia[2];
+  if (n >= 4) v += (n - 3) * precosPorDia[3];
+  return +v.toFixed(2);
+}
+function calcularValorFinal(vb, tipo, dm = 0) {
+  let v = vb;
+  if (tipo === 'Governo') v *= 0.8;
+  else if (tipo === 'Permissionario') v *= 0.4;
+  if (dm > 0) v *= (1 - dm / 100);
+  return +v.toFixed(2);
+}
+
+/* ===========================================================
+   GET /api/admin/eventos (Rota Principal de Listagem)
+   =========================================================== */
 router.get('/', async (req, res) => {
   try {
     const { search = '', page = 1, limit = 10 } = req.query;
@@ -383,7 +404,6 @@ router.get('/', async (req, res) => {
     const total = countRow?.total || 0;
     const totalPages = Math.ceil(total / limitNum);
 
-    // Consulta SQL simples e rápida para buscar os dados brutos
     const dataSql = `
       SELECT e.*, c.nome_razao_social AS nome_cliente, c.tipo_cliente
         FROM Eventos e
@@ -393,17 +413,13 @@ router.get('/', async (req, res) => {
        LIMIT ? OFFSET ?`;
     const rows = await dbAll(dataSql, params.concat([limitNum, offset]));
 
-    // Lógica final para enriquecer e corrigir os dados antigos
     for (const evento of rows) {
-      // 1. Corrige o valor final de eventos antigos/importados
       if (evento.evento_gratuito == 0 && (!evento.valor_final || evento.valor_final === 0)) {
         let datas = [];
         if (typeof evento.datas_evento === 'string') {
           try {
-            // Tenta ler o formato JSON ["2025-03-20"]
             datas = JSON.parse(evento.datas_evento);
           } catch {
-            // Se falhar, tenta ler o formato "2025-03-20"
             datas = evento.datas_evento.split(',').map(s => s.trim()).filter(Boolean);
           }
         }
@@ -412,13 +428,10 @@ router.get('/', async (req, res) => {
             const numDiarias = datas.length;
             const valorBrutoRecalculado = calcularValorBruto(numDiarias);
             const tipoCliente = evento.tipo_cliente || 'Geral';
-            // USA O NOME CORRETO DA COLUNA QUE DESCOBRIMOS:
             const descontoManual = evento.percentual_desconto_manual || 0; 
             evento.valor_final = calcularValorFinal(valorBrutoRecalculado, tipoCliente, descontoManual);
         }
       }
-      
-      // 2. Garante que a flag de gratuito seja um booleano (true/false) para o frontend
       evento.evento_gratuito = !!evento.evento_gratuito;
     }
 
