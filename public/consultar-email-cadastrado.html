@@ -140,25 +140,26 @@
             });
 
             function anonimizarEmail(email) {
-            if (!email || !email.includes('@')) {
-                return 'E-mail inválido';
-            }
-            
-            const [local, dominio] = email.split('@');
-            let anonLocal;
-
-            if (local.length <= 3) {
-                // Para nomes curtos, exibe o primeiro caractere e esconde o resto
-                anonLocal = local.charAt(0) + '*****';
-            } else {
-                // Para nomes mais longos, exibe os 3 primeiros caracteres
-                anonLocal = local.substring(0, 3) + '*****';
-            }
-            
-            // Retorna o nome parcialmente anônimo com o domínio completo
-            return `${anonLocal}@${dominio}`;
+        if (!email || !email.includes('@')) {
+            return 'E-mail inválido';
         }
+        
+        const [local, dominio] = email.split('@');
+        let anonLocal;
 
+        // Se a parte local for longa o suficiente (mais de 5 caracteres)
+        if (local.length > 5) {
+            const primeiro = local.substring(0, 3); // Pega os 3 primeiros
+            const ultimo = local.substring(local.length - 2); // Pega os 2 últimos
+            anonLocal = `${primeiro}*****${ultimo}`;
+        } else {
+            // Para nomes curtos, exibe apenas o primeiro caractere
+            anonLocal = local.charAt(0) + '*****';
+        }
+        
+        // Retorna a parte local modificada com o domínio completo
+        return `${anonLocal}@${dominio}`;
+    }
             form.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 btnText.textContent = 'Consultando...';

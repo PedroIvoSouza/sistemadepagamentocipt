@@ -111,33 +111,32 @@ router.get(
 
       // Maiores devedores (apenas títulos cobrados e vencidos)
       const maioresDevedores = await dbAll(
-        `SELECT
-            p.nome_empresa,
+        `WITH abertas AS (
+          SELECT
+            d.permissionario_id,
             COUNT(*) AS qtd_dars,
             COALESCE(SUM(d.valor), 0) AS total_aberto,
             COALESCE(SUM(CASE
                     WHEN DATE(d.data_vencimento) < DATE('now','localtime')
                     THEN d.valor ELSE 0
-                  END), 0) AS total_vencido,
-            COALESCE(SUM(CASE
-                    WHEN DATE(d.data_vencimento) >= DATE('now','localtime')
-                    THEN d.valor ELSE 0
-                  END), 0) AS total_a_vencer,
-            -- aliases para o front atual:
-            COALESCE(SUM(CASE
-                    WHEN DATE(d.data_vencimento) < DATE('now','localtime')
-                    THEN d.valor ELSE 0
-                  END), 0) AS total_devido,
-            COALESCE(SUM(CASE
-                    WHEN DATE(d.data_vencimento) < DATE('now','localtime')
-                    THEN d.valor ELSE 0
-                  END), 0) AS valor
-        FROM dars d
-        JOIN permissionarios p ON p.id = d.permissionario_id
-        WHERE d.status IN ('Pendente','Emitido','Vencido')
-        GROUP BY p.id, p.nome_empresa
-        HAVING COALESCE(SUM(d.valor), 0) > 0
-        ORDER BY total_devido DESC
+                  END), 0) AS total_vencido
+          FROM dars d
+          WHERE d.status IN ('Pendente','Emitido','Vencido')
+          GROUP BY d.permissionario_id
+        )
+        SELECT
+          p.nome_empresa,
+          a.qtd_dars,
+          a.total_aberto,
+          a.total_vencido,
+          (a.total_aberto - a.total_vencido) AS total_a_vencer,
+          -- aliases p/ compatibilidade com o front:
+          a.total_aberto AS total_devido,
+          a.total_aberto AS valor
+        FROM abertas a
+        JOIN permissionarios p ON p.id = a.permissionario_id
+        WHERE a.total_aberto > 0
+        ORDER BY a.total_aberto DESC
         LIMIT 5`
       );
 
