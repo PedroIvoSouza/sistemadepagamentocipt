@@ -14,6 +14,12 @@
   <link rel="stylesheet" href="/css/mobile-tweaks.css">
 
   <style>
+  eventos-table-body td .btn-group {
+  flex-wrap: nowrap; /* Impede que os botões quebrem a linha */
+    }
+  eventos-table-body td .btn {
+      padding: 0.2rem 0.5rem; /* Deixa os botões mais compactos */
+    }
     :root {
       --cor-primaria: #0056a0;
       --cor-sidebar: #004480;
@@ -833,22 +839,18 @@ async function carregarClientes(){
 
  async function renderTable(eventos){
     if (!Array.isArray(eventos) || eventos.length === 0){
-      // Corrigido para 10 colunas
       eventosTableBody.innerHTML = '<tr><td colspan="10" class="text-center">Nenhum evento encontrado.</td></tr>';
       return;
     }
 
-    // 1. Cria uma lista de "promessas" para buscar o status de todos os eventos em paralelo
     const promessasDeStatus = eventos.map(ev => 
         fetch(`/api/admin/eventos/${evIdOf(ev)}/termo/assinafy-status`, { headers: AUTH_HEADERS })
             .then(res => res.ok ? res.json() : null)
             .catch(() => null)
     );
 
-    // 2. Espera todas as buscas de status terminarem
     const resultadosDeStatus = await Promise.all(promessasDeStatus);
 
-    // 3. Agora, monta a tabela com todos os dados em mãos
     const tableRowsHtml = eventos.map((ev, index) => {
       const meta = resultadosDeStatus[index];
       const evNormalizado = normalizarEvento(ev);
@@ -899,12 +901,14 @@ async function carregarClientes(){
             </div>
           </td>
           <td class="text-center">
-            <button class="btn btn-sm btn-outline-secondary btn-editar" title="Editar" data-evento-id="${id}">
-              <i class="bi bi-pencil"></i>
-            </button>
-            <button class="btn btn-sm btn-outline-danger btn-apagar" title="Apagar" data-evento-id="${id}" data-evento-nome="${evNormalizado.nome_evento || ''}">
-              <i class="bi bi-trash"></i>
-            </button>
+            <div class="btn-group">
+              <button class="btn btn-sm btn-outline-secondary btn-editar" title="Editar" data-evento-id="${id}">
+                <i class="bi bi-pencil"></i>
+              </button>
+              <button class="btn btn-sm btn-outline-danger btn-apagar" title="Apagar" data-evento-id="${id}" data-evento-nome="${evNormalizado.nome_evento || ''}">
+                <i class="bi bi-trash"></i>
+              </button>
+            </div>
           </td>
         </tr>`;
     }).join('');
@@ -977,16 +981,15 @@ async function carregarClientes(){
     }
     throw new Error('Falha ao buscar dados do evento.');
   }
-  function normalizarEvento(payload){
+function normalizarEvento(payload){
     const ev = payload?.evento || payload?.data || payload || {};
     
-    // CORREÇÃO PARA NÚMERO DO PROCESSO: Remove o "E:" e o excesso de zeros.
+    // As correções que já fizemos antes
     let numero_processo = ev.numero_processo ?? ev.numeroProcesso ?? '';
-    if (numero_processo) {
-      numero_processo = numero_processo.replace('E:', '').replace('.000000', '.');
+    if (numero_processo && numero_processo.startsWith('E:')) {
+      numero_processo = numero_processo.substring(2).replace('.000000', '.');
     }
 
-    // CORREÇÃO PARA ESPAÇOS UTILIZADOS (já implementada)
     let espacos_utilizados_texto = ev.espaco_utilizado ?? ev.espacosUtilizados ?? '';
     let espacos_utilizados_lista = [];
     if (typeof espacos_utilizados_texto === 'string') {
@@ -996,6 +999,9 @@ async function carregarClientes(){
         if (textoUpper.includes('COWORKING')) espacos_utilizados_lista.push('Coworking');
         if (textoUpper.includes('ESPAÇO EM FRENTE AO AUDITÓRIO') || textoUpper.includes('ESPAÇO ABERTO')) espacos_utilizados_lista.push('Espaço em Frente ao Auditório');
     }
+
+    // ADIÇÃO DA LINHA QUE FALTAVA PARA A DATA
+    const data_vigencia_final = ev.data_vigencia_final ?? null;
 
     const area_m2 = ev.area_m2 ?? ev.areaM2 ?? espacos_utilizados_lista.reduce((s, nome) => s + (ESPACOS_INFO[nome]?.area || 0), 0);
     
