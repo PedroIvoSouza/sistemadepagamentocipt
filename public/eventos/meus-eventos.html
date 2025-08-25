@@ -118,6 +118,24 @@
       </div>
     </div>
   </div>
+  <div class="modal fade" id="infoModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-envelope-check-fill text-primary me-2"></i>Verifique seu E-mail</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+        </div>
+        <div class="modal-body">
+          <p>O convite para assinatura foi enviado para o seu e-mail.</p>
+          <p class="mb-0">Por favor, abra a mensagem que você recebeu da <strong>Assinafy</strong> e clique no link indicado para assinar o documento.</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Entendi</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
 
   <!-- JS -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
@@ -148,6 +166,8 @@
       const modalEl = document.getElementById('assinafyModal');
       const assinafyIframe = document.getElementById('assinafyIframe');
       const assinafyModal = new bootstrap.Modal(modalEl);
+      const infoModal = new bootstrap.Modal(document.getElementById('infoModal'));
+
       modalEl.addEventListener('hidden.bs.modal', () => { assinafyIframe.src = ''; });
 
       async function atualizarUIEvento(eventoId){
@@ -260,73 +280,19 @@
             return;
           }
 
-if (btnAssinar) {
+          i if (btnAssinar) {
             const eventoId = btnAssinar.dataset.assinarTermo;
-            const originalHtml = btnAssinar.innerHTML;
             const statusEl = document.getElementById(`sig-status-${eventoId}`);
 
-            btnAssinar.disabled = true;
-            btnAssinar.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Abrindo…`;
-            if (statusEl) statusEl.textContent = 'Verificando documento...';
-
-            try {
-              // PASSO 1: Chamada ao backend, que agora tem a nova lógica
-              const linkResp = await fetch(`/api/portal/eventos/${eventoId}/termo/assinafy/link`, { headers });
-              const linkData = await linkResp.json();
-
-              if (!linkResp.ok || !linkData.ok) {
-                throw new Error(linkData.error || 'Não foi possível obter os dados da assinatura.');
-              }
-
-              // PASSO 2: Tratar os diferentes status retornados pelo backend
-              switch (linkData.status) {
-                case 'aguardando_token':
-                  // SUCESSO! Abre a página de verificação da Assinafy em nova aba.
-                  if (statusEl) statusEl.textContent = 'Aguardando verificação...';
-                  window.open(linkData.url, '_blank', 'noopener');
-                  alert('A página de assinatura foi aberta em uma nova aba. Por favor, insira o código que você recebeu por e-mail para continuar.');
-                  break;
-
-                case 'pendente_assinatura':
-                  // Caso de assinatura embedded (sem token), abre no modal/iframe.
-                  if (statusEl) statusEl.textContent = 'Assinatura em andamento...';
-                  assinafyIframe.src = linkData.url;
-                  assinafyModal.show();
-                  break;
-
-                case 'assinado':
-                  // O documento já está assinado.
-                  if (statusEl) statusEl.textContent = 'Documento já assinado.';
-                  alert('Este documento já foi assinado com sucesso!');
-                  // Atualiza a UI para remover o botão de assinar e mostrar o de download
-                  atualizarUIEvento(eventoId);
-                  break;
-                
-                default:
-                  // Outros casos, como processando ou erro.
-                  throw new Error(linkData.message || 'O link de assinatura não está disponível no momento. Tente novamente mais tarde.');
-              }
-
-            } catch (err) {
-              const msg = err.message || 'Falha ao iniciar o processo de assinatura.';
-              if (statusEl) statusEl.textContent = msg;
-              alert(msg);
-            } finally {
-              // Restaura o botão ao estado original
-              btnAssinar.disabled = false;
-              btnAssinar.innerHTML = originalHtml;
-              // Limpa a mensagem de status se ela não for de erro
-              if (statusEl && (statusEl.textContent === 'Verificando documento...' || statusEl.textContent === 'Aguardando verificação...')) {
-                statusEl.textContent = '';
-              }
+            // Atualiza o texto de status na página
+            if (statusEl) {
+              statusEl.textContent = 'Verifique seu e-mail para continuar.';
+              statusEl.className = 'ms-2 text-primary fw-bold';
             }
-          }
-        });
 
-      }catch(err){
-        console.warn(err);
-        if (loading) loading.innerHTML = `<p class="text-danger">Erro ao carregar: ${err.message}</p>`;
-      }
+            // Exibe o nosso novo modal "bonitinho"
+            infoModal.show();
+          }
     });
   </script>
 </body>
