@@ -53,6 +53,8 @@ const sefaz = axios.create({
    headers: {
      'Content-Type': 'application/json',
      Accept: 'application/json',
+     // highlight-next-line
+     'appToken': getAppTokenStrict(), // <<< ADICIONAR ESTA LINHA
    },
 });
 
