@@ -940,13 +940,13 @@ async function carregarClientes(){
   function normalizarEvento(payload){
     const ev = payload?.evento || payload?.data || payload || {};
     
-    // CORREÇÃO PARA NÚMERO DO PROCESSO: Remove o prefixo "E:"
+    // CORREÇÃO PARA NÚMERO DO PROCESSO: Remove o "E:" e o excesso de zeros.
     let numero_processo = ev.numero_processo ?? ev.numeroProcesso ?? '';
-    if (numero_processo.startsWith('E:')) {
-      numero_processo = numero_processo.substring(2);
+    if (numero_processo) {
+      numero_processo = numero_processo.replace('E:', '').replace('.000000', '.');
     }
 
-    // CORREÇÃO PARA ESPAÇOS UTILIZADOS: Lê o texto e encontra as opções
+    // CORREÇÃO PARA ESPAÇOS UTILIZADOS (já implementada)
     let espacos_utilizados_texto = ev.espaco_utilizado ?? ev.espacosUtilizados ?? '';
     let espacos_utilizados_lista = [];
     if (typeof espacos_utilizados_texto === 'string') {
@@ -954,21 +954,24 @@ async function carregarClientes(){
         if (textoUpper.includes('AUDITÓRIO')) espacos_utilizados_lista.push('Auditório');
         if (textoUpper.includes('ANFITEATRO')) espacos_utilizados_lista.push('Anfiteatro');
         if (textoUpper.includes('COWORKING')) espacos_utilizados_lista.push('Coworking');
-        if (textoUpper.includes('ESPAÇO EM FRENTE AO AUDITÓRIO')) espacos_utilizados_lista.push('Espaço em Frente ao Auditório');
+        if (textoUpper.includes('ESPAÇO EM FRENTE AO AUDITÓRIO') || textoUpper.includes('ESPAÇO ABERTO')) espacos_utilizados_lista.push('Espaço em Frente ao Auditório');
     }
 
-    // O resto da função continua como antes, mas usando as variáveis corrigidas
+    const area_m2 = ev.area_m2 ?? ev.areaM2 ?? espacos_utilizados_lista.reduce((s, nome) => s + (ESPACOS_INFO[nome]?.area || 0), 0);
+    
+    // CORREÇÃO PARA NÚMERO DO OFÍCIO SEI: Adiciona a leitura do campo
+    const numero_oficio_sei = ev.numero_oficio_sei ?? ev.numeroOficioSei ?? '';
+    
+    // O resto da função continua como antes
     const id_cliente = ev.id_cliente ?? ev.cliente_id ?? ev.idCliente ?? '';
     const nome_evento = ev.nome_evento ?? ev.nome ?? ev.titulo ?? '';
     const tipo_desconto_auto = ev.tipo_desconto_auto ?? ev.tipoDescontoAuto ?? ev.tipo_cliente ?? 'Geral';
     const desconto_manual_percent = ev.desconto_manual_percent ?? ev.descontoManualPercent ?? ev.desconto ?? 0;
-    const area_m2 = ev.area_m2 ?? ev.areaM2 ?? espacos_utilizados_lista.reduce((s, nome) => s + (ESPACOS_INFO[nome]?.area || 0), 0);
     const numero_termo = ev.numero_termo ?? ev.numeroTermo ?? '';
     let datas_evento = ev.datas_evento ?? ev.datas ?? ev.datasEvento ?? [];
     if (typeof datas_evento === 'string') datas_evento = datas_evento.split(',').map(s=>s.trim()).filter(Boolean);
     if (!Array.isArray(datas_evento)) datas_evento = [];
     const parcelas = Array.isArray(payload?.parcelas) ? payload.parcelas : [];
-    const numero_oficio_sei = ev.numero_oficio_sei ?? ev.numeroOficioSei ?? '';
     const hora_inicio = ev.hora_inicio ?? ev.horaInicio ?? null;
     const hora_fim = ev.hora_fim ?? ev.horaFim ?? null;
     const hora_montagem = ev.hora_montagem ?? ev.horaMontagem ?? null;
@@ -987,14 +990,13 @@ async function carregarClientes(){
       valor_bruto, valor_final, total_diarias
     };
   }
-
-  async function editarEvento(eventoId){
+   async function editarEvento(eventoId){
     if (!eventoId){ alert('ID inválido'); return; }
     if (!clientesCarregados) await carregarClientes();
 
     try{
       const raw = await fetchEventoById(eventoId);
-      const ev  = normalizarEvento(raw);
+      const ev  = normalizarEvento(raw); // Usa a nova função inteligente
 
       // Limpa o formulário
       form.reset(); 
@@ -1006,19 +1008,22 @@ async function carregarClientes(){
       // Preenche todos os campos com os dados normalizados
       clienteSelect.value = ev.id_cliente || '';
       document.getElementById('nome-evento').value = ev.nome_evento || '';
+      
+      // CORREÇÃO: Usa o valor normalizado
       numeroOficioSeiMask.value = ev.numero_oficio_sei || '';
+      numeroProcessoMask.value = ev.numero_processo || '';
+      numeroTermoMask.value = ev.numero_termo || '';
       
       Array.from(espacoUtilizadoSelect.options).forEach(opt => {
         opt.selected = (ev.espacos_utilizados || []).includes(opt.value);
       });
-      espacoUtilizadoSelect.dispatchEvent(new Event('change')); // Isso recalcula a área
+      espacoUtilizadoSelect.dispatchEvent(new Event('change'));
 
       horaInicioInput.value = ev.hora_inicio || '';
       horaFimInput.value = ev.hora_fim || '';
       horaMontagemInput.value = ev.hora_montagem || '';
       horaDesmontagemInput.value = ev.hora_desmontagem || '';
-      numeroProcessoMask.value = ev.numero_processo || ''; // Agora funciona com o valor limpo
-      numeroTermoMask.value = ev.numero_termo || '';
+      
       eventoGratuitoInput.checked = !!ev.evento_gratuito;
       justificativaGratuitoTextarea.value = ev.justificativa_gratuito || '';
       justificativaGratuitoWrapper.classList.toggle('d-none', !eventoGratuitoInput.checked);
@@ -1033,11 +1038,11 @@ async function carregarClientes(){
 
       // CORREÇÃO PARA PARCELAS:
       if (ev.parcelas && ev.parcelas.length > 0){
-        ev.parcelas.forEach((p,i)=>{
+        ev.parcelas.forEach((p, i) => {
           adicionarParcela();
           const m = parcelasMasks[i];
           const val = p.valor_parcela ?? p.valor ?? 0;
-          m.valorMask.unmaskedValue = String(val);
+          m.valorMask.unmaskedValue = String(val); // Define o valor
           const venc = p.vencimento ?? p.data_vencimento ?? null;
           if (venc) m.picker.setDate(venc, true);
         });
