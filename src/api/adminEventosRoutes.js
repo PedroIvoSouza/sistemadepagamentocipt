@@ -123,7 +123,7 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
   let { signerName, signerEmail, signerCpf, signerPhone, message, expiresAt } = req.body || {};
 
   try {
-    // Etapa 0: Obter dados do signatário (sem alterações)
+    // Etapa 0: Obter dados do signatário
     const sql = `
       SELECT c.nome_responsavel, c.nome_razao_social, c.email, c.telefone,
              c.documento_responsavel, c.documento
@@ -141,29 +141,29 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
     signerCpf   = signerCpf   || onlyDigits(row.documento_responsavel || row.documento || '');
     signerPhone = signerPhone || row.telefone || '';
 
-    // Etapa 1: Gerar o termo em PDF (sem alterações)
-    const out = await gerarTermoEventoPdfkitEIndexar(id); [cite: 1]
+    // Etapa 1: Gerar o termo em PDF
+    const out = await gerarTermoEventoPdfkitEIndexar(id);
 
-    // Etapa 2: Fazer o upload para a Assinafy (sem alterações)
-    const uploaded = await uploadDocumentFromFile(out.filePath, out.fileName); [cite: 1]
-    const assinafyDocId = uploaded?.id || uploaded?.data?.id; [cite: 1]
-    if (!assinafyDocId) return res.status(500).json({ ok: false, error: 'Falha no upload ao Assinafy.' }); [cite: 1]
+    // Etapa 2: Fazer o upload para a Assinafy
+    const uploaded = await uploadDocumentFromFile(out.filePath, out.fileName);
+    const assinafyDocId = uploaded?.id || uploaded?.data?.id;
+    if (!assinafyDocId) return res.status(500).json({ ok: false, error: 'Falha no upload ao Assinafy.' });
 
-    // Etapa 3: Aguardar o documento ficar pronto (sem alterações)
-    await waitUntilReadyForAssignment(assinafyDocId, { retries: 20, intervalMs: 3000 }); [cite: 1]
+    // Etapa 3: Aguardar o documento ficar pronto
+    await waitUntilReadyForAssignment(assinafyDocId, { retries: 20, intervalMs: 3000 });
 
-    // Etapa 4: Garantir que o signatário existe na Assinafy (sem alterações)
+    // Etapa 4: Garantir que o signatário existe na Assinafy
     const signer = await ensureSigner({
       full_name: signerName,
       email: signerEmail,
       government_id: onlyDigits(signerCpf || ''),
       phone: `+55${onlyDigits(signerPhone || '')}`,
-    }); [cite: 1]
-    const signerId = signer?.id || signer?.data?.id; [cite: 1]
-    if (!signerId) return res.status(500).json({ ok: false, error: 'Falha ao criar signatário no Assinafy.' }); [cite: 1]
+    });
+    const signerId = signer?.id || signer?.data?.id;
+    if (!signerId) return res.status(500).json({ ok: false, error: 'Falha ao criar signatário no Assinafy.' });
 
     // Etapa 5: Solicitar a assinatura (Assignment). É isso que dispara o e-mail.
-    await requestSignatures(assinafyDocId, [signerId], { message, expires_at: expiresAt }); [cite: 1]
+    await requestSignatures(assinafyDocId, [signerId], { message, expires_at: expiresAt });
 
     // Etapa 6: Salvar no banco de dados. Note que 'assinaturaUrl' é explicitamente nulo.
     await dbRun(
@@ -176,7 +176,7 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
       [id, out.filePath, out.publicUrl || out.pdf_public_url || null, assinafyDocId]
     );
 
-    // Etapa 7: Retornar sucesso para o Admin. SEM ERRO!
+    // Etapa 7: Retornar sucesso para o Admin.
     return res.json({
       ok: true,
       message: 'Documento enviado com sucesso! O signatário receberá as instruções por e-mail.',
@@ -186,7 +186,7 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
     console.error('[assinafy] erro no fluxo de enviar-assinatura:', err.message, err.response?.data);
     return res.status(500).json({
       ok: false,
-      error: 'Falha no envio', // Mensagem de erro que o admin via
+      error: 'Falha no envio',
       assinafyMessage: err.response?.data?.message,
     });
   }
