@@ -323,46 +323,35 @@ router.get('/:id/termo/assinafy-status', async (req, res) => {
   const { id } = req.params;
   try {
     const row = await dbGet(
-      `SELECT assinafy_id, assinatura_url FROM documentos WHERE evento_id = ? AND tipo = 'termo_evento' ORDER BY id DESC LIMIT 1`,
-      [id],
-      'termo/assinafy-get'
+      `SELECT assinafy_id, assinatura_url, signed_pdf_public_url FROM documentos WHERE evento_id = ? AND tipo = 'termo_evento' ORDER BY id DESC LIMIT 1`,
+      [id]
     );
-    if (!row?.assinafy_id) return res.status(404).json({ ok: false, error: 'Sem assinafy_id para este termo.' });
+    if (!row?.assinafy_id) {
+      return res.json({ ok: true, local: { status: 'nao_enviado' } });
+    }
 
     const doc = await getDocument(row.assinafy_id);
     const info = doc?.data || doc;
-    let assinaturaUrl = row.assinatura_url || null;
+    const statusReal = info?.status;
 
-    // se não temos, tenta buscar e persistir
-    if (!assinaturaUrl) {
-      await waitUntilPendingSignature(row.assinafy_id, { retries: 4, intervalMs: 1000 }).catch(()=>{});
-      assinaturaUrl = await getSigningUrl(row.assinafy_id);
-      if (assinaturaUrl) {
-        await dbRun(
-          `UPDATE documentos SET assinatura_url = ? WHERE evento_id = ? AND tipo = 'termo_evento'`,
-          [assinaturaUrl, id],
-          'termo/assinafy-save-link'
-        );
-      }
-    }
-
-    // se já “certified”, salvar a URL assinada e data
-    if (info?.status === 'certified' || info?.status === 'certificated') {
-      const bestUrl = pickBestArtifactUrl(info);
+    // Se o documento já foi certificado, apenas atualizamos nosso status no banco.
+    // NÃO salvamos mais a URL direta da Assinafy.
+    if (statusReal === 'certified' || statusReal === 'certificated') {
       await dbRun(
         `UPDATE documentos
-             SET status = 'assinado',
-                 signed_pdf_public_url = COALESCE(signed_pdf_public_url, ?),
-                 signed_at = COALESCE(signed_at, datetime('now'))
-           WHERE evento_id = ? AND tipo = 'termo_evento'`,
-        [bestUrl || null, id],
-        'termo/assinafy-cert'
+           SET status = 'assinado',
+               signed_at = COALESCE(signed_at, datetime('now'))
+         WHERE evento_id = ? AND tipo = 'termo_evento' AND status != 'assinado'`, // Evita updates desnecessários
+        [id]
       );
     }
 
-    return res.json({ ok: true, assinafy: info, assinatura_url: assinaturaUrl || null });
+    return res.json({ 
+      ok: true, 
+      assinafy: info
+    });
   } catch (err) {
-    console.error('[assinafy-status] erro:', err.message);
+    console.error(`[assinafy-status] erro para evento ${id}:`, err.message);
     return res.status(500).json({ ok: false, error: 'Falha ao consultar status no Assinafy.' });
   }
 });
