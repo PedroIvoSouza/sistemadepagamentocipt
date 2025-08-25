@@ -156,7 +156,7 @@ async function conciliarPagamentosDoMes() {
   totalAtualizados += 1;
 } else {
   // ADICIONE ESTE BLOCO 'ELSE'
-  console.warn(`--> ALERTA: Não foi possível vincular o pagamento da SEFAZ. DADOS: Guia=${numeroGuia}, DocOrigem=${numeroDocOrigem}, CodBarras=${codigoBarras}`);
+console.warn(`--> ALERTA: Pagamento não vinculado. DADOS SEFAZ -> CNPJ/CPF: ${it.raw.numeroInscricao}, Guia: ${numeroGuia}, DocOrigem: ${numeroDocOrigem}`);
 }
 }
     }
