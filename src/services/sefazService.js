@@ -62,6 +62,7 @@ const sefaz = axios.create({
 // ==========================
 // Helpers
 // ==========================
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 function cleanHeaderValue(s) {
   return (s ?? '').toString().replace(/[\r\n]/g, '').trim();
@@ -73,8 +74,6 @@ function getAppTokenStrict() {
   if (/[\u0000-\u001F\u007F]/.test(v)) throw new Error('SEFAZ_APP_TOKEN contém caracteres de controle');
   return v;
 }
-
-const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 async function reqWithRetry(doRequest, label = 'sefaz-call') {
   const maxRetries = Number(SEFAZ_RETRIES || 5);
