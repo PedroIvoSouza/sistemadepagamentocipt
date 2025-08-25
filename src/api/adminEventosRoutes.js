@@ -388,19 +388,28 @@ router.get('/', async (req, res) => {
     const total = countRow?.total || 0;
     const totalPages = Math.ceil(total / limitNum);
 
-    const dataSql = `
-      SELECT e.id, e.id_cliente, e.nome_evento, e.espaco_utilizado, e.area_m2,
-             COALESCE(e.valor_final, SUM(de.valor_parcela)) AS valor_final, e.status, e.data_vigencia_final,
-             e.numero_oficio_sei, e.numero_processo, e.numero_termo,
-             e.hora_inicio, e.hora_fim, e.hora_montagem, e.hora_desmontagem,
-             c.nome_razao_social AS nome_cliente
-        FROM Eventos e
-        JOIN Clientes_Eventos c ON e.id_cliente = c.id
-        LEFT JOIN DARs_Eventos de ON de.id_evento = e.id
-        ${whereClause}
-       GROUP BY e.id
-       ORDER BY e.id DESC
-       LIMIT ? OFFSET ?`;
+     const dataSql = `
+      SELECT 
+        e.id, 
+        e.id_cliente, 
+        e.nome_evento, 
+        e.espaco_utilizado, 
+        e.area_m2,
+        e.numero_processo,
+        e.numero_termo,
+        c.nome_razao_social AS nome_cliente,
+        COALESCE(e.valor_final, (SELECT SUM(de_sum.valor_parcela) FROM DARs_Eventos de_sum WHERE de_sum.id_evento = e.id), 0) AS valor_final,
+        CASE 
+          WHEN (SELECT COUNT(*) FROM DARs_Eventos de_total WHERE de_total.id_evento = e.id) = 0 THEN 'Pendente'
+          WHEN (SELECT COUNT(*) FROM DARs_Eventos de_paid JOIN dars d_paid ON d_paid.id = de_paid.id_dar WHERE de_paid.id_evento = e.id AND d_paid.status = 'Pago') = (SELECT COUNT(*) FROM DARs_Eventos de_total WHERE de_total.id_evento = e.id) THEN 'Pago'
+          ELSE 'Pendente'
+        END AS status
+      FROM Eventos e
+      JOIN Clientes_Eventos c ON e.id_cliente = c.id
+      ${whereClause}
+      GROUP BY e.id
+      ORDER BY e.id DESC
+      LIMIT ? OFFSET ?`;
     const rows = await dbAll(dataSql, params.concat([limitNum, offset]), 'listar-eventos');
 
     res.json({ eventos: rows, totalPages, currentPage: pageNum });
