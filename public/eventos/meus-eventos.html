@@ -167,7 +167,6 @@
       const assinafyIframe = document.getElementById('assinafyIframe');
       const assinafyModal = new bootstrap.Modal(modalEl);
       const infoModal = new bootstrap.Modal(document.getElementById('infoModal'));
-
       modalEl.addEventListener('hidden.bs.modal', () => { assinafyIframe.src = ''; });
 
       async function atualizarUIEvento(eventoId){
@@ -263,7 +262,6 @@
 
         // Listener dos botões
         acc.addEventListener('click', async (e)=>{
-          const btnAssinar = e.target.closest('button[data-assinar-termo]');
           const btnBaixar  = e.target.closest('button[data-baixar-termo]');
 
           if (btnBaixar) {
@@ -280,19 +278,24 @@
             return;
           }
 
+          const btnAssinar = e.target.closest('button[data-assinar-termo]');
           if (btnAssinar) {
             const eventoId = btnAssinar.dataset.assinarTermo;
             const statusEl = document.getElementById(`sig-status-${eventoId}`);
-
-            // Atualiza o texto de status na página
+            
             if (statusEl) {
               statusEl.textContent = 'Verifique seu e-mail para continuar.';
               statusEl.className = 'ms-2 text-primary fw-bold';
             }
-
-            // Exibe o nosso novo modal "bonitinho"
+            
             infoModal.show();
           }
+        });
+
+      }catch(err){
+        console.warn(err);
+        if (loading) loading.innerHTML = `<p class="text-danger">Erro ao carregar: ${err.message}</p>`;
+      }
     });
   </script>
 </body>
