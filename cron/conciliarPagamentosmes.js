@@ -13,7 +13,7 @@ const {
 console.log('[DEBUG] Ponto 2: Módulos carregados.');
 
 // ======= DB =======
-const DB_PATH = process.env.SQLITE_STORAGE || './sistemacipt.db';
+const DB_PATH = process.env.SQLITE_STORAGE || require('path').resolve(__dirname, '../sistemacipt.db');
 const db = new sqlite3.Database(DB_PATH);
 
 function dbRun(sql, params = []) {
