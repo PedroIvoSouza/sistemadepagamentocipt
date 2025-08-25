@@ -140,7 +140,7 @@
   <!-- JS -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 
-  <script>
+ <script>
     // helpers
     const soDigitos = (v='') => String(v).replace(/\D/g,'');
     function formatarDocumento(v){
@@ -167,39 +167,42 @@
       const assinafyIframe = document.getElementById('assinafyIframe');
       const assinafyModal = new bootstrap.Modal(modalEl);
       const infoModal = new bootstrap.Modal(document.getElementById('infoModal'));
+
       modalEl.addEventListener('hidden.bs.modal', () => { assinafyIframe.src = ''; });
 
       async function atualizarUIEvento(eventoId){
         try{
-          // 1. Busca os metadados mais recentes do documento
-          const r = await fetch(`/api/documentos/termo/${eventoId}/meta`, { headers });
+          const r = await fetch(`/api/portal/eventos/${eventoId}/termo/meta`, { headers });
           if(!r.ok) return;
           const meta = await r.json();
           const btns = document.getElementById(`btns-${eventoId}`);
           if(!btns) return;
 
-          // 2. Verifica se o documento está assinado, usando o status do seu banco
           const estaAssinado = meta.status === 'assinado';
+          const foiEnviado = meta.assinafy_id && meta.status !== 'nao_enviado';
 
-          // 3. Constrói a URL de download SEGURA, que aponta para o SEU servidor
+          // Constrói a URL de download SEGURA, que aponta para o SEU servidor
           const urlDownloadSegura = `/api/documentos/assinafy/${meta.assinafy_id}/download-signed`;
 
-          // 4. Monta os botões com a lógica correta e a URL SEGURA
-          btns.innerHTML = `
+          let botoesTermoHtml = `
             <button class="btn btn-sm btn-outline-secondary" data-baixar-termo="${eventoId}">
               <i class="bi bi-filetype-pdf"></i> Baixar Termo Original
             </button>
-            ${!estaAssinado 
-              ? `<button class="btn btn-sm btn-primary" data-assinar-termo="${eventoId}"><i class="bi bi-pen"></i> Assinar Termo</button>`
-              : ''
-            }
-            ${estaAssinado && meta.assinafy_id 
-              ? `<a class="btn btn-sm btn-success" href="${urlDownloadSegura}" target="_blank" rel="noopener">
-                   <i class="bi bi-download"></i> Baixar Termo Assinado
-                 </a>` 
-              : ''
-            }
           `;
+
+          if (estaAssinado) {
+            botoesTermoHtml += `
+              <a class="btn btn-sm btn-success" href="${urlDownloadSegura}" target="_blank" rel="noopener">
+                <i class="bi bi-download"></i> Baixar Termo Assinado
+              </a>`;
+          } else if (foiEnviado) {
+            botoesTermoHtml += `
+              <button class="btn btn-sm btn-primary" data-assinar-termo="${eventoId}">
+                <i class="bi bi-pen"></i> Assinar Termo
+              </button>`;
+          }
+          
+          btns.innerHTML = botoesTermoHtml;
         }catch(e){ 
           console.warn('Falha ao atualizar UI do evento:', e); 
         }
@@ -215,7 +218,6 @@
       });
 
       try{
-        // /me
         const r = await fetch('/api/portal/eventos/me', { headers });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const { user, eventos } = await r.json();
@@ -230,26 +232,12 @@
           return;
         }
 
-        const partes = [];
-        for (const [i, ev] of eventos.entries()) {
+        const partes = eventos.map((ev, i) => {
           const evId = ev.id || ev.evento_id || ev.id_evento;
           const valor = Number(typeof ev.valor_final==='number' ? ev.valor_final : parseFloat(String(ev.valor_final||'0').replace(/\./g,'').replace(',','.')) || 0);
           const datasFmt = Array.isArray(ev.datas_evento) ? ev.datas_evento.map(d=>formatDateBR(d)).join(', ') : formatDateBR(ev.datas_evento || ev.data);
 
-          let showAssinar = true;
-          let signedUrl = '';
-          try {
-            const rMeta = await fetch(`/api/documentos/termo/${evId}/meta`, { headers });
-            if (rMeta.ok) {
-              const meta = await rMeta.json();
-              if (meta.status === 'assinado' || meta.status === 'signed' || meta.signed_pdf_public_url) {
-                showAssinar = false;
-                if (meta.signed_pdf_public_url) signedUrl = meta.signed_pdf_public_url;
-              }
-            }
-          } catch {}
-
-          partes.push(`
+          return `
           <div class="accordion-item">
             <h2 class="accordion-header" id="head${i}">
               <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#col${i}">
@@ -264,35 +252,24 @@
                 <div class="mb-2"><strong>Processo:</strong> ${ev.numero_processo || '-'}</div>
                 <div class="mb-2"><strong>Termo:</strong> ${ev.numero_termo || '-'}</div>
                 <div class="btn-group mt-2" id="btns-${evId}">
-                  <button class="btn btn-sm btn-outline-secondary" data-baixar-termo="${evId}">
-                    <i class="bi bi-filetype-pdf"></i> Baixar Termo
-                  </button>
-                  ${showAssinar ? `<button class="btn btn-sm btn-primary" data-assinar-termo="${evId}"><i class="bi bi-pen"></i> Assinar Termo</button>` : ''}
-                  ${signedUrl ? `<a class="btn btn-sm btn-success" href="${signedUrl}" target="_blank" rel="noopener"><i class="bi bi-download"></i> Termo Assinado</a>` : ''}
+                  <span class="spinner-border spinner-border-sm" role="status"></span>
                 </div>
                 <small class="ms-2 text-muted" id="sig-status-${evId}"></small>
               </div>
             </div>
-          </div>`);
-        }
-        acc.innerHTML = partes.join('');
+          </div>`;
+        }).join('');
+        
+        acc.innerHTML = partes;
 
-        // Listener dos botões
+        // Após renderizar a estrutura, chama a função para carregar os botões de cada evento
+        eventos.forEach(ev => atualizarUIEvento(ev.id || ev.evento_id || ev.id_evento));
+
         acc.addEventListener('click', async (e)=>{
           const btnBaixar  = e.target.closest('button[data-baixar-termo]');
-
           if (btnBaixar) {
             const eventoId = btnBaixar.dataset.baixarTermo;
-            try{
-              const r = await fetch(`/api/portal/eventos/${eventoId}/termo/meta`, { headers });
-              const j = await r.json();
-              const url = j.signed_pdf_public_url || j.url_visualizacao || j.pdf_public_url || j.pdf_url;
-              if (!r.ok || !url) throw new Error(j.error || 'Termo indisponível.');
-              window.open(url, '_blank', 'noopener');
-            }catch(err){
-              alert(err.message || 'Não foi possível abrir o termo.');
-            }
-            return;
+            window.open(`/api/admin/eventos/${eventoId}/termo`, '_blank', 'noopener');
           }
 
           const btnAssinar = e.target.closest('button[data-assinar-termo]');
@@ -314,6 +291,6 @@
         if (loading) loading.innerHTML = `<p class="text-danger">Erro ao carregar: ${err.message}</p>`;
       }
     });
-  </script>
+</script>
 </body>
 </html>
