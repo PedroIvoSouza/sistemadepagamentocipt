@@ -810,33 +810,17 @@ async function renderTable(eventos){
     }
     eventosTableBody.innerHTML = '';
     for (const ev of eventos){
-      // 1. NORMALIZAÇÃO DOS DADOS (AQUI ESTÁ A CORREÇÃO)
-      // Usamos a mesma função do "Editar" para garantir consistência em toda a aplicação.
       const evNormalizado = normalizarEvento(ev);
-      
       const id = evIdOf(ev);
       const status = evNormalizado.status || 'Pendente';
       const badge = status==='Pago' ? 'bg-success'
                   : ['Emitido','Reemitido'].includes(status) ? 'bg-primary'
                   : 'bg-warning text-dark';
       
-      let mostraBtnEnviar = true;
-      let assinafyIdDoMeta = '';
-      try {
-        const rMeta = await fetch(`/api/admin/eventos/${id}/termo/assinafy-status`, { headers: AUTH_HEADERS });
-        if (rMeta.ok) {
-          const meta = await rMeta.json();
-          assinafyIdDoMeta = meta?.assinafy?.id || meta?.assinafy_id;
-          const statusReal = meta?.assinafy?.status;
-          
-          if (statusReal === 'assinado' || statusReal === 'signed' || statusReal === 'certificated') {
-            mostraBtnEnviar = false;
-          }
-        }
-      } catch {}
-      
       const tr = document.createElement('tr');
-      // 2. Usamos os dados normalizados (evNormalizado) para exibir na tabela
+      // Guarda o ID do cliente no próprio elemento da linha para uso posterior
+      tr.dataset.clienteId = ev.id_cliente; 
+      
       tr.innerHTML = `
         <td>${id}</td>
         <td><strong class="text-capitalize">${evNormalizado.nome_evento || ''}</strong></td>
@@ -849,16 +833,10 @@ async function renderTable(eventos){
             <i class="bi bi-file-earmark-arrow-down"></i>
           </button>
         </td>
-        <td class="text-center">
-          <div class="btn-group">
-            <button class="btn btn-sm btn-outline-secondary btn-termo" title="Baixar Termo Original" data-evento-id="${id}">
-              <i class="bi bi-file-earmark-text"></i>
+        <td class="text-center" id="termo-actions-${id}">
+            <button class="btn btn-sm btn-outline-info btn-verificar-status" data-evento-id="${id}" title="Verificar Status do Termo">
+                <i class="bi bi-arrow-repeat"></i> Verificar Status
             </button>
-            ${mostraBtnEnviar 
-              ? `<button class="btn btn-sm btn-primary btn-enviar-assinafy" title="Enviar para Assinatura" data-evento-id="${id}" data-cliente-id="${ev.id_cliente}"><i class="bi bi-pen"></i></button>` 
-              : `<a class="btn btn-sm btn-success" href="/api/documentos/assinafy/${assinafyIdDoMeta}/download-signed" target="_blank" rel="noopener" title="Baixar Termo Assinado"><i class="bi bi-download"></i></a>`
-            }
-          </div>
         </td>
         <td class="text-center">
           <button class="btn btn-sm btn-outline-secondary btn-editar" title="Editar" data-evento-id="${id}">
@@ -871,7 +849,7 @@ async function renderTable(eventos){
       eventosTableBody.appendChild(tr);
     }
   }
-      
+  
   function renderPagination(totalPages, page){
     paginationNav.innerHTML = '';
     if (!totalPages || totalPages <= 1) return;
@@ -1178,49 +1156,53 @@ async function renderTable(eventos){
   }
 
   // Delegação de eventos da TABELA e do MODAL de DARs
-   function inicializarEventListeners(){
-    // Listener de clique para a tabela inteira
+    function inicializarEventListeners(){
     eventosTableBody.addEventListener('click', async (e)=>{
-      // Identifica qual botão foi clicado
-      const btnDars     = e.target.closest('.btn-dars');
-      const btnTermo    = e.target.closest('.btn-termo');
+      const btnDars = e.target.closest('.btn-dars');
+      const btnTermo = e.target.closest('.btn-termo');
       const btnAssinafy = e.target.closest('.btn-enviar-assinafy');
-      const btnApagar   = e.target.closest('.btn-apagar');
-      const btnEditar   = e.target.closest('.btn-editar');
+      const btnApagar = e.target.closest('.btn-apagar');
+      const btnEditar = e.target.closest('.btn-editar');
+      const btnVerificarStatus = e.target.closest('.btn-verificar-status');
 
-      // Ação para o botão "Ver DARs"
-      if (btnDars){
-        const eventoId = btnDars.dataset.eventoId;
-        const eventoNome = btnDars.dataset.eventoNome || `#${eventoId}`;
-        abrirModalDARs(eventoId, eventoNome);
-        return; // Encerra a execução aqui
-      }
-      
-      // Ação para o botão "Baixar Termo Original"
-      if (btnTermo){
-        const eventoId = btnTermo.dataset.eventoId;
-        if (btnTermo.dataset.loading === '1') return;
-        const original = btnTermo.innerHTML;
-        btnTermo.disabled = true;
-        btnTermo.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
+      if (btnVerificarStatus) {
+        const eventoId = btnVerificarStatus.dataset.eventoId;
+        const originalHtml = btnVerificarStatus.innerHTML;
+        btnVerificarStatus.disabled = true;
+        btnVerificarStatus.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
 
         try {
-          const r = await fetch(`/api/admin/eventos/${eventoId}/termo`, { headers: AUTH_HEADERS, cache: 'no-store' });
-          if (!r.ok) throw new Error('Falha ao gerar termo');
-          const blob = await r.blob();
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `termo_original_evento_${eventoId}.pdf`;
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-          URL.revokeObjectURL(url);
-        } catch(err) {
-          alert(`Erro ao baixar termo original: ${err.message}`);
-        } finally {
-          btnTermo.disabled = false;
-          btnTermo.innerHTML = original;
+            const rMeta = await fetch(`/api/admin/eventos/${eventoId}/termo/assinafy-status`, { headers: AUTH_HEADERS });
+            const meta = await rMeta.json();
+
+            if (!rMeta.ok || !meta.ok) throw new Error(meta.error || 'Falha ao buscar status');
+
+            const assinafyId = meta?.assinafy?.id;
+            const statusReal = meta?.assinafy?.status;
+            let mostraBtnEnviar = true;
+            if (statusReal === 'assinado' || statusReal === 'signed' || statusReal === 'certificated') {
+                mostraBtnEnviar = false;
+            }
+
+            // Pega o ID do cliente guardado no elemento <tr> da tabela
+            const clienteId = e.target.closest('tr')?.dataset.clienteId || '';
+
+            const container = document.getElementById(`termo-actions-${eventoId}`);
+            container.innerHTML = `
+              <div class="btn-group">
+                <button class="btn btn-sm btn-outline-secondary btn-termo" title="Baixar Termo Original" data-evento-id="${eventoId}">
+                  <i class="bi bi-file-earmark-text"></i>
+                </button>
+                ${mostraBtnEnviar 
+                  ? `<button class="btn btn-sm btn-primary btn-enviar-assinafy" title="Enviar para Assinatura" data-evento-id="${eventoId}" data-cliente-id="${clienteId}"><i class="bi bi-pen"></i></button>` 
+                  : `<a class="btn btn-sm btn-success" href="/api/documentos/assinafy/${assinafyId}/download-signed" target="_blank" rel="noopener" title="Baixar Termo Assinado"><i class="bi bi-download"></i></a>`
+                }
+              </div>
+            `;
+        } catch (err) {
+            alert(err.message);
+            btnVerificarStatus.disabled = false;
+            btnVerificarStatus.innerHTML = originalHtml;
         }
         return;
       }
