@@ -400,7 +400,4 @@ portalEventosAssinaturaRouter.post('/consultar-email', async (req, res) => {
 });
 
 // A LINHA DE EXPORTAÇÃO CORRETA:
-module.exports = {
-  portalEventosAssinaturaRouter,
-  documentosAssinafyPublicRouter,
-};
+module.exports = router;
