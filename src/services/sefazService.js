@@ -62,6 +62,15 @@ const sefaz = axios.create({
 // ==========================
 // Helpers
 // ==========================
+
+const cleanHeaderValue = (s) => (s ?? '').toString().replace(/[\r\n]/g, '').trim();
+function getAppTokenStrict() {
+  const v = cleanHeaderValue(process.env.SEFAZ_APP_TOKEN);
+  if (!v) throw new Error('SEFAZ_APP_TOKEN não configurado no .env.');
+  if (/[\u0000-\u001F\u007F]/.test(v)) throw new Error('SEFAZ_APP_TOKEN contém caracteres de controle');
+  return v;
+}
+
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 async function reqWithRetry(doRequest, label = 'sefaz-call') {
@@ -103,14 +112,6 @@ function clampDataLimitePagamento(dataVencimentoISO, dataLimiteISO) {
   const hojeISO = new Date().toISOString().slice(0, 10);
   const lim = toISO(dataLimiteISO) || toISO(dataVencimentoISO) || hojeISO;
   return lim < hojeISO ? hojeISO : lim;
-}
-
-const cleanHeaderValue = (s) => (s ?? '').toString().replace(/[\r\n]/g, '').trim();
-function getAppTokenStrict() {
-  const v = cleanHeaderValue(process.env.SEFAZ_APP_TOKEN);
-  if (!v) throw new Error('SEFAZ_APP_TOKEN não configurado no .env.');
-  if (/[\u0000-\u001F\u007F]/.test(v)) throw new Error('SEFAZ_APP_TOKEN contém caracteres de controle');
-  return v;
 }
 
 /**
