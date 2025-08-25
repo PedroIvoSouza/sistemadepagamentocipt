@@ -388,8 +388,12 @@ function calcularValorFinal(vb, tipo, dm = 0) {
 router.get('/', async (req, res) => {
   try {
     const { 
-      search = '', page = 1, limit = 10,
-      sort = 'data_vigencia_final', order = 'asc', filter = 'todos'
+      search = '', 
+      page = 1, 
+      limit = 10,
+      sort = 'data_vigencia_final', // Ordenação padrão por data
+      order = 'asc',                 // Ordem padrão ascendente (mais antigo primeiro)
+      filter = 'todos'
     } = req.query;
 
     const pageNum = parseInt(page, 10) || 1;
@@ -412,7 +416,9 @@ router.get('/', async (req, res) => {
       whereClause += 'e.evento_gratuito = 1';
     }
 
-    const colunasPermitidas = ['id', 'nome_evento', 'data_vigencia_final'];
+    // --- AQUI ESTÁ A CORREÇÃO PRINCIPAL ---
+    // Garantimos que a coluna de data está na lista de permissões.
+    const colunasPermitidas = ['id', 'nome_evento', 'data_vigencia_final']; 
     const sortColumn = colunasPermitidas.includes(sort) ? sort : 'id';
     const sortOrder = ['asc', 'desc'].includes(order.toLowerCase()) ? order : 'desc';
     const orderByClause = `ORDER BY ${sortColumn} ${sortOrder}`;
@@ -438,7 +444,6 @@ router.get('/', async (req, res) => {
           try { datas = JSON.parse(evento.datas_evento); } 
           catch { datas = evento.datas_evento.split(',').map(s => s.trim()).filter(Boolean); }
         }
-        
         if (Array.isArray(datas) && datas.length > 0) {
             const numDiarias = datas.length;
             const valorBrutoRecalculado = calcularValorBruto(numDiarias);
