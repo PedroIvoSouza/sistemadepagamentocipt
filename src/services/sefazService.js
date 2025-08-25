@@ -49,14 +49,36 @@ const sefaz = axios.create({
    baseURL: BASE_URL,
    timeout: Number(SEFAZ_TIMEOUT_MS || 120000),
    httpsAgent,
-   proxy: false, // <<< ignora HTTP(S)_PROXY do ambiente para SEFAZ
+   proxy: false,
    headers: {
      'Content-Type': 'application/json',
      Accept: 'application/json',
-     // highlight-next-line
-     'appToken': getAppTokenStrict(), // <<< ADICIONAR ESTA LINHA
+     'appToken': getAppTokenStrict(),
    },
 });
+
+
+// ==========================================
+// === INTERCEPTOR DE DEBUG ADICIONADO AQUI ===
+// ==========================================
+sefaz.interceptors.request.use(request => {
+  console.log('\n--- AXIOS REQUEST INTERCEPTOR ---');
+  console.log('Enviando requisição:');
+  console.log(`- Método: ${request.method.toUpperCase()}`);
+  console.log(`- URL Base: ${request.baseURL}`);
+  console.log(`- Caminho: ${request.url}`);
+  console.log(`- URL Completa: ${request.baseURL}${request.url}`);
+  console.log('- Headers:', JSON.stringify(request.headers, null, 2));
+  if (request.data) {
+    console.log('- Corpo (Payload):', JSON.stringify(request.data, null, 2));
+  }
+  console.log('---------------------------------\n');
+  return request;
+}, error => {
+  console.error('--- AXIOS REQUEST ERROR ---', error);
+  return Promise.reject(error);
+});
+// ==========================================
 
 
 // ==========================
