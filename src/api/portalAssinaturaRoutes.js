@@ -198,35 +198,41 @@ portalEventosAssinaturaRouter.post('/consultar-email', async (req, res) => {
     return res.status(400).json({ ok: false, error: 'Documento (CNPJ/CPF) é obrigatório.' });
   }
 
+  // Limpa o documento vindo do formulário, removendo tudo que não for número.
   const docLimpo = String(documento).replace(/\D/g, '');
 
   try {
-    // 1. Procura na tabela de Permissionários
-    let sql = `SELECT email FROM permissionarios WHERE cnpj = ?`;
+    // 1. Procura na tabela de Permissionários, limpando o campo do banco de dados para uma comparação segura.
+    // A função REPLACE aninhada remove '.', '/' e '-' e o TRIM remove espaços no início/fim.
+    let sql = `
+      SELECT email FROM permissionarios 
+      WHERE REPLACE(REPLACE(REPLACE(TRIM(cnpj), '.', ''), '/', ''), '-', '') = ?
+    `;
     let row = await dbGet(sql, [docLimpo]);
 
-    // 2. Se não encontrou um registro ou se o e-mail estiver vazio, procura na tabela de Clientes de Eventos
+    // 2. Se não encontrou um e-mail válido, procura na tabela de Clientes de Eventos da mesma forma robusta.
     if (!row || !row.email) {
-        const sqlEventos = `SELECT email FROM Clientes_Eventos WHERE documento = ?`;
-        const rowEventos = await dbGet(sqlEventos, [docLimpo]);
-        
-        // Se encontrou um e-mail válido na segunda tabela, usa esse resultado
-        if (rowEventos && rowEventos.email) {
-            row = rowEventos;
-        }
+      const sqlEventos = `
+        SELECT email FROM Clientes_Eventos 
+        WHERE REPLACE(REPLACE(REPLACE(TRIM(documento), '.', ''), '/', ''), '-', '') = ?
+      `;
+      const rowEventos = await dbGet(sqlEventos, [docLimpo]);
+      
+      if (rowEventos && rowEventos.email) {
+        row = rowEventos;
+      }
     }
 
-    // 3. Verifica o resultado final e retorna
+    // 3. Verifica o resultado final e retorna.
     if (row && row.email) {
-        res.json({ ok: true, email: row.email });
+      res.json({ ok: true, email: row.email });
     } else {
-        res.status(404).json({ ok: false, error: 'Nenhum cadastro encontrado para o documento informado.' });
+      res.status(404).json({ ok: false, error: 'Nenhum cadastro encontrado para o documento informado.' });
     }
-
-} catch (err) {
+  } catch (err) {
     console.error('[consultar-email] erro:', err.message);
     res.status(500).json({ ok: false, error: 'Ocorreu um erro interno. Tente novamente mais tarde.' });
-}
+  }
 });
 
 
