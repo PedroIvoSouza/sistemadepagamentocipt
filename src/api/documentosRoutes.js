@@ -258,24 +258,42 @@ router.get('/assinafy/:id/download-signed', async (req, res) => {
   const id = req.params.id;
   try {
     const doc = await dbGet(`SELECT * FROM documentos WHERE assinafy_id=?`, [id]);
-    if (doc?.signed_pdf_public_url) {
-      const abs = path.join(PUBLIC_DIR, doc.signed_pdf_public_url.replace(/^\//,''));
-      return safeSendFile(res, abs, `termo_assinado_${doc.evento_id || id}.pdf`);
+
+    // 1. VERIFICA SE JÁ EXISTE UM ARQUIVO LOCAL VÁLIDO (CACHE)
+    // A URL deve ser um caminho local (começando com /) e o arquivo deve existir no disco.
+    const isLocalUrlValid = doc?.signed_pdf_public_url && !doc.signed_pdf_public_url.startsWith('http');
+    if (isLocalUrlValid) {
+      const absPath = path.join(PUBLIC_DIR, doc.signed_pdf_public_url.replace(/^\//, ''));
+      if (fs.existsSync(absPath)) {
+        console.log(`[download-signed] Servindo arquivo do cache local: ${absPath}`);
+        return safeSendFile(res, absPath, `termo_assinado_${doc.evento_id || id}.pdf`);
+      }
     }
+
+    // 2. SE NÃO HÁ CACHE (OU ESTÁ INVÁLIDO), BAIXA DA ASSINAFY
+    // Esta parte agora é executada se o campo no banco estiver vazio, com uma URL http, ou se o arquivo local foi apagado.
+    console.log(`[download-signed] Cache não encontrado ou inválido. Baixando da Assinafy...`);
     const bin = await downloadSignedPdf(id);
     const fileName = `termo_assinado_${id}.pdf`;
-    const abs = path.join(SIGNED_DIR, fileName);
-    fs.writeFileSync(abs, Buffer.from(bin));
-    const pub = `/documentos/assinados/${fileName}`;
+    const absPath = path.join(SIGNED_DIR, fileName);
+    const publicUrl = `/documentos/assinados/${fileName}`;
+    
+    fs.writeFileSync(absPath, Buffer.from(bin));
+    console.log(`[download-signed] Arquivo salvo em: ${absPath}`);
+
+    // 3. ATUALIZA O BANCO DE DADOS COM O CAMINHO LOCAL CORRETO
     if (doc) {
-      await dbRun(`UPDATE documentos SET signed_pdf_public_url=?, status='assinado', signed_at=? WHERE id=?`,
-        [pub, new Date().toISOString(), doc.id]);
+      await dbRun(`UPDATE documentos SET signed_pdf_public_url=?, status='assinado', signed_at=COALESCE(signed_at, ?) WHERE id=?`,
+        [publicUrl, new Date().toISOString(), doc.id]);
     }
-    return safeSendFile(res, abs, fileName);
+
+    // 4. SERVE O ARQUIVO RECÉM-BAIXADO PARA O USUÁRIO
+    return safeSendFile(res, absPath, fileName);
+
   } catch (e) {
     console.error('[documentos] /assinafy/:id/download-signed erro:', e?.response?.data || e.message);
     if (e?.response?.status === 404) {
-      return res.status(404).json({ error: 'PDF assinado não encontrado.' });
+      return res.status(404).json({ error: 'PDF assinado não encontrado na Assinafy.' });
     }
     res.status(500).json({ error: 'Falha ao baixar PDF assinado.' });
   }
