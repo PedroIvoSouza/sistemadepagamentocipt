@@ -105,18 +105,63 @@ async function conciliarPagamentosD1() {
         console.log(`[CONCILIA] Receita ${cod} em ${dataDia}: retornados ${itens.length} registros.`);
       }
       for (const it of itens) {
-        const numero = String(it.numeroGuia || '').trim();
-        if (!numero) continue;
-        totalEncontrados += 1;
-        const r1 = await dbRun(`UPDATE dars SET status = 'Pago', data_pagamento = COALESCE(?, data_pagamento) WHERE numero_documento = ?`, [it.dataPagamento || null, numero]);
-        if (r1?.changes > 0) { totalAtualizados += r1.changes; continue; }
-        const r2 = await dbRun(`UPDATE dars SET status = 'Pago', data_pagamento = COALESCE(?, data_pagamento), numero_documento = COALESCE(numero_documento, codigo_barras) WHERE codigo_barras = ? AND (numero_documento IS NULL OR numero_documento = '')`, [it.dataPagamento || null, numero]);
-        if (r2?.changes > 0) { totalAtualizados += r2.changes; continue; }
-        const r3 = await dbRun(`UPDATE dars SET status = 'Pago', data_pagamento = COALESCE(?, data_pagamento) WHERE linha_digitavel = ?`, [it.dataPagamento || null, numero]);
-        if (r3?.changes > 0) { totalAtualizados += r3.changes; }
+      const numeroGuia = String(it.numeroGuia || '').trim();
+      const numeroDocOrigem = String(it.numeroDocOrigem || '').trim();
+
+      // Se não houver nenhum identificador, pula para o próximo
+      if (!numeroGuia && !numeroDocOrigem) continue;
+
+      totalEncontrados += 1;
+      let changes = 0;
+
+      // --- NOVA LÓGICA DE VINCULAÇÃO ---
+
+      // TENTATIVA 1: Usar o Documento de Origem (o mais confiável para boletos antigos)
+      // Compara o 'numeroDocumentoOrigem' da SEFAZ com o 'id' da sua tabela local 'dars'
+      if (numeroDocOrigem) {
+        const r1 = await dbRun(
+          `UPDATE dars
+              SET status = 'Pago',
+                  data_pagamento = COALESCE(?, data_pagamento),
+                  numero_documento = COALESCE(numero_documento, ?)
+            WHERE id = ?`,
+          [it.dataPagamento || null, numeroGuia || null, numeroDocOrigem]
+        );
+        changes = r1?.changes || 0;
+      }
+
+      // TENTATIVAS DE FALLBACK (se a primeira falhar ou não existir doc de origem)
+      if (changes === 0 && numeroGuia) {
+        // Tentativa 2: por numero_documento
+        const r2 = await dbRun(
+          `UPDATE dars SET status = 'Pago', data_pagamento = COALESCE(?, data_pagamento) WHERE numero_documento = ?`,
+          [it.dataPagamento || null, numeroGuia]
+        );
+        changes = r2?.changes || 0;
+
+        // Tentativa 3: por codigo_barras
+        if (changes === 0) {
+          const r3 = await dbRun(
+            `UPDATE dars SET status = 'Pago', data_pagamento = COALESCE(?, data_pagamento), numero_documento = COALESCE(numero_documento, codigo_barras) WHERE codigo_barras = ? AND (numero_documento IS NULL OR numero_documento = '')`,
+            [it.dataPagamento || null, numeroGuia]
+          );
+          changes = r3?.changes || 0;
+        }
+
+        // Tentativa 4: por linha_digitavel
+        if (changes === 0) {
+          const r4 = await dbRun(
+            `UPDATE dars SET status = 'Pago', data_pagamento = COALESCE(?, data_pagamento) WHERE linha_digitavel = ?`,
+            [it.dataPagamento || null, numeroGuia]
+          );
+          changes = r4?.changes || 0;
+        }
+      }
+
+      if (changes > 0) {
+        totalAtualizados += 1;
       }
     }
-  }
 
   console.log(`[CONCILIA] Finalizado. Registros retornados no período todo: ${totalEncontrados}. DARs atualizados: ${totalAtualizados}.`);
 }
