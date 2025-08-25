@@ -100,69 +100,64 @@ async function conciliarPagamentosDoMes() {
       }
 
       for (const it of itens) {
-  // Pega os dois possíveis identificadores da resposta da SEFAZ
-  const numeroGuia = String(it.numeroGuia || '').trim();
-  const numeroDocOrigem = String(it.numeroDocOrigem || '').trim();
+        const numeroGuia = String(it.numeroGuia || '').trim();
+        const numeroDocOrigem = String(it.numeroDocOrigem || '').trim();
 
-  // Se não houver nenhum identificador, pula para o próximo pagamento
-  if (!numeroGuia && !numeroDocOrigem) continue;
+        if (!numeroGuia && !numeroDocOrigem) continue;
 
-  totalEncontrados += 1;
-  let changes = 0;
+        totalEncontrados += 1;
+        let changes = 0;
 
-  // --- LÓGICA DE VINCULAÇÃO ROBUSTA ---
+        // TENTATIVA 1: Usar o Documento de Origem (o mais confiável para boletos antigos)
+        if (numeroDocOrigem) {
+          const r1 = await dbRun(
+            `UPDATE dars
+                SET status = 'Pago',
+                    data_pagamento = COALESCE(?, data_pagamento),
+                    numero_documento = COALESCE(numero_documento, ?)
+              WHERE id = ?`,
+            [it.dataPagamento || null, numeroGuia || null, numeroDocOrigem]
+          );
+          changes = r1?.changes || 0;
+        }
 
-  // TENTATIVA 1 (Principal): Usar o Documento de Origem.
-  // Compara o 'numeroDocumentoOrigem' da SEFAZ com o 'id' da sua tabela local 'dars'.
-  // É a forma mais confiável de encontrar os boletos antigos.
-  if (numeroDocOrigem) {
-    const r1 = await dbRun(
-      `UPDATE dars
-          SET status = 'Pago',
-              data_pagamento = COALESCE(?, data_pagamento),
-              numero_documento = COALESCE(numero_documento, ?)
-        WHERE id = ?`,
-      [it.dataPagamento || null, numeroGuia || null, numeroDocOrigem]
-    );
-    changes = r1?.changes || 0;
-  }
+        // TENTATIVAS DE FALLBACK (se a primeira falhar ou não existir doc de origem)
+        if (changes === 0 && numeroGuia) {
+          // Tentativa 2: por numero_documento
+          const r2 = await dbRun(
+            `UPDATE dars SET status = 'Pago', data_pagamento = COALESCE(?, data_pagamento) WHERE numero_documento = ?`,
+            [it.dataPagamento || null, numeroGuia]
+          );
+          changes = r2?.changes || 0;
 
-  // TENTATIVAS DE FALLBACK (se a primeira falhar ou para boletos novos)
-  if (changes === 0 && numeroGuia) {
-    // Tentativa 2: por numero_documento
-    const r2 = await dbRun(
-      `UPDATE dars SET status = 'Pago', data_pagamento = COALESCE(?, data_pagamento) WHERE numero_documento = ?`,
-      [it.dataPagamento || null, numeroGuia]
-    );
-    changes = r2?.changes || 0;
+          // Tentativa 3: por codigo_barras
+          if (changes === 0) {
+            const r3 = await dbRun(
+              `UPDATE dars SET status = 'Pago', data_pagamento = COALESCE(?, data_pagamento), numero_documento = COALESCE(numero_documento, codigo_barras) WHERE codigo_barras = ? AND (numero_documento IS NULL OR numero_documento = '')`,
+              [it.dataPagamento || null, numeroGuia]
+            );
+            changes = r3?.changes || 0;
+          }
 
-    // Tentativa 3: por codigo_barras
-    if (changes === 0) {
-      const r3 = await dbRun(
-        `UPDATE dars SET status = 'Pago', data_pagamento = COALESCE(?, data_pagamento), numero_documento = COALESCE(numero_documento, codigo_barras) WHERE codigo_barras = ? AND (numero_documento IS NULL OR numero_documento = '')`,
-        [it.dataPagamento || null, numeroGuia]
-      );
-      changes = r3?.changes || 0;
+          // Tentativa 4: por linha_digitavel
+          if (changes === 0) {
+            const r4 = await dbRun(
+              `UPDATE dars SET status = 'Pago', data_pagamento = COALESCE(?, data_pagamento) WHERE linha_digitavel = ?`,
+              [it.dataPagamento || null, numeroGuia]
+            );
+            changes = r4?.changes || 0;
+          }
+        }
+
+        if (changes > 0) {
+          console.log(`--> SUCESSO: DAR com ID ${numeroDocOrigem || '(desconhecido)'} e Guia ${numeroGuia || '(desconhecida)'} foi atualizada para 'Pago'.`);
+          totalAtualizados += 1;
+        }
+      }
     }
-
-    // Tentativa 4: por linha_digitavel
-    if (changes === 0) {
-      const r4 = await dbRun(
-        `UPDATE dars SET status = 'Pago', data_pagamento = COALESCE(?, data_pagamento) WHERE linha_digitavel = ?`,
-        [it.dataPagamento || null, numeroGuia]
-      );
-      changes = r4?.changes || 0;
-    }
   }
 
-  // Se alguma das tentativas funcionou, contabiliza como atualizado.
-  if (changes > 0) {
-    console.log(`--> SUCESSO: DAR com ID ${numeroDocOrigem || '(desconhecido)'} e Guia ${numeroGuia || '(desconhecida)'} foi atualizada para 'Pago'.`);
-    totalAtualizados += 1;
-  }
-}
-
-  console.log(`[CONCILIA] Finalizado. Registros retornados e vinculados no período: ${totalAtualizados}.`);
+  console.log(`[CONCILIA] Finalizado. Total de pagamentos da SEFAZ no período: ${totalEncontrados}. DARs atualizadas no banco: ${totalAtualizados}.`);
 }
 
 // ======= Agendamento diário (02:05 America/Maceio) =======
