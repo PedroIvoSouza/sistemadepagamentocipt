@@ -176,14 +176,17 @@
           const meta = await r.json();
           const btns = document.getElementById(`btns-${eventoId}`);
           if(!btns) return;
-          const assinada = meta.status === 'assinado' || meta.status === 'signed' || !!meta.signed_pdf_public_url;
-          const signedUrl = meta.signed_pdf_public_url || '';
+               const assinada = meta.status === 'assinado' || meta.status === 'signed' || meta.status === 'certificated' || !!meta.signed_pdf_public_url;
+          
+          // Construímos a URL segura que aponta para o NOSSO servidor
+          const signedDownloadUrl = `/api/documentos/assinafy/${meta.assinafy_id}/download-signed`;
+
           btns.innerHTML = `
             <button class="btn btn-sm btn-outline-secondary" data-baixar-termo="${eventoId}">
-              <i class="bi bi-filetype-pdf"></i> Baixar Termo
+              <i class="bi bi-filetype-pdf"></i> Baixar Termo Original
             </button>
             ${assinada ? '' : `<button class="btn btn-sm btn-primary" data-assinar-termo="${eventoId}"><i class="bi bi-pen"></i> Assinar Termo</button>`}
-            ${assinada && signedUrl ? `<a class="btn btn-sm btn-success" href="${signedUrl}" target="_blank" rel="noopener"><i class="bi bi-download"></i> Termo Assinado</a>` : ''}
+            ${assinada && meta.assinafy_id ? `<a class="btn btn-sm btn-success" href="${signedDownloadUrl}" target="_blank" rel="noopener"><i class="bi bi-download"></i> Baixar Termo Assinado</a>` : ''}
           `;
         }catch(e){ console.warn(e); }
       }
