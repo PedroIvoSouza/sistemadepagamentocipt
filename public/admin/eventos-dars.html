@@ -990,26 +990,24 @@ async function carregarClientes(){
       valor_bruto, valor_final, total_diarias
     };
   }
-   async function editarEvento(eventoId){
+    async function editarEvento(eventoId){
     if (!eventoId){ alert('ID inválido'); return; }
     if (!clientesCarregados) await carregarClientes();
 
     try{
       const raw = await fetchEventoById(eventoId);
-      const ev  = normalizarEvento(raw); // Usa a nova função inteligente
+      const ev  = normalizarEvento(raw); // Usa a função que limpa e padroniza os dados
 
-      // Limpa o formulário
+      // Limpa o formulário antes de preencher
       form.reset(); 
       fp.clear(); 
       parcelasContainer.innerHTML='';
       parcelasMasks.forEach(({valorMask,picker})=>{ try{valorMask.destroy()}catch{} try{picker.destroy()}catch{} });
       parcelasMasks = [];
 
-      // Preenche todos os campos com os dados normalizados
+      // Preenche todos os campos com os dados já normalizados
       clienteSelect.value = ev.id_cliente || '';
       document.getElementById('nome-evento').value = ev.nome_evento || '';
-      
-      // CORREÇÃO: Usa o valor normalizado
       numeroOficioSeiMask.value = ev.numero_oficio_sei || '';
       numeroProcessoMask.value = ev.numero_processo || '';
       numeroTermoMask.value = ev.numero_termo || '';
@@ -1017,7 +1015,7 @@ async function carregarClientes(){
       Array.from(espacoUtilizadoSelect.options).forEach(opt => {
         opt.selected = (ev.espacos_utilizados || []).includes(opt.value);
       });
-      espacoUtilizadoSelect.dispatchEvent(new Event('change'));
+      espacoUtilizadoSelect.dispatchEvent(new Event('change')); // Isso recalcula a área
 
       horaInicioInput.value = ev.hora_inicio || '';
       horaFimInput.value = ev.hora_fim || '';
@@ -1033,29 +1031,37 @@ async function carregarClientes(){
         fp.setDate(ev.datas_evento, true);
       }
       
-      tipoDescontoAutoDisplay.value = ev.tipo_desconto_auto || (clienteSelect.selectedOptions[0]?.dataset.tipo || 'Geral');
+      const tipoClienteSelecionado = clienteSelect.selectedOptions[0]?.dataset?.tipo || 'Geral';
+      tipoDescontoAutoDisplay.value = ev.tipo_desconto_auto || tipoClienteSelecionado;
       descontoManualInput.value = ev.desconto_manual_percent || 0;
 
-      // CORREÇÃO PARA PARCELAS:
+      // --- CORREÇÃO PRINCIPAL PARA PARCELAS ---
+      // 1. Recalcula o valor final real com base nas datas e descontos do formulário
+      const numDiarias = ev.datas_evento.length;
+      const valorBrutoRecalculado = calcularValorBruto(numDiarias);
+      const valorFinalRecalculado = calcularValorFinal(valorBrutoRecalculado, tipoDescontoAutoDisplay.value, descontoManualInput.value);
+
+      // 2. Lógica inteligente para preencher as parcelas
       if (ev.parcelas && ev.parcelas.length > 0){
+        // Se o backend enviou parcelas, usa elas
         ev.parcelas.forEach((p, i) => {
           adicionarParcela();
           const m = parcelasMasks[i];
           const val = p.valor_parcela ?? p.valor ?? 0;
-          m.valorMask.unmaskedValue = String(val); // Define o valor
+          m.valorMask.unmaskedValue = String(val);
           const venc = p.vencimento ?? p.data_vencimento ?? null;
           if (venc) m.picker.setDate(venc, true);
         });
-      } else if (!ev.evento_gratuito && ev.valor_final > 0) {
-        // Se não vieram parcelas, mas o evento é pago, preenche a Parcela 1 com o valor total
+      } else if (!ev.evento_gratuito && valorFinalRecalculado > 0) {
+        // Se não vieram parcelas, mas o evento é pago, preenche a Parcela 1 com o valor RECALCULADO
         adicionarParcela();
         const m = parcelasMasks[0];
-        m.valorMask.unmaskedValue = String(ev.valor_final);
+        m.valorMask.unmaskedValue = String(valorFinalRecalculado);
       } else if (!ev.evento_gratuito) {
-        adicionarParcela(); // Adiciona uma parcela em branco para eventos pagos sem valor
+        adicionarParcela(); // Adiciona uma parcela em branco se for pago mas sem valor
       }
       
-      atualizarCalculos(); // Recalcula totais ao final
+      atualizarCalculos(); // Roda no final para garantir que todos os totais sejam exibidos corretamente
 
       modoEdicao = true;
       editEventoId = eventoId;
