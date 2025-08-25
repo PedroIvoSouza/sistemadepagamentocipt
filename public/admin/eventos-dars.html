@@ -863,9 +863,9 @@ async function carregarClientes(){
             <i class="bi bi-trash"></i>
           </button>
         </td>`;
-      eventosTableBody.appendChild(tr); // Esta linha era essencial e estava faltando
-    } // A chave de fechamento do 'for' estava faltando
-  } // A chave de fechamento da função 'renderTable' estava faltando
+      eventosTableBody.appendChild(tr); // Adiciona a linha na tabela
+    } // Fecha o loop for
+  } // Fecha a função renderTable
       
   function renderPagination(totalPages, page){
     paginationNav.innerHTML = '';
