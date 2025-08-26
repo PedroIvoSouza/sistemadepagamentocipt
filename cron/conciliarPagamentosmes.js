@@ -107,7 +107,15 @@ async function conciliarPagamentosDoMes() {
         const numeroGuia = String(it.numeroGuia || '').trim();
         const codigoBarras = String(it.codigoBarras || '').trim();
         const linhaDigitavel = String(it.linhaDigitavel || '').trim();
-        const docPagador = normalizeDoc(it.numeroInscricao || it.raw?.numeroInscricao || '');
+        const docPagador = normalizeDoc(
+          it.numeroInscricao
+          || it.raw?.numeroInscricao
+          || it.raw?.contribuintePagador?.numeroInscricao
+          || it.raw?.contribuinteEmitente?.numeroInscricao
+          || it.raw?.pagador?.numeroInscricao
+          || it.raw?.contribuinte?.numeroInscricao
+          || ''
+        );
         const valorPago = parseFloat(it.valorPago || 0);
 
         if (!docPagador) continue;
