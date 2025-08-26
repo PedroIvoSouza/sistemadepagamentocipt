@@ -156,46 +156,67 @@ async function conciliarPagamentosDoMes() {
 
   const hoje = new Date();
   const primeiroDiaDoMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
-
-  // Formata as datas para o range completo do mês até hoje
-  const dataInicioPeriodo = ymd(primeiroDiaDoMes);
-  const dataFimPeriodo = ymd(hoje);
-  const dtHoraInicioPeriodo = toDateTimeISO(primeiroDiaDoMes, 0, 0, 0);
-  const dtHoraFimPeriodo = toDateTimeISO(hoje, 23, 59, 59);
-
-  let totalEncontrados = 0;
+  
   let totalAtualizados = 0;
-  const pagamentosMap = new Map();
+  const pagamentosMap = new Map(); // Acumula todos os pagamentos únicos do mês
 
-  for (const cod of receitas) {
-    console.log(`[CONCILIA] Buscando pagamentos de ${dataInicioPeriodo} a ${dataFimPeriodo} para receita ${cod}...`);
-    
-    // 1. Busca por data de arrecadação
-    try {
-      const pagsArrecadacao = await listarPagamentosPorDataArrecadacao(dataInicioPeriodo, dataFimPeriodo, cod);
-      for (const p of pagsArrecadacao) {
-        if (p.numeroGuia) pagamentosMap.set(p.numeroGuia, p);
-      }
-    } catch (e) {
-      console.error(`[CONCILIA] ERRO SEVERO ao buscar por-data-arrecadacao: ${e.message || e}`);
+  // ==================================================================
+  // NOVO LOOP: Itera sobre o mês em blocos de 7 dias
+  // ==================================================================
+  let dataDeInicioDoBloco = new Date(primeiroDiaDoMes);
+
+  while (dataDeInicioDoBloco <= hoje) {
+    let dataDeFimDoBloco = new Date(dataDeInicioDoBloco);
+    dataDeFimDoBloco.setDate(dataDeInicioDoBloco.getDate() + 6); // Adiciona 6 dias para um intervalo de 7 dias
+
+    // Garante que o fim do bloco não ultrapasse a data de hoje
+    if (dataDeFimDoBloco > hoje) {
+      dataDeFimDoBloco = hoje;
     }
 
-    // 2. Busca por data de inclusão (para pegar pagamentos que entraram no sistema depois)
-    try {
-      const pagsInclusao = await listarPagamentosPorDataInclusao(dtHoraInicioPeriodo, dtHoraFimPeriodo, cod);
-      for (const p of pagsInclusao) {
-        if (p.numeroGuia && !pagamentosMap.has(p.numeroGuia)) {
-            pagamentosMap.set(p.numeroGuia, p);
+    const dataInicioPeriodo = ymd(dataDeInicioDoBloco);
+    const dataFimPeriodo = ymd(dataDeFimDoBloco);
+    const dtHoraInicioPeriodo = toDateTimeISO(dataDeInicioDoBloco, 0, 0, 0);
+    const dtHoraFimPeriodo = toDateTimeISO(dataDeFimDoBloco, 23, 59, 59);
+
+    console.log(`\n[CONCILIA] Processando bloco de ${dataInicioPeriodo} a ${dataFimPeriodo}...`);
+
+    for (const cod of receitas) {
+      console.log(`[CONCILIA] Buscando pagamentos para receita ${cod} no bloco atual...`);
+      
+      // 1. Busca por data de arrecadação
+      try {
+        const pagsArrecadacao = await listarPagamentosPorDataArrecadacao(dataInicioPeriodo, dataFimPeriodo, cod);
+        for (const p of pagsArrecadacao) {
+          if (p.numeroGuia) pagamentosMap.set(p.numeroGuia, p);
         }
+      } catch (e) {
+        console.error(`[CONCILIA] ERRO SEVERO ao buscar por-data-arrecadacao: ${e.message || e}`);
       }
-    } catch (e) {
-      console.error(`[CONCILIA] ERRO SEVERO ao buscar por-data-inclusao: ${e.message || e}`);
+
+      // 2. Busca por data de inclusão
+      try {
+        const pagsInclusao = await listarPagamentosPorDataInclusao(dtHoraInicioPeriodo, dtHoraFimPeriodo, cod);
+        for (const p of pagsInclusao) {
+          if (p.numeroGuia && !pagamentosMap.has(p.numeroGuia)) {
+            pagamentosMap.set(p.numeroGuia, p);
+          }
+        }
+      } catch (e) {
+        console.error(`[CONCILIA] ERRO SEVERO ao buscar por-data-inclusao: ${e.message || e}`);
+      }
     }
+    
+    // Prepara para o próximo bloco
+    dataDeInicioDoBloco.setDate(dataDeInicioDoBloco.getDate() + 7);
   }
+  // ==================================================================
+  // FIM DO NOVO LOOP
+  // ==================================================================
   
   const todosPagamentos = Array.from(pagamentosMap.values());
-  totalEncontrados = todosPagamentos.length;
-  console.log(`[CONCILIA] Total de ${totalEncontrados} pagamentos únicos encontrados na SEFAZ para o período.`);
+  const totalEncontrados = todosPagamentos.length;
+  console.log(`\n[CONCILIA] Total de ${totalEncontrados} pagamentos únicos encontrados na SEFAZ para o mês inteiro.`);
 
   for (const pagamento of todosPagamentos) {
     const vinculado = await tentarVincularPagamento(pagamento);
@@ -208,7 +229,7 @@ async function conciliarPagamentosDoMes() {
     }
   }
 
-  console.log(`[CONCILIA] Finalizado. Total de pagamentos da SEFAZ no período: ${totalEncontrados}. DARs atualizadas no banco: ${totalAtualizados}.`);
+  console.log(`\n[CONCILIA] Finalizado. Total de pagamentos da SEFAZ no período: ${totalEncontrados}. DARs atualizadas no banco: ${totalAtualizados}.`);
 }
 
 // ==========================
