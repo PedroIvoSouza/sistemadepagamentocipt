@@ -496,10 +496,10 @@ async function listarPagamentosPorDataArrecadacao(dataInicioISO, dataFimISO, cod
 
 async function listarPagamentosPorDataInclusao(dataInicioISODateTime, dataFimISODateTime, codigoReceita) {
   const payload = {
-    dataHoraInicioInclusao: dataInicioISODateTime.replace('T', ' '),
-    dataHoraFimInclusao:    dataFimISODateTime.replace('T', ' '),
+    dataHoraInicioInclusao: dataInicioISODateTime, // <--- CORRIGIDO
+    dataHoraFimInclusao:    dataFimISODateTime,    // <--- CORRIGIDO
   };
-  // Idem: ative se quiser filtrar por receita:
+  // Se quiser filtrar por receita (recomendado quando você já itera por código):
   if (codigoReceita) payload.codigoReceita = normalizeCodigoReceita(codigoReceita);
 
   const { data } = await reqWithRetry(
