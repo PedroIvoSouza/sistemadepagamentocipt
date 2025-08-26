@@ -65,8 +65,8 @@ router.get('/dashboard-stats', authMiddleware, async (req, res) => {
 
     try {
         const pendentes = await dbGetAsync(`SELECT COUNT(*) as count FROM dars WHERE permissionario_id = ? AND status = 'Pendente'`, [userId]);
-        const vencidos = await dbGetAsync(`SELECT COUNT(*) as count FROM dars WHERE permissionario_id = ? AND status = 'Vencido'`, [userId]);
-        const totalDevido = await dbGetAsync(`SELECT SUM(valor) as total FROM dars WHERE permissionario_id = ? AND (status = 'Pendente' OR status = 'Vencido')`, [userId]);
+        const vencidos = await dbGetAsync(`SELECT COUNT(*) as count FROM dars WHERE permissionario_id = ? AND status IN ('Vencido','Vencida')`, [userId]);
+        const totalDevido = await dbGetAsync(`SELECT SUM(valor) as total FROM dars WHERE permissionario_id = ? AND status IN ('Pendente','Vencido','Vencida')`, [userId]);
 
         res.status(200).json({
             darsPendentes: pendentes.count || 0,
