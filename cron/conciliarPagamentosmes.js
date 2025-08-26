@@ -24,7 +24,6 @@ const {
 // ENV e Config
 // ==========================
 const {
-  DB_PATH = '/home/pedroivodesouza/sistemadepagamentocipt/sistemacipt.db', // Recomendado mover para .env
   RECEITA_CODIGO_PERMISSIONARIO,
   RECEITA_CODIGO_EVENTO,
 } = process.env;
