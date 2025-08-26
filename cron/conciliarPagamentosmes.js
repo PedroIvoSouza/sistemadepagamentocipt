@@ -176,30 +176,27 @@ async function conciliarPagamentosDoMes() {
     console.log(`\n[CONCILIA] Processando dia ${dataDia}...`);
 
     for (const cod of receitas) {
-      // 1. Busca por data de arrecadação (intervalo de 1 dia)
-      try {
-        const pagsArrecadacao = await listarPagamentosPorDataArrecadacao(dataDia, dataDia, cod);
-        for (const p of pagsArrecadacao) {
-          if (p.numeroGuia) pagamentosMap.set(p.numeroGuia, p);
-        }
-      } catch (e) {
-        // Não logamos como erro severo, pois a outra busca pode funcionar
-        console.warn(`[CONCILIA] Aviso ao buscar por-data-arrecadacao para receita ${cod}: ${e.message || e}`);
-      }
-
-      // 2. Busca por data de inclusão (intervalo de 1 dia)
-      try {
-        const pagsInclusao = await listarPagamentosPorDataInclusao(dtHoraInicioDia, dtHoraFimDia, cod);
-        for (const p of pagsInclusao) {
-          if (p.numeroGuia && !pagamentosMap.has(p.numeroGuia)) {
-            pagamentosMap.set(p.numeroGuia, p);
+      // 1) Arrecadação do dia (sem codigoReceita)
+        try {
+          const pagsArrecadacao = await listarPagamentosPorDataArrecadacao(dataDia, dataDia);
+          for (const p of pagsArrecadacao) {
+            if (p.numeroGuia) pagamentosMap.set(p.numeroGuia, p);
           }
+        } catch (e) {
+          console.warn(`[CONCILIA] Aviso por-data-arrecadacao: ${e.message || e}`);
         }
-      } catch (e) {
-        console.warn(`[CONCILIA] Aviso ao buscar por-data-inclusao para receita ${cod}: ${e.message || e}`);
-      }
-    }
-  }
+        
+        // 2) Inclusão do dia (sem codigoReceita)
+        try {
+          const pagsInclusao = await listarPagamentosPorDataInclusao(dtHoraInicioDia, dtHoraFimDia);
+          for (const p of pagsInclusao) {
+            if (p.numeroGuia && !pagamentosMap.has(p.numeroGuia)) {
+              pagamentosMap.set(p.numeroGuia, p);
+            }
+          }
+        } catch (e) {
+          console.warn(`[CONCILIA] Aviso por-data-inclusao: ${e.message || e}`);
+        }
   
   const todosPagamentos = Array.from(pagamentosMap.values());
   const totalEncontrados = todosPagamentos.length;
