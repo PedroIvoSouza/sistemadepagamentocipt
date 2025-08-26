@@ -20,7 +20,6 @@ const {
   listarPagamentosPorDataInclusao,
 } = require('../src/services/sefazService');
 
-
 // ==========================
 // Helpers
 // ==========================
@@ -28,7 +27,6 @@ function normalizeDoc(s = '') { return String(s).replace(/\D/g, ''); }
 function cents(n) { return Math.round(Number(n || 0) * 100); }
 function isCNPJ(s='') { return /^\d{14}$/.test(normalizeDoc(s)); }
 function cnpjRoot(s='') { return normalizeDoc(s).slice(0, 8); } // 8 dígitos iniciais
-
 
 // ==========================
 // DB
@@ -45,7 +43,6 @@ function dbAll(sql, params = []) {
     db.all(sql, params, (err, rows) => (err ? reject(err) : resolve(rows || [])));
   });
 }
-
 function dbRun(sql, params = []) {
   return new Promise((resolve, reject) => {
     db.run(sql, params, function (err) {
@@ -54,7 +51,6 @@ function dbRun(sql, params = []) {
     });
   });
 }
-
 function dbGet(sql, params = []) {
   return new Promise((resolve, reject) => {
     db.get(sql, params, (err, row) => (err ? reject(err) : resolve(row)));
@@ -80,9 +76,7 @@ function toDateTimeString(date, hh, mm, ss) {
 }
 
 // ==========================
-// (Opcional) Receitas para conciliar
-// Mantida caso você queira voltar a filtrar por receita no futuro.
-// NÃO é usada enquanto “puxamos tudo”.
+// (Opcional) Receitas (não usadas enquanto "puxamos tudo")
 // ==========================
 function receitasAtivas() {
   const set = new Set();
@@ -103,16 +97,41 @@ function receitasAtivas() {
 /**
  * Tenta vincular um pagamento a uma DAR no banco de dados, retornando true se bem-sucedido.
  */
- // 1) Fallbacks por doc+valor
+async function tentarVincularPagamento(pagamento) {
+  const {
+    numeroDocOrigem = '',
+    numeroGuia = '',
+    codigoBarras = '',
+    linhaDigitavel = '',
+    dataPagamento,
+    valorPago = 0,
+    numeroInscricao = '',
+  } = pagamento;
+
+  const docPagador = normalizeDoc(numeroInscricao || '');
+  if (!docPagador) return false;
+
+  // 0) Tentativas diretas (chaves únicas)
+  const diretas = [
+    { label: 'id',               sql: `UPDATE dars SET status='Pago', data_pagamento=COALESCE(?, data_pagamento) WHERE id=?               AND status!='Pago'`, val: numeroDocOrigem },
+    { label: 'codigo_barras',    sql: `UPDATE dars SET status='Pago', data_pagamento=COALESCE(?, data_pagamento) WHERE codigo_barras=?    AND status!='Pago'`, val: codigoBarras },
+    { label: 'linha_digitavel',  sql: `UPDATE dars SET status='Pago', data_pagamento=COALESCE(?, data_pagamento) WHERE linha_digitavel=?  AND status!='Pago'`, val: linhaDigitavel },
+    { label: 'numero_documento', sql: `UPDATE dars SET status='Pago', data_pagamento=COALESCE(?, data_pagamento) WHERE numero_documento=? AND status!='Pago'`, val: numeroGuia },
+  ];
+  for (const t of diretas) {
+    if (!t.val) continue;
+    const r = await dbRun(t.sql, [dataPagamento || null, t.val]);
+    dlog(`Tentativa direta por ${t.label}=${t.val} → changes=${r?.changes || 0}`);
+    if (r?.changes > 0) return true;
+  }
+
+  // 1) Fallback doc+valor
   if (!(valorPago > 0)) return false;
   const pagoCents = cents(valorPago);
-
-  // helper p/ normalizar colunas em SQL sem precisar de funções custom:
   const NORM = (col) => `REPLACE(REPLACE(REPLACE(REPLACE(${col},'.',''),'-',''),'/',''),' ','')`;
 
-  // ---------- Estratégia A: Permissionário (exato -> raiz -> multi) ----------
+  // ---------- Estratégia A: Permissionário (exato -> raiz) ----------
   let permIds = [];
-
   if (isCNPJ(docPagador)) {
     // A.1) exato
     const permExato = await dbGet(
@@ -131,8 +150,7 @@ function receitasAtivas() {
       if (permRaizRows.length === 1) {
         permIds = [permRaizRows[0].id];
       } else if (permRaizRows.length > 1) {
-        // vários permissionários com essa raiz — considerar todos no ranking por valor
-        permIds = permRaizRows.map(r => r.id);
+        permIds = permRaizRows.map(r => r.id); // considera todas as filiais/matriz
       }
     }
   }
@@ -158,7 +176,6 @@ function receitasAtivas() {
   };
 
   if (permIds.length > 0) {
-    // Busca DARs dos permissionários candidatos, ordenando por proximidade de valor e data
     const placeholders = permIds.map(() => '?').join(',');
     const candPerm = await dbAll(
       `SELECT d.id, d.valor, d.numero_documento, d.data_vencimento
