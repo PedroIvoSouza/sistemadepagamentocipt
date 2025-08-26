@@ -8,6 +8,16 @@ const {
   listarPagamentosPorDataInclusao,
 } = require('../src/services/sefazService');
 
+function normalizeDoc(s='') { return String(s).replace(/\D/g, ''); }
+function cents(n) { return Math.round(Number(n || 0) * 100); }
+
+// opcional: um dbGet local (você ainda não tinha aqui)
+function dbGet(sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.get(sql, params, (err, row) => err ? reject(err) : resolve(row));
+  });
+}
+
 // ======= DB =======
 const DB_PATH = '/home/pedroivodesouza/sistemadepagamentocipt/sistemacipt.db';
 const db = new sqlite3.Database(DB_PATH);
@@ -97,7 +107,7 @@ async function conciliarPagamentosDoMes() {
         const numeroGuia = String(it.numeroGuia || '').trim();
         const codigoBarras = String(it.codigoBarras || '').trim();
         const linhaDigitavel = String(it.linhaDigitavel || '').trim();
-        const docPagador = String(it.raw.numeroInscricao || '').trim();
+        const docPagador = normalizeDoc(it.numeroInscricao || it.raw?.numeroInscricao || '');
         const valorPago = parseFloat(it.valorPago || 0);
 
         if (!docPagador) continue;
@@ -141,29 +151,64 @@ async function conciliarPagamentosDoMes() {
           changes = r4?.changes || 0;
         }
 
-        // TENTATIVA 5: Por Documento (CNPJ/CPF) e Valor
+        // TENTATIVA 5 (robusta): Documento + Valor (normalizados) com tolerância de centavos
         if (changes === 0 && docPagador && valorPago > 0) {
-          const r5 = await dbRun(
-            `UPDATE dars
-                SET status = 'Pago', data_pagamento = COALESCE(?, data_pagamento)
-              WHERE id = (
-                SELECT d.id FROM dars d
-                LEFT JOIN permissionarios p ON d.permissionario_id = p.id AND d.tipo_permissionario = 'Permissionario'
-                LEFT JOIN DARs_Eventos de ON d.id = de.id_dar
-                LEFT JOIN Eventos e ON de.id_evento = e.id
-                LEFT JOIN Clientes_Eventos ce ON e.id_cliente = ce.id
-                WHERE 
-                  (p.cnpj = ? OR ce.documento = ?)
-                  AND d.valor = ?
-                  AND d.status != 'Pago'
-                ORDER BY d.data_vencimento ASC
-                LIMIT 1
-              )`,
-            [it.dataPagamento, docPagador, docPagador, valorPago]
+          const row = await dbGet(
+            `
+            SELECT d.id, d.status
+              FROM dars d
+              LEFT JOIN permissionarios p
+                ON d.tipo_permissionario = 'Permissionario'
+               AND d.permissionario_id = p.id
+              LEFT JOIN DARs_Eventos de ON de.id_dar = d.id
+              LEFT JOIN Eventos e       ON e.id = de.id_evento
+              LEFT JOIN Clientes_Eventos ce ON ce.id = e.id_cliente
+             WHERE (
+               REPLACE(REPLACE(REPLACE(REPLACE(IFNULL(p.cnpj,''),'.',''),'-',''),'/',''),' ','') = ?
+               OR REPLACE(REPLACE(REPLACE(REPLACE(IFNULL(ce.documento,''),'.',''),'-',''),'/',''),' ','') = ?
+             )
+               AND ABS(ROUND(d.valor*100) - ?) <= 2 -- tolera até 2 centavos
+             ORDER BY d.data_vencimento ASC
+             LIMIT 1
+            `,
+            [docPagador, docPagador, cents(valorPago)]
           );
-          changes = r5?.changes || 0;
+        
+          if (row?.id) {
+            if (row.status === 'Pago') {
+              console.log(`--> OK: já conciliado (id=${row.id}).`);
+            } else {
+              const r5 = await dbRun(
+                `UPDATE dars SET status='Pago', data_pagamento=COALESCE(?, data_pagamento) WHERE id=?`,
+                [it.dataPagamento || null, row.id]
+              );
+              changes = r5?.changes || 0;
+            }
+          }
         }
 
+        // Depois das tentativas por guia/barras/linha, se changes===0, checar se já está Pago
+          if (changes === 0 && numeroGuia) {
+            const j = await dbGet(`SELECT status FROM dars WHERE numero_documento=?`, [numeroGuia]);
+            if (j?.status === 'Pago') {
+              console.log(`--> OK: guia ${numeroGuia} já conciliada anteriormente.`);
+              continue;
+            }
+          }
+          if (changes === 0 && codigoBarras) {
+            const j = await dbGet(`SELECT status FROM dars WHERE codigo_barras=?`, [codigoBarras]);
+            if (j?.status === 'Pago') {
+              console.log(`--> OK: código de barras já conciliado anteriormente.`);
+              continue;
+            }
+          }
+          if (changes === 0 && linhaDigitavel) {
+            const j = await dbGet(`SELECT status FROM dars WHERE linha_digitavel=?`, [linhaDigitavel]);
+            if (j?.status === 'Pago') {
+              console.log(`--> OK: linha digitável já conciliada anteriormente.`);
+              continue;
+            }
+          }
         if (changes > 0) {
           console.log(`--> SUCESSO: Pagamento de ${docPagador} (Guia: ${numeroGuia}) foi vinculado e atualizado para 'Pago'.`);
           totalAtualizados += 1;
