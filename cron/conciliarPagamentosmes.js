@@ -56,14 +56,20 @@ function dbGet(sql, params = []) {
 // Datas
 // ==========================
 function ymd(d) {
+  // Esta função já está correta, retorna YYYY-MM-DD
   const off = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
   return off.toISOString().slice(0, 10);
 }
-function toDateTimeISO(date, hh, mm, ss) {
-  const local = new Date(date.getFullYear(), date.getMonth(), date.getDate(), hh, mm, ss);
-  const off = new Date(local.getTime() - local.getTimezoneOffset() * 60000);
-  return off.toISOString().slice(0, 19); // YYYY-MM-DDTHH:mm:ss
+function toDateTimeString(date, hh, mm, ss) {
+  const yyyy = date.getFullYear();
+  const MM = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  const HH = String(hh).padStart(2, '0');
+  const mm_ = String(mm).padStart(2, '0');
+  const ss_ = String(ss).padStart(2, '0');
+  return `${yyyy}-${MM}-${dd} ${HH}:${mm_}:${ss_}`; // Ex: 2025-08-01 00:00:00
 }
+
 
 // ==========================
 // Receitas para conciliar
@@ -158,61 +164,42 @@ async function conciliarPagamentosDoMes() {
   const primeiroDiaDoMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
   
   let totalAtualizados = 0;
-  const pagamentosMap = new Map(); // Acumula todos os pagamentos únicos do mês
+  const pagamentosMap = new Map();
 
-  // ==================================================================
-  // NOVO LOOP: Itera sobre o mês em blocos de 7 dias
-  // ==================================================================
-  let dataDeInicioDoBloco = new Date(primeiroDiaDoMes);
+  // LOOP DIA A DIA: Itera sobre cada dia do mês, do dia 1º até hoje
+  for (let diaCorrente = new Date(primeiroDiaDoMes); diaCorrente <= hoje; diaCorrente.setDate(diaCorrente.getDate() + 1)) {
+    
+    const dataDia = ymd(diaCorrente);
+    const dtHoraInicioDia = toDateTimeString(diaCorrente, 0, 0, 0);
+    const dtHoraFimDia = toDateTimeString(diaCorrente, 23, 59, 59);
 
-  while (dataDeInicioDoBloco <= hoje) {
-    let dataDeFimDoBloco = new Date(dataDeInicioDoBloco);
-    dataDeFimDoBloco.setDate(dataDeInicioDoBloco.getDate() + 6); // Adiciona 6 dias para um intervalo de 7 dias
-
-    // Garante que o fim do bloco não ultrapasse a data de hoje
-    if (dataDeFimDoBloco > hoje) {
-      dataDeFimDoBloco = hoje;
-    }
-
-    const dataInicioPeriodo = ymd(dataDeInicioDoBloco);
-    const dataFimPeriodo = ymd(dataDeFimDoBloco);
-    const dtHoraInicioPeriodo = toDateTimeISO(dataDeInicioDoBloco, 0, 0, 0);
-    const dtHoraFimPeriodo = toDateTimeISO(dataDeFimDoBloco, 23, 59, 59);
-
-    console.log(`\n[CONCILIA] Processando bloco de ${dataInicioPeriodo} a ${dataFimPeriodo}...`);
+    console.log(`\n[CONCILIA] Processando dia ${dataDia}...`);
 
     for (const cod of receitas) {
-      console.log(`[CONCILIA] Buscando pagamentos para receita ${cod} no bloco atual...`);
-      
-      // 1. Busca por data de arrecadação
+      // 1. Busca por data de arrecadação (intervalo de 1 dia)
       try {
-        const pagsArrecadacao = await listarPagamentosPorDataArrecadacao(dataInicioPeriodo, dataFimPeriodo, cod);
+        const pagsArrecadacao = await listarPagamentosPorDataArrecadacao(dataDia, dataDia, cod);
         for (const p of pagsArrecadacao) {
           if (p.numeroGuia) pagamentosMap.set(p.numeroGuia, p);
         }
       } catch (e) {
-        console.error(`[CONCILIA] ERRO SEVERO ao buscar por-data-arrecadacao: ${e.message || e}`);
+        // Não logamos como erro severo, pois a outra busca pode funcionar
+        console.warn(`[CONCILIA] Aviso ao buscar por-data-arrecadacao para receita ${cod}: ${e.message || e}`);
       }
 
-      // 2. Busca por data de inclusão
+      // 2. Busca por data de inclusão (intervalo de 1 dia)
       try {
-        const pagsInclusao = await listarPagamentosPorDataInclusao(dtHoraInicioPeriodo, dtHoraFimPeriodo, cod);
+        const pagsInclusao = await listarPagamentosPorDataInclusao(dtHoraInicioDia, dtHoraFimDia, cod);
         for (const p of pagsInclusao) {
           if (p.numeroGuia && !pagamentosMap.has(p.numeroGuia)) {
             pagamentosMap.set(p.numeroGuia, p);
           }
         }
       } catch (e) {
-        console.error(`[CONCILIA] ERRO SEVERO ao buscar por-data-inclusao: ${e.message || e}`);
+        console.warn(`[CONCILIA] Aviso ao buscar por-data-inclusao para receita ${cod}: ${e.message || e}`);
       }
     }
-    
-    // Prepara para o próximo bloco
-    dataDeInicioDoBloco.setDate(dataDeInicioDoBloco.getDate() + 7);
   }
-  // ==================================================================
-  // FIM DO NOVO LOOP
-  // ==================================================================
   
   const todosPagamentos = Array.from(pagamentosMap.values());
   const totalEncontrados = todosPagamentos.length;
