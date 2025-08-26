@@ -193,10 +193,14 @@ window.onload = async () => {
     
     const stats = await response.json();
 
-    document.getElementById('stat-permissionarios').innerText = stats.totalPermissionarios ?? '0';
-    document.getElementById('stat-pendentes').innerText      = stats.darsPendentes ?? '0';
-    document.getElementById('stat-vencidos').innerText       = stats.darsVencidos ?? '0';
-    document.getElementById('stat-receita').innerText        = `R$ ${Number(stats.receitaPendente || 0).toFixed(2).replace('.',',')}`;
+    document.getElementById('stat-permissionarios').innerText = Number(stats.totalPermissionarios || 0).toLocaleString('pt-BR');
+    document.getElementById('stat-pendentes').innerText      = Number(stats.darsPendentes || 0).toLocaleString('pt-BR');
+    document.getElementById('stat-vencidos').innerText       = Number(stats.darsVencidos || 0).toLocaleString('pt-BR');
+    document.getElementById('stat-receita').innerText =
+      (stats.receitaPendente || 0).toLocaleString('pt-BR', {
+        style: 'currency',
+        currency: 'BRL'
+      });
 
     const meses = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
     const resumoBody = document.getElementById('resumo-mensal-body');
@@ -204,9 +208,9 @@ window.onload = async () => {
       resumoBody.innerHTML = stats.resumoMensal.map(item => `
         <tr>
           <td><strong>${meses[(item.mes_referencia||1)-1]}/${item.ano_referencia}</strong></td>
-          <td>${item.emitidas ?? 0}</td>
-          <td>${item.pagas ?? 0}</td>
-          <td><span class="text-danger fw-bold">${item.vencidas ?? 0}</span></td>
+          <td>${Number(item.emitidas ?? 0).toLocaleString('pt-BR')}</td>
+          <td>${Number(item.pagas ?? 0).toLocaleString('pt-BR')}</td>
+          <td><span class="text-danger fw-bold">${Number(item.vencidas ?? 0).toLocaleString('pt-BR')}</span></td>
         </tr>
       `).join('');
     } else {
@@ -248,7 +252,7 @@ window.onload = async () => {
           return `
             <li class="list-group-item d-flex justify-content-between align-items-center">
               <small>${item.nome_empresa}</small>
-              <span class="badge bg-danger rounded-pill">R$ ${vencido.toFixed(2).replace('.',',')}</span>
+              <span class="badge bg-danger rounded-pill">${vencido.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
             </li>
           `;
         }).join('');
