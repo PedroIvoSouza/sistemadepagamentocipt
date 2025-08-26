@@ -507,12 +507,11 @@ async function listarPagamentosPorDataArrecadacao(dataInicioISO, dataFimISO, cod
   return lista.map(mapPagamento);
 }
 
-async function listarPagamentosPorDataInclusao(dataInicioISODateTime, dataFimISODateTime, codigoReceita) {
+async function listarPagamentosPorDataInclusao(dataInicioDateTime, dataFimDateTime, codigoReceita) {
   const payload = {
-    dataHoraInicioInclusao: dataInicioISODateTime, // <--- CORRIGIDO
-    dataHoraFimInclusao:    dataFimISODateTime,    // <--- CORRIGIDO
+    dataHoraInicioInclusao: dataInicioDateTime,
+    dataHoraFimInclusao:    dataFimDateTime,
   };
-  // Se quiser filtrar por receita (recomendado quando você já itera por código):
   if (codigoReceita) payload.codigoReceita = normalizeCodigoReceita(codigoReceita);
 
   const { data } = await reqWithRetry(
@@ -522,6 +521,31 @@ async function listarPagamentosPorDataInclusao(dataInicioISODateTime, dataFimISO
 
   const lista = Array.isArray(data) ? data : (data?.itens || data?.content || []);
   return lista.map(mapPagamento);
+}
+
+// Função de retry voltando ao normal, sem o log de depuração gigante
+async function reqWithRetry(doRequest, label = 'sefaz-call') {
+  const maxRetries = Number(SEFAZ_RETRIES || 5);
+  let lastErr;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await doRequest();
+    } catch (err) {
+      lastErr = err;
+      const isTimeout = err?.code === 'ECONNABORTED' || /timeout/i.test(err?.message || '');
+      const noResp = !err?.response; // erros de rede (DNS, TCP reset etc)
+      const retriable = [429, 502, 503, 504].includes(err?.response?.status);
+
+      if (attempt < maxRetries && (isTimeout || noResp || retriable)) {
+        const delay = Math.min(30000, 1000 * Math.pow(2, attempt)); // 1s,2s,4s,8s,16s,30s
+        console.warn(`[SEFAZ][retry ${attempt + 1}/${maxRetries}] ${label}: ${err.message || err}. +${delay}ms`);
+        await sleep(delay);
+        continue;
+      }
+      break;
+    }
+  }
+  throw lastErr;
 }
 
 // ==========================
