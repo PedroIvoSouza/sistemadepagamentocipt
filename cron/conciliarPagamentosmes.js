@@ -2,7 +2,7 @@
 require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
 const sqlite3 = require('sqlite3').verbose();
 const cron = require('node-cron');
-const IS_DEBUG = String(DEBUG_CONCILIACAO).toLowerCase() === 'true';
+
 const {
   DB_PATH = '/home/pedroivodesouza/sistemadepagamentocipt/sistemacipt.db',
   RECEITA_CODIGO_PERMISSIONARIO,
