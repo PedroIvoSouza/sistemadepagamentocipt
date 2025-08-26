@@ -103,47 +103,11 @@ function receitasAtivas() {
 /**
  * Tenta vincular um pagamento a uma DAR no banco de dados, retornando true se bem-sucedido.
  */
-async function tentarVincularPagamento(pagamento) {
-  const {
-    numeroDocOrigem = '',
-    numeroGuia = '',
-    codigoBarras = '',
-    linhaDigitavel = '',
-    dataPagamento,
-    valorPago = 0,
-    numeroInscricao = '',
-  } = pagamento;
-
-  const docPagador = normalizeDoc(numeroInscricao || '');
-  if (!docPagador) return false;
-
-  // 0) Tentativas diretas (chaves únicas)
-  const diretas = [
-    { label: 'id', sql: `UPDATE dars SET status='Pago', data_pagamento=COALESCE(?, data_pagamento) WHERE id=? AND status!='Pago'`, val: numeroDocOrigem },
-    { label: 'codigo_barras', sql: `UPDATE dars SET status='Pago', data_pagamento=COALESCE(?, data_pagamento) WHERE codigo_barras=? AND status!='Pago'`, val: codigoBarras },
-    { label: 'linha_digitavel', sql: `UPDATE dars SET status='Pago', data_pagamento=COALESCE(?, data_pagamento) WHERE linha_digitavel=? AND status!='Pago'`, val: linhaDigitavel },
-    { label: 'numero_documento', sql: `UPDATE dars SET status='Pago', data_pagamento=COALESCE(?, data_pagamento) WHERE numero_documento=? AND status!='Pago'`, val: numeroGuia },
-  ];
-  for (const t of diretas) {
-    if (!t.val) continue;
-    const r = await dbRun(t.sql, [dataPagamento || null, t.val]);
-    dlog(`Tentativa direta por ${t.label}=${t.val} → changes=${r?.changes || 0}`);
-    if (r?.changes > 0) return true;
-  }
-
-  // 1) Fallbacks por doc+valor
+ // 1) Fallbacks por doc+valor
   if (!(valorPago > 0)) return false;
   const pagoCents = cents(valorPago);
 
   // helper p/ normalizar colunas em SQL sem precisar de funções custom:
-  const NORM = (col) => `REPLACE(REPLACE(REPLACE(REPLACE(${col},'.',''),'-',''),'/',''),' ','')`;
-
-  // Estratégia A: caminho direto do permissionário (mais comum nos seus casos)
-  // 1.A) pega o ID do permissionário pelo CNPJ
-   // 1) Fallbacks por doc+valor
-  if (!(valorPago > 0)) return false;
-  const pagoCents = cents(valorPago);
-
   const NORM = (col) => `REPLACE(REPLACE(REPLACE(REPLACE(${col},'.',''),'-',''),'/',''),' ','')`;
 
   // ---------- Estratégia A: Permissionário (exato -> raiz -> multi) ----------
@@ -160,23 +124,20 @@ async function tentarVincularPagamento(pagamento) {
     // A.2) raiz (matriz/filial) se não encontrou exato
     if (permIds.length === 0) {
       const raiz = cnpjRoot(docPagador);
-      const permRaiz = await new Promise((resolve, reject) => {
-        db.all(
-          `SELECT id FROM permissionarios 
-            WHERE substr(${NORM('cnpj')},1,8) = ?`,
-          [raiz],
-          (err, rows) => err ? reject(err) : resolve(rows || [])
-        );
-      });
-      if (permRaiz.length === 1) {
-        permIds = [permRaiz[0].id];
-      } else if (permRaiz.length > 1) {
-        // vários permissionários com essa raiz — vamos considerar todos no ranking por valor
-        permIds = permRaiz.map(r => r.id);
+      const permRaizRows = await dbAll(
+        `SELECT id FROM permissionarios WHERE substr(${NORM('cnpj')},1,8) = ?`,
+        [raiz]
+      );
+      if (permRaizRows.length === 1) {
+        permIds = [permRaizRows[0].id];
+      } else if (permRaizRows.length > 1) {
+        // vários permissionários com essa raiz — considerar todos no ranking por valor
+        permIds = permRaizRows.map(r => r.id);
       }
     }
   }
 
+  // Função de ranking/tentativa por tolerância
   const rankAndTry = async (rows, tolList) => {
     for (const tol of tolList) {
       const candTol = rows.filter(r => Math.abs(Math.round(r.valor * 100) - pagoCents) <= tol);
@@ -188,7 +149,6 @@ async function tentarVincularPagamento(pagamento) {
         );
         if (r?.changes > 0) return { done: true };
       } else if (candTol.length > 1) {
-        // ambíguo: não concilia automaticamente
         dlog(`Ambíguo (${candTol.length}) na tolerância. Exemplos:`,
              candTol.slice(0, 3).map(x => ({ id: x.id, valor: x.valor, numero_documento: x.numero_documento })));
         return { done: false, multi: true };
@@ -198,44 +158,37 @@ async function tentarVincularPagamento(pagamento) {
   };
 
   if (permIds.length > 0) {
-    // Busca DARs de todos os permissionários candidatos, ordenando por proximidade de valor e data
+    // Busca DARs dos permissionários candidatos, ordenando por proximidade de valor e data
     const placeholders = permIds.map(() => '?').join(',');
-    const candPerm = await new Promise((resolve, reject) => {
-      db.all(
-        `SELECT d.id, d.valor, d.numero_documento, d.data_vencimento
-           FROM dars d
-          WHERE d.permissionario_id IN (${placeholders})
-            AND d.status != 'Pago'
-          ORDER BY ABS(ROUND(d.valor*100) - ?) ASC, d.data_vencimento ASC
-          LIMIT 20`,
-        [...permIds, pagoCents],
-        (err, rows) => err ? reject(err) : resolve(rows || [])
-      );
-    });
-
-    const res = await rankAndTry(candPerm, [2, TOL_BASE, Math.max(TOL_BASE, Math.round(pagoCents * 0.03))]);
-    if (res.done || res.multi) return !!res.done;
-  }
-  // ---------- Estratégia B: via Eventos/Clientes (exato ou raiz) ----------
-  const candsEv = await new Promise((resolve, reject) => {
-    db.all(
+    const candPerm = await dbAll(
       `SELECT d.id, d.valor, d.numero_documento, d.data_vencimento
          FROM dars d
-         JOIN DARs_Eventos de ON de.id_dar = d.id
-         JOIN Eventos e       ON e.id = de.id_evento
-         JOIN Clientes_Eventos ce ON ce.id = e.id_cliente
-        WHERE (
-              ${NORM('ce.documento')} = ?
-          OR  (length(${NORM('ce.documento')})=14 AND substr(${NORM('ce.documento')},1,8) = ?)
-        )
+        WHERE d.permissionario_id IN (${placeholders})
           AND d.status != 'Pago'
         ORDER BY ABS(ROUND(d.valor*100) - ?) ASC, d.data_vencimento ASC
         LIMIT 20`,
-      [docPagador, isCNPJ(docPagador) ? cnpjRoot(docPagador) : '__NO_ROOT__', pagoCents],
-      (err, rows) => err ? reject(err) : resolve(rows || [])
+      [...permIds, pagoCents]
     );
-  });
+    const res = await rankAndTry(candPerm, [2, TOL_BASE, Math.max(TOL_BASE, Math.round(pagoCents * 0.03))]);
+    if (res.done || res.multi) return !!res.done;
+  }
 
+  // ---------- Estratégia B: via Eventos/Clientes (exato ou raiz) ----------
+  const candsEv = await dbAll(
+    `SELECT d.id, d.valor, d.numero_documento, d.data_vencimento
+       FROM dars d
+       JOIN DARs_Eventos de ON de.id_dar = d.id
+       JOIN Eventos e       ON e.id = de.id_evento
+       JOIN Clientes_Eventos ce ON ce.id = e.id_cliente
+      WHERE (
+            ${NORM('ce.documento')} = ?
+        OR  (length(${NORM('ce.documento')})=14 AND substr(${NORM('ce.documento')},1,8) = ?)
+      )
+        AND d.status != 'Pago'
+      ORDER BY ABS(ROUND(d.valor*100) - ?) ASC, d.data_vencimento ASC
+      LIMIT 20`,
+    [docPagador, isCNPJ(docPagador) ? cnpjRoot(docPagador) : '__NO_ROOT__', pagoCents]
+  );
   {
     const res = await rankAndTry(candsEv, [2, TOL_BASE, Math.max(TOL_BASE, Math.round(pagoCents * 0.03))]);
     if (res.done || res.multi) return !!res.done;
