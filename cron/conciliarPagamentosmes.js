@@ -21,12 +21,6 @@ function dbRun(sql, params = []) {
   });
 }
 
-function dbGet(sql, params = []) {
-  return new Promise((resolve, reject) => {
-    db.get(sql, params, (err, row) => (err ? reject(err) : resolve(row)));
-  });
-}
-
 // ======= Datas =======
 function ymd(d) {
   const off = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
@@ -60,7 +54,7 @@ async function conciliarPagamentosDoMes() {
 
   const receitas = receitasAtivas();
   if (receitas.length === 0) {
-    console.warn('[CONCILIA] Nenhuma receita configurada no .env (RECEITA_CODIGO_PERMISSIONARIO/RECEITA_CODIGO_EVENTO).');
+    console.warn('[CONCILIA] Nenhuma receita configurada no .env.');
     return;
   }
 
@@ -72,7 +66,6 @@ async function conciliarPagamentosDoMes() {
   let totalAtualizados = 0;
 
   for (let diaCorrente = new Date(primeiroDiaDoMes); diaCorrente <= ultimoDiaParaBuscar; diaCorrente.setDate(diaCorrente.getDate() + 1)) {
-    
     const dataDia = ymd(diaCorrente);
     const dtIniDia = toDateTimeISO(diaCorrente, 0, 0, 0);
     const dtFimDia = toDateTimeISO(diaCorrente, 23, 59, 59);
@@ -121,29 +114,29 @@ async function conciliarPagamentosDoMes() {
           changes = r1?.changes || 0;
         }
 
-        // TENTATIVA 2: Por Número do Documento/Guia
-        if (changes === 0 && numeroGuia) {
+        // TENTATIVA 2: Por Código de Barras
+        if (changes === 0 && codigoBarras) {
           const r2 = await dbRun(
-            `UPDATE dars SET status = 'Pago', data_pagamento = COALESCE(?, data_pagamento) WHERE numero_documento = ? AND status != 'Pago'`,
-            [it.dataPagamento || null, numeroGuia]
+            `UPDATE dars SET status = 'Pago', data_pagamento = COALESCE(?, data_pagamento) WHERE codigo_barras = ? AND status != 'Pago'`,
+            [it.dataPagamento || null, codigoBarras]
           );
           changes = r2?.changes || 0;
         }
-        
-        // TENTATIVA 3: Por Código de Barras
-        if (changes === 0 && codigoBarras) {
+
+        // TENTATIVA 3: Por Linha Digitável
+        if (changes === 0 && linhaDigitavel) {
           const r3 = await dbRun(
-            `UPDATE dars SET status = 'Pago', data_pagamento = COALESCE(?, data_pagamento) WHERE codigo_barras = ? AND status != 'Pago'`,
-            [it.dataPagamento || null, codigoBarras]
+            `UPDATE dars SET status = 'Pago', data_pagamento = COALESCE(?, data_pagamento) WHERE linha_digitavel = ? AND status != 'Pago'`,
+            [it.dataPagamento || null, linhaDigitavel]
           );
           changes = r3?.changes || 0;
         }
 
-        // TENTATIVA 4: Por Linha Digitável
-        if (changes === 0 && linhaDigitavel) {
+        // TENTATIVA 4: Por Número do Documento/Guia
+        if (changes === 0 && numeroGuia) {
           const r4 = await dbRun(
-            `UPDATE dars SET status = 'Pago', data_pagamento = COALESCE(?, data_pagamento) WHERE linha_digitavel = ? AND status != 'Pago'`,
-            [it.dataPagamento || null, linhaDigitavel]
+            `UPDATE dars SET status = 'Pago', data_pagamento = COALESCE(?, data_pagamento) WHERE numero_documento = ? AND status != 'Pago'`,
+            [it.dataPagamento || null, numeroGuia]
           );
           changes = r4?.changes || 0;
         }
