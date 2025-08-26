@@ -38,7 +38,7 @@
         .content { padding: 2rem; }
         .card { border: none; border-radius: var(--raio-borda); box-shadow: 0 2px 5px rgba(0,0,0,0.05); margin-bottom: 2rem; }
         .card-title { color: #6c757d; font-size: 0.9rem; font-weight: 700; text-transform: uppercase; }
-        .stat-number { font-size: 2.2rem; font-weight: 700; color: var(--cor-primaria); }
+        .stat-number { font-size: clamp(1.4rem, 4vw, 2.2rem); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 700; color: var(--cor-primaria); }
         .stat-icon { font-size: 3rem; color: var(--cor-primaria); opacity: 0.2; }
     </style>
 </head>
