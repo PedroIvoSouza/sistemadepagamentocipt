@@ -481,12 +481,12 @@ async function listarPagamentosPorDataArrecadacao(dataInicioISO, dataFimISO, cod
   );
 
   const lista = Array.isArray(data) ? data : (data?.itens || data?.content || []);
- return lista.map(it => ({
+  return lista.map(it => ({
   numeroGuia: it.numeroGuia || null,
   codigoBarras: it.numCodigoBarras || it.codigoBarras || null,
   linhaDigitavel: it.linhaDigitavel || null,
   dataPagamento: it.dataPagamento || it.dtPagamento || null,
-  valorPago: it.valorPago || it.valor || null,
+  valorPago: it.valorTotal || it.valorPago || null, // <<< ADICIONAR/AJUSTAR ESTA LINHA
   numeroDocOrigem: it.numeroDocumentoOrigem || null,
   raw: it,
 }));
