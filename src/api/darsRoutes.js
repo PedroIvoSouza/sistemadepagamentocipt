@@ -180,8 +180,12 @@ router.get('/', authMiddleware, (req, res) => {
     params.push(ano);
   }
   if (status && status !== 'todos') {
-    sql += ` AND status = ?`;
-    params.push(status);
+    if (status === 'Vencido') {
+      sql += ` AND status IN ('Vencido','Vencida')`;
+    } else {
+      sql += ` AND status = ?`;
+      params.push(status);
+    }
   }
 
   sql += ` ORDER BY ano_referencia DESC, mes_referencia DESC`;
@@ -231,7 +235,7 @@ router.get('/:id/preview', authMiddleware, async (req, res) => {
 
     // corrige vencimento no passado
     let guiaSource = { ...dar };
-    if (dar.status === 'Vencido') {
+    if (['Vencido', 'Vencida'].includes(dar.status)) {
       const calculo = await calcularEncargosAtraso(dar);
       guiaSource.valor = calculo.valorAtualizado;
       guiaSource.data_vencimento = calculo.novaDataVencimento || isoHojeLocal();
@@ -268,7 +272,7 @@ router.post('/:id/emitir', authMiddleware, async (req, res) => {
 
     // corrige vencimento no passado
     let guiaSource = { ...dar };
-    if (dar.status === 'Vencido') {
+    if (['Vencido', 'Vencida'].includes(dar.status)) {
       const calculo = await calcularEncargosAtraso(dar);
       guiaSource.valor = calculo.valorAtualizado;
       guiaSource.data_vencimento = calculo.novaDataVencimento || isoHojeLocal();

@@ -15,3 +15,14 @@ Adicione no arquivo `.env` ou nas variáveis do servidor:
 - `ASSINAFY_CALLBACK_URL`: URL pública para o retorno após a assinatura, ex.: `https://seusistema/api/documentos/assinafy/callback`.
 
 Certifique-se de reiniciar o servidor após alterar as variáveis.
+
+## Status das DARs
+
+As DARs utilizam os seguintes status padronizados:
+
+- `Pendente` – guia gerada mas ainda não emitida.
+- `Emitido` / `Reemitido` – guia emitida para pagamento.
+- `Pago` – pagamento confirmado.
+- `Vencido` – vencimento ultrapassado sem pagamento.
+
+O valor legado `Vencida` foi unificado para `Vencido` e não deve mais ser utilizado.
