@@ -102,6 +102,10 @@
             const messageDiv = document.getElementById('message');
             const formContainer = document.getElementById('formContainer');
             const cnpj = cnpjInput.value;
+            const submitButton = form.querySelector('button[type="submit"]');
+
+            submitButton.disabled = true;
+            submitButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span> Enviando...';
             
             try {
                 const response = await fetch('/api/auth/solicitar-acesso', {
@@ -128,6 +132,9 @@
                 messageDiv.innerText = error.message;
                 messageDiv.className = 'alert alert-danger';
                 messageDiv.style.display = 'block';
+            } finally {
+                submitButton.disabled = false;
+                submitButton.innerHTML = 'Enviar Código';
             }
         });
     </script>
