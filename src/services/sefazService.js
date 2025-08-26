@@ -57,21 +57,26 @@ const sefaz = axios.create({
    },
 });
 
+const TIPO_INSCRICAO = { CPF: 3, CNPJ: 4 };
 
 // ==========================================
 // === INTERCEPTOR DE DEBUG ADICIONADO AQUI ===
 // ==========================================
 sefaz.interceptors.request.use(request => {
+  const maskedHeaders = { ...request.headers };
+  if (maskedHeaders && maskedHeaders.appToken) {
+    const t = String(maskedHeaders.appToken);
+    maskedHeaders.appToken = t.length > 8 ? `${t.slice(0,4)}…${t.slice(-4)}` : '***';
+  }
+
   console.log('\n--- AXIOS REQUEST INTERCEPTOR ---');
   console.log('Enviando requisição:');
   console.log(`- Método: ${request.method.toUpperCase()}`);
   console.log(`- URL Base: ${request.baseURL}`);
   console.log(`- Caminho: ${request.url}`);
   console.log(`- URL Completa: ${request.baseURL}${request.url}`);
-  console.log('- Headers:', JSON.stringify(request.headers, null, 2));
-  if (request.data) {
-    console.log('- Corpo (Payload):', JSON.stringify(request.data, null, 2));
-  }
+  console.log('- Headers:', JSON.stringify(maskedHeaders, null, 2));
+  if (request.data) console.log('- Corpo (Payload):', JSON.stringify(request.data, null, 2));
   console.log('---------------------------------\n');
   return request;
 }, error => {
@@ -487,54 +492,36 @@ function mapPagamento(it) {
   };
 }
 
-/**
- * Lista pagamentos por DATA DE ARRECADAÇÃO (YYYY-MM-DD a YYYY-MM-DD)
- */
 async function listarPagamentosPorDataArrecadacao(dataInicioISO, dataFimISO, codigoReceita) {
-  const payload = {
-    dataInicioArrecadacao: dataInicioISO,
-    dataFimArrecadacao: dataFimISO,
-  };
-  
-  // Linha comentada temporariamente para buscar todas as receitas
-  // if (codigoReceita) {
-  //   payload.codigoReceita = normalizeCodigoReceita(codigoReceita);
-  // }
-
   const payload = { dataInicioArrecadacao: dataInicioISO, dataFimArrecadacao: dataFimISO };
+  // Se quiser filtrar por receita (recomendado quando você já itera por código):
   if (codigoReceita) payload.codigoReceita = normalizeCodigoReceita(codigoReceita);
-  
+
   const { data } = await reqWithRetry(
     () => sefaz.post('/api/public/v2/guia/pagamento/por-data-arrecadacao', payload),
     'pagamento/por-data-arrecadacao'
   );
 
   const lista = Array.isArray(data) ? data : (data?.itens || data?.content || []);
-  return lista.map(it => ({
-  numeroGuia: it.numeroGuia || null,
-  codigoBarras: it.numCodigoBarras || it.codigoBarras || null,
-  linhaDigitavel: it.linhaDigitavel || null,
-  dataPagamento: it.dataPagamento || it.dtPagamento || null,
-  valorPago: it.valorTotal || it.valorPago || null, // <<< ADICIONAR/AJUSTAR ESTA LINHA
-  numeroDocOrigem: it.numeroDocumentoOrigem || null,
-  raw: it,
-}));
+  return lista.map(mapPagamento);
 }
 
-/**
- * Lista pagamentos por DATA DE INCLUSÃO (YYYY-MM-DD HH:mm:ss a YYYY-MM-DD HH:mm:ss)
- */
 async function listarPagamentosPorDataInclusao(dataInicioISODateTime, dataFimISODateTime, codigoReceita) {
   const payload = {
     dataHoraInicioInclusao: dataInicioISODateTime.replace('T', ' '),
-    dataHoraFimInclusao: dataFimISODateTime.replace('T', ' '),
+    dataHoraFimInclusao:    dataFimISODateTime.replace('T', ' '),
   };
-  
-  const payload = {
-  dataHoraInicioInclusao: dataInicioISODateTime.replace('T', ' '),
-  dataHoraFimInclusao: dataFimISODateTime.replace('T', ' '),
-  };
+  // Idem: ative se quiser filtrar por receita:
   if (codigoReceita) payload.codigoReceita = normalizeCodigoReceita(codigoReceita);
+
+  const { data } = await reqWithRetry(
+    () => sefaz.post('/api/public/v2/guia/pagamento/por-data-inclusao', payload),
+    'pagamento/por-data-inclusao'
+  );
+
+  const lista = Array.isArray(data) ? data : (data?.itens || data?.content || []);
+  return lista.map(mapPagamento);
+}
   
   // Linha comentada temporariamente para buscar todas as receitas
   // if (codigoReceita) {
