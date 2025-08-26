@@ -111,6 +111,19 @@ async function reqWithRetry(doRequest, label = 'sefaz-call') {
       return await doRequest();
     } catch (err) {
       lastErr = err;
+
+      // ==========================================================
+      // ===  NOVA LÓGICA DE LOG DE ERRO DETALHADO ADICIONADA AQUI ===
+      // ==========================================================
+      if (err.response) {
+        // Se a API retornou um erro (4xx, 5xx), loga o corpo da resposta
+        console.error(`\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!`);
+        console.error(`[SEFAZ][${label}] ERRO DA API (Status: ${err.response.status})`);
+        console.error(`[SEFAZ][${label}] RESPOSTA COMPLETA DA API:`, JSON.stringify(err.response.data, null, 2));
+        console.error(`!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n`);
+      }
+      // ==========================================================
+
       const isTimeout = err?.code === 'ECONNABORTED' || /timeout/i.test(err?.message || '');
       const noResp = !err?.response; // erros de rede (DNS, TCP reset etc)
       const retriable = [429, 502, 503, 504].includes(err?.response?.status);
