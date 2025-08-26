@@ -20,17 +20,6 @@ const {
   listarPagamentosPorDataInclusao,
 } = require('../src/services/sefazService');
 
-// ==========================
-// ENV e Config
-// ==========================
-const {
-  RECEITA_CODIGO_PERMISSIONARIO,
-  RECEITA_CODIGO_EVENTO,
-} = process.env;
-
-if (!DB_PATH) {
-  throw new Error('Caminho do banco de dados não definido. Configure DB_PATH no seu arquivo .env');
-}
 
 // ==========================
 // Helpers
