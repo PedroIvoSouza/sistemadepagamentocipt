@@ -2,6 +2,9 @@
 require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
 const sqlite3 = require('sqlite3').verbose();
 const cron = require('node-cron');
+const { CONCILIACAO_TOLERANCIA_CENTAVOS = '2', DEBUG_CONCILIACAO = 'false' } = process.env;
+const TOL_CENTS_BASE = Number(CONCILIACAO_TOLERANCIA_CENTAVOS) || 2;
+const IS_DEBUG = String(DEBUG_CONCILIACAO).toLowerCase() === 'true';
 
 const {
   listarPagamentosPorDataArrecadacao,
@@ -36,6 +39,12 @@ const db = new sqlite3.Database(DB_PATH, (err) => {
     process.exit(1);
   }
 });
+
+function dbAll(sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.all(sql, params, (err, rows) => (err ? reject(err) : resolve(rows || [])));
+  });
+}
 
 function dbRun(sql, params = []) {
   return new Promise((resolve, reject) => {
@@ -102,55 +111,85 @@ async function tentarVincularPagamento(pagamento) {
     linhaDigitavel = '',
     dataPagamento,
     valorPago = 0,
-    numeroInscricao: docPagador = '',
+    numeroInscricao: docPagadorRaw = '',
   } = pagamento;
 
-  if (!docPagador) return false;
+  const docPagador = normalizeDoc(docPagadorRaw);
+  const guia = String(numeroGuia || '').trim();
+  const barras = String(codigoBarras || '').trim();
+  const linha = String(linhaDigitavel || '').trim();
 
-  // Tentativas com chaves diretas (id, barras, etc.)
-  const tentativasDiretas = [
-    { key: 'id', value: numeroDocOrigem, query: `UPDATE dars SET status = 'Pago', data_pagamento = COALESCE(?, data_pagamento) WHERE id = ? AND status != 'Pago'` },
-    { key: 'codigo_barras', value: codigoBarras, query: `UPDATE dars SET status = 'Pago', data_pagamento = COALESCE(?, data_pagamento) WHERE codigo_barras = ? AND status != 'Pago'` },
-    { key: 'linha_digitavel', value: linhaDigitavel, query: `UPDATE dars SET status = 'Pago', data_pagamento = COALESCE(?, data_pagamento) WHERE linha_digitavel = ? AND status != 'Pago'` },
-    { key: 'numero_documento', value: numeroGuia, query: `UPDATE dars SET status = 'Pago', data_pagamento = COALESCE(?, data_pagamento) WHERE numero_documento = ? AND status != 'Pago'` },
+  // 0) Tentativas com chaves diretas, usando TRIM no SQL
+  const diretas = [
+    { nome: 'id', sql: `UPDATE dars SET status='Pago', data_pagamento=COALESCE(?, data_pagamento) WHERE id = ? AND status != 'Pago'`, val: numeroDocOrigem },
+    { nome: 'codigo_barras', sql: `UPDATE dars SET status='Pago', data_pagamento=COALESCE(?, data_pagamento) WHERE TRIM(codigo_barras) = TRIM(?) AND status != 'Pago'`, val: barras },
+    { nome: 'linha_digitavel', sql: `UPDATE dars SET status='Pago', data_pagamento=COALESCE(?, data_pagamento) WHERE TRIM(linha_digitavel) = TRIM(?) AND status != 'Pago'`, val: linha },
+    { nome: 'numero_documento', sql: `UPDATE dars SET status='Pago', data_pagamento=COALESCE(?, data_pagamento) WHERE TRIM(numero_documento) = TRIM(?) AND status != 'Pago'`, val: guia },
   ];
 
-  for (const tentativa of tentativasDiretas) {
-    if (tentativa.value) {
-      const res = await dbRun(tentativa.query, [dataPagamento || null, tentativa.value]);
-      if (res?.changes > 0) return true;
+  for (const t of diretas) {
+    if (t.val) {
+      const r = await dbRun(t.sql, [dataPagamento || null, t.val]);
+      if (IS_DEBUG) console.log(`[DEBUG] Tentativa direta por ${t.nome}=${t.val} → changes=${r?.changes || 0}`);
+      if (r?.changes > 0) return true;
     }
   }
 
-  // Tentativa 5 (robusta): Documento + Valor com tolerância
-  if (valorPago > 0) {
-    // NOTA: seria muito mais rápido ter documento (CNPJ/CPF) normalizado e indexado em dars.
-    const row = await dbGet(
-      `SELECT d.id, d.status FROM dars d
-       LEFT JOIN permissionarios p ON d.tipo_permissionario = 'Permissionario' AND d.permissionario_id = p.id
-       LEFT JOIN DARs_Eventos de ON de.id_dar = d.id
-       LEFT JOIN Eventos e ON e.id = de.id_evento
-       LEFT JOIN Clientes_Eventos ce ON ce.id = e.id_cliente
-       WHERE (
-         REPLACE(REPLACE(REPLACE(REPLACE(IFNULL(p.cnpj,''),'.',''),'-',''),'/',''),' ','') = ? OR
-         REPLACE(REPLACE(REPLACE(REPLACE(IFNULL(ce.documento,''),'.',''),'-',''),'/',''),' ','') = ?
-       )
-       AND d.status != 'Pago'
-       AND ABS(ROUND(d.valor*100) - ?) <= 2 -- tolera até 2 centavos
-       ORDER BY d.data_vencimento ASC
-       LIMIT 1`,
-      [docPagador, docPagador, cents(valorPago)]
-    );
-    
-    if (row?.id) {
-      const res = await dbRun(`UPDATE dars SET status='Pago', data_pagamento=? WHERE id=?`, [dataPagamento || null, row.id]);
-      if (res?.changes > 0) return true;
+  // 1) Fallback por documento (permissionário) + valor com tolerância
+  //    - remove a dependência de d.tipo_permissionario = 'Permissionario'
+  //    - tenta com tolerância pequena; se não achar, amplia com segurança
+  if (docPagador && valorPago > 0) {
+    const valorCents = cents(valorPago);
+
+    // Monta expressão "normalize(doc)" dentro do SQL
+    const NORM = (col) => `REPLACE(REPLACE(REPLACE(REPLACE(IFNULL(${col},''),'.',''),'-',''),'/',''),' ','')`;
+
+    // Consulta candidatos (JOIN sem amarrar ao tipo_permissionario)
+    async function buscarCandidato(tolCents) {
+      const rows = await dbAll(
+        `SELECT d.id, d.status, d.valor, d.data_vencimento
+           FROM dars d
+           LEFT JOIN permissionarios p ON p.id = d.permissionario_id
+          WHERE d.status != 'Pago'
+            AND (${NORM('p.cnpj')} = ?)
+            AND ABS(ROUND(d.valor*100) - ?) <= ?
+          ORDER BY ABS(ROUND(d.valor*100) - ?) ASC, d.data_vencimento ASC
+          LIMIT 2`,
+        [docPagador, valorCents, tolCents, valorCents]
+      );
+      return rows;
+    }
+
+    // Passo A: tolerância base (2 cent por padrão)
+    let rows = await buscarCandidato(TOL_CENTS_BASE);
+    if (IS_DEBUG) console.log(`[DEBUG] Fallback doc+valor tol=${TOL_CENTS_BASE}¢ → ${rows.length} candidato(s)`);
+
+    // Passo B: se não achou, tenta tolerância “média” (R$ 5,00) p/ cobrir juros/descontos comuns
+    if (rows.length === 0) {
+      rows = await buscarCandidato(500);
+      if (IS_DEBUG) console.log('[DEBUG] Fallback doc+valor tol=500¢ →', rows.length, 'candidato(s)');
+    }
+
+    // Passo C (opcional): se ainda não achou, tolerância proporcional (até 3% ou R$ 20, o que for menor)
+    if (rows.length === 0) {
+      const tolPerc = Math.min(Math.round(valorCents * 0.03), 2000); // máx R$ 20,00
+      rows = await buscarCandidato(tolPerc);
+      if (IS_DEBUG) console.log(`[DEBUG] Fallback doc+valor tol=${tolPerc}¢ (≈3%) → ${rows.length} candidato(s)`);
+    }
+
+    if (rows.length === 1) {
+      const r = await dbRun(
+        `UPDATE dars SET status='Pago', data_pagamento=COALESCE(?, data_pagamento) WHERE id=?`,
+        [dataPagamento || null, rows[0].id]
+      );
+      if (r?.changes > 0) return true;
+    } else if (rows.length > 1 && IS_DEBUG) {
+      console.warn('[DEBUG] Ambíguo: mais de uma DAR compatível para o mesmo CNPJ + valor. Não vou conciliar automaticamente.');
     }
   }
-  
+
   return false;
 }
-
 async function conciliarPagamentosDoMes() {
   console.log(`[CONCILIA] Iniciando conciliação do Mês Atual... DB=${DB_PATH}`);
 
