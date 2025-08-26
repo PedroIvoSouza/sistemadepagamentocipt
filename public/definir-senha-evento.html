@@ -117,6 +117,9 @@
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             messageDiv.style.display = 'none';
+            const submitButton = form.querySelector('button[type="submit"]');
+            submitButton.disabled = true;
+            submitButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span> Salvando...';
 
             const senha = document.getElementById('nova_senha').value;
             const confirmacao = document.getElementById('confirmar_nova_senha').value;
@@ -125,6 +128,8 @@
                 messageDiv.className = 'alert alert-warning';
                 messageDiv.textContent = 'A senha deve ter no mínimo 8 caracteres.';
                 messageDiv.style.display = 'block';
+                submitButton.disabled = false;
+                submitButton.innerHTML = 'Salvar Nova Senha';
                 return;
             }
             
@@ -132,6 +137,8 @@
                 messageDiv.className = 'alert alert-danger';
                 messageDiv.textContent = 'As senhas não coincidem. Por favor, tente novamente.';
                 messageDiv.style.display = 'block';
+                submitButton.disabled = false;
+                submitButton.innerHTML = 'Salvar Nova Senha';
                 return;
             }
 
@@ -155,6 +162,9 @@
                 messageDiv.className = 'alert alert-danger';
                 messageDiv.textContent = `Erro: ${err.message}`;
                 messageDiv.style.display = 'block';
+            } finally {
+                submitButton.disabled = false;
+                submitButton.innerHTML = 'Salvar Nova Senha';
             }
         });
     });

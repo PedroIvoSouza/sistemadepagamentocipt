@@ -96,6 +96,7 @@
             const urlParams = new URLSearchParams(window.location.search);
             const cnpj = urlParams.get('cnpj');
             const codigo = document.getElementById('codigo').value;
+            const submitButton = form.querySelector('button[type="submit"]');
 
             if (!cnpj) {
                 messageDiv.innerText = 'Erro: CNPJ não encontrado. Por favor, reinicie o processo.';
@@ -103,6 +104,9 @@
                 messageDiv.style.display = 'block';
                 return;
             }
+
+            submitButton.disabled = true;
+            submitButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span> Consultando...';
 
             try {
                 const response = await fetch('/api/auth/verificar-codigo', {
@@ -127,6 +131,9 @@
                 messageDiv.innerText = error.message;
                 messageDiv.className = 'alert alert-danger';
                 messageDiv.style.display = 'block';
+            } finally {
+                submitButton.disabled = false;
+                submitButton.innerHTML = 'Verificar Código';
             }
         });
     </script>
