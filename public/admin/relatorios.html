@@ -70,7 +70,31 @@
 
             <main class="content">
                 <h1 class="h2 mb-4">Relatórios</h1>
-                <button id="btnRelatorioDevedores" class="btn btn-primary">Relatório de Devedores</button>
+                <div class="mb-3">
+                    <input type="month" id="mesAno" class="form-control d-inline-block w-auto">
+                    <button id="btnRelatorioPagamentos" class="btn btn-secondary ms-2">Buscar Pagamentos</button>
+                    <button id="btnRelatorioDevedores" class="btn btn-primary ms-2">Relatório de Devedores</button>
+                </div>
+
+                <div id="secaoPagos" class="mt-4" style="display:none;">
+                    <h2 class="h5">Pagos</h2>
+                    <table class="table table-sm" id="tabelaPagos">
+                        <thead>
+                            <tr><th>Permissionário</th><th>CNPJ</th><th>Valor</th></tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+
+                <div id="secaoDevedores" class="mt-4" style="display:none;">
+                    <h2 class="h5">Devedores</h2>
+                    <table class="table table-sm" id="tabelaDevedores">
+                        <thead>
+                            <tr><th>Permissionário</th><th>CNPJ</th><th>Valor</th></tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
             </main>
         </div>
     </div>
