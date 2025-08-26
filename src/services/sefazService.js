@@ -18,8 +18,8 @@ const {
   RECEITA_CODIGO_EVENTO_PJ,
   DOC_ORIGEM_COD,            // opcional (se sua receita exigir documento de origem)
   SEFAZ_TLS_INSECURE = 'true',
-  SEFAZ_TIMEOUT_MS = '120000',  // 120s
-  SEFAZ_RETRIES = '5',          // 1 tentativa + 5 retries
+  SEFAZ_TIMEOUT_MS = '120000', // 120s
+  SEFAZ_RETRIES = '5',         // 1 tentativa + 5 retries
 } = process.env;
 
 
@@ -46,17 +46,18 @@ const httpsAgent = new https.Agent({
 // AXIOS (instância oficial SEFAZ)
 // ==========================
 const sefaz = axios.create({
-   baseURL: BASE_URL,
-   timeout: Number(SEFAZ_TIMEOUT_MS || 120000),
-   httpsAgent,
-   proxy: false,
-   headers: {
-     'Content-Type': 'application/json',
-     Accept: 'application/json',
-     'appToken': getAppTokenStrict(),
-   },
+    baseURL: BASE_URL,
+    timeout: Number(SEFAZ_TIMEOUT_MS || 120000),
+    httpsAgent,
+    proxy: false,
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      'appToken': getAppTokenStrict(),
+    },
 });
 
+// Mapeamento de tipo de inscrição conforme a API da SEFAZ
 const TIPO_INSCRICAO = { CPF: 3, CNPJ: 4 };
 
 // ==========================================
@@ -169,10 +170,10 @@ function buildSefazPayload({
   competenciaMes,
   competenciaAno,
   valorPrincipal,
-  dataVencimentoISO,     // YYYY-MM-DD
-  dataLimiteISO,         // YYYY-MM-DD (opcional, será clampado)
+  dataVencimentoISO,      // YYYY-MM-DD
+  dataLimiteISO,          // YYYY-MM-DD (opcional, será clampado)
   observacao,
-  docOrigem,             // opcional: { codigo: <int>, numero: <string> }
+  docOrigem,              // opcional: { codigo: <int>, numero: <string> }
 }) {
   // valida o token em runtime
   getAppTokenStrict();
@@ -180,8 +181,6 @@ function buildSefazPayload({
   const numeroInscricao = onlyDigits(documento || cnpj || '');
   const len = numeroInscricao.length;
 
-  // Mapeamento padrão usado por essa API: 1=CPF, 4=CNPJ
-  const TIPO_INSCRICAO = { CPF: 3, CNPJ: 4 };
   let codigoTipoInscricao;
   if (len === 11) {
     codigoTipoInscricao = TIPO_INSCRICAO.CPF;
@@ -190,7 +189,6 @@ function buildSefazPayload({
   } else {
     throw new Error('Documento do emitente inválido (CPF com 11 dígitos ou CNPJ com 14).');
   }
-
 
   const receitaCod = normalizeCodigoReceita(receitaCodigo);
   if (!receitaCod) throw new Error('Código de receita inválido/ausente.');
@@ -207,7 +205,7 @@ function buildSefazPayload({
   const payload = {
     versao: '1.0',
     contribuinteEmitente: {
-      codigoTipoInscricao,     // agora dinâmico
+      codigoTipoInscricao,   // agora dinâmico
       numeroInscricao,
       nome: nome || 'Contribuinte',
       codigoIbgeMunicipio: Number(codIbgeMunicipio || COD_IBGE_MUNICIPIO || 0),
@@ -237,13 +235,17 @@ function buildSefazPayload({
 
 function pickReceitaEventoByDoc(docDigits, receitaOverride) {
   if (receitaOverride) return normalizeCodigoReceita(receitaOverride);
+  
+  const receitaPF = process.env.RECEITA_CODIGO_EVENTO_PF || process.env.RECEITA_CODIGO_EVENTO;
+  const receitaPJ = process.env.RECEITA_CODIGO_EVENTO_PJ || process.env.RECEITA_CODIGO_EVENTO || process.env.RECEITA_CODIGO_PERMISSIONARIO;
+
   if (docDigits.length === 11) {
-    const cod = normalizeCodigoReceita(process.env.RECEITA_CODIGO_EVENTO_PF || process.env.RECEITA_CODIGO_EVENTO);
+    const cod = normalizeCodigoReceita(receitaPF);
     if (!cod) throw new Error('Código de receita de EVENTO para PF não configurado. Defina RECEITA_CODIGO_EVENTO_PF.');
     return cod;
   }
   if (docDigits.length === 14) {
-    const cod = normalizeCodigoReceita(process.env.RECEITA_CODIGO_EVENTO_PJ || process.env.RECEITA_CODIGO_EVENTO || process.env.RECEITA_CODIGO_PERMISSIONARIO);
+    const cod = normalizeCodigoReceita(receitaPJ);
     if (!cod) throw new Error('Código de receita de EVENTO para PJ não configurado. Defina RECEITA_CODIGO_EVENTO_PJ.');
     return cod;
   }
@@ -253,8 +255,8 @@ function pickReceitaEventoByDoc(docDigits, receitaOverride) {
 
 /**
  * Permissionários (aluguel)
- *   perm: { cnpj, nome_empresa }
- *   darLike: { valor, data_vencimento, mes_referencia, ano_referencia, id? }
+ * perm: { cnpj, nome_empresa }
+ * darLike: { valor, data_vencimento, mes_referencia, ano_referencia, id? }
  */
 function buildSefazPayloadPermissionario({ perm, darLike, receitaCodigo = RECEITA_CODIGO_PERMISSIONARIO }) {
   // antes usávamos "cnpj" direto; agora padronizamos como "documento" (pode ser CPF/CNPJ)
@@ -271,7 +273,7 @@ function buildSefazPayloadPermissionario({ perm, darLike, receitaCodigo = RECEIT
     : null;
 
   return buildSefazPayload({
-    documento,                                // 👈 agora definido
+    documento,                                  // 👈 agora definido
     nome,
     codIbgeMunicipio: COD_IBGE_MUNICIPIO,
     receitaCodigo: receitaCodigo || RECEITA_CODIGO_PERMISSIONARIO,
@@ -279,7 +281,7 @@ function buildSefazPayloadPermissionario({ perm, darLike, receitaCodigo = RECEIT
     competenciaAno: ano,
     valorPrincipal: valor,
     dataVencimentoISO: dataVencISO,
-    dataLimiteISO: dataVencISO,               // será clampado >= hoje
+    dataLimiteISO: dataVencISO,                 // será clampado >= hoje
     observacao: `Aluguel CIPT - ${nome}`,
     docOrigem,
   });
@@ -287,8 +289,8 @@ function buildSefazPayloadPermissionario({ perm, darLike, receitaCodigo = RECEIT
 
 /**
  * Eventos (se usar receita distinta)
- *   cliente: { cnpj, nome_razao_social }
- *   parcela: { valor, vencimento, competenciaMes, competenciaAno, id? }
+ * cliente: { cnpj, nome_razao_social }
+ * parcela: { valor, vencimento, competenciaMes, competenciaAno, id? }
  */
 function buildSefazPayloadEvento({ cliente, parcela, receitaCodigo }) {
   const doc = onlyDigits(cliente?.cnpj || cliente?.documento || '');
@@ -298,22 +300,8 @@ function buildSefazPayloadEvento({ cliente, parcela, receitaCodigo }) {
   const mes = Number(parcela?.competenciaMes || parcela?.mes || 0);
   const ano = Number(parcela?.competenciaAno || parcela?.ano || 0);
 
-  // Escolha automática da receita por tipo de inscrição:
-  let receitaPorTipo = receitaCodigo; // permite override explícito
-  if (!receitaPorTipo) {
-    if (doc.length === 11) {
-      receitaPorTipo = RECEITA_CODIGO_EVENTO_PF || RECEITA_CODIGO_EVENTO;
-    } else if (doc.length === 14) {
-      receitaPorTipo = RECEITA_CODIGO_EVENTO_PJ || RECEITA_CODIGO_EVENTO || RECEITA_CODIGO_PERMISSIONARIO;
-    }
-  }
-
-  if (!receitaPorTipo) {
-    throw new Error(
-      `Código de receita de evento não configurado para o tipo de inscrição (${doc.length===11?'CPF':'CNPJ'}). ` +
-      `Defina RECEITA_CODIGO_EVENTO_${doc.length===11?'PF':'PJ'} no .env.`
-    );
-  }
+  // Lógica de seleção de receita centralizada na função pickReceitaEventoByDoc
+  const receitaPorTipo = pickReceitaEventoByDoc(doc, receitaCodigo);
 
   const docOrigem = DOC_ORIGEM_COD
     ? { codigo: Number(DOC_ORIGEM_COD), numero: String(parcela?.id || parcela?.referencia || '') || String(Date.now()) }
@@ -323,7 +311,7 @@ function buildSefazPayloadEvento({ cliente, parcela, receitaCodigo }) {
     documento: doc,
     nome,
     codIbgeMunicipio: COD_IBGE_MUNICIPIO,
-    receitaCodigo: receitaPorTipo,      // << usa a receita compatível
+    receitaCodigo: receitaPorTipo,        // << usa a receita compatível
     competenciaMes: mes,
     competenciaAno: ano,
     valorPrincipal: valor,
@@ -401,14 +389,14 @@ async function _postEmitir(payload) {
  * Compat: emitirGuiaSefaz(contribuinte, guiaLike) → monta payload perm.
  */
 async function emitirGuiaSefaz(arg1, arg2) {
-   // payload pronto?
-   if (arg1 && typeof arg1 === 'object' && arg1.versao && arg1.contribuinteEmitente && arg1.receitas) {
-     return _postEmitir(arg1);
-   }
-   // Compat (contribuinte, guiaLike)
-   if (arg1 && arg2) {
-     const contrib = arg1 || {};
-     const guia = arg2 || {};
+    // payload pronto?
+    if (arg1 && typeof arg1 === 'object' && arg1.versao && arg1.contribuinteEmitente && arg1.receitas) {
+      return _postEmitir(arg1);
+    }
+    // Compat (contribuinte, guiaLike)
+    if (arg1 && arg2) {
+      const contrib = arg1 || {};
+      const guia = arg2 || {};
     const doc = onlyDigits(contrib.documento || contrib.cnpj || contrib.cpf || '');
     const fakeDarLike = {
       valor: guia.valor || guia.valorPrincipal || 0,
@@ -441,9 +429,9 @@ async function emitirGuiaSefaz(arg1, arg2) {
       return _postEmitir(payload);
     }
     throw new Error('Documento inválido (CPF 11 dígitos ou CNPJ 14).');
-   }
-   throw new Error('emitirGuiaSefaz: chame com payload pronto ou (contribuinte, guiaLike).');
- }
+    }
+    throw new Error('emitirGuiaSefaz: chame com payload pronto ou (contribuinte, guiaLike).');
+}
 
 
 // ==========================
@@ -522,28 +510,7 @@ async function listarPagamentosPorDataInclusao(dataInicioISODateTime, dataFimISO
   const lista = Array.isArray(data) ? data : (data?.itens || data?.content || []);
   return lista.map(mapPagamento);
 }
-  
-  // Linha comentada temporariamente para buscar todas as receitas
-  // if (codigoReceita) {
-  //   payload.codigoReceita = normalizeCodigoReceita(codigoReceita);
-  // }
 
-  const { data } = await reqWithRetry(
-    () => sefaz.post('/api/public/v2/guia/pagamento/por-data-inclusao', payload),
-    'pagamento/por-data-inclusao'
-  );
-
-  const lista = Array.isArray(data) ? data : (data?.itens || data?.content || []);
-  return lista.map(it => ({
-  numeroGuia: it.numeroGuia || null,
-  codigoBarras: it.numCodigoBarras || it.codigoBarras || null,
-  linhaDigitavel: it.linhaDigitavel || null,
-  dataPagamento: it.dataPagamento || it.dtPagamento || null,
-  valorPago: it.valorPago || it.valor || null,
-  numeroDocOrigem: it.numeroDocumentoOrigem || null,
-  raw: it,
-}));
-}
 // ==========================
 // Exports
 // ==========================
