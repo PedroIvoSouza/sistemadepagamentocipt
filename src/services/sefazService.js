@@ -461,6 +461,32 @@ async function consultarReceita(codigo) {
   }
 }
 
+const getNumeroInscricao = (it) => onlyDigits(
+  it.numeroInscricao
+  || it.contribuintePagador?.numeroInscricao
+  || it.contribuinteEmitente?.numeroInscricao
+  || it.pagador?.numeroInscricao
+  || it.contribuinte?.numeroInscricao
+  || ''
+);
+
+const getValorPago = (it) => Number(
+  it.valorPago ?? it.valorTotal ?? it.valor ?? it.valorPrincipal ?? 0
+);
+
+function mapPagamento(it) {
+  return {
+    numeroGuia: String(it.numeroGuia || it.numGuia || '').trim() || null,
+    codigoBarras: String(it.numCodigoBarras || it.codigoBarras || '').trim() || null,
+    linhaDigitavel: String(it.linhaDigitavel || '').trim() || null,
+    dataPagamento: it.dataPagamento || it.dtPagamento || null,
+    valorPago: getValorPago(it),
+    numeroDocOrigem: it.numeroDocumentoOrigem || it.numeroDocOrigem || null,
+    numeroInscricao: getNumeroInscricao(it),
+    raw: it,
+  };
+}
+
 /**
  * Lista pagamentos por DATA DE ARRECADAÇÃO (YYYY-MM-DD a YYYY-MM-DD)
  */
@@ -475,6 +501,9 @@ async function listarPagamentosPorDataArrecadacao(dataInicioISO, dataFimISO, cod
   //   payload.codigoReceita = normalizeCodigoReceita(codigoReceita);
   // }
 
+  const payload = { dataInicioArrecadacao: dataInicioISO, dataFimArrecadacao: dataFimISO };
+  if (codigoReceita) payload.codigoReceita = normalizeCodigoReceita(codigoReceita);
+  
   const { data } = await reqWithRetry(
     () => sefaz.post('/api/public/v2/guia/pagamento/por-data-arrecadacao', payload),
     'pagamento/por-data-arrecadacao'
@@ -500,7 +529,13 @@ async function listarPagamentosPorDataInclusao(dataInicioISODateTime, dataFimISO
     dataHoraInicioInclusao: dataInicioISODateTime.replace('T', ' '),
     dataHoraFimInclusao: dataFimISODateTime.replace('T', ' '),
   };
-
+  
+  const payload = {
+  dataHoraInicioInclusao: dataInicioISODateTime.replace('T', ' '),
+  dataHoraFimInclusao: dataFimISODateTime.replace('T', ' '),
+  };
+  if (codigoReceita) payload.codigoReceita = normalizeCodigoReceita(codigoReceita);
+  
   // Linha comentada temporariamente para buscar todas as receitas
   // if (codigoReceita) {
   //   payload.codigoReceita = normalizeCodigoReceita(codigoReceita);
