@@ -82,6 +82,7 @@
                                     <option value="Pendente">Pendente</option>
                                     <option value="Pago">Pago</option>
                                     <option value="Vencido">Vencido</option>
+                                    <option value="Vencida">Vencida</option>
                                 </select>
                             </div>
                         </div>
@@ -236,7 +237,7 @@
                         return;
                     }
 
-                    const statusColors = { 'Pendente': 'bg-warning text-dark', 'Pago': 'bg-success text-white', 'Vencido': 'bg-danger text-white' };
+                    const statusColors = { 'Pendente': 'bg-warning text-dark', 'Pago': 'bg-success text-white', 'Vencido': 'bg-danger text-white', 'Vencida': 'bg-danger text-white' };
                     let tableHTML = '';
                     dars.forEach(dar => {
                         const statusColor = statusColors[dar.status] || 'bg-secondary text-white';
@@ -276,7 +277,7 @@
                 button.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
 
                 try {
-                    if (darStatus === 'Vencido') {
+                    if (darStatus === 'Vencido' || darStatus === 'Vencida') {
                         const response = await fetch(`/api/dars/${darId}/recalcular`, { headers });
                         if (!response.ok) throw new Error('Erro ao recalcular o DAR.');
                         const calculo = await response.json();
