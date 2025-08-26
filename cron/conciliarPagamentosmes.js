@@ -48,7 +48,44 @@ function addDays(isoYYYYMMDD, days) {
   dt.setUTCDate(dt.getUTCDate() + days);
   return ymd(dt);
 }
+function endsWithSufixoGuia(numDoc, guiaNum, minLen = 6) {
+  const a = normalizeDoc(numDoc || '');
+  const b = normalizeDoc(guiaNum || '');
+  if (!a || !b) return false;
+  const sfx = b.slice(-Math.min(minLen, b.length));
+  return a.endsWith(sfx);
+}
 
+async function applyTiebreakers(cands, guiaNum, dtPgto) {
+  let list = cands.slice();
+
+  // TB1: sufixo de guia (6 dígitos)
+  if (guiaNum) {
+    const bySfx = list.filter(r => endsWithSufixoGuia(r.numero_documento, guiaNum, 6));
+    if (bySfx.length === 1) return bySfx[0];
+    if (bySfx.length > 1) list = bySfx; // restringe o conjunto
+  }
+
+  // TB2: vencimento mais próximo da data do pagamento
+  if (dtPgto && list.length > 1) {
+    const base = new Date(String(dtPgto).slice(0, 10));
+    list.sort((a, b) => {
+      const da = new Date(a.data_vencimento || '1970-01-01');
+      const db = new Date(b.data_vencimento || '1970-01-01');
+      return Math.abs(da - base) - Math.abs(db - base);
+    });
+    // Só escolhe se há um claro primeiro lugar
+    const best = list[0];
+    const second = list[1];
+    if (!second) return best;
+    const baseTs = new Date(String(dtPgto).slice(0, 10)).getTime();
+    const diff1 = Math.abs(new Date(best.data_vencimento || '1970-01-01') - baseTs);
+    const diff2 = Math.abs(new Date(second.data_vencimento || '1970-01-01') - baseTs);
+    if (diff1 < diff2) return best;
+  }
+
+  return null; // continua ambíguo
+}
 // ==========================
 // DB
 // ==========================
@@ -109,9 +146,11 @@ async function tryUpdateByWhere(label, whereSql, whereParams, dtPgto) {
   return { updated: false, alreadyPaid: false };
 }
 
-async function rankAndTry(rows, tolList, ctxLabel, dtPgto) {
+async function rankAndTry(rows, tolList, ctxLabel, dtPgto, guiaNum) {
   dlog(`${ctxLabel}: candidatos pré-tolerância = ${rows.length}`);
-  const tolMax = Math.max(...tolList);
+  rows = rows || [];
+  rows._pagoCents = rows._pagoCents ?? 0; // garantia
+
   for (const tol of tolList) {
     const candTol = rows.filter(r => Math.abs(Math.round(r.valor * 100) - rows._pagoCents) <= tol);
     dlog(`${ctxLabel}: tol=${tol}¢ → ${candTol.length} candidato(s)`);
@@ -122,15 +161,25 @@ async function rankAndTry(rows, tolList, ctxLabel, dtPgto) {
       );
       if (r?.changes > 0) return { done: true };
     } else if (candTol.length > 1) {
+      // TIE-BREAKERS
+      const picked = await applyTiebreakers(candTol, guiaNum, dtPgto);
+      if (picked) {
+        const r = await dbRun(
+          `UPDATE dars SET status='Pago', data_pagamento=COALESCE(?, data_pagamento) WHERE id=?`,
+          [dtPgto || null, picked.id]
+        );
+        if (r?.changes > 0) {
+          dlog(`${ctxLabel}: resolveu via tie-breakers (sufixo/vencimento): id=${picked.id}`);
+          return { done: true };
+        }
+      }
       dlog(`${ctxLabel}: Ambíguo (${candTol.length}). Exemplos:`,
            candTol.slice(0, 3).map(x => ({ id: x.id, valor: x.valor, numero_documento: x.numero_documento })));
       return { done: false, multi: true };
     }
   }
-  // nada único por tolerância — não resolve aqui
   return { done: false };
 }
-
 /**
  * Tenta vincular um pagamento a uma DAR. Retorna true se atualizou (ou já estava Pago).
  */
@@ -302,12 +351,30 @@ async function tentarVincularPagamento(pagamento) {
         [dataPagamento || null, candJan[0].id]
       );
       if (r?.changes > 0) return true;
+    } else if (candJan.length > 1) {
+      const picked = await applyTiebreakers(candJan, guiaNum, dataPagamento);
+      if (picked) {
+        const r = await dbRun(
+          `UPDATE dars SET status='Pago', data_pagamento=COALESCE(?, data_pagamento) WHERE id=?`,
+          [dataPagamento || null, picked.id]
+        );
+        if (r?.changes > 0) return true;
+      }
     }
-  }
 
+    if (guiaNum) {
+  const existe = await dbGet(
+    `SELECT 1 AS ok FROM dars WHERE CAST(${SQL_NORM('numero_documento')} AS INTEGER) = CAST(? AS INTEGER) LIMIT 1`,
+    [guiaNum]
+  );
+  if (!existe?.ok) {
+    console.warn(`[MOTIVO] DAR inexistente no banco para guia=${guiaNum}. Verifique se foi emitida/importada.`);
+  }
+}
   // Falhou todos os critérios seguros
   return false;
 }
+
 
 // ==========================
 // Execução do mês corrente
