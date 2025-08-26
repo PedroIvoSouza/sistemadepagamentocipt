@@ -415,6 +415,51 @@ router.get(
       console.error('Erro ao exportar permissionários:', error);
       res.status(500).json({ error: 'Erro ao exportar os dados.' });
     }
+  } 
+);
+
+/* ===========================================================
+   GET /api/admin/relatorios/pagamentos
+   =========================================================== */
+router.get(
+  '/relatorios/pagamentos',
+  [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN'])],
+  async (req, res) => {
+    try {
+      const mes = parseInt(req.query.mes, 10);
+      const ano = parseInt(req.query.ano, 10);
+
+      if (!mes || mes < 1 || mes > 12 || !ano) {
+        return res.status(400).json({ error: 'Parâmetros mes e ano são obrigatórios e devem ser válidos.' });
+      }
+
+      const pagos = await dbAll(
+        `SELECT d.permissionario_id, p.nome_empresa, p.cnpj, SUM(d.valor) AS valor
+           FROM dars d
+           JOIN permissionarios p ON p.id = d.permissionario_id
+          WHERE d.mes_referencia = ?
+            AND d.ano_referencia = ?
+            AND d.status = 'Pago'
+          GROUP BY d.permissionario_id, p.nome_empresa, p.cnpj`,
+        [mes, ano]
+      );
+
+      const devedores = await dbAll(
+        `SELECT d.permissionario_id, p.nome_empresa, p.cnpj, SUM(d.valor) AS valor
+           FROM dars d
+           JOIN permissionarios p ON p.id = d.permissionario_id
+          WHERE d.mes_referencia = ?
+            AND d.ano_referencia = ?
+            AND d.status IN ${OPEN_STATUSES}
+          GROUP BY d.permissionario_id, p.nome_empresa, p.cnpj`,
+        [mes, ano]
+      );
+
+      res.status(200).json({ pagos, devedores });
+    } catch (error) {
+      console.error('Erro ao gerar relatório de pagamentos:', error);
+      res.status(500).json({ error: 'Erro ao gerar relatório de pagamentos.' });
+    }
   }
 );
 
