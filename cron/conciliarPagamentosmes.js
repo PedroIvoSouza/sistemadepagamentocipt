@@ -56,7 +56,7 @@ function dbGet(sql, params = []) {
 // Datas
 // ==========================
 function ymd(d) {
-  // Esta função já está correta, retorna YYYY-MM-DD
+  // Retorna YYYY-MM-DD no “local day”
   const off = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
   return off.toISOString().slice(0, 10);
 }
@@ -70,9 +70,10 @@ function toDateTimeString(date, hh, mm, ss) {
   return `${yyyy}-${MM}-${dd} ${HH}:${mm_}:${ss_}`; // Ex: 2025-08-01 00:00:00
 }
 
-
 // ==========================
-// Receitas para conciliar
+// (Opcional) Receitas para conciliar
+// Mantida caso você queira voltar a filtrar por receita no futuro.
+// NÃO é usada enquanto “puxamos tudo”.
 // ==========================
 function receitasAtivas() {
   const set = new Set();
@@ -123,8 +124,7 @@ async function tentarVincularPagamento(pagamento) {
 
   // Tentativa 5 (robusta): Documento + Valor com tolerância
   if (valorPago > 0) {
-    // NOTA DE PERFORMANCE: Esta query seria muito mais rápida se os documentos (CNPJ/CPF)
-    // fossem armazenados em uma coluna normalizada (apenas dígitos) e indexada.
+    // NOTA: seria muito mais rápido ter documento (CNPJ/CPF) normalizado e indexado em dars.
     const row = await dbGet(
       `SELECT d.id, d.status FROM dars d
        LEFT JOIN permissionarios p ON d.tipo_permissionario = 'Permissionario' AND d.permissionario_id = p.id
@@ -154,50 +154,46 @@ async function tentarVincularPagamento(pagamento) {
 async function conciliarPagamentosDoMes() {
   console.log(`[CONCILIA] Iniciando conciliação do Mês Atual... DB=${DB_PATH}`);
 
-  const receitas = receitasAtivas();
-  if (receitas.length === 0) {
-    console.warn('[CONCILIA] Nenhuma receita configurada no .env para conciliação.');
-    return;
-  }
-
+  // “Puxar tudo”: NÃO vamos iterar por receita.
   const hoje = new Date();
   const primeiroDiaDoMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
-  
+
   let totalAtualizados = 0;
   const pagamentosMap = new Map();
 
-  // LOOP DIA A DIA: Itera sobre cada dia do mês, do dia 1º até hoje
+  // LOOP DIA A DIA
   for (let diaCorrente = new Date(primeiroDiaDoMes); diaCorrente <= hoje; diaCorrente.setDate(diaCorrente.getDate() + 1)) {
-    
     const dataDia = ymd(diaCorrente);
     const dtHoraInicioDia = toDateTimeString(diaCorrente, 0, 0, 0);
     const dtHoraFimDia = toDateTimeString(diaCorrente, 23, 59, 59);
 
     console.log(`\n[CONCILIA] Processando dia ${dataDia}...`);
 
-    for (const cod of receitas) {
-      // 1) Arrecadação do dia (sem codigoReceita)
-        try {
-          const pagsArrecadacao = await listarPagamentosPorDataArrecadacao(dataDia, dataDia);
-          for (const p of pagsArrecadacao) {
-            if (p.numeroGuia) pagamentosMap.set(p.numeroGuia, p);
-          }
-        } catch (e) {
-          console.warn(`[CONCILIA] Aviso por-data-arrecadacao: ${e.message || e}`);
-        }
+    // 1) Arrecadação do dia (sem codigoReceita)
+    try {
+      const pagsArrecadacao = await listarPagamentosPorDataArrecadacao(dataDia, dataDia);
+      for (const p of pagsArrecadacao) {
+        // chave de dedupe robusta
+        const key = p.numeroGuia || p.codigoBarras || p.linhaDigitavel || `${p.numeroInscricao}-${p.valorPago}-${p.dataPagamento || ''}`;
+        if (!pagamentosMap.has(key)) pagamentosMap.set(key, p);
+      }
+    } catch (e) {
+      console.warn(`[CONCILIA] Aviso por-data-arrecadacao: ${e.message || e}`);
+    }
         
-        // 2) Inclusão do dia (sem codigoReceita)
-        try {
-          const pagsInclusao = await listarPagamentosPorDataInclusao(dtHoraInicioDia, dtHoraFimDia);
-          for (const p of pagsInclusao) {
-            if (p.numeroGuia && !pagamentosMap.has(p.numeroGuia)) {
-              pagamentosMap.set(p.numeroGuia, p);
-            }
-          }
-        } catch (e) {
-          console.warn(`[CONCILIA] Aviso por-data-inclusao: ${e.message || e}`);
-        }
-  
+    // 2) Inclusão do dia (sem codigoReceita)
+    try {
+      const pagsInclusao = await listarPagamentosPorDataInclusao(dtHoraInicioDia, dtHoraFimDia);
+      for (const p of pagsInclusao) {
+        const key = p.numeroGuia || p.codigoBarras || p.linhaDigitavel || `${p.numeroInscricao}-${p.valorPago}-${p.dataPagamento || ''}`;
+        if (!pagamentosMap.has(key)) pagamentosMap.set(key, p);
+      }
+    } catch (e) {
+      console.warn(`[CONCILIA] Aviso por-data-inclusao: ${e.message || e}`);
+    }
+  }
+
+  // Após percorrer todos os dias, consolidamos e conciliamos
   const todosPagamentos = Array.from(pagamentosMap.values());
   const totalEncontrados = todosPagamentos.length;
   console.log(`\n[CONCILIA] Total de ${totalEncontrados} pagamentos únicos encontrados na SEFAZ para o mês inteiro.`);
@@ -206,10 +202,10 @@ async function conciliarPagamentosDoMes() {
     const vinculado = await tentarVincularPagamento(pagamento);
 
     if (vinculado) {
-      console.log(`--> SUCESSO: Pagamento de ${pagamento.numeroInscricao} (Guia: ${pagamento.numeroGuia}) foi vinculado e atualizado para 'Pago'.`);
+      console.log(`--> SUCESSO: Pagamento de ${pagamento.numeroInscricao} (Guia: ${pagamento.numeroGuia || '—'}) atualizado para 'Pago'.`);
       totalAtualizados++;
     } else {
-      console.warn(`--> ALERTA: Pagamento não vinculado. DADOS SEFAZ -> CNPJ/CPF: ${pagamento.numeroInscricao}, Guia: ${pagamento.numeroGuia}, Valor: ${pagamento.valorPago}`);
+      console.warn(`--> ALERTA: Pagamento não vinculado. DADOS SEFAZ -> CNPJ/CPF: ${pagamento.numeroInscricao}, Guia: ${pagamento.numeroGuia || '—'}, Valor: ${pagamento.valorPago}`);
     }
   }
 
