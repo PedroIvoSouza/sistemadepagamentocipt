@@ -100,65 +100,84 @@ async function conciliarPagamentosDoMes() {
       }
 
       for (const it of itens) {
-  // Captura todos os identificadores que recebemos do sefazService
-  const numeroDocOrigem = String(it.numeroDocOrigem || '').trim();
-  const numeroGuia = String(it.numeroGuia || '').trim();
-  const codigoBarras = String(it.codigoBarras || '').trim();
-  const linhaDigitavel = String(it.linhaDigitavel || '').trim();
+        const numeroDocOrigem = String(it.numeroDocOrigem || '').trim();
+        const numeroGuia = String(it.numeroGuia || '').trim();
+        const codigoBarras = String(it.codigoBarras || '').trim();
+        const linhaDigitavel = String(it.linhaDigitavel || '').trim();
+        const docPagador = String(it.raw.numeroInscricao || '').trim();
+        const valorPago = parseFloat(it.valorPago || 0);
 
-  // Se não houver nenhum identificador, pula para o próximo pagamento
-  if (!numeroGuia && !numeroDocOrigem && !codigoBarras && !linhaDigitavel) continue;
+        if (!docPagador) continue;
 
-  totalEncontrados += 1;
-  let changes = 0;
+        totalEncontrados += 1;
+        let changes = 0;
 
-  // --- LÓGICA DE VINCULAÇÃO FINAL ---
+        // TENTATIVA 1: Por Documento de Origem (id)
+        if (changes === 0 && numeroDocOrigem) {
+          const r1 = await dbRun(
+            `UPDATE dars SET status = 'Pago', data_pagamento = COALESCE(?, data_pagamento) WHERE id = ? AND status != 'Pago'`,
+            [it.dataPagamento || null, numeroDocOrigem]
+          );
+          changes = r1?.changes || 0;
+        }
 
-  // TENTATIVA 1: Por Documento de Origem (mais confiável para registros antigos)
-  if (numeroDocOrigem) {
-    const r1 = await dbRun(
-      `UPDATE dars SET status = 'Pago', data_pagamento = COALESCE(?, data_pagamento) WHERE id = ?`,
-      [it.dataPagamento || null, numeroDocOrigem]
-    );
-    changes = r1?.changes || 0;
-  }
+        // TENTATIVA 2: Por Número do Documento/Guia
+        if (changes === 0 && numeroGuia) {
+          const r2 = await dbRun(
+            `UPDATE dars SET status = 'Pago', data_pagamento = COALESCE(?, data_pagamento) WHERE numero_documento = ? AND status != 'Pago'`,
+            [it.dataPagamento || null, numeroGuia]
+          );
+          changes = r2?.changes || 0;
+        }
+        
+        // TENTATIVA 3: Por Código de Barras
+        if (changes === 0 && codigoBarras) {
+          const r3 = await dbRun(
+            `UPDATE dars SET status = 'Pago', data_pagamento = COALESCE(?, data_pagamento) WHERE codigo_barras = ? AND status != 'Pago'`,
+            [it.dataPagamento || null, codigoBarras]
+          );
+          changes = r3?.changes || 0;
+        }
 
-  // TENTATIVA 2: Por Número do Documento/Guia
-  if (changes === 0 && numeroGuia) {
-    const r2 = await dbRun(
-      `UPDATE dars SET status = 'Pago', data_pagamento = COALESCE(?, data_pagamento) WHERE numero_documento = ?`,
-      [it.dataPagamento || null, numeroGuia]
-    );
-    changes = r2?.changes || 0;
-  }
+        // TENTATIVA 4: Por Linha Digitável
+        if (changes === 0 && linhaDigitavel) {
+          const r4 = await dbRun(
+            `UPDATE dars SET status = 'Pago', data_pagamento = COALESCE(?, data_pagamento) WHERE linha_digitavel = ? AND status != 'Pago'`,
+            [it.dataPagamento || null, linhaDigitavel]
+          );
+          changes = r4?.changes || 0;
+        }
 
-  // TENTATIVA 3: Por Código de Barras
-  if (changes === 0 && codigoBarras) {
-    const r3 = await dbRun(
-      `UPDATE dars SET status = 'Pago', data_pagamento = COALESCE(?, data_pagamento) WHERE codigo_barras = ?`,
-      [it.dataPagamento || null, codigoBarras]
-    );
-    changes = r3?.changes || 0;
-  }
+        // TENTATIVA 5: Por Documento (CNPJ/CPF) e Valor
+        if (changes === 0 && docPagador && valorPago > 0) {
+          const r5 = await dbRun(
+            `UPDATE dars
+                SET status = 'Pago', data_pagamento = COALESCE(?, data_pagamento)
+              WHERE id = (
+                SELECT d.id FROM dars d
+                LEFT JOIN permissionarios p ON d.permissionario_id = p.id AND d.tipo_permissionario = 'Permissionario'
+                LEFT JOIN DARs_Eventos de ON d.id = de.id_dar
+                LEFT JOIN Eventos e ON de.id_evento = e.id
+                LEFT JOIN Clientes_Eventos ce ON e.id_cliente = ce.id
+                WHERE 
+                  (p.cnpj = ? OR ce.documento = ?)
+                  AND d.valor = ?
+                  AND d.status != 'Pago'
+                ORDER BY d.data_vencimento ASC
+                LIMIT 1
+              )`,
+            [it.dataPagamento, docPagador, docPagador, valorPago]
+          );
+          changes = r5?.changes || 0;
+        }
 
-  // TENTATIVA 4: Por Linha Digitável
-  if (changes === 0 && linhaDigitavel) {
-    const r4 = await dbRun(
-      `UPDATE dars SET status = 'Pago', data_pagamento = COALESCE(?, data_pagamento) WHERE linha_digitavel = ?`,
-      [it.dataPagamento || null, linhaDigitavel]
-    );
-    changes = r4?.changes || 0;
-  }
-
-  // Se alguma das tentativas funcionou, contabiliza e informa.
-  if (changes > 0) {
-  console.log(`--> SUCESSO: Pagamento referente à Guia ${numeroGuia || numeroDocOrigem} foi vinculado e atualizado para 'Pago'.`);
-  totalAtualizados += 1;
-} else {
-  // ADICIONE ESTE BLOCO 'ELSE'
-console.warn(`--> ALERTA: Pagamento não vinculado. DADOS SEFAZ -> CNPJ/CPF: ${it.raw.numeroInscricao}, Guia: ${numeroGuia}, DocOrigem: ${numeroDocOrigem}`);
-}
-}
+        if (changes > 0) {
+          console.log(`--> SUCESSO: Pagamento de ${docPagador} (Guia: ${numeroGuia}) foi vinculado e atualizado para 'Pago'.`);
+          totalAtualizados += 1;
+        } else {
+          console.warn(`--> ALERTA: Pagamento não vinculado. DADOS SEFAZ -> CNPJ/CPF: ${docPagador}, Guia: ${numeroGuia}`);
+        }
+      }
     }
   }
 
