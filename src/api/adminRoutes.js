@@ -88,25 +88,26 @@ router.get(
       );
       const darsVencidos = vencRow?.qnt ?? 0;
 
-      // Resumo mensal por competência (usa ano/mes de referência)
-      const resumoMensal = await dbAll(
-        `SELECT
-            ano_referencia,
-            mes_referencia,
-            COUNT(*) AS emitidas,
-            SUM(CASE WHEN status = 'Pago' THEN 1 ELSE 0 END) AS pagas,
-            SUM(
-              CASE
-                WHEN status IN ${OPEN_STATUSES}
-                 AND DATE(data_vencimento) < DATE('now','localtime')
-                THEN 1 ELSE 0
-              END
-            ) AS vencidas
-         FROM dars
-         GROUP BY ano_referencia, mes_referencia
-         ORDER BY ano_referencia DESC, mes_referencia DESC
-         LIMIT 6`
-      );
+      // Resumo mensal por mês de vencimento (não por competência)
+         const resumoMensal = await dbAll(`
+           SELECT
+             CAST(strftime('%Y', data_vencimento) AS INTEGER) AS ano,
+             CAST(strftime('%m', data_vencimento) AS INTEGER) AS mes,
+             COUNT(*) AS emitidas,
+             SUM(CASE WHEN status = 'Pago' THEN 1 ELSE 0 END) AS pagas,
+             SUM(CASE
+                   WHEN status IN ${OPEN_STATUSES}
+                    AND DATE(data_vencimento) < DATE('now','localtime')
+                 THEN 1 ELSE 0 END) AS vencidas,
+             SUM(CASE
+                   WHEN status IN ${OPEN_STATUSES}
+                    AND DATE(data_vencimento) >= DATE('now','localtime')
+                 THEN 1 ELSE 0 END) AS a_vencer
+           FROM dars
+           GROUP BY ano, mes
+           ORDER BY ano DESC, mes DESC
+           LIMIT 6
+         `);
 
       // Maiores devedores (todas as competências)
       // Ranking por QUANTIDADE de DARs em aberto; chip mostra SOMENTE o valor vencido
