@@ -204,17 +204,18 @@ window.onload = async () => {
 
     const meses = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
     const resumoBody = document.getElementById('resumo-mensal-body');
+    
     if (stats.resumoMensal && stats.resumoMensal.length > 0) {
       resumoBody.innerHTML = stats.resumoMensal.map(item => `
         <tr>
-          <td><strong>${meses[(item.mes_referencia||1)-1]}/${item.ano_referencia}</strong></td>
+          <td><strong>${meses[(item.mes||1)-1]}/${item.ano}</strong></td>
           <td>${Number(item.emitidas ?? 0).toLocaleString('pt-BR')}</td>
           <td>${Number(item.pagas ?? 0).toLocaleString('pt-BR')}</td>
           <td><span class="text-danger fw-bold">${Number(item.vencidas ?? 0).toLocaleString('pt-BR')}</span></td>
         </tr>
       `).join('');
     } else {
-      resumoBody.innerHTML = '<tr><td colspan="4" class="text-muted text-center">Nenhum dado mensal para exibir.</td></tr>';
+      resumoBody.innerHTML = '<tr><td colspan="5" class="text-muted text-center">Nenhum dado mensal para exibir.</td></tr>';
     }
 
     if (document.documentElement.classList.contains('is-mobile')) {
@@ -222,7 +223,8 @@ window.onload = async () => {
       const emitidas = stats.resumoMensal?.map(item => item.emitidas || 0) || [];
       const pagas = stats.resumoMensal?.map(item => item.pagas || 0) || [];
       const vencidas = stats.resumoMensal?.map(item => item.vencidas || 0) || [];
-      const hasData = labels.length > 0 && [...emitidas, ...pagas, ...vencidas].some(v => v > 0);
+    const hasData = labels.length > 0 &&
+      (emitidas.some(v => v > 0) || pagas.some(v => v > 0) || vencidas.some(v => v > 0));
       const chartCanvas = document.getElementById('resumoMensalChart');
       if (hasData) {
         new Chart(chartCanvas, {
