@@ -23,43 +23,6 @@ const allAsync = (sql, params = []) =>
     db.all(sql, params, (err, rows) => (err ? reject(err) : resolve(rows || [])));
   });
 
-// Ensure tables/columns exist
-async function ensureTables() {
-  await runAsync(`CREATE TABLE IF NOT EXISTS salas (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    nome TEXT NOT NULL,
-    capacidade INTEGER NOT NULL,
-    ativa INTEGER DEFAULT 1
-  )`);
-  await runAsync(`CREATE TABLE IF NOT EXISTS reservas (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    sala_id INTEGER NOT NULL,
-    data TEXT NOT NULL,
-    horario_inicio TEXT NOT NULL,
-    horario_fim TEXT NOT NULL,
-    qtd_pessoas INTEGER NOT NULL,
-    FOREIGN KEY(sala_id) REFERENCES salas(id)
-  )`);
-
-  // add missing columns
-  const salasCols = await allAsync(`PRAGMA table_info(salas)`);
-  const salasNames = new Set(salasCols.map(c => c.name.toLowerCase()));
-  if (!salasNames.has('status')) {
-    await runAsync(`ALTER TABLE salas ADD COLUMN status TEXT DEFAULT 'disponivel'`);
-  }
-
-  const reservasCols = await allAsync(`PRAGMA table_info(reservas)`);
-  const reservasNames = new Set(reservasCols.map(c => c.name.toLowerCase()));
-  if (!reservasNames.has('status')) {
-    await runAsync(`ALTER TABLE reservas ADD COLUMN status TEXT DEFAULT 'pendente'`);
-  }
-  if (!reservasNames.has('usada')) {
-    await runAsync(`ALTER TABLE reservas ADD COLUMN usada INTEGER DEFAULT 0`);
-  }
-}
-
-ensureTables().catch(err => console.error('[adminSalasRoutes] ensureTables', err.message));
-
 // ========== Reservas ==========
 // GET /api/admin/salas/reservas - lista calendário com filtros
 router.get(
@@ -69,9 +32,9 @@ router.get(
     try {
       const { salaId, dataInicio, dataFim } = req.query;
       let sql = `
-        SELECT r.*, s.nome AS sala_nome
-          FROM reservas r
-          JOIN salas s ON s.id = r.sala_id
+        SELECT r.*, s.numero AS sala_nome
+          FROM reservas_salas r
+          JOIN salas_reuniao s ON s.id = r.sala_id
          WHERE 1=1`;
       const params = [];
       if (salaId) { sql += ' AND r.sala_id = ?'; params.push(salaId); }
@@ -82,10 +45,11 @@ router.get(
         id: r.id,
         sala_id: r.sala_id,
         sala_nome: r.sala_nome,
-        inicio: `${r.data}T${r.horario_inicio}`,
-        fim: `${r.data}T${r.horario_fim}`,
+        permissionario_id: r.permissionario_id,
+        inicio: `${r.data}T${r.hora_inicio}`,
+        fim: `${r.data}T${r.hora_fim}`,
         status: r.status,
-        usada: Boolean(r.usada)
+        usada: Boolean(r.checkin)
       }));
       res.json(resp);
     } catch (e) {
@@ -100,15 +64,25 @@ router.post(
   '/reservas',
   [authMiddleware, authorizeRole(['SUPER_ADMIN', 'SALAS_ADMIN'])],
   async (req, res) => {
-    const { sala_id, data, horario_inicio, horario_fim, qtd_pessoas = 0, status = 'pendente' } = req.body || {};
-    if (!sala_id || !data || !horario_inicio || !horario_fim) {
-      return res.status(400).json({ error: 'Campos obrigatórios: sala_id, data, horario_inicio, horario_fim.' });
+    const {
+      sala_id,
+      permissionario_id,
+      data,
+      horario_inicio,
+      horario_fim,
+      qtd_pessoas = 0,
+      status = 'pendente',
+    } = req.body || {};
+    if (!sala_id || !permissionario_id || !data || !horario_inicio || !horario_fim) {
+      return res.status(400).json({
+        error: 'Campos obrigatórios: sala_id, permissionario_id, data, horario_inicio, horario_fim.',
+      });
     }
     try {
       await runAsync(
-        `INSERT INTO reservas (sala_id, data, horario_inicio, horario_fim, qtd_pessoas, status, usada)
-         VALUES (?, ?, ?, ?, ?, ?, 0)`,
-        [sala_id, data, horario_inicio, horario_fim, qtd_pessoas, status]
+        `INSERT INTO reservas_salas (sala_id, permissionario_id, data, hora_inicio, hora_fim, participantes, status, checkin)
+         VALUES (?, ?, ?, ?, ?, ?, ?, NULL)`,
+        [sala_id, permissionario_id, data, horario_inicio, horario_fim, qtd_pessoas, status]
       );
       res.status(201).json({ message: 'Reserva criada' });
     } catch (e) {
@@ -124,21 +98,35 @@ router.put(
   [authMiddleware, authorizeRole(['SUPER_ADMIN', 'SALAS_ADMIN'])],
   async (req, res) => {
     const id = parseInt(req.params.id, 10);
-    const { data, horario_inicio, horario_fim, sala_id, status, usada } = req.body || {};
+    const {
+      data,
+      horario_inicio,
+      horario_fim,
+      sala_id,
+      status,
+      usada,
+      qtd_pessoas,
+      permissionario_id,
+    } = req.body || {};
     try {
       const updates = [];
       const params = [];
       if (data) { updates.push('data = ?'); params.push(data); }
-      if (horario_inicio) { updates.push('horario_inicio = ?'); params.push(horario_inicio); }
-      if (horario_fim) { updates.push('horario_fim = ?'); params.push(horario_fim); }
+      if (horario_inicio) { updates.push('hora_inicio = ?'); params.push(horario_inicio); }
+      if (horario_fim) { updates.push('hora_fim = ?'); params.push(horario_fim); }
       if (sala_id) { updates.push('sala_id = ?'); params.push(sala_id); }
       if (status) { updates.push('status = ?'); params.push(status); }
-      if (typeof usada === 'boolean') { updates.push('usada = ?'); params.push(usada ? 1 : 0); }
+      if (typeof qtd_pessoas === 'number') { updates.push('participantes = ?'); params.push(qtd_pessoas); }
+      if (permissionario_id) { updates.push('permissionario_id = ?'); params.push(permissionario_id); }
+      if (typeof usada === 'boolean') {
+        updates.push('checkin = ?');
+        params.push(usada ? new Date().toISOString() : null);
+      }
       if (!updates.length) {
         return res.status(400).json({ error: 'Nenhum campo para atualizar.' });
       }
       params.push(id);
-      await runAsync(`UPDATE reservas SET ${updates.join(', ')} WHERE id = ?`, params);
+      await runAsync(`UPDATE reservas_salas SET ${updates.join(', ')} WHERE id = ?`, params);
       res.json({ message: 'Reserva atualizada' });
     } catch (e) {
       console.error(e);
@@ -156,7 +144,7 @@ router.patch(
     const { status } = req.body || {};
     if (!status) return res.status(400).json({ error: 'Status é obrigatório.' });
     try {
-      await runAsync(`UPDATE reservas SET status = ? WHERE id = ?`, [status, id]);
+      await runAsync(`UPDATE reservas_salas SET status = ? WHERE id = ?`, [status, id]);
       res.json({ message: 'Status atualizado' });
     } catch (e) {
       console.error(e);
@@ -165,18 +153,50 @@ router.patch(
   }
 );
 
-// Compat: POST /reservas/:id/checkin
+// POST /reservas/:id/checkin - marca uso da reserva
 router.post(
   '/reservas/:id/checkin',
   [authMiddleware, authorizeRole(['SUPER_ADMIN', 'SALAS_ADMIN'])],
   async (req, res) => {
     const id = parseInt(req.params.id, 10);
     try {
-      await runAsync(`UPDATE reservas SET usada = 1 WHERE id = ?`, [id]);
+      await runAsync(`UPDATE reservas_salas SET checkin = CURRENT_TIMESTAMP WHERE id = ?`, [id]);
       res.json({ message: 'Check-in realizado' });
     } catch (e) {
       console.error(e);
       res.status(500).json({ error: 'Erro ao registrar check-in.' });
+    }
+  }
+);
+
+// POST /reservas/:id/uso - alias para check-in
+router.post(
+  '/reservas/:id/uso',
+  [authMiddleware, authorizeRole(['SUPER_ADMIN', 'SALAS_ADMIN'])],
+  async (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    try {
+      await runAsync(`UPDATE reservas_salas SET checkin = CURRENT_TIMESTAMP WHERE id = ?`, [id]);
+      res.json({ message: 'Uso registrado' });
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ error: 'Erro ao registrar uso.' });
+    }
+  }
+);
+
+// DELETE /reservas/:id - cancela reserva
+router.delete(
+  '/reservas/:id',
+  [authMiddleware, authorizeRole(['SUPER_ADMIN', 'SALAS_ADMIN'])],
+  async (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    try {
+      await runAsync(`UPDATE reservas_salas SET status = 'cancelada' WHERE id = ?`, [id]);
+      res.json({ message: 'Reserva cancelada' });
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ error: 'Erro ao cancelar reserva.' });
     }
   }
 );
@@ -188,7 +208,7 @@ router.get(
   [authMiddleware, authorizeRole(['SUPER_ADMIN', 'SALAS_ADMIN'])],
   async (_req, res) => {
     try {
-      const salas = await allAsync(`SELECT id, nome, capacidade, status FROM salas`);
+      const salas = await allAsync(`SELECT id, numero AS nome, capacidade, status FROM salas_reuniao`);
       res.json(salas);
     } catch (e) {
       console.error(e);
@@ -209,7 +229,7 @@ router.put(
       return res.status(400).json({ error: 'Status inválido.' });
     }
     try {
-      await runAsync(`UPDATE salas SET status = ? WHERE id = ?`, [status, id]);
+      await runAsync(`UPDATE salas_reuniao SET status = ? WHERE id = ?`, [status, id]);
       res.json({ message: 'Status da sala atualizado' });
     } catch (e) {
       console.error(e);
