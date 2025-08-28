@@ -10,6 +10,30 @@ process.env.SQLITE_STORAGE = path.resolve(__dirname, 'salas.test.db');
 
 const db = require('../src/database/db');
 
+function runAsync(sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.run(sql, params, function (err) {
+      if (err) {
+        reject(err);
+      } else {
+        resolve(this);
+      }
+    });
+  });
+}
+
+function allAsync(sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.all(sql, params, (err, rows) => {
+      if (err) {
+        reject(err);
+      } else {
+        resolve(rows);
+      }
+    });
+  });
+}
+
 function resetDb() {
   return new Promise((resolve, reject) => {
     db.serialize(() => {
@@ -108,6 +132,11 @@ test('Cancelamento com menos de 24h', async () => {
 test('Admin altera status', async () => {
   const reservaId = await insertReserva('2025-10-10','09:00','10:00');
   const app = setupAdminApp();
+  await runAsync(
+    `INSERT INTO reservas_salas (sala_id, permissionario_id, data, hora_inicio, hora_fim, participantes, status, checkin)
+     VALUES (1, 1, '2025-10-10', '10:00', '11:00', 3, 'pendente', NULL)`
+  );
+
   await supertest(app)
     .patch(`/api/admin/salas/reservas/${reservaId}/status`)
     .set('Authorization', `Bearer ${adminToken}`)
@@ -119,6 +148,11 @@ test('Admin altera status', async () => {
 test('Admin realiza check-in', async () => {
   const reservaId = await insertReserva('2025-10-10','09:00','10:00');
   const app = setupAdminApp();
+  await runAsync(
+    `INSERT INTO reservas_salas (sala_id, permissionario_id, data, hora_inicio, hora_fim, participantes, status, checkin)
+     VALUES (1, 1, '2025-10-10', '10:00', '11:00', 3, 'pendente', NULL)`
+  );
+
   await supertest(app)
     .post(`/api/admin/salas/reservas/${reservaId}/checkin`)
     .set('Authorization', `Bearer ${adminToken}`)
