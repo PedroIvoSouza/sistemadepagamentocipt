@@ -24,33 +24,68 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     } catch {}
 
+    // Carrega salas disponíveis para o select
+    const salaSelect = document.getElementById('sala');
+    try {
+        const respSalas = await fetch('/api/salas', { headers });
+        if (respSalas.ok) {
+            const salas = await respSalas.json();
+            salas.forEach(s => {
+                const opt = document.createElement('option');
+                opt.value = s.id;
+                opt.textContent = s.nome;
+                salaSelect.appendChild(opt);
+            });
+        }
+    } catch {}
+
     const calendarEl = document.getElementById('calendar');
     const calendar = new FullCalendar.Calendar(calendarEl, {
         initialView: 'dayGridMonth',
         locale: 'pt-br',
         events: async (info, successCallback, failureCallback) => {
+            const salaId = salaSelect.value;
+            if (!salaId) { successCallback([]); return; }
             try {
-                const res = await fetch('/api/reservas', { headers });
-                if (!res.ok) throw new Error('Falha ao carregar reservas');
-                const data = await res.json();
-                successCallback(data);
+                const eventos = [];
+                const current = new Date(info.start);
+                while (current < info.end) {
+                    const dataStr = current.toISOString().slice(0,10);
+                    const resp = await fetch(`/api/salas/${salaId}/disponibilidade?data=${dataStr}`, { headers });
+                    if (!resp.ok) throw new Error('Falha ao carregar disponibilidade');
+                    const { horarios } = await resp.json();
+                    horarios.forEach(h => {
+                        const inicio = `${dataStr}T${h}`;
+                        const fimDate = new Date(`${inicio}:00`);
+                        fimDate.setHours(fimDate.getHours() + 1);
+                        const fim = fimDate.toISOString().slice(0,16);
+                        eventos.push({ title: 'Disponível', start: inicio, end: fim });
+                    });
+                    current.setDate(current.getDate() + 1);
+                }
+                successCallback(eventos);
             } catch (err) {
                 failureCallback(err);
             }
         }
     });
     calendar.render();
+    salaSelect.addEventListener('change', () => calendar.refetchEvents());
 
     document.getElementById('reserveForm').addEventListener('submit', async (e) => {
         e.preventDefault();
-        const sala = document.getElementById('sala').value;
+        const sala_id = salaSelect.value;
         const start = document.getElementById('start').value;
         const end = document.getElementById('end').value;
+        const qtd_pessoas = parseInt(document.getElementById('qtd_pessoas').value, 10);
+        const data = start.split('T')[0];
+        const horario_inicio = start.split('T')[1];
+        const horario_fim = end.split('T')[1];
         try {
-            const res = await fetch('/api/reservas', {
+            const res = await fetch('/api/salas/reservas', {
                 method: 'POST',
                 headers,
-                body: JSON.stringify({ sala, start, end })
+                body: JSON.stringify({ sala_id, data, horario_inicio, horario_fim, qtd_pessoas })
             });
             if (!res.ok) throw new Error('Erro ao reservar');
             calendar.refetchEvents();
@@ -64,7 +99,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         e.preventDefault();
         const id = document.getElementById('reservaId').value;
         try {
-            const res = await fetch(`/api/reservas/${id}`, {
+            const res = await fetch(`/api/salas/reservas/${id}`, {
                 method: 'DELETE',
                 headers
             });
