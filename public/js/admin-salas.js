@@ -38,7 +38,7 @@ async function fetchReservas(fetchInfo, successCallback, failureCallback) {
 }
 
 function onEventClick(info) {
-  const acao = prompt('Digite "c" para cancelar ou "u" para registrar uso da sala:');
+  const acao = prompt('Digite "c" para cancelar ou "u" para registrar check-in:');
   if (acao === 'c') {
     fetch(`/api/admin/salas/reservas/${info.event.id}`, { method: 'DELETE' })
       .then(resp => {
@@ -46,10 +46,10 @@ function onEventClick(info) {
         else alert('Falha ao cancelar reserva');
       });
   } else if (acao === 'u') {
-    fetch(`/api/admin/salas/reservas/${info.event.id}/uso`, { method: 'POST' })
+    fetch(`/api/admin/salas/reservas/${info.event.id}/checkin`, { method: 'POST' })
       .then(resp => {
-        if (resp.ok) alert('Uso registrado');
-        else alert('Falha ao registrar uso');
+        if (resp.ok) alert('Check-in registrado');
+        else alert('Falha ao registrar check-in');
       });
   }
 }
@@ -58,7 +58,10 @@ function onEventChange(info) {
   fetch(`/api/admin/salas/reservas/${info.event.id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ inicio: info.event.start, fim: info.event.end })
+    body: JSON.stringify({
+      inicio: info.event.start ? info.event.start.toISOString() : null,
+      fim: info.event.end ? info.event.end.toISOString() : null
+    })
   }).then(resp => {
     if (!resp.ok) alert('Falha ao atualizar reserva');
   }).catch(err => {
@@ -78,24 +81,40 @@ async function carregarSalas() {
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td>${sala.nome}</td>
-        <td><input type="checkbox" class="chk-disponivel" ${sala.disponivel ? 'checked' : ''}></td>
-        <td><input type="checkbox" class="chk-manutencao" ${sala.manutencao ? 'checked' : ''}></td>`;
+        <td><input type="checkbox" class="chk-disponivel" ${sala.status === 'disponivel' ? 'checked' : ''}></td>
+        <td><input type="checkbox" class="chk-manutencao" ${sala.status === 'manutencao' ? 'checked' : ''}></td>`;
       tabela.appendChild(tr);
       const chkDisp = tr.querySelector('.chk-disponivel');
       const chkManu = tr.querySelector('.chk-manutencao');
-      chkDisp.addEventListener('change', () => atualizarSala(sala.id, { disponivel: chkDisp.checked }));
-      chkManu.addEventListener('change', () => atualizarSala(sala.id, { manutencao: chkManu.checked }));
+      chkDisp.addEventListener('change', () => {
+        if (chkDisp.checked) chkManu.checked = false;
+        const status = chkDisp.checked
+          ? 'disponivel'
+          : chkManu.checked
+            ? 'manutencao'
+            : 'indisponivel';
+        atualizarSala(sala.id, status);
+      });
+      chkManu.addEventListener('change', () => {
+        if (chkManu.checked) chkDisp.checked = false;
+        const status = chkManu.checked
+          ? 'manutencao'
+          : chkDisp.checked
+            ? 'disponivel'
+            : 'indisponivel';
+        atualizarSala(sala.id, status);
+      });
     });
   } catch (err) {
     console.error(err);
   }
 }
 
-function atualizarSala(id, dados) {
-  fetch(`/api/admin/salas/${id}`, {
+function atualizarSala(id, status) {
+  fetch(`/api/admin/salas/${id}/status`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(dados)
+    body: JSON.stringify({ status })
   }).then(resp => {
     if (!resp.ok) alert('Falha ao atualizar sala');
   }).catch(err => {

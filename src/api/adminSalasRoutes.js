@@ -107,10 +107,22 @@ router.put(
       usada,
       qtd_pessoas,
       permissionario_id,
+      inicio,
+      fim,
     } = req.body || {};
     try {
       const updates = [];
       const params = [];
+      if (inicio) {
+        const [d, t] = inicio.split('T');
+        updates.push('data = ?'); params.push(d);
+        updates.push('hora_inicio = ?'); params.push(t.slice(0,5));
+      }
+      if (fim) {
+        const [d, t] = fim.split('T');
+        if (!inicio) { updates.push('data = ?'); params.push(d); }
+        updates.push('hora_fim = ?'); params.push(t.slice(0,5));
+      }
       if (data) { updates.push('data = ?'); params.push(data); }
       if (horario_inicio) { updates.push('hora_inicio = ?'); params.push(horario_inicio); }
       if (horario_fim) { updates.push('hora_fim = ?'); params.push(horario_fim); }
