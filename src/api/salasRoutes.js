@@ -21,25 +21,6 @@ const allAsync = (sql, params = []) =>
   new Promise((resolve, reject) => {
     db.all(sql, params, (err, rows) => (err ? reject(err) : resolve(rows || [])));
   });
-
-// Garante tabelas
-runAsync(`CREATE TABLE IF NOT EXISTS salas (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  nome TEXT NOT NULL,
-  capacidade INTEGER NOT NULL,
-  ativa INTEGER DEFAULT 1
-)`);
-
-runAsync(`CREATE TABLE IF NOT EXISTS reservas (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  sala_id INTEGER NOT NULL,
-  data TEXT NOT NULL,
-  horario_inicio TEXT NOT NULL,
-  horario_fim TEXT NOT NULL,
-  qtd_pessoas INTEGER NOT NULL,
-  FOREIGN KEY(sala_id) REFERENCES salas(id)
-)`);
-
 // Aplica auth
 router.use(authMiddleware);
 
@@ -47,7 +28,7 @@ router.use(authMiddleware);
 router.get('/', async (_req, res) => {
   try {
     const salas = await allAsync(
-      `SELECT id, nome, capacidade FROM salas WHERE ativa = 1`
+      `SELECT id, numero AS nome, capacidade FROM salas_reuniao WHERE status = 'disponivel'`
     );
     res.json(salas);
   } catch (e) {
@@ -75,13 +56,13 @@ router.get('/:id/disponibilidade', async (req, res) => {
   }
   try {
     const reservas = await allAsync(
-      `SELECT horario_inicio, horario_fim FROM reservas WHERE sala_id = ? AND data = ?`,
+      `SELECT hora_inicio, hora_fim FROM reservas_salas WHERE sala_id = ? AND data = ?`,
       [salaId, data]
     );
     const ocupados = new Set();
     reservas.forEach(r => {
-      let h = r.horario_inicio;
-      while (h < r.horario_fim) {
+      let h = r.hora_inicio;
+      while (h < r.hora_fim) {
         ocupados.add(h);
         h = somaHora(h);
       }
@@ -105,7 +86,7 @@ router.post('/reservas', async (req, res) => {
     return res.status(400).json({ error: 'Reserva requer pelo menos 3 pessoas.' });
   }
   try {
-    const sala = await getAsync(`SELECT * FROM salas WHERE id = ? AND ativa = 1`, [sala_id]);
+    const sala = await getAsync(`SELECT * FROM salas_reuniao WHERE id = ? AND status = 'disponivel'`, [sala_id]);
     if (!sala) return res.status(404).json({ error: 'Sala não encontrada ou inativa.' });
     if (qtd_pessoas > sala.capacidade) {
       return res.status(400).json({ error: 'Capacidade da sala excedida.' });
@@ -122,18 +103,19 @@ router.post('/reservas', async (req, res) => {
 
     const prevDate = new Date(inicio); prevDate.setDate(prevDate.getDate() - 1);
     const nextDate = new Date(inicio); nextDate.setDate(nextDate.getDate() + 1);
+    const permissionarioId = req.user.id;
     const consec = await getAsync(
-      `SELECT id FROM reservas WHERE sala_id = ? AND data IN (?, ?)`,
-      [sala_id, prevDate.toISOString().slice(0,10), nextDate.toISOString().slice(0,10)]
+      `SELECT id FROM reservas_salas WHERE permissionario_id = ? AND data IN (?, ?)`,
+      [permissionarioId, prevDate.toISOString().slice(0,10), nextDate.toISOString().slice(0,10)]
     );
     if (consec) {
       return res.status(400).json({ error: 'Não é permitido reservar dias consecutivos.' });
     }
 
     const conflito = await getAsync(
-      `SELECT id FROM reservas
+      `SELECT id FROM reservas_salas
          WHERE sala_id = ? AND data = ?
-           AND NOT (? >= horario_fim OR ? <= horario_inicio)`,
+           AND NOT (? >= hora_fim OR ? <= hora_inicio)`,
       [sala_id, data, horario_inicio, horario_fim]
     );
     if (conflito) {
@@ -141,9 +123,9 @@ router.post('/reservas', async (req, res) => {
     }
 
     const result = await runAsync(
-      `INSERT INTO reservas (sala_id, data, horario_inicio, horario_fim, qtd_pessoas)
-       VALUES (?, ?, ?, ?, ?)`,
-      [sala_id, data, horario_inicio, horario_fim, qtd_pessoas]
+      `INSERT INTO reservas_salas (sala_id, permissionario_id, data, hora_inicio, hora_fim, participantes, status, checkin)
+       VALUES (?, ?, ?, ?, ?, ?, 'pendente', NULL)`,
+      [sala_id, permissionarioId, data, horario_inicio, horario_fim, qtd_pessoas]
     );
     res.status(201).json({ id: result.lastID });
   } catch (e) {
@@ -156,14 +138,14 @@ router.post('/reservas', async (req, res) => {
 router.delete('/reservas/:id', async (req, res) => {
   const id = parseInt(req.params.id, 10);
   try {
-    const reserva = await getAsync(`SELECT * FROM reservas WHERE id = ?`, [id]);
+    const reserva = await getAsync(`SELECT * FROM reservas_salas WHERE id = ?`, [id]);
     if (!reserva) return res.status(404).json({ error: 'Reserva não encontrada.' });
-    const inicio = new Date(`${reserva.data}T${reserva.horario_inicio}:00`);
+    const inicio = new Date(`${reserva.data}T${reserva.hora_inicio}:00`);
     const diff = inicio.getTime() - Date.now();
     if (diff < 24 * 60 * 60 * 1000) {
       return res.status(400).json({ error: 'Cancelamento permitido apenas com 24h de antecedência.' });
     }
-    await runAsync(`DELETE FROM reservas WHERE id = ?`, [id]);
+    await runAsync(`DELETE FROM reservas_salas WHERE id = ?`, [id]);
     res.status(204).send();
   } catch (e) {
     res.status(500).json({ error: 'Erro ao cancelar reserva.' });
