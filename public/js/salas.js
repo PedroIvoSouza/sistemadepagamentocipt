@@ -128,27 +128,50 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
             if (!res.ok) throw new Error('Erro ao reservar');
             calendar.refetchEvents();
+            carregarReservas();
             e.target.reset();
         } catch (err) {
             alert(err.message);
         }
     });
 
-    document.getElementById('cancelForm').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const id = document.getElementById('reservaId').value;
+    const reservasBody = document.querySelector('#reservasTable tbody');
+    async function carregarReservas() {
         try {
-            const res = await fetch(`/api/salas/reservas/${id}`, {
-                method: 'DELETE',
-                headers
+            const resp = await fetch('/api/salas/minhas-reservas', { headers });
+            if (!resp.ok) throw new Error('Falha ao carregar reservas');
+            const reservas = await resp.json();
+            reservasBody.innerHTML = '';
+            reservas.forEach(r => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${r.sala}</td>
+                    <td>${r.data}</td>
+                    <td>${r.hora_inicio}</td>
+                    <td>${r.hora_fim}</td>
+                    <td><button class="btn btn-sm btn-danger" data-id="${r.id}">Cancelar</button></td>`;
+                reservasBody.appendChild(tr);
             });
-            if (!res.ok) throw new Error('Erro ao cancelar');
-            calendar.refetchEvents();
-            e.target.reset();
         } catch (err) {
-            alert(err.message);
+            reservasBody.innerHTML = '';
+        }
+    }
+
+    reservasBody.addEventListener('click', async (e) => {
+        if (e.target.matches('button[data-id]')) {
+            const id = e.target.getAttribute('data-id');
+            try {
+                const res = await fetch(`/api/salas/reservas/${id}`, { method: 'DELETE', headers });
+                if (!res.ok) throw new Error('Erro ao cancelar');
+                calendar.refetchEvents();
+                carregarReservas();
+            } catch (err) {
+                alert(err.message);
+            }
         }
     });
+
+    carregarReservas();
 });
 
 function formatarCNPJ(cnpj) {

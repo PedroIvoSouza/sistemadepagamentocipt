@@ -75,6 +75,24 @@ router.get('/:id/disponibilidade', async (req, res) => {
   }
 });
 
+// Reservas futuras do usuário
+router.get('/minhas-reservas', async (req, res) => {
+  try {
+    const reservas = await allAsync(
+      `SELECT r.id, s.numero AS sala, r.data, r.hora_inicio, r.hora_fim
+         FROM reservas_salas r
+         JOIN salas_reuniao s ON r.sala_id = s.id
+        WHERE r.permissionario_id = ?
+          AND datetime(r.data || 'T' || r.hora_fim) >= datetime('now')
+        ORDER BY r.data, r.hora_inicio`,
+      [req.user.id]
+    );
+    res.json(reservas);
+  } catch (e) {
+    res.status(500).json({ error: 'Erro ao listar reservas.' });
+  }
+});
+
 // Reservas da sala em intervalo
 router.get('/:id/reservas', async (req, res) => {
   const salaId = parseInt(req.params.id, 10);
