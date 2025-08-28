@@ -1,171 +1,113 @@
-// Em: cron/conciliarPagamentosmes.js
+// cron/conciliarPagamentosmes.js  (rotina DIÁRIA 06:00 America/Maceio)
+// - Concilia 1 dia por vez (ontem por padrão)
+// - Reemissão com juros: chave exata (guia/barras/linha) resolve sem tolerância ampla
+// - Sem guia: prioriza referência (ano/mes) + evita vencimento futuro + tie-break por vencimento
+
 require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
+const fs = require('fs');
+const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
 const cron = require('node-cron');
 
 const {
   DB_PATH = '/home/pedroivodesouza/sistemadepagamentocipt/sistemacipt.db',
-  RECEITA_CODIGO_PERMISSIONARIO,
-  RECEITA_CODIGO_EVENTO,
-  CONCILIACAO_TOLERANCIA_CENTAVOS = '500', // 5 reais
+  CONCILIACAO_TOLERANCIA_CENTAVOS = '500',
   DEBUG_CONCILIACAO = 'true',
+  CONCILIAR_BASE_DIA = 'ontem', // "ontem" (padrão) ou "hoje"
 } = process.env;
 
 const TOL_BASE = Number(CONCILIACAO_TOLERANCIA_CENTAVOS) || 500;
 const DBG = String(DEBUG_CONCILIACAO).toLowerCase() === 'true';
 const dlog = (...a) => { if (DBG) console.log('[DEBUG]', ...a); };
 
-console.log(`BUILD: conciliarPagamentosmes.js @ ${new Date().toISOString()} | TOL_BASE=${TOL_BASE}¢ | DEBUG=${DBG}`);
+console.log(`BUILD: conciliarPagamentosmes.js(daily) @ ${new Date().toISOString()} | TOL_BASE=${TOL_BASE}¢ | DEBUG=${DBG}`);
 
-// (opcional) echo de algumas envs úteis de backend SEFAZ
-try {
-  const { SEFAZ_MODE, SEFAZ_TLS_INSECURE, SEFAZ_APP_TOKEN } = process.env;
-  console.log('\n--- VERIFICANDO VARIÁVEIS DE AMBIENTE CARREGADAS ---');
-  if (SEFAZ_MODE) console.log(`SEFAZ_MODE: [${SEFAZ_MODE}]`);
-  if (SEFAZ_TLS_INSECURE) console.log(`SEFAZ_TLS_INSECURE: [${SEFAZ_TLS_INSECURE}]`);
-  if (SEFAZ_APP_TOKEN) console.log(`SEFAZ_APP_TOKEN (primeiros 5 caracteres): [${String(SEFAZ_APP_TOKEN).slice(0,5)}...]`);
-  console.log('----------------------------------------------------\n');
-} catch (_) {}
-
-// ==========================
-// SEFAZ service
-// ==========================
 const {
   listarPagamentosPorDataArrecadacao,
   listarPagamentosPorDataInclusao,
 } = require('../src/services/sefazService');
 
-// ==========================
-// Helpers
-// ==========================
+// ------------------------- Helpers -------------------------
 function normalizeDoc(s = '') { return String(s).replace(/\D/g, ''); }
 function cents(n) { return Math.round(Number(n || 0) * 100); }
 function isCNPJ(s = '') { return /^\d{14}$/.test(normalizeDoc(s)); }
-function cnpjRoot(s = '') { return normalizeDoc(s).slice(0, 8); } // 8 dígitos iniciais
-function SQL_NORM(col) {
-  // Normaliza no SQLite (remove . - / e espaços)
-  return `REPLACE(REPLACE(REPLACE(REPLACE(${col},'.',''),'-',''),'/',''),' ','')`;
+function cnpjRoot(s = '') { return normalizeDoc(s).slice(0, 8); }
+function SQL_NORM(col) { return `REPLACE(REPLACE(REPLACE(REPLACE(${col},'.',''),'-',''),'/',''),' ','')`; }
+function ymd(d) { const off = new Date(d.getTime() - d.getTimezoneOffset() * 60000); return off.toISOString().slice(0,10); }
+function toDateTimeString(date, hh, mm, ss) {
+  const yyyy = date.getFullYear();
+  const MM   = String(date.getMonth()+1).padStart(2,'0');
+  const dd   = String(date.getDate()).padStart(2,'0');
+  const HH   = String(hh).padStart(2,'0');
+  const mi   = String(mm).padStart(2,'0');
+  const ss_  = String(ss).padStart(2,'0');
+  return `${yyyy}-${MM}-${dd} ${HH}:${mi}:${ss_}`;
 }
 function endsWithSufixoGuia(numDoc, guiaNum, minLen = 6) {
-  const a = normalizeDoc(numDoc || '');
-  const b = normalizeDoc(guiaNum || '');
+  const a = normalizeDoc(numDoc || ''); const b = normalizeDoc(guiaNum || '');
   if (!a || !b) return false;
   const sfx = b.slice(-Math.min(minLen, b.length));
   return a.endsWith(sfx);
 }
 
-async function applyTiebreakers(cands, guiaNum, dtPgto) {
-  let list = (cands || []).slice();
-
-  // TB1: sufixo de guia (6 dígitos)
-  if (guiaNum) {
-    const bySfx = list.filter(r => endsWithSufixoGuia(r.numero_documento, guiaNum, 6));
-    if (bySfx.length === 1) return bySfx[0];
-    if (bySfx.length > 1) list = bySfx; // restringe o conjunto
-  }
-
-  // TB2: vencimento mais próximo da data do pagamento
-  if (dtPgto && list.length > 1) {
-    const base = new Date(String(dtPgto).slice(0, 10));
-    list.sort((a, b) => {
-      const da = new Date(a.data_vencimento || '1970-01-01');
-      const db = new Date(b.data_vencimento || '1970-01-01');
-      return Math.abs(da - base) - Math.abs(db - base);
-    });
-
-    const best = list[0];
-    const second = list[1];
-    if (!second) return best;
-
-    const baseTs = base.getTime();
-    const diff1 = Math.abs(new Date(best.data_vencimento || '1970-01-01') - baseTs);
-    const diff2 = Math.abs(new Date(second.data_vencimento || '1970-01-01') - baseTs);
-    if (diff1 < diff2) return best;
-  }
-
-  return null; // segue ambíguo
-}
-
-// ==========================
-// DB
-// ==========================
+// ------------------------- DB -------------------------
 const db = new sqlite3.Database(DB_PATH, (err) => {
   if (err) {
     console.error('[CONCILIA] Erro ao conectar ao banco de dados:', err.message);
     process.exit(1);
   }
 });
+const dbAll = (sql,p=[]) => new Promise((res,rej)=>db.all(sql,p,(e,r)=>e?rej(e):res(r||[])));
+const dbRun = (sql,p=[]) => new Promise((res,rej)=>db.run(sql,p,function(e){ if(e) return rej(e); res(this); }));
+const dbGet = (sql,p=[]) => new Promise((res,rej)=>db.get(sql,p,(e,r)=>e?rej(e):res(r)));
 
-function dbAll(sql, params = []) {
-  return new Promise((resolve, reject) => {
-    db.all(sql, params, (err, rows) => (err ? reject(err) : resolve(rows || [])));
+// ------------------------- Tie-breakers -------------------------
+async function applyTiebreakers(cands, guiaNum, dtPgto) {
+  let list = (cands || []).slice();
+
+  // 1) Sufixo da guia (se houver)
+  if (guiaNum) {
+    const bySfx = list.filter(r => endsWithSufixoGuia(r.numero_documento, guiaNum, 6));
+    if (bySfx.length === 1) return bySfx[0];
+    if (bySfx.length > 1) list = bySfx;
+  }
+
+  // 2) Priorizar referência mais antiga (mês/ano)
+  list.sort((a,b) => {
+    const ka = (a.ano_referencia ?? 9999) * 100 + (a.mes_referencia ?? 99);
+    const kb = (b.ano_referencia ?? 9999) * 100 + (b.mes_referencia ?? 99);
+    return ka - kb;
   });
-}
-function dbRun(sql, params = []) {
-  return new Promise((resolve, reject) => {
-    db.run(sql, params, function (err) {
-      if (err) return reject(err);
-      resolve(this);
+
+  // 3) Dentro da mesma referência, preferir vencimento mais próximo ao pagamento
+  if (dtPgto) {
+    const base = new Date(String(dtPgto).slice(0,10));
+    list.sort((a,b) => {
+      const ka = (a.ano_referencia ?? 9999) * 100 + (a.mes_referencia ?? 99);
+      const kb = (b.ano_referencia ?? 9999) * 100 + (b.mes_referencia ?? 99);
+      if (ka !== kb) return ka - kb;
+      const da = new Date(a.data_vencimento || '1970-01-01');
+      const db = new Date(b.data_vencimento || '1970-01-01');
+      return Math.abs(da - base) - Math.abs(db - base);
     });
-  });
-}
-function dbGet(sql, params = []) {
-  return new Promise((resolve, reject) => {
-    db.get(sql, params, (err, row) => (err ? reject(err) : resolve(row)));
-  });
+  }
+
+  return list[0] || null;
 }
 
-// ==========================
-// Datas
-// ==========================
-function ymd(d) {
-  // Retorna YYYY-MM-DD no “local day”
-  const off = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
-  return off.toISOString().slice(0, 10);
-}
-function toDateTimeString(date, hh, mm, ss) {
-  const yyyy = date.getFullYear();
-  const MM = String(date.getMonth() + 1).padStart(2, '0');
-  const dd = String(date.getDate()).padStart(2, '0');
-  const HH = String(hh).padStart(2, '0');
-  const mm_ = String(mm).padStart(2, '0');
-  const ss_ = String(ss).padStart(2, '0');
-  return `${yyyy}-${MM}-${dd} ${HH}:${mm_}:${ss_}`; // Ex: 2025-08-01 00:00:00
-}
-
-// ==========================
-// (Opcional) Receitas para conciliar — não usadas enquanto “puxamos tudo”.
-// ==========================
-function receitasAtivas() {
-  const set = new Set();
-  [RECEITA_CODIGO_PERMISSIONARIO, RECEITA_CODIGO_EVENTO].forEach(envVar => {
-    if (envVar) {
-      const cod = Number(normalizeDoc(envVar));
-      if (cod) set.add(cod);
-      else throw new Error(`Código de receita inválido encontrado no .env: ${envVar}`);
-    }
-  });
-  return Array.from(set);
-}
-
-// ==========================
-// Rank helper (com tie-breakers)
-// ==========================
 async function rankAndTry(rows, tolList, ctxLabel, dtPgto, guiaNum, pagoCents) {
   rows = rows || [];
   dlog(`${ctxLabel}: candidatos pré-tolerância = ${rows.length}`);
-
   for (const tol of tolList) {
-    const candTol = rows.filter(r => Math.abs(Math.round(r.valor * 100) - pagoCents) <= tol);
+    const candTol = rows.filter(r => Math.abs(Math.round(r.valor*100) - pagoCents) <= tol);
     dlog(`${ctxLabel}: tol=${tol}¢ → ${candTol.length} candidato(s)`);
     if (candTol.length === 1) {
       const r = await dbRun(
         `UPDATE dars SET status='Pago', data_pagamento=COALESCE(?, data_pagamento) WHERE id=?`,
         [dtPgto || null, candTol[0].id]
       );
-      if (r?.changes > 0) return { done: true };
+      if (r?.changes > 0) return { done:true };
     } else if (candTol.length > 1) {
-      // TIE-BREAKERS
       const picked = await applyTiebreakers(candTol, guiaNum, dtPgto);
       if (picked) {
         const r = await dbRun(
@@ -173,21 +115,19 @@ async function rankAndTry(rows, tolList, ctxLabel, dtPgto, guiaNum, pagoCents) {
           [dtPgto || null, picked.id]
         );
         if (r?.changes > 0) {
-          dlog(`${ctxLabel}: resolveu via tie-breakers (sufixo/vencimento): id=${picked.id}`);
-          return { done: true };
+          dlog(`${ctxLabel}: resolveu via tie-breakers (ref/vencimento): id=${picked.id}`);
+          return { done:true };
         }
       }
       dlog(`${ctxLabel}: Ambíguo (${candTol.length}). Exemplos:`,
-        candTol.slice(0, 3).map(x => ({ id: x.id, valor: x.valor, numero_documento: x.numero_documento })));
-      return { done: false, multi: true };
+        candTol.slice(0,3).map(x=>({id:x.id,valor:x.valor,numero_documento:x.numero_documento})));
+      return { done:false, multi:true };
     }
   }
-  return { done: false };
+  return { done:false };
 }
 
-// ==========================
-// Conciliação
-// ==========================
+// ------------------------- Vinculação -------------------------
 async function tentarVincularPagamento(pagamento) {
   const {
     numeroDocOrigem = '',
@@ -202,42 +142,39 @@ async function tentarVincularPagamento(pagamento) {
   const guiaNum = numeroGuia || '';
   const docPagador = normalizeDoc(numeroInscricao || '');
   const pagoCents = cents(valorPago);
-  const tolList = [2, TOL_BASE, Math.max(TOL_BASE, Math.round(pagoCents * 0.03))];
 
-  // ---------- 0) Tentativas diretas ----------
-  // 0.1) chaves diretas simples
+  // Tolerância: só 2¢ quando houver chave exata; ampla quando NÃO houver.
+  const hasChaveExata = !!(numeroGuia || codigoBarras || linhaDigitavel);
+  const tolList = hasChaveExata
+    ? [2]  // guia/linha/código -> apenas arredondamento
+    : [2, TOL_BASE, Math.max(TOL_BASE, Math.round(pagoCents * 0.03))];
+
+  // 0) Tentativas diretas
   const diretas = [
-    { label: 'id', sql: `UPDATE dars SET status='Pago', data_pagamento=COALESCE(?, data_pagamento) WHERE id=? AND status!='Pago'`, val: numeroDocOrigem },
-    { label: 'codigo_barras', sql: `UPDATE dars SET status='Pago', data_pagamento=COALESCE(?, data_pagamento) WHERE codigo_barras=? AND status!='Pago'`, val: codigoBarras },
-    { label: 'linha_digitavel', sql: `UPDATE dars SET status='Pago', data_pagamento=COALESCE(?, data_pagamento) WHERE linha_digitavel=? AND status!='Pago'`, val: linhaDigitavel },
-    { label: 'numero_documento', sql: `UPDATE dars SET status='Pago', data_pagamento=COALESCE(?, data_pagamento) WHERE numero_documento=? AND status!='Pago'`, val: guiaNum },
+    { label:'id',               sql:`UPDATE dars SET status='Pago', data_pagamento=COALESCE(?, data_pagamento) WHERE id=? AND status!='Pago'`,                 val: numeroDocOrigem },
+    { label:'codigo_barras',    sql:`UPDATE dars SET status='Pago', data_pagamento=COALESCE(?, data_pagamento) WHERE codigo_barras=? AND status!='Pago'`,      val: codigoBarras },
+    { label:'linha_digitavel',  sql:`UPDATE dars SET status='Pago', data_pagamento=COALESCE(?, data_pagamento) WHERE linha_digitavel=? AND status!='Pago'`,    val: linhaDigitavel },
+    { label:'numero_documento', sql:`UPDATE dars SET status='Pago', data_pagamento=COALESCE(?, data_pagamento) WHERE numero_documento=? AND status!='Pago'`,   val: guiaNum },
   ];
-
   for (const t of diretas) {
     if (!t.val) continue;
     const r = await dbRun(t.sql, [dataPagamento || null, t.val]);
     dlog(`direta: ${t.label}=${t.val} → changes=${r?.changes || 0}`);
     if (r?.changes > 0) return true;
 
-    // se já estava pago, considera sucesso e loga
+    // já estava 'Pago'?
     let wherePaid = '';
-    if (t.label === 'numero_documento') {
-      wherePaid = `CAST(${SQL_NORM('numero_documento')} AS INTEGER) = CAST(? AS INTEGER)`;
-    } else if (t.label === 'codigo_barras' || t.label === 'linha_digitavel') {
-      wherePaid = `${t.label} = ?`;
-    } else if (t.label === 'id') {
-      wherePaid = `id = ?`;
-    }
+    if (t.label === 'numero_documento')       wherePaid = `CAST(${SQL_NORM('numero_documento')} AS INTEGER) = CAST(? AS INTEGER)`;
+    else if (t.label === 'codigo_barras' || t.label === 'linha_digitavel') wherePaid = `${t.label} = ?`;
+    else if (t.label === 'id')                wherePaid = `id = ?`;
+
     if (wherePaid) {
       const already = await dbGet(`SELECT id FROM dars WHERE ${wherePaid} AND status='Pago' LIMIT 1`, [t.val]);
-      if (already?.id) {
-        console.log(`[INFO] encontrada por ${t.label}=${t.val}, mas já estava 'Pago'.`);
-        return true;
-      }
+      if (already?.id) { console.log(`[INFO] encontrada por ${t.label}=${t.val}, mas já estava 'Pago'.`); return true; }
     }
   }
 
-  // 0.2) equivalências normalizadas (sem pontuação)
+  // 0.2) equivalências normalizadas
   if (codigoBarras) {
     const cbNorm = normalizeDoc(codigoBarras);
     const r = await dbRun(
@@ -247,17 +184,12 @@ async function tentarVincularPagamento(pagamento) {
     );
     dlog(`direta: codigo_barras(num)=${cbNorm} → changes=${r?.changes || 0}`);
     if (r?.changes > 0) return true;
-
     const already = await dbGet(
       `SELECT id FROM dars WHERE ${SQL_NORM('codigo_barras')} = ? AND status='Pago' LIMIT 1`,
       [cbNorm]
     );
-    if (already?.id) {
-      console.log(`[INFO] encontrada por codigo_barras=${codigoBarras}, mas já estava 'Pago'.`);
-      return true;
-    }
+    if (already?.id) { console.log(`[INFO] encontrada por codigo_barras=${codigoBarras}, mas já estava 'Pago'.`); return true; }
   }
-
   if (guiaNum) {
     const r = await dbRun(
       `UPDATE dars SET status='Pago', data_pagamento=COALESCE(?, data_pagamento)
@@ -267,63 +199,53 @@ async function tentarVincularPagamento(pagamento) {
     );
     dlog(`direta: numero_documento(num)=~${guiaNum} → changes=${r?.changes || 0}`);
     if (r?.changes > 0) return true;
-
     const already = await dbGet(
       `SELECT id FROM dars WHERE CAST(${SQL_NORM('numero_documento')} AS INTEGER) = CAST(? AS INTEGER) AND status='Pago' LIMIT 1`,
       [guiaNum]
     );
-    if (already?.id) {
-      console.log(`[INFO] encontrada por numero_documento=${guiaNum}, mas já estava 'Pago'.`);
-      return true;
-    }
+    if (already?.id) { console.log(`[INFO] encontrada por numero_documento=${guiaNum}, mas já estava 'Pago'.`); return true; }
   }
 
-  // Se não tem valor, não dá pra seguir nos fallbacks por proximidade de valor
   if (!(valorPago > 0)) return false;
 
-  // ---------- 1) Permissionário: exato -> raiz ----------
+  // Data base para vetar vencimento futuro
+  const dataBase = (dataPagamento || ymd(new Date()));
+
+  // 1) Permissionário (CNPJ exato/raiz) + tolerância
   let permIds = [];
   if (isCNPJ(docPagador)) {
-    // exato
-    const permExato = await dbGet(
-      `SELECT id FROM permissionarios WHERE ${SQL_NORM('cnpj')} = ? LIMIT 1`,
-      [docPagador]
-    );
+    const permExato = await dbGet(`SELECT id FROM permissionarios WHERE ${SQL_NORM('cnpj')} = ? LIMIT 1`, [docPagador]);
     if (permExato?.id) permIds = [permExato.id];
-
-    // raiz, se não encontrou exato
     if (permIds.length === 0) {
       const raiz = cnpjRoot(docPagador);
-      const permRaiz = await dbAll(
-        `SELECT id FROM permissionarios WHERE substr(${SQL_NORM('cnpj')},1,8) = ?`,
-        [raiz]
-      );
-      if (permRaiz.length === 1) {
-        permIds = [permRaiz[0].id];
-      } else if (permRaiz.length > 1) {
-        permIds = permRaiz.map(r => r.id);
-      }
+      const permRaiz = await dbAll(`SELECT id FROM permissionarios WHERE substr(${SQL_NORM('cnpj')},1,8) = ?`, [raiz]);
+      if (permRaiz.length === 1) permIds = [permRaiz[0].id];
+      else if (permRaiz.length > 1) permIds = permRaiz.map(r => r.id);
     }
   }
-
   if (permIds.length > 0) {
-    const placeholders = permIds.map(() => '?').join(',');
+    const placeholders = permIds.map(()=>'?').join(',');
     const candPerm = await dbAll(
-      `SELECT d.id, d.valor, d.numero_documento, d.data_vencimento
+      `SELECT d.id, d.valor, d.numero_documento, d.data_vencimento,
+              d.mes_referencia, d.ano_referencia
          FROM dars d
         WHERE d.permissionario_id IN (${placeholders})
           AND d.status != 'Pago'
-        ORDER BY ABS(ROUND(d.valor*100) - ?) ASC, d.data_vencimento ASC
+          AND date(d.data_vencimento) <= date(?)
+        ORDER BY d.ano_referencia ASC, d.mes_referencia ASC,
+                 ABS(ROUND(d.valor*100) - ?) ASC,
+                 d.data_vencimento ASC
         LIMIT 50`,
-      [...permIds, pagoCents]
+      [...permIds, dataBase, cents(valorPago)]
     );
-    const r = await rankAndTry(candPerm, tolList, 'perm', dataPagamento, guiaNum, pagoCents);
+    const r = await rankAndTry(candPerm, tolList, 'perm', dataPagamento, guiaNum, cents(valorPago));
     if (r.done || r.multi) return !!r.done;
   }
 
-  // ---------- 2) Eventos / Clientes_Eventos (exato doc ou raiz) ----------
+  // 2) Eventos (doc cliente exato/raiz) + tolerância
   const candEv = await dbAll(
-    `SELECT d.id, d.valor, d.numero_documento, d.data_vencimento
+    `SELECT d.id, d.valor, d.numero_documento, d.data_vencimento,
+            d.mes_referencia, d.ano_referencia
        FROM dars d
        JOIN DARs_Eventos de ON de.id_dar = d.id
        JOIN Eventos e       ON e.id = de.id_evento
@@ -333,177 +255,217 @@ async function tentarVincularPagamento(pagamento) {
         OR  (length(${SQL_NORM('ce.documento')})=14 AND substr(${SQL_NORM('ce.documento')},1,8) = ?)
       )
         AND d.status != 'Pago'
-      ORDER BY ABS(ROUND(d.valor*100) - ?) ASC, d.data_vencimento ASC
+        AND date(d.data_vencimento) <= date(?)
+      ORDER BY d.ano_referencia ASC, d.mes_referencia ASC,
+               ABS(ROUND(d.valor*100) - ?) ASC,
+               d.data_vencimento ASC
       LIMIT 50`,
-    [docPagador, isCNPJ(docPagador) ? cnpjRoot(docPagador) : '__NO_ROOT__', pagoCents]
+    [normalizeDoc(numeroInscricao||''), isCNPJ(numeroInscricao||'') ? cnpjRoot(numeroInscricao) : '__NO_ROOT__', dataBase, cents(valorPago)]
   );
   {
-    const r = await rankAndTry(candEv, tolList, 'evento', dataPagamento, guiaNum, pagoCents);
+    const r = await rankAndTry(candEv, tolList, 'evento', dataPagamento, guiaNum, cents(valorPago));
     if (r.done || r.multi) return !!r.done;
   }
 
-  // ---------- 3) Guia + valor ----------
+  // 3) Guia + valor (mesmo número, sem depender do valor exato)
   if (guiaNum) {
     const candGuia = await dbAll(
-      `SELECT d.id, d.valor, d.numero_documento, d.data_vencimento
+      `SELECT d.id, d.valor, d.numero_documento, d.data_vencimento,
+              d.mes_referencia, d.ano_referencia
          FROM dars d
         WHERE CAST(${SQL_NORM('d.numero_documento')} AS INTEGER) = CAST(? AS INTEGER)
           AND d.status != 'Pago'
-        ORDER BY ABS(ROUND(d.valor*100) - ?) ASC, d.data_vencimento ASC
+          AND date(d.data_vencimento) <= date(?)
+        ORDER BY d.ano_referencia ASC, d.mes_referencia ASC,
+                 ABS(ROUND(d.valor*100) - ?) ASC,
+                 d.data_vencimento ASC
         LIMIT 50`,
-      [guiaNum, pagoCents]
+      [guiaNum, dataBase, cents(valorPago)]
     );
-    const r = await rankAndTry(candGuia, tolList, 'guia+valor', dataPagamento, guiaNum, pagoCents);
+    const r = await rankAndTry(candGuia, tolList, 'guia+valor', dataPagamento, guiaNum, cents(valorPago));
     if (r.done || r.multi) return !!r.done;
   }
 
-  // ---------- 4) LIKE sufixo da guia + valor (ex.: últimos 6 dígitos) ----------
+  // 4) LIKE sufixo da guia + valor
   if (guiaNum) {
     const sfx = normalizeDoc(guiaNum).slice(-6);
     if (sfx) {
       const candLike = await dbAll(
-        `SELECT d.id, d.valor, d.numero_documento, d.data_vencimento
+        `SELECT d.id, d.valor, d.numero_documento, d.data_vencimento,
+                d.mes_referencia, d.ano_referencia
            FROM dars d
           WHERE ${SQL_NORM('d.numero_documento')} LIKE '%' || ?
             AND d.status != 'Pago'
-          ORDER BY ABS(ROUND(d.valor*100) - ?) ASC, d.data_vencimento ASC
+            AND date(d.data_vencimento) <= date(?)
+          ORDER BY d.ano_referencia ASC, d.mes_referencia ASC,
+                   ABS(ROUND(d.valor*100) - ?) ASC,
+                   d.data_vencimento ASC
           LIMIT 50`,
-        [sfx, pagoCents]
+        [sfx, dataBase, cents(valorPago)]
       );
-      const r = await rankAndTry(candLike, tolList, 'likeGuia+valor', dataPagamento, guiaNum, pagoCents);
+      const r = await rankAndTry(candLike, tolList, 'likeGuia+valor', dataPagamento, guiaNum, cents(valorPago));
       if (r.done || r.multi) return !!r.done;
     }
   }
 
-  // ---------- 5) Janela de vencimento ±60 dias + valor ----------
-  // (último recurso conservador)
-  const baseDt = dataPagamento ? String(dataPagamento).slice(0, 10) : ymd(new Date());
-  const maxTol = Math.max(TOL_BASE, Math.round(pagoCents * 0.03));
+  // 5) Janela de vencimento ±60d + valor (último recurso)
+  const baseDt = dataPagamento ? String(dataPagamento).slice(0,10) : ymd(new Date());
+  const maxTol = Math.max(TOL_BASE, Math.round(cents(valorPago) * 0.03));
   const candJan = await dbAll(
-    `SELECT d.id, d.valor, d.numero_documento, d.data_vencimento
+    `SELECT d.id, d.valor, d.numero_documento, d.data_vencimento,
+            d.mes_referencia, d.ano_referencia
        FROM dars d
       WHERE d.status != 'Pago'
         AND ABS(ROUND(d.valor*100) - ?) <= ?
         AND ABS(julianday(d.data_vencimento) - julianday(?)) <= 60
-      ORDER BY ABS(ROUND(d.valor*100) - ?) ASC, d.data_vencimento ASC
+        AND date(d.data_vencimento) <= date(?)
+      ORDER BY d.ano_referencia ASC, d.mes_referencia ASC,
+               ABS(ROUND(d.valor*100) - ?) ASC,
+               d.data_vencimento ASC
       LIMIT 50`,
-    [pagoCents, maxTol, baseDt, pagoCents]
+    [cents(valorPago), maxTol, baseDt, dataBase, cents(valorPago)]
   );
   dlog(`janela±60d: candidatos = ${candJan.length}`);
   if (candJan.length === 1) {
-    const r = await dbRun(
-      `UPDATE dars SET status='Pago', data_pagamento=COALESCE(?, data_pagamento) WHERE id=?`,
-      [dataPagamento || null, candJan[0].id]
-    );
+    const r = await dbRun(`UPDATE dars SET status='Pago', data_pagamento=COALESCE(?, data_pagamento) WHERE id=?`,
+      [dataPagamento || null, candJan[0].id]);
     if (r?.changes > 0) return true;
   } else if (candJan.length > 1) {
     const picked = await applyTiebreakers(candJan, guiaNum, dataPagamento);
     if (picked) {
-      const r = await dbRun(
-        `UPDATE dars SET status='Pago', data_pagamento=COALESCE(?, data_pagamento) WHERE id=?`,
-        [dataPagamento || null, picked.id]
-      );
+      const r = await dbRun(`UPDATE dars SET status='Pago', data_pagamento=COALESCE(?, data_pagamento) WHERE id=?`,
+        [dataPagamento || null, picked.id]);
       if (r?.changes > 0) return true;
     }
   }
 
-  // ---------- Diagnóstico: DAR inexistente por guia ----------
   if (guiaNum) {
     const existe = await dbGet(
       `SELECT 1 AS ok FROM dars WHERE CAST(${SQL_NORM('numero_documento')} AS INTEGER) = CAST(? AS INTEGER) LIMIT 1`,
       [guiaNum]
     );
-    if (!existe?.ok) {
-      console.warn(`[MOTIVO] DAR inexistente no banco para guia=${guiaNum}. Verifique se foi emitida/importada.`);
-    }
+    if (!existe?.ok) console.warn(`[MOTIVO] DAR inexistente no banco para guia=${guiaNum}. Verifique se foi emitida/importada.`);
   }
-
   return false;
 }
 
-async function conciliarPagamentosDoMes() {
-  console.log(`[CONCILIA] Iniciando conciliação do Mês Atual... DB=${DB_PATH}`);
+// ------------------------- Core diário -------------------------
+async function conciliarPagamentosDoDia(dataISO) {
+  const dataDia = dataISO || ymd(new Date());
+  console.log(`[CONCILIA] Iniciando conciliação do dia ${dataDia}... DB=${DB_PATH}`);
 
-  const hoje = new Date();
-  const primeiroDiaDoMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+  const dia = new Date(`${dataDia}T00:00:00`);
+  const dtHoraInicioDia = toDateTimeString(dia, 0, 0, 0);
+  const dtHoraFimDia    = toDateTimeString(dia, 23, 59, 59);
 
-  let totalAtualizados = 0;
   const pagamentosMap = new Map();
 
-  // LOOP DIA A DIA
-  for (let diaCorrente = new Date(primeiroDiaDoMes); diaCorrente <= hoje; diaCorrente.setDate(diaCorrente.getDate() + 1)) {
-    const dataDia = ymd(diaCorrente);
-    const dtHoraInicioDia = toDateTimeString(diaCorrente, 0, 0, 0);
-    const dtHoraFimDia = toDateTimeString(diaCorrente, 23, 59, 59);
-
-    console.log(`\n[CONCILIA] Processando dia ${dataDia}...`);
-
-    // 1) Arrecadação do dia (sem codigoReceita)
-    try {
-      const pagsArrecadacao = await listarPagamentosPorDataArrecadacao(dataDia, dataDia);
-      for (const p of pagsArrecadacao) {
-        const key = p.numeroGuia || p.codigoBarras || p.linhaDigitavel || `${p.numeroInscricao}-${p.valorPago}-${p.dataPagamento || ''}`;
-        if (!pagamentosMap.has(key)) pagamentosMap.set(key, p);
-      }
-    } catch (e) {
-      console.warn(`[CONCILIA] Aviso por-data-arrecadacao: ${e.message || e}`);
+  try {
+    // Arrecadação (dia fechado)
+    const pagsArr = await listarPagamentosPorDataArrecadacao(dataDia, dataDia);
+    for (const p of pagsArr) {
+      const key = p.numeroGuia || p.codigoBarras || p.linhaDigitavel ||
+        `${p.numeroInscricao}-${p.valorPago}-${p.dataPagamento || ''}`;
+      if (!pagamentosMap.has(key)) pagamentosMap.set(key, p);
     }
-
-    // 2) Inclusão do dia (sem codigoReceita)
-    try {
-      const pagsInclusao = await listarPagamentosPorDataInclusao(dtHoraInicioDia, dtHoraFimDia);
-      for (const p of pagsInclusao) {
-        const key = p.numeroGuia || p.codigoBarras || p.linhaDigitavel || `${p.numeroInscricao}-${p.valorPago}-${p.dataPagamento || ''}`;
-        if (!pagamentosMap.has(key)) pagamentosMap.set(key, p);
-      }
-    } catch (e) {
-      console.warn(`[CONCILIA] Aviso por-data-inclusao: ${e.message || e}`);
-    }
+  } catch (e) {
+    console.warn(`[CONCILIA] Aviso por-data-arrecadacao(${dataDia}): ${e.message || e}`);
   }
 
-  // Após percorrer todos os dias, consolidamos e conciliamos
-  const todosPagamentos = Array.from(pagamentosMap.values());
-  const totalEncontrados = todosPagamentos.length;
-  console.log(`\n[CONCILIA] Total de ${totalEncontrados} pagamentos únicos encontrados na SEFAZ para o mês inteiro.`);
+  try {
+    // Inclusão (janela 00:00:00~23:59:59)
+    const pagsInc = await listarPagamentosPorDataInclusao(dtHoraInicioDia, dtHoraFimDia);
+    for (const p of pagsInc) {
+      const key = p.numeroGuia || p.codigoBarras || p.linhaDigitavel ||
+        `${p.numeroInscricao}-${p.valorPago}-${p.dataPagamento || ''}`;
+      if (!pagamentosMap.has(key)) pagamentosMap.set(key, p);
+    }
+  } catch (e) {
+    console.warn(`[CONCILIA] Aviso por-data-inclusao(${dataDia}): ${e.message || e}`);
+  }
 
+  const todosPagamentos = Array.from(pagamentosMap.values());
+  console.log(`[CONCILIA] ${todosPagamentos.length} pagamentos únicos encontrados na SEFAZ para ${dataDia}.`);
+
+  let totalAtualizados = 0;
   for (const pagamento of todosPagamentos) {
     const vinculado = await tentarVincularPagamento(pagamento);
-
     if (vinculado) {
-      console.log(`--> SUCESSO: Pagamento de ${pagamento.numeroInscricao} (Guia: ${pagamento.numeroGuia || '—'}) atualizado para 'Pago'.`);
+      console.log(`--> SUCESSO: Pagamento de ${pagamento.numeroInscricao} (Guia: ${pagamento.numeroGuia || '—'}) atualizado p/ 'Pago'.`);
       totalAtualizados++;
     } else {
-      console.warn(`--> ALERTA: Pagamento não vinculado. DADOS SEFAZ -> CNPJ/CPF: ${pagamento.numeroInscricao}, Guia: ${pagamento.numeroGuia || '—'}, Valor: ${pagamento.valorPago}`);
+      console.warn(`--> ALERTA: Pagamento não vinculado. SEFAZ -> Doc: ${pagamento.numeroInscricao}, Guia: ${pagamento.numeroGuia || '—'}, Valor: ${pagamento.valorPago}`);
     }
   }
-
-  console.log(`\n[CONCILIA] Finalizado. Total de pagamentos da SEFAZ no período: ${totalEncontrados}. DARs atualizadas no banco: ${totalAtualizados}.`);
+  console.log(`[CONCILIA] ${dataDia} finalizado. DARs atualizadas: ${totalAtualizados}/${todosPagamentos.length}.`);
 }
 
-// ==========================
-// Agendamento
-// ==========================
+// ------------------------- Lock simples (anti conc. simultânea) -------------------------
+const LOCK_FILE = '/tmp/cipt-concilia.lock';
+async function withLock(fn) {
+  const fdPath = path.resolve(LOCK_FILE);
+  let fd;
+  try {
+    fd = fs.openSync(fdPath, 'wx'); // falha se já existir
+  } catch {
+    console.warn('[CONCILIA] Outra instância parece estar rodando. Abortando este ciclo.');
+    return;
+  }
+  try {
+    await fn();
+  } finally {
+    try { fs.closeSync(fd); } catch {}
+    try { fs.unlinkSync(fdPath); } catch {}
+  }
+}
+
+// ------------------------- Agendamento diário (06:00) -------------------------
 function scheduleConciliacao() {
-  cron.schedule('5 2 * * *', conciliarPagamentosDoMes, {
-    scheduled: true,
-    timezone: 'America/Maceio',
-  });
-  console.log('[CONCILIA] Agendador diário iniciado (02:05 America/Maceio).');
+  cron.schedule('0 6 * * *', async () => {
+    const base = new Date();
+    if ((CONCILIAR_BASE_DIA || 'ontem').toLowerCase() !== 'hoje') base.setDate(base.getDate()-1);
+    const alvo = ymd(base);
+    await withLock(() => conciliarPagamentosDoDia(alvo));
+  }, { scheduled:true, timezone:'America/Maceio' });
+
+  console.log('[CONCILIA] Agendador diário iniciado (06:00 America/Maceio).');
 }
 
-// Se rodar diretamente: executa uma vez
+// Execução direta via CLI:
+//   node cron/conciliarPagamentosmes.js                -> roda com CONCILIAR_BASE_DIA (padrão ontem)
+//   node cron/conciliarPagamentosmes.js --date=2025-08-27
+//   node cron/conciliarPagamentosmes.js --range=2025-08-01:2025-08-28
 if (require.main === module) {
-  conciliarPagamentosDoMes()
-    .catch((e) => {
-      console.error('[CONCILIA] ERRO FATAL NA EXECUÇÃO:', e.message || e);
-      process.exit(1);
-    })
-    .finally(() => {
-      db.close((err) => {
-        if (err) console.error('[CONCILIA] Erro ao fechar DB:', err.message);
-      });
-    });
+  const argDate  = (process.argv.find(a=>a.startsWith('--date=')) || '').split('=')[1];
+  const argRange = (process.argv.find(a=>a.startsWith('--range='))|| '').split('=')[1];
+
+  const run = async () => {
+    if (argRange) {
+      const [ini,fim] = argRange.split(':').map(s=>s.trim());
+      const d0 = new Date(`${ini}T00:00:00`);
+      const d1 = new Date(`${fim}T00:00:00`);
+      for (let d = new Date(d0); d <= d1; d.setDate(d.getDate()+1)) {
+        await withLock(() => conciliarPagamentosDoDia(ymd(d)));
+      }
+      return;
+    }
+    if (argDate) {
+      await withLock(() => conciliarPagamentosDoDia(argDate));
+      return;
+    }
+    const base = new Date();
+    if ((CONCILIAR_BASE_DIA || 'ontem').toLowerCase() !== 'hoje') base.setDate(base.getDate()-1);
+    await withLock(() => conciliarPagamentosDoDia(ymd(base)));
+  };
+
+  run()
+  .catch(e=>{
+    console.error('[CONCILIA] ERRO FATAL:', e?.message || e);
+    process.exit(1);
+  })
+  .finally(()=>{
+    db.close(err => { if (err) console.error('[CONCILIA] Erro ao fechar DB:', err.message); });
+  });
 } else {
-  // exporta para ser usado pelo seu index/boot
-  module.exports = { scheduleConciliacao, conciliarPagamentosDoMes };
+  module.exports = { scheduleConciliacao, conciliarPagamentosDoDia };
 }
