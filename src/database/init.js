@@ -84,6 +84,41 @@ db.serialize(() => {
             return console.error('Erro ao criar a tabela "reservas_audit":', err.message);
         }
         console.log('Tabela "reservas_audit" verificada/criada com sucesso.');
+    // Tabela 4: Salas de Reunião
+    db.run(`
+        CREATE TABLE IF NOT EXISTS salas_reuniao (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            numero TEXT NOT NULL,
+            capacidade INTEGER NOT NULL,
+            status TEXT NOT NULL DEFAULT 'disponivel'
+        );
+    `, (err) => {
+        if (err) {
+            return console.error('Erro ao criar a tabela "salas_reuniao":', err.message);
+        }
+        console.log('Tabela "salas_reuniao" verificada/criada com sucesso.');
+    });
+
+    // Tabela 5: Reservas de Salas
+    db.run(`
+        CREATE TABLE IF NOT EXISTS reservas_salas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sala_id INTEGER NOT NULL,
+            permissionario_id INTEGER NOT NULL,
+            data TEXT NOT NULL,
+            hora_inicio TEXT NOT NULL,
+            hora_fim TEXT NOT NULL,
+            participantes INTEGER,
+            status TEXT,
+            checkin TEXT,
+            FOREIGN KEY (sala_id) REFERENCES salas_reuniao (id),
+            FOREIGN KEY (permissionario_id) REFERENCES permissionarios (id)
+        );
+    `, (err) => {
+        if (err) {
+            return console.error('Erro ao criar a tabela "reservas_salas":', err.message);
+        }
+        console.log('Tabela "reservas_salas" verificada/criada com sucesso.');
     });
 });
 

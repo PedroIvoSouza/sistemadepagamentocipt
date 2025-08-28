@@ -10,6 +10,9 @@ const jwt = require('jsonwebtoken');
 const router = express.Router();
 const db = new sqlite3.Database('./sistemacipt.db');
 
+// Roles válidas para administradores do sistema
+const VALID_ROLES = ['SUPER_ADMIN', 'FINANCE_ADMIN', 'SALAS_ADMIN'];
+
 // ROTA PARA LISTAR TODOS OS ADMINISTRADORES (Apenas SUPER_ADMIN)
 router.get('/', [authMiddleware, authorizeRole(['SUPER_ADMIN'])], (req, res) => {
     const sql = `SELECT id, nome, email, role FROM administradores`;
@@ -33,6 +36,7 @@ router.get('/:id', [authMiddleware, authorizeRole(['SUPER_ADMIN'])], (req, res) 
 router.post('/', [authMiddleware, authorizeRole(['SUPER_ADMIN'])], (req, res) => {
     const { nome, email, role } = req.body;
     if (!nome || !email || !role) return res.status(400).json({ error: 'Nome, email e nível são obrigatórios.' });
+    if (!VALID_ROLES.includes(role)) return res.status(400).json({ error: 'Nível de acesso inválido.' });
 
     // MUDANÇA 1: Adicionamos a coluna 'senha' no INSERT
     const sql = `INSERT INTO administradores (nome, email, role, senha) VALUES (?, ?, ?, ?)`;
@@ -68,6 +72,7 @@ router.post('/', [authMiddleware, authorizeRole(['SUPER_ADMIN'])], (req, res) =>
 router.put('/:id', [authMiddleware, authorizeRole(['SUPER_ADMIN'])], (req, res) => {
     const { nome, email, role } = req.body;
     if (!nome || !email || !role) return res.status(400).json({ error: 'Nome, email e nível são obrigatórios.' });
+    if (!VALID_ROLES.includes(role)) return res.status(400).json({ error: 'Nível de acesso inválido.' });
 
     const sql = `UPDATE administradores SET nome = ?, email = ?, role = ? WHERE id = ?`;
     db.run(sql, [nome, email, role, req.params.id], function(err) {

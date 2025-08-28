@@ -120,6 +120,7 @@
                             <label for="adminRole" class="form-label">Nível de Acesso</label>
                             <select class="form-select" id="adminRole" required>
                                 <option value="FINANCE_ADMIN" selected>Administrador Financeiro</option>
+                                <option value="SALAS_ADMIN">Administrador de Salas</option>
                                 <option value="SUPER_ADMIN">Super Administrador</option>
                             </select>
                         </div>
@@ -202,9 +203,17 @@
             function renderTable(admins) {
                 tableBody.innerHTML = '';
                 admins.forEach(admin => {
-                    const roleLabel = admin.role === 'SUPER_ADMIN' 
-                        ? '<span class="badge bg-success">Super Admin</span>' 
-                        : '<span class="badge bg-info">Financeiro</span>';
+                    let roleLabel;
+                    switch (admin.role) {
+                        case 'SUPER_ADMIN':
+                            roleLabel = '<span class="badge bg-success">Super Admin</span>';
+                            break;
+                        case 'SALAS_ADMIN':
+                            roleLabel = '<span class="badge bg-warning text-dark">Salas</span>';
+                            break;
+                        default:
+                            roleLabel = '<span class="badge bg-info">Financeiro</span>';
+                    }
                     
                     tableBody.innerHTML += `
                         <tr data-id="${admin.id}">

@@ -56,6 +56,7 @@ const adminEventosRoutes     = require('./api/adminEventosRoutes');   // inclui 
 const webhooksAssinafyRoutes = require('./api/webhooksAssinafyRoutes');
 const assinafyRoutes         = require('./routes/assinafy');           // preparar/embedded
 const documentosRoutes       = require('./api/documentosRoutes');
+const salasRoutes            = require('./api/salasRoutes');
 
 // ===== App =====
 const app  = express();
@@ -110,6 +111,7 @@ mount('/api/admin/eventos',          'adminEventosRoutes',           adminEvento
 
 mount('/api/eventos',   'eventosRoutes',   eventosRoutes,   app);
 mount('/api/documentos','documentosRoutes',documentosRoutes,app);
+mount('/api/salas',     'salasRoutes',     salasRoutes,     app);
 
 // Bot
 mount('/api/bot', 'botRoutes', botRoutes, app);
