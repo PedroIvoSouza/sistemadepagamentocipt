@@ -26,3 +26,13 @@ As DARs utilizam os seguintes status padronizados:
 - `Vencido` – vencimento ultrapassado sem pagamento.
 
 O valor legado `Vencida` foi unificado para `Vencido` e não deve mais ser utilizado.
+
+## Migrações do Banco de Dados
+
+Para configurar um novo ambiente, execute as migrações do Sequelize antes de iniciar o servidor:
+
+```bash
+npx sequelize-cli db:migrate
+```
+
+O projeto também tenta rodar esse comando automaticamente na inicialização, mas executar manualmente garante que o schema esteja atualizado.
