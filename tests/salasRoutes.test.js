@@ -37,6 +37,7 @@ beforeEach(resetDb);
 const userToken = jwt.sign({ id: 1 }, process.env.JWT_SECRET);
 const adminToken = jwt.sign({ id: 999, role: 'SUPER_ADMIN' }, process.env.JWT_SECRET);
 
+
 function loadUserRoutes() {
   return require('../src/api/salasRoutes');
 }
@@ -74,6 +75,7 @@ function insertReserva(data, inicio, fim, permissionario = 1) {
 
 test('Reserva válida', async () => {
   const app = setupUserApp();
+  const token = userToken();
   await supertest(app)
     .post('/api/salas/reservas')
     .set('Authorization', `Bearer ${userToken}`)
@@ -82,6 +84,7 @@ test('Reserva válida', async () => {
       data: '2025-10-10',
       horario_inicio: '09:00',
       horario_fim: '10:00',
+
       qtd_pessoas: 3,
     })
     .expect(201)
@@ -92,6 +95,7 @@ test('Reserva válida', async () => {
 
 test('Falha por menos de 3 participantes', async () => {
   const app = setupUserApp();
+  const token = userToken();
   await supertest(app)
     .post('/api/salas/reservas')
     .set('Authorization', `Bearer ${userToken}`)
@@ -100,16 +104,19 @@ test('Falha por menos de 3 participantes', async () => {
       data: '2025-10-10',
       horario_inicio: '09:00',
       horario_fim: '10:00',
+
       qtd_pessoas: 2,
     })
     .expect(400)
     .then(res => {
-      assert.match(res.body.error, /pelo menos 3 pessoas/);
+
+      assert.equal(res.body.error, 'Reserva requer pelo menos 3 pessoas.');
     });
 });
 
 test('Bloqueio de reservas em dias consecutivos', async () => {
   const app = setupUserApp();
+  const token = userToken();
   await supertest(app)
     .post('/api/salas/reservas')
     .set('Authorization', `Bearer ${userToken}`)
@@ -118,6 +125,7 @@ test('Bloqueio de reservas em dias consecutivos', async () => {
       data: '2025-10-10',
       horario_inicio: '09:00',
       horario_fim: '10:00',
+
       qtd_pessoas: 3,
     })
     .expect(201);
@@ -129,11 +137,13 @@ test('Bloqueio de reservas em dias consecutivos', async () => {
       data: '2025-10-11',
       horario_inicio: '09:00',
       horario_fim: '10:00',
+
       qtd_pessoas: 3,
     })
     .expect(400)
     .then(res => {
-      assert.match(res.body.error, /dias consecutivos/);
+
+      assert.equal(res.body.error, 'Não é permitido reservar dias consecutivos.');
     });
 });
 
@@ -147,16 +157,33 @@ test('Cancelamento com menos de 24h', async () => {
     .toTimeString()
     .slice(0, 5);
   const reservaId = await insertReserva(data, inicio, fim);
+
   const app = setupUserApp();
+  const token = userToken();
+  const now = new Date(Date.now() + 60 * 60 * 1000);
+  const data = now.toISOString().slice(0, 10);
+  const inicio = now.toTimeString().slice(0, 5);
+  const fim = new Date(now.getTime() + 60 * 60 * 1000).toTimeString().slice(0, 5);
+  const result = await runAsync(
+    `INSERT INTO reservas_salas (sala_id, permissionario_id, data, hora_inicio, hora_fim, participantes, status, checkin)
+     VALUES (1, 1, ?, ?, ?, 3, 'pendente', NULL)`,
+    [data, inicio, fim]
+  );
   await supertest(app)
     .delete(`/api/salas/reservas/${reservaId}`)
     .set('Authorization', `Bearer ${userToken}`)
     .expect(400);
+
 });
 
 test('Admin altera status', async () => {
   const reservaId = await insertReserva('2025-10-10', '09:00', '10:00');
   const app = setupAdminApp();
+  const token = adminToken();
+  const result = await runAsync(
+    `INSERT INTO reservas_salas (sala_id, permissionario_id, data, hora_inicio, hora_fim, participantes, status, checkin)
+     VALUES (1, 1, '2025-10-10', '10:00', '11:00', 3, 'pendente', NULL)`
+  );
   await supertest(app)
     .patch(`/api/admin/salas/reservas/${reservaId}/status`)
     .set('Authorization', `Bearer ${adminToken}`)
@@ -170,9 +197,15 @@ test('Admin altera status', async () => {
 test('Admin realiza check-in', async () => {
   const reservaId = await insertReserva('2025-10-10', '09:00', '10:00');
   const app = setupAdminApp();
+  const token = adminToken();
+  const result = await runAsync(
+    `INSERT INTO reservas_salas (sala_id, permissionario_id, data, hora_inicio, hora_fim, participantes, status, checkin)
+     VALUES (1, 1, '2025-10-10', '10:00', '11:00', 3, 'pendente', NULL)`
+  );
   await supertest(app)
     .post(`/api/admin/salas/reservas/${reservaId}/checkin`)
     .set('Authorization', `Bearer ${adminToken}`)
+
     .expect(200)
     .then(res => {
       assert.equal(res.body.message, 'Check-in realizado');
