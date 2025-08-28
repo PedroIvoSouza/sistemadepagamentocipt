@@ -98,6 +98,17 @@ test('Reserva válida', async () => {
   assert.equal(audit[0].acao, 'CRIACAO');
 });
 
+test('Bloqueia reserva em dias consecutivos', async () => {
+  await insertReserva('2025-10-10','09:00','10:00');
+  const app = setupUserApp();
+  await supertest(app)
+    .post('/api/salas/reservas')
+    .set('Authorization', `Bearer ${userToken}`)
+    .send({ sala_id:1, data:'2025-10-11', horario_inicio:'09:00', horario_fim:'10:00', qtd_pessoas:2 })
+    .expect(400)
+    .then(res => assert.equal(res.body.error, 'Não é permitido reservar sala em dias consecutivos.'));
+});
+
 test('Lista disponibilidade retorna reservas existentes', async () => {
   await insertReserva('2025-10-10','09:00','10:30');
   const app = setupUserApp();

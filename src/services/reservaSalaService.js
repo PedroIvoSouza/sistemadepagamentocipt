@@ -61,8 +61,25 @@ async function verificarConflito(salaId, data, inicio, fim, ignoreId) {
   }
 }
 
+async function verificarDiasConsecutivos(permissionarioId, salaId, data) {
+  const baseDate = new Date(`${data}T00:00:00`);
+  if (isNaN(baseDate)) throw validationError('Data inválida.');
+  const prev = new Date(baseDate);
+  prev.setDate(baseDate.getDate() - 1);
+  const next = new Date(baseDate);
+  next.setDate(baseDate.getDate() + 1);
+  const prevStr = prev.toISOString().slice(0, 10);
+  const nextStr = next.toISOString().slice(0, 10);
+  const sql = `SELECT id FROM reservas_salas WHERE permissionario_id = ? AND sala_id = ? AND data IN (?, ?)`;
+  const conflito = await getAsync(sql, [permissionarioId, salaId, prevStr, nextStr]);
+  if (conflito) {
+    throw validationError('Não é permitido reservar sala em dias consecutivos.');
+  }
+}
+
 module.exports = {
   validarSalaECapacidade,
   validarHorarios,
   verificarConflito,
+  verificarDiasConsecutivos,
 };
