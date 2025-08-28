@@ -281,20 +281,13 @@
       async function reemitirDAR(headers, eventoId, dar){
         const darId   = dar.id || dar.dar_id || dar.parcela_id || dar.referencia || dar.parcela_num;
         const parcNum = dar.parcela_num || dar.referencia || null;
-        const tentativas = [
-          { url: `/api/portal/eventos/${eventoId}/dars/${darId}/reemitir`, opt:{ method:'POST', headers } },
-          { url: `/api/eventos/clientes/eventos/${eventoId}/dars/${darId}/reemitir`, opt:{ method:'POST', headers } },
-          { url: `/api/portal/eventos/${eventoId}/dars/reemitir`,  opt:{ method:'POST', headers, body: JSON.stringify({ dar_id:darId, parcela_num:parcNum }) } },
-          { url: `/api/eventos/clientes/eventos/${eventoId}/dars/reemitir`, opt:{ method:'POST', headers, body: JSON.stringify({ dar_id:darId, parcela_num:parcNum }) } },
-          { url: `/api/eventos/dars/${darId}/reemitir`, opt:{ method:'POST', headers, body: JSON.stringify({ parcela_num:parcNum, evento_id:eventoId }) } }
-        ];
-        for (const t of tentativas){
-          try{
-            const r = await fetch(t.url, t.opt);
-            const j = await r.json().catch(()=> ({}));
-            if (r.ok) return j;
-          }catch{}
-        }
+        const resp = await fetch(`/api/admin/dars/${darId}/reemitir`, {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ evento_id: eventoId, parcela_num: parcNum })
+        });
+        const json = await resp.json().catch(() => ({}));
+        if (resp.ok) return json;
         throw new Error('Não foi possível emitir a DAR.');
       }
 
