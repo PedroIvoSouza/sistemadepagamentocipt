@@ -40,16 +40,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch {}
 
     const calendarEl = document.getElementById('calendar');
-    const HORARIOS_PADRAO = [
-        '08:00','09:00','10:00','11:00','12:00',
-        '13:00','14:00','15:00','16:00','17:00'
-    ];
-    const somaHora = h => {
-        const [hr, min] = h.split(':').map(Number);
-        const d = new Date(0,0,0,hr,min,0);
-        d.setHours(d.getHours() + 1);
-        return d.toTimeString().slice(0,5);
-    };
     const calendar = new FullCalendar.Calendar(calendarEl, {
         initialView: 'dayGridMonth',
         locale: 'pt-br',
@@ -63,41 +53,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const resp = await fetch(`/api/salas/${salaId}/reservas?inicio=${inicio}&fim=${fim}`, { headers });
                 if (!resp.ok) throw new Error('Falha ao carregar reservas');
                 const reservas = await resp.json();
-                const eventos = [];
-                const reservasPorData = {};
-                reservas.forEach(r => {
-                    eventos.push({
-                        title: 'Reservado',
-                        start: r.inicio,
-                        end: r.fim,
-                        backgroundColor: '#dc3545',
-                        borderColor: '#dc3545'
-                    });
-                    const data = r.inicio.split('T')[0];
-                    if (!reservasPorData[data]) reservasPorData[data] = new Set();
-                    let h = r.inicio.split('T')[1].slice(0,5);
-                    const hf = r.fim.split('T')[1].slice(0,5);
-                    while (h < hf) { reservasPorData[data].add(h); h = somaHora(h); }
-                });
-
-                for (let current = new Date(info.start); current < info.end; current.setDate(current.getDate()+1)) {
-                    const dataStr = current.toISOString().slice(0,10);
-                    const ocupados = reservasPorData[dataStr] || new Set();
-                    HORARIOS_PADRAO.forEach(h => {
-                        if (!ocupados.has(h)) {
-                            const start = `${dataStr}T${h}`;
-                            const fimDate2 = new Date(`${start}:00`);
-                            fimDate2.setHours(fimDate2.getHours()+1);
-                            eventos.push({
-                                title: 'Disponível',
-                                start,
-                                end: fimDate2.toISOString().slice(0,16),
-                                backgroundColor: '#198754',
-                                borderColor: '#198754'
-                            });
-                        }
-                    });
-                }
+                const eventos = reservas.map(r => ({
+                    title: 'Reservado',
+                    start: r.inicio,
+                    end: r.fim,
+                    backgroundColor: '#dc3545',
+                    borderColor: '#dc3545'
+                }));
                 successCallback(eventos);
             } catch (err) {
                 failureCallback(err);
@@ -113,10 +75,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         const start = document.getElementById('start').value;
         const end = document.getElementById('end').value;
         const qtd_pessoas = parseInt(document.getElementById('qtd_pessoas').value, 10);
-        if (qtd_pessoas < 3) {
-            alert('A quantidade mínima de pessoas é 3.');
-            return;
-        }
         const data = start.split('T')[0];
         const horario_inicio = start.split('T')[1];
         const horario_fim = end.split('T')[1];
