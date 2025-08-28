@@ -3,6 +3,7 @@ const express = require('express');
 const authMiddleware = require('../middleware/authMiddleware');
 const authorizeRole = require('../middleware/roleMiddleware');
 const db = require('../database/db');
+const reservaSalaService = require('../services/reservaSalaService');
 
 const router = express.Router();
 
@@ -79,6 +80,15 @@ router.post(
       });
     }
     try {
+      await reservaSalaService.validarSalaECapacidade(sala_id, qtd_pessoas);
+      reservaSalaService.validarHorarios(data, horario_inicio, horario_fim);
+      await reservaSalaService.verificarConflito(
+        sala_id,
+        data,
+        horario_inicio,
+        horario_fim
+      );
+
       await runAsync(
         `INSERT INTO reservas_salas (sala_id, permissionario_id, data, hora_inicio, hora_fim, participantes, status, checkin)
          VALUES (?, ?, ?, ?, ?, ?, ?, NULL)`,
@@ -87,7 +97,7 @@ router.post(
       res.status(201).json({ message: 'Reserva criada' });
     } catch (e) {
       console.error(e);
-      res.status(500).json({ error: 'Erro ao criar reserva.' });
+      res.status(e.status || 500).json({ error: e.status ? e.message : 'Erro ao criar reserva.' });
     }
   }
 );
@@ -111,6 +121,40 @@ router.put(
       fim,
     } = req.body || {};
     try {
+      const atual = await getAsync(`SELECT * FROM reservas_salas WHERE id = ?`, [id]);
+      if (!atual) return res.status(404).json({ error: 'Reserva não encontrada.' });
+
+      let finalData = atual.data;
+      let finalInicio = atual.hora_inicio;
+      let finalFim = atual.hora_fim;
+      let finalSala = atual.sala_id;
+      let finalQtd = typeof qtd_pessoas === 'number' ? qtd_pessoas : atual.participantes;
+
+      if (inicio) {
+        const [d, t] = inicio.split('T');
+        finalData = d;
+        finalInicio = t.slice(0,5);
+      }
+      if (fim) {
+        const [d, t] = fim.split('T');
+        finalData = d;
+        finalFim = t.slice(0,5);
+      }
+      if (data) finalData = data;
+      if (horario_inicio) finalInicio = horario_inicio;
+      if (horario_fim) finalFim = horario_fim;
+      if (sala_id) finalSala = sala_id;
+
+      await reservaSalaService.validarSalaECapacidade(finalSala, finalQtd);
+      reservaSalaService.validarHorarios(finalData, finalInicio, finalFim);
+      await reservaSalaService.verificarConflito(
+        finalSala,
+        finalData,
+        finalInicio,
+        finalFim,
+        id
+      );
+
       const updates = [];
       const params = [];
       if (inicio) {
@@ -142,7 +186,7 @@ router.put(
       res.json({ message: 'Reserva atualizada' });
     } catch (e) {
       console.error(e);
-      res.status(500).json({ error: 'Erro ao atualizar reserva.' });
+      res.status(e.status || 500).json({ error: e.status ? e.message : 'Erro ao atualizar reserva.' });
     }
   }
 );
