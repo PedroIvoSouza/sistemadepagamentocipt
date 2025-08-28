@@ -65,17 +65,21 @@
                     <div class="card-body">
                         <h5 class="card-title">Reservar Sala</h5>
                         <form id="reserveForm" class="row g-3">
-                            <div class="col-md-4">
+                            <div class="col-md-3">
                                 <label for="sala" class="form-label">Sala</label>
-                                <input type="text" id="sala" class="form-control" required>
+                                <select id="sala" class="form-select" required></select>
                             </div>
-                            <div class="col-md-4">
+                            <div class="col-md-3">
                                 <label for="start" class="form-label">Início</label>
                                 <input type="datetime-local" id="start" class="form-control" required>
                             </div>
-                            <div class="col-md-4">
+                            <div class="col-md-3">
                                 <label for="end" class="form-label">Fim</label>
                                 <input type="datetime-local" id="end" class="form-control" required>
+                            </div>
+                            <div class="col-md-3">
+                                <label for="qtd_pessoas" class="form-label">Qtd. Pessoas</label>
+                                <input type="number" id="qtd_pessoas" class="form-control" required min="1">
                             </div>
                             <div class="col-12 text-end">
                                 <button type="submit" class="btn btn-primary">Reservar</button>
