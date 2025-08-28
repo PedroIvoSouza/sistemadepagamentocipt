@@ -10,11 +10,13 @@ const sqlite3 = require('sqlite3').verbose();
 const cron = require('node-cron');
 
 const {
-  DB_PATH = '/home/pedroivodesouza/sistemadepagamentocipt/sistemacipt.db',
+  SQLITE_STORAGE,
   CONCILIACAO_TOLERANCIA_CENTAVOS = '500',
   DEBUG_CONCILIACAO = 'true',
   CONCILIAR_BASE_DIA = 'ontem', // "ontem" (padrão) ou "hoje"
 } = process.env;
+
+const DB_PATH = path.resolve(SQLITE_STORAGE || '/home/pedroivodesouza/sistemadepagamentocipt/sistemacipt.db');
 
 const TOL_BASE = Number(CONCILIACAO_TOLERANCIA_CENTAVOS) || 500;
 const DBG = String(DEBUG_CONCILIACAO).toLowerCase() === 'true';
