@@ -39,12 +39,16 @@ function resetDb() {
     db.serialize(() => {
       db.run('DROP TABLE IF EXISTS reservas_salas');
       db.run('DROP TABLE IF EXISTS salas_reuniao');
+      db.run('DROP TABLE IF EXISTS reservas_audit');
       db.run('CREATE TABLE salas_reuniao (id INTEGER PRIMARY KEY, numero TEXT, capacidade INTEGER, status TEXT)');
       db.run(
         'CREATE TABLE reservas_salas (id INTEGER PRIMARY KEY, sala_id INTEGER, permissionario_id INTEGER, data TEXT, hora_inicio TEXT, hora_fim TEXT, participantes INTEGER, status TEXT, checkin TEXT)',
         err => {
           if (err) return reject(err);
-          db.run("INSERT INTO salas_reuniao (id, numero, capacidade, status) VALUES (1, 'Sala 1', 5, 'disponivel')", err2 => err2 ? reject(err2) : resolve());
+          db.run('CREATE TABLE reservas_audit (id INTEGER PRIMARY KEY, reserva_id INTEGER, acao TEXT, detalhes TEXT)', err2 => {
+            if (err2) return reject(err2);
+            db.run("INSERT INTO salas_reuniao (id, numero, capacidade, status) VALUES (1, 'Sala 1', 5, 'disponivel')", err3 => err3 ? reject(err3) : resolve());
+          });
         }
       );
     });
@@ -83,12 +87,15 @@ function insertReserva(data, inicio, fim, permissionario = 1) {
 
 test('Reserva válida', async () => {
   const app = setupUserApp();
+  let newId;
   await supertest(app)
     .post('/api/salas/reservas')
     .set('Authorization', `Bearer ${userToken}`)
     .send({ sala_id:1, data:'2025-10-10', horario_inicio:'09:00', horario_fim:'10:00', qtd_pessoas:3 })
     .expect(201)
-    .then(res => assert.ok(res.body.id));
+    .then(res => { newId = res.body.id; assert.ok(newId); });
+  const audit = await allAsync('SELECT * FROM reservas_audit WHERE reserva_id = ?', [newId]);
+  assert.equal(audit[0].acao, 'CRIACAO');
 });
 
 test('Falha por menos de 3 participantes', async () => {
@@ -129,6 +136,17 @@ test('Cancelamento com menos de 24h', async () => {
     .expect(400);
 });
 
+test('Cancelamento cria auditoria', async () => {
+  const reservaId = await insertReserva('2030-10-10','09:00','10:00');
+  const app = setupUserApp();
+  await supertest(app)
+    .delete(`/api/salas/reservas/${reservaId}`)
+    .set('Authorization', `Bearer ${userToken}`)
+    .expect(204);
+  const audit = await allAsync('SELECT * FROM reservas_audit WHERE reserva_id = ?', [reservaId]);
+  assert.equal(audit[0].acao, 'CANCELAMENTO');
+});
+
 test('Admin altera status', async () => {
   const reservaId = await insertReserva('2025-10-10','09:00','10:00');
   const app = setupAdminApp();
@@ -143,6 +161,8 @@ test('Admin altera status', async () => {
     .send({ status:'confirmada' })
     .expect(200)
     .then(res => assert.equal(res.body.message, 'Status atualizado'));
+  const audit = await allAsync('SELECT * FROM reservas_audit WHERE reserva_id = ?', [reservaId]);
+  assert.equal(audit[0].acao, 'ATUALIZACAO');
 });
 
 test('Admin realiza check-in', async () => {
@@ -158,4 +178,6 @@ test('Admin realiza check-in', async () => {
     .set('Authorization', `Bearer ${adminToken}`)
     .expect(200)
     .then(res => assert.equal(res.body.message, 'Check-in realizado'));
+  const audit = await allAsync('SELECT * FROM reservas_audit WHERE reserva_id = ?', [reservaId]);
+  assert.equal(audit[0].acao, 'CHECKIN');
 });

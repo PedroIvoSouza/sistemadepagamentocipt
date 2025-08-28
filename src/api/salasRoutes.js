@@ -3,6 +3,7 @@ const express = require('express');
 const authMiddleware = require('../middleware/authMiddleware');
 const db = require('../database/db');
 const reservaSalaService = require('../services/reservaSalaService');
+const reservaAuditService = require('../services/reservaAuditService');
 
 const router = express.Router();
 
@@ -163,6 +164,7 @@ router.post('/reservas', async (req, res) => {
        VALUES (?, ?, ?, ?, ?, ?, 'pendente', NULL)`,
       [sala_id, permissionarioId, data, horario_inicio, horario_fim, qtd_pessoas]
     );
+    await reservaAuditService.logCriacao(result.lastID, { sala_id, permissionario_id: permissionarioId, data, horario_inicio, horario_fim, participantes: qtd_pessoas });
     res.status(201).json({ id: result.lastID });
   } catch (e) {
     console.error(e);
@@ -185,6 +187,7 @@ router.delete('/reservas/:id', async (req, res) => {
       return res.status(400).json({ error: 'Cancelamento permitido apenas com 24h de antecedência.' });
     }
     await runAsync(`DELETE FROM reservas_salas WHERE id = ?`, [id]);
+    await reservaAuditService.logCancelamento(id, { permissionario_id: req.user.id });
     res.status(204).send();
   } catch (e) {
     res.status(500).json({ error: 'Erro ao cancelar reserva.' });

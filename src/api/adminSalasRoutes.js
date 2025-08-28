@@ -4,6 +4,7 @@ const authMiddleware = require('../middleware/authMiddleware');
 const authorizeRole = require('../middleware/roleMiddleware');
 const db = require('../database/db');
 const reservaSalaService = require('../services/reservaSalaService');
+const reservaAuditService = require('../services/reservaAuditService');
 
 const router = express.Router();
 
@@ -110,11 +111,12 @@ router.post(
         horario_fim
       );
 
-      await runAsync(
+      const result = await runAsync(
         `INSERT INTO reservas_salas (sala_id, permissionario_id, data, hora_inicio, hora_fim, participantes, status, checkin)
          VALUES (?, ?, ?, ?, ?, ?, ?, NULL)`,
         [sala_id, permissionario_id, data, horario_inicio, horario_fim, qtd_pessoas, status]
       );
+      await reservaAuditService.logCriacao(result.lastID, { sala_id, permissionario_id, data, horario_inicio, horario_fim, participantes: qtd_pessoas, status });
       res.status(201).json({ message: 'Reserva criada' });
     } catch (e) {
       console.error(e);
@@ -204,6 +206,7 @@ router.put(
       }
       params.push(id);
       await runAsync(`UPDATE reservas_salas SET ${updates.join(', ')} WHERE id = ?`, params);
+      await reservaAuditService.logAtualizacao(id, req.body);
       res.json({ message: 'Reserva atualizada' });
     } catch (e) {
       console.error(e);
@@ -222,6 +225,7 @@ router.patch(
     if (!status) return res.status(400).json({ error: 'Status é obrigatório.' });
     try {
       await runAsync(`UPDATE reservas_salas SET status = ? WHERE id = ?`, [status, id]);
+      await reservaAuditService.logAtualizacao(id, { status });
       res.json({ message: 'Status atualizado' });
     } catch (e) {
       console.error(e);
@@ -238,6 +242,7 @@ router.post(
     const id = parseInt(req.params.id, 10);
     try {
       await runAsync(`UPDATE reservas_salas SET checkin = CURRENT_TIMESTAMP WHERE id = ?`, [id]);
+      await reservaAuditService.logCheckin(id, {});
       res.json({ message: 'Check-in realizado' });
     } catch (e) {
       console.error(e);
@@ -254,6 +259,7 @@ router.post(
     const id = parseInt(req.params.id, 10);
     try {
       await runAsync(`UPDATE reservas_salas SET checkin = CURRENT_TIMESTAMP WHERE id = ?`, [id]);
+      await reservaAuditService.logCheckin(id, {});
       res.json({ message: 'Uso registrado' });
     } catch (e) {
       console.error(e);
@@ -270,6 +276,7 @@ router.delete(
     const id = parseInt(req.params.id, 10);
     try {
       await runAsync(`UPDATE reservas_salas SET status = 'cancelada' WHERE id = ?`, [id]);
+      await reservaAuditService.logCancelamento(id, {});
       res.json({ message: 'Reserva cancelada' });
     } catch (e) {
       console.error(e);
