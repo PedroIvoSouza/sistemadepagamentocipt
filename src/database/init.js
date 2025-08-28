@@ -84,7 +84,9 @@ db.serialize(() => {
             return console.error('Erro ao criar a tabela "reservas_audit":', err.message);
         }
         console.log('Tabela "reservas_audit" verificada/criada com sucesso.');
-    // Tabela 4: Salas de Reunião
+    });
+
+    // Tabela 5: Salas de Reunião
     db.run(`
         CREATE TABLE IF NOT EXISTS salas_reuniao (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -99,7 +101,7 @@ db.serialize(() => {
         console.log('Tabela "salas_reuniao" verificada/criada com sucesso.');
     });
 
-    // Tabela 5: Reservas de Salas
+    // Tabela 6: Reservas de Salas
     db.run(`
         CREATE TABLE IF NOT EXISTS reservas_salas (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
