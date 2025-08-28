@@ -1,6 +1,9 @@
 // src/index.js
 require('dotenv').config();
 
+// Garante que as migrações do Sequelize sejam executadas ao iniciar
+require('./database/init');
+
 console.log('[BOOT] BOT_SHARED_KEY len =', (process.env.BOT_SHARED_KEY || '').length);
 
 const express = require('express');

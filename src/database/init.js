@@ -1,5 +1,9 @@
 const sqlite3 = require('sqlite3').verbose();
-const db = new sqlite3.Database('./sistemacipt.db');
+const { execSync } = require('child_process');
+const path = require('path');
+
+const DB_PATH = process.env.SQLITE_STORAGE || './sistemacipt.db';
+const db = new sqlite3.Database(DB_PATH);
 
 db.serialize(() => {
     console.log('Iniciando a verificação/criação das tabelas...');
@@ -70,58 +74,6 @@ db.serialize(() => {
         console.log('Tabela "certidoes_quitacao" verificada/criada com sucesso.');
     });
 
-    // Tabela 4: Auditoria de Reservas
-    db.run(`
-        CREATE TABLE IF NOT EXISTS reservas_audit (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            reserva_id INTEGER NOT NULL,
-            acao TEXT NOT NULL,
-            detalhes TEXT,
-            data_registro TEXT DEFAULT CURRENT_TIMESTAMP
-        );
-    `, (err) => {
-        if (err) {
-            return console.error('Erro ao criar a tabela "reservas_audit":', err.message);
-        }
-        console.log('Tabela "reservas_audit" verificada/criada com sucesso.');
-    });
-
-    // Tabela 5: Salas de Reunião
-    db.run(`
-        CREATE TABLE IF NOT EXISTS salas_reuniao (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            numero TEXT NOT NULL,
-            capacidade INTEGER NOT NULL,
-            status TEXT NOT NULL DEFAULT 'disponivel'
-        );
-    `, (err) => {
-        if (err) {
-            return console.error('Erro ao criar a tabela "salas_reuniao":', err.message);
-        }
-        console.log('Tabela "salas_reuniao" verificada/criada com sucesso.');
-    });
-
-    // Tabela 6: Reservas de Salas
-    db.run(`
-        CREATE TABLE IF NOT EXISTS reservas_salas (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            sala_id INTEGER NOT NULL,
-            permissionario_id INTEGER NOT NULL,
-            data TEXT NOT NULL,
-            hora_inicio TEXT NOT NULL,
-            hora_fim TEXT NOT NULL,
-            participantes INTEGER,
-            status TEXT,
-            checkin TEXT,
-            FOREIGN KEY (sala_id) REFERENCES salas_reuniao (id),
-            FOREIGN KEY (permissionario_id) REFERENCES permissionarios (id)
-        );
-    `, (err) => {
-        if (err) {
-            return console.error('Erro ao criar a tabela "reservas_salas":', err.message);
-        }
-        console.log('Tabela "reservas_salas" verificada/criada com sucesso.');
-    });
 });
 
 db.close((err) => {
@@ -129,4 +81,15 @@ db.close((err) => {
         return console.error(err.message);
     }
     console.log('Conexão com o banco de dados fechada.');
+
+    try {
+        console.log('Executando migrações do Sequelize...');
+        const absolutePath = path.resolve(DB_PATH);
+        execSync(`npx sequelize-cli db:migrate --url sqlite:${absolutePath}`, {
+            stdio: 'inherit',
+        });
+        console.log('Migrações executadas com sucesso.');
+    } catch (error) {
+        console.error('Erro ao executar migrações:', error.message);
+    }
 });
