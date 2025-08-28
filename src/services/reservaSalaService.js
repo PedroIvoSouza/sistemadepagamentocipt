@@ -39,16 +39,26 @@ function validarHorarios(data, inicio, fim) {
 }
 
 async function verificarConflito(salaId, data, inicio, fim, ignoreId) {
-  let sql = `SELECT id FROM reservas_salas
+  try {
+    let sql = `SELECT id FROM reservas_salas
                WHERE sala_id = ? AND data = ?
                  AND NOT (? >= hora_fim OR ? <= hora_inicio)`;
-  const params = [salaId, data, inicio, fim];
-  if (ignoreId) {
-    sql += ' AND id <> ?';
-    params.push(ignoreId);
+    const params = [salaId, data, inicio, fim];
+    if (ignoreId) {
+      sql += ' AND id <> ?';
+      params.push(ignoreId);
+    }
+    const conflito = await getAsync(sql, params);
+    if (conflito) throw validationError('Horário indisponível para a sala.');
+  } catch (e) {
+    if (
+      e.code === 'SQLITE_CONSTRAINT' &&
+      /UNIQUE constraint failed: reservas_salas/.test(e.message || '')
+    ) {
+      throw validationError('Horário indisponível para a sala.');
+    }
+    throw e;
   }
-  const conflito = await getAsync(sql, params);
-  if (conflito) throw validationError('Horário indisponível para a sala.');
 }
 
 module.exports = {
