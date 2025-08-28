@@ -78,6 +78,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         const start = document.getElementById('start').value;
         const end = document.getElementById('end').value;
         const qtd_pessoas = parseInt(document.getElementById('qtd_pessoas').value, 10);
+        if (qtd_pessoas < 3) {
+            alert('A quantidade mínima de pessoas é 3.');
+            return;
+        }
         const data = start.split('T')[0];
         const horario_inicio = start.split('T')[1];
         const horario_fim = end.split('T')[1];
