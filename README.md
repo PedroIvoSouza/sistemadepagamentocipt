@@ -10,6 +10,7 @@ Este projeto integra o fluxo de assinaturas digitais utilizando o serviço **Ass
 ## Variáveis de Ambiente
 Adicione no arquivo `.env` ou nas variáveis do servidor:
 
+- `SQLITE_STORAGE`: caminho do arquivo SQLite utilizado pela aplicação e pelos scripts de conciliação, por exemplo `./sistemacipt.db`.
 - `ASSINAFY_API_KEY`: token de acesso gerado no painel.
 - `ASSINAFY_API_URL` (opcional): URL base da API. Padrão `https://api.assinafy.com`.
 - `ASSINAFY_CALLBACK_URL`: URL pública para o retorno após a assinatura, ex.: `https://seusistema/api/documentos/assinafy/callback`.

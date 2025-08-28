@@ -1,12 +1,15 @@
 // Em: cron/conciliarPagamentosAno.js
 require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
 const sqlite3 = require('sqlite3').verbose();
+const path = require('path');
 
 const {
-  DB_PATH = '/home/pedroivodesouza/sistemadepagamentocipt/sistemacipt.db',
+  SQLITE_STORAGE,
   CONCILIACAO_TOLERANCIA_CENTAVOS = '500', // 5 reais
   DEBUG_CONCILIACAO = 'true',
 } = process.env;
+
+const DB_PATH = path.resolve(SQLITE_STORAGE || '/home/pedroivodesouza/sistemadepagamentocipt/sistemacipt.db');
 
 const TOL_BASE = Number(CONCILIACAO_TOLERANCIA_CENTAVOS) || 500;
 const DBG = String(DEBUG_CONCILIACAO).toLowerCase() === 'true';
