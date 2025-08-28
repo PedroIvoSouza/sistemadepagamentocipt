@@ -22,6 +22,11 @@ window.addEventListener('DOMContentLoaded', () => {
     btnDars.addEventListener('click', async () => {
       try {
         const resp = await fetch('/api/admin/relatorios/dars');
+        if (resp.status === 404 || resp.status === 204) {
+          await resp.json();
+          alert('Nenhuma DAR encontrada.');
+          return;
+        }
         if (!resp.ok) throw new Error('Falha ao gerar relatório');
         const blob = await resp.blob();
         const url = URL.createObjectURL(blob);
