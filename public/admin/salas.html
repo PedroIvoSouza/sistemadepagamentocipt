@@ -61,6 +61,7 @@
             <div class="content">
                 <div class="card">
                     <div class="card-body">
+                        <div id="mensagem" class="mb-3"></div>
                         <ul class="nav nav-tabs" id="salasTabs" role="tablist">
                             <li class="nav-item" role="presentation">
                                 <button class="nav-link active" id="reservas-tab" data-bs-toggle="tab" data-bs-target="#reservas" type="button" role="tab">Reservas</button>
@@ -99,6 +100,24 @@
                             </div>
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="modalReserva" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Ações da reserva</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                </div>
+                <div class="modal-body">
+                    Escolha a ação desejada para a reserva selecionada.
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-danger" id="btnCancelarReserva">Cancelar reserva</button>
+                    <button type="button" class="btn btn-success" id="btnRegistrarCheckin">Registrar check-in</button>
                 </div>
             </div>
         </div>
