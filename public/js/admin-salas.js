@@ -14,6 +14,11 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     calendar.render();
     window._salasCalendar = calendar;
+
+    ['filtroSala', 'filtroDataInicio', 'filtroDataFim'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('change', () => calendar.refetchEvents());
+    });
   }
 
   carregarSalas();
@@ -21,7 +26,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
 async function fetchReservas(fetchInfo, successCallback, failureCallback) {
   try {
-    const resp = await fetch('/api/admin/salas/reservas');
+    const params = new URLSearchParams({
+      salaId: document.getElementById('filtroSala')?.value || '',
+      dataInicio: document.getElementById('filtroDataInicio')?.value || '',
+      dataFim: document.getElementById('filtroDataFim')?.value || ''
+    });
+    const resp = await fetch(`/api/admin/salas/reservas?${params.toString()}`);
     if (!resp.ok) throw new Error('Falha ao carregar reservas');
     const dados = await resp.json();
     const eventos = dados.map(r => ({
@@ -72,38 +82,47 @@ function onEventChange(info) {
 
 async function carregarSalas() {
   const tabela = document.querySelector('#tabelaSalas tbody');
-  if (!tabela) return;
+  const selectSala = document.getElementById('filtroSala');
   try {
     const resp = await fetch('/api/admin/salas');
     if (!resp.ok) throw new Error('Falha ao carregar salas');
     const salas = await resp.json();
     salas.forEach(sala => {
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td>${sala.nome}</td>
-        <td><input type="checkbox" class="chk-disponivel" ${sala.status === 'disponivel' ? 'checked' : ''}></td>
-        <td><input type="checkbox" class="chk-manutencao" ${sala.status === 'manutencao' ? 'checked' : ''}></td>`;
-      tabela.appendChild(tr);
-      const chkDisp = tr.querySelector('.chk-disponivel');
-      const chkManu = tr.querySelector('.chk-manutencao');
-      chkDisp.addEventListener('change', () => {
-        if (chkDisp.checked) chkManu.checked = false;
-        const status = chkDisp.checked
-          ? 'disponivel'
-          : chkManu.checked
-            ? 'manutencao'
-            : 'indisponivel';
-        atualizarSala(sala.id, status);
-      });
-      chkManu.addEventListener('change', () => {
-        if (chkManu.checked) chkDisp.checked = false;
-        const status = chkManu.checked
-          ? 'manutencao'
-          : chkDisp.checked
+      if (tabela) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${sala.nome}</td>
+          <td><input type="checkbox" class="chk-disponivel" ${sala.status === 'disponivel' ? 'checked' : ''}></td>
+          <td><input type="checkbox" class="chk-manutencao" ${sala.status === 'manutencao' ? 'checked' : ''}></td>`;
+        tabela.appendChild(tr);
+        const chkDisp = tr.querySelector('.chk-disponivel');
+        const chkManu = tr.querySelector('.chk-manutencao');
+        chkDisp.addEventListener('change', () => {
+          if (chkDisp.checked) chkManu.checked = false;
+          const status = chkDisp.checked
             ? 'disponivel'
-            : 'indisponivel';
-        atualizarSala(sala.id, status);
-      });
+            : chkManu.checked
+              ? 'manutencao'
+              : 'indisponivel';
+          atualizarSala(sala.id, status);
+        });
+        chkManu.addEventListener('change', () => {
+          if (chkManu.checked) chkDisp.checked = false;
+          const status = chkManu.checked
+            ? 'manutencao'
+            : chkDisp.checked
+              ? 'disponivel'
+              : 'indisponivel';
+          atualizarSala(sala.id, status);
+        });
+      }
+
+      if (selectSala) {
+        const opt = document.createElement('option');
+        opt.value = sala.id;
+        opt.textContent = sala.nome;
+        selectSala.appendChild(opt);
+      }
     });
   } catch (err) {
     console.error(err);

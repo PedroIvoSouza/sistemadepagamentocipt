@@ -31,16 +31,37 @@ router.get(
   [authMiddleware, authorizeRole(['SUPER_ADMIN', 'SALAS_ADMIN'])],
   async (req, res) => {
     try {
-      const { salaId, dataInicio, dataFim } = req.query;
+      const { salaId = '', dataInicio = '', dataFim = '' } = req.query;
       let sql = `
         SELECT r.*, s.numero AS sala_nome
           FROM reservas_salas r
           JOIN salas_reuniao s ON s.id = r.sala_id
          WHERE 1=1`;
       const params = [];
-      if (salaId) { sql += ' AND r.sala_id = ?'; params.push(salaId); }
-      if (dataInicio) { sql += ' AND r.data >= ?'; params.push(dataInicio); }
-      if (dataFim) { sql += ' AND r.data <= ?'; params.push(dataFim); }
+
+      if (salaId) {
+        const idNum = parseInt(salaId, 10);
+        if (Number.isNaN(idNum)) {
+          return res.status(400).json({ error: 'salaId inválido' });
+        }
+        sql += ' AND r.sala_id = ?';
+        params.push(idNum);
+      }
+      if (dataInicio) {
+        if (isNaN(Date.parse(dataInicio))) {
+          return res.status(400).json({ error: 'dataInicio inválida' });
+        }
+        sql += ' AND r.data >= ?';
+        params.push(dataInicio);
+      }
+      if (dataFim) {
+        if (isNaN(Date.parse(dataFim))) {
+          return res.status(400).json({ error: 'dataFim inválida' });
+        }
+        sql += ' AND r.data <= ?';
+        params.push(dataFim);
+      }
+
       const rows = await allAsync(sql, params);
       const resp = rows.map(r => ({
         id: r.id,

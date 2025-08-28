@@ -71,6 +71,22 @@
                         </ul>
                         <div class="tab-content mt-3" id="salasTabsContent">
                             <div class="tab-pane fade show active" id="reservas" role="tabpanel" aria-labelledby="reservas-tab">
+                                <div class="row mb-3">
+                                    <div class="col-auto">
+                                        <label for="filtroSala" class="form-label">Sala</label>
+                                        <select id="filtroSala" class="form-select">
+                                            <option value="">Todas</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-auto">
+                                        <label for="filtroDataInicio" class="form-label">Data inicial</label>
+                                        <input type="date" id="filtroDataInicio" class="form-control">
+                                    </div>
+                                    <div class="col-auto">
+                                        <label for="filtroDataFim" class="form-label">Data final</label>
+                                        <input type="date" id="filtroDataFim" class="form-control">
+                                    </div>
+                                </div>
                                 <div id="calendar"></div>
                             </div>
                             <div class="tab-pane fade" id="salas" role="tabpanel" aria-labelledby="salas-tab">
