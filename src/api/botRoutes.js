@@ -967,9 +967,20 @@ router.post('/dars/:darId/reemit', botAuthMiddleware, async (req, res) => {
              pdf_url = ?,
              codigo_barras = COALESCE(?, codigo_barras),
              linha_digitavel = COALESCE(?, linha_digitavel),
-             status = 'Reemitido'
+             status = 'Reemitido',
+             valor = ?,
+             data_vencimento = ?,
+             data_emissao = CURRENT_TIMESTAMP
        WHERE id = ?`,
-      [numeroGuia, pdfOut, cbClean || null, ldClean || null, darId]
+      [
+        numeroGuia,
+        pdfOut,
+        cbClean || null,
+        ldClean || null,
+        valorParaEmitir,
+        novoVencimentoISO,
+        darId
+      ]
     );
 
     return res.json({
