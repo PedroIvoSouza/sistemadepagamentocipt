@@ -19,13 +19,19 @@ router.post('/login', (req, res) => {
 
     // Busca o admin no banco, incluindo a sua 'role' (nível de permissão)
     const sql = `SELECT id, nome, senha, role FROM administradores WHERE email = ?`;
-    
+
     db.get(sql, [email], async (err, admin) => {
         if (err) { return res.status(500).json({ error: 'Erro de banco de dados.' }); }
         if (!admin) { return res.status(401).json({ error: 'Credenciais inválidas.' }); }
 
         const senhaValida = await bcrypt.compare(senha, admin.senha);
         if (!senhaValida) { return res.status(401).json({ error: 'Credenciais inválidas.' }); }
+
+        // Permite login apenas para as roles configuradas no painel de gestão
+        const allowedRoles = ['SUPER_ADMIN', 'FINANCE_ADMIN', 'SALAS_ADMIN'];
+        if (!allowedRoles.includes(admin.role)) {
+            return res.status(403).json({ error: 'Acesso negado. Você não tem permissão para acessar o painel.' });
+        }
 
         // Gera o token incluindo a 'role' no payload (a informação que faltava)
         const payload = { 
