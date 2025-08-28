@@ -119,6 +119,9 @@ async function criarEventoComDars(db, data, helpers) {
     );
     if (!cliente) throw new Error(`Cliente com ID ${idCliente} não foi encontrado no banco.`);
 
+    const cols = await dbAll(db, 'PRAGMA table_info(dars)');
+    const hasDataEmissao = cols.some(c => c.name === 'data_emissao');
+
     if (!eventoGratuito) {
       const documentoLimpo = onlyDigits(cliente.documento);
       const tipoInscricao = documentoLimpo.length === 11 ? 3 : 4;
@@ -135,11 +138,16 @@ async function criarEventoComDars(db, data, helpers) {
           throw new Error(`O valor da parcela ${i + 1} deve ser maior que zero.`);
         }
         const [ano, mes] = vencimentoISO.split('-');
+        const darCols = ['valor', 'data_vencimento', 'status', 'mes_referencia', 'ano_referencia', 'permissionario_id', 'tipo_permissionario'];
+        const darVals = [valorParcela, vencimentoISO, 'Pendente', Number(mes), Number(ano), null, 'Evento'];
+        if (hasDataEmissao && p.data_emissao) {
+          darCols.push('data_emissao');
+          darVals.push(p.data_emissao);
+        }
         const darStmt = await dbRun(
           db,
-          `INSERT INTO dars (valor, data_vencimento, status, mes_referencia, ano_referencia, permissionario_id, tipo_permissionario)
-           VALUES (?, ?, 'Pendente', ?, ?, NULL, 'Evento')`,
-          [valorParcela, vencimentoISO, Number(mes), Number(ano)]
+          `INSERT INTO dars (${darCols.join(',')}) VALUES (${darCols.map(() => '?').join(',')})`,
+          darVals
         );
         const darId = darStmt.lastID;
 
@@ -311,6 +319,9 @@ async function atualizarEventoComDars(db, id, data, helpers) {
       throw new Error(`Cliente com ID ${idCliente} não encontrado.`);
     }
 
+    const cols = await dbAll(db, 'PRAGMA table_info(dars)');
+    const hasDataEmissao = cols.some(c => c.name === 'data_emissao');
+
     if (!eventoGratuito) {
       const docLimpo = onlyDigits(cliente.documento);
       const tipoInscricao = docLimpo.length === 11 ? 3 : 4;
@@ -328,11 +339,16 @@ async function atualizarEventoComDars(db, id, data, helpers) {
           throw new Error(`O valor da parcela ${i + 1} deve ser maior que zero.`);
         }
         const [ano, mes] = vencimentoISO.split('-');
+        const darCols = ['valor', 'data_vencimento', 'status', 'mes_referencia', 'ano_referencia', 'permissionario_id', 'tipo_permissionario'];
+        const darVals = [valorParcela, vencimentoISO, 'Pendente', Number(mes), Number(ano), null, 'Evento'];
+        if (hasDataEmissao && p.data_emissao) {
+          darCols.push('data_emissao');
+          darVals.push(p.data_emissao);
+        }
         const darStmt = await dbRun(
           db,
-          `INSERT INTO dars (valor, data_vencimento, status, mes_referencia, ano_referencia, permissionario_id, tipo_permissionario)
-           VALUES (?, ?, 'Pendente', ?, ?, NULL, 'Evento')`,
-          [valorParcela, vencimentoISO, Number(mes), Number(ano)]
+          `INSERT INTO dars (${darCols.join(',')}) VALUES (${darCols.map(() => '?').join(',')})`,
+          darVals
         );
         const darId = darStmt.lastID;
         await dbRun(

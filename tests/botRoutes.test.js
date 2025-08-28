@@ -11,6 +11,7 @@ const DB_PATH = path.join(__dirname, 'bot-test.db');
 try { fs.unlinkSync(DB_PATH); } catch {}
 process.env.SQLITE_PATH = DB_PATH;
 process.env.BOT_SHARED_KEY = 'secret';
+process.env.SEFAZ_APP_TOKEN = 'token';
 
 const BARCODE = '12345678901234567890123456789012345678901234';
 const EXPECTED = codigoBarrasParaLinhaDigitavel(BARCODE);
@@ -63,7 +64,8 @@ async function reset() {
     numero_documento TEXT,
     linha_digitavel TEXT,
     codigo_barras TEXT,
-    pdf_url TEXT
+    pdf_url TEXT,
+    data_emissao TEXT DEFAULT CURRENT_TIMESTAMP
   );`);
   await run('DELETE FROM permissionarios');
   await run('DELETE FROM dars');

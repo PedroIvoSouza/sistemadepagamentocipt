@@ -67,7 +67,8 @@ async function setupSchema(db) {
     permissionario_id INTEGER,
     tipo_permissionario TEXT,
     numero_documento TEXT,
-    pdf_url TEXT
+    pdf_url TEXT,
+    data_emissao TEXT DEFAULT CURRENT_TIMESTAMP
   );`);
   await run(db, `CREATE TABLE DARs_Eventos (
     id_evento INTEGER,
