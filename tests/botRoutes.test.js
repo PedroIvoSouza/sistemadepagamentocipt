@@ -30,6 +30,12 @@ const tokenUtils = require('../src/utils/token');
 mock.method(tokenUtils, 'gerarTokenDocumento', async () => 'token');
 mock.method(tokenUtils, 'imprimirTokenEmPdf', async pdf => pdf);
 
+const cobrancaService = require('../src/services/cobrancaService');
+mock.method(cobrancaService, 'calcularEncargosAtraso', async dar => ({
+  valorAtualizado: dar.valor + 50,
+  novaDataVencimento: '2030-12-31'
+}));
+
 const botRoutes = require('../src/api/botRoutes');
 const app = express();
 app.use(express.json());
@@ -122,4 +128,18 @@ test('POST /api/bot/dars/:id/reemit grava codigo_barras e linha_digitavel', asyn
   const row = await get('SELECT linha_digitavel, codigo_barras FROM dars WHERE id = 1');
   assert.strictEqual(row.linha_digitavel, EXPECTED);
   assert.strictEqual(row.codigo_barras, BARCODE);
+});
+
+test('POST /api/bot/dars/:id/reemit aplica novo valor e vencimento', async () => {
+  await reset();
+  await run("UPDATE dars SET status='Emitido', numero_documento='old', linha_digitavel=NULL, codigo_barras=NULL WHERE id=1");
+  const res = await request
+    .post('/api/bot/dars/1/reemit')
+    .set('X-Bot-Key', 'secret')
+    .send({ msisdn: MSISDN });
+  assert.strictEqual(res.statusCode, 200);
+  const row = await get('SELECT valor, data_vencimento, data_emissao FROM dars WHERE id = 1');
+  assert.strictEqual(row.valor, 150);
+  assert.strictEqual(row.data_vencimento, '2030-12-31');
+  assert.ok(row.data_emissao);
 });
