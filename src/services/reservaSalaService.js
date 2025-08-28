@@ -42,6 +42,7 @@ async function verificarConflito(salaId, data, inicio, fim, ignoreId) {
   try {
     let sql = `SELECT id FROM reservas_salas
                WHERE sala_id = ? AND data = ?
+                 AND status <> 'cancelada'
                  AND NOT (? >= hora_fim OR ? <= hora_inicio)`;
     const params = [salaId, data, inicio, fim];
     if (ignoreId) {
