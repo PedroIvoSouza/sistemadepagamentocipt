@@ -303,7 +303,9 @@ router.post('/:id/emitir', authMiddleware, async (req, res) => {
          SET numero_documento = ?,
              pdf_url = ?,
              linha_digitavel = COALESCE(?, linha_digitavel),
-             status = 'Emitido',
+             valor = ?,
+             data_vencimento = ?,
+             status = 'Reemitido',
              emitido_por_id = ?,
              data_emissao = CURRENT_TIMESTAMP
        WHERE id = ?`,
@@ -311,6 +313,8 @@ router.post('/:id/emitir', authMiddleware, async (req, res) => {
         sefazResponse.numeroGuia,
         sefazResponse.pdfBase64,
         sefazResponse.linhaDigitavel || null,
+        guiaSource.valor,
+        toISO(guiaSource.data_vencimento),
         userId,
         darId,
       ]
