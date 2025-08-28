@@ -179,3 +179,20 @@ test('Admin realiza check-in', async () => {
   const audit = await allAsync('SELECT * FROM reservas_audit WHERE reserva_id = ?', [reservaId]);
   assert.equal(audit[0].acao, 'CHECKIN');
 });
+
+test('Reserva cancelada pelo admin libera horário', async () => {
+  const reservaId = await insertReserva('2025-10-10','09:00','10:00');
+  const adminApp = setupAdminApp();
+  await supertest(adminApp)
+    .delete(`/api/admin/salas/reservas/${reservaId}`)
+    .set('Authorization', `Bearer ${adminToken}`)
+    .expect(200);
+
+  const userApp = setupUserApp();
+  await supertest(userApp)
+    .post('/api/salas/reservas')
+    .set('Authorization', `Bearer ${userToken}`)
+    .send({ sala_id:1, data:'2025-10-10', horario_inicio:'09:00', horario_fim:'10:00', qtd_pessoas:2 })
+    .expect(201)
+    .then(res => assert.ok(res.body.id));
+});
