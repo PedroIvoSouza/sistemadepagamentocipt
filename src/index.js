@@ -38,6 +38,7 @@ const adminDarsRoutes       = require('./api/adminDarsRoutes');
 const adminOficiosRoutes    = require('./api/adminOficiosRoutes');
 const permissionariosRoutes = require('./api/permissionariosRoutes');
 const botRoutes             = require('./api/botRoutes');
+const adminSalasRoutes      = require('./api/adminSalasRoutes');
 
 // Routers de assinatura do portal (exporta 2 routers)
 const portalAssin = require('./api/portalAssinaturaRoutes');
@@ -96,6 +97,7 @@ mount('/api/admin/dars',        'adminDarsRoutes',       adminDarsRoutes,       
 mount('/api/admins',            'adminManagementRoutes', adminManagementRoutes, app);
 mount('/api/admin',             'adminRoutes',           adminRoutes,           app);
 mount('/api/admin',             'adminOficiosRoutes',    adminOficiosRoutes,    app);
+mount('/api/admin/salas',       'adminSalasRoutes',      adminSalasRoutes,      app);
 
 // Webhook Assinafy
 mount('/api/webhooks/assinafy', 'webhooksAssinafyRoutes', webhooksAssinafyRoutes, app);
