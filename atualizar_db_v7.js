@@ -32,10 +32,11 @@ const isWin = process.platform === 'win32';
 const sqliteUrl = `sqlite:${isWin ? '/' : '////'}${newDbPath}`;
 
 log(`Rodando migrations em ${sqliteUrl} ...`);
-execSync(`npx sequelize-cli db:migrate --url "${sqliteUrl}"`, {
+execSync(`npx sequelize-cli db:migrate --migrations-path src/migrations --url "${sqliteUrl}"`, {
   stdio: 'inherit',
   cwd: root,
 });
 
 log('Migrations concluídas com sucesso.');
 log('Agora, aponte o .env para a NOVA base e reinicie o PM2.');
+
