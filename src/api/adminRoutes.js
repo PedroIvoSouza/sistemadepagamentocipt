@@ -546,6 +546,91 @@ router.get(
 );
 
 /* ===========================================================
+   GET /api/admin/relatorios/dars
+   =========================================================== */
+router.get(
+  '/relatorios/dars',
+  [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN'])],
+  async (req, res) => {
+    try {
+      const cols = await dbAll(`PRAGMA table_info(dars)`);
+      const hasCreatedAt = cols.some(c => c.name === 'created_at');
+      const hasDataEmissao = cols.some(c => c.name === 'data_emissao');
+      const emissaoSelect = hasCreatedAt
+        ? 'd.created_at'
+        : hasDataEmissao
+        ? 'd.data_emissao'
+        : 'NULL';
+      const orderBy = emissaoSelect !== 'NULL' ? emissaoSelect : 'd.id';
+
+      const dars = await dbAll(
+        `SELECT
+            p.nome_empresa,
+            p.cnpj,
+            d.numero_documento,
+            d.valor,
+            ${emissaoSelect} AS data_emissao,
+            d.mes_referencia,
+            d.ano_referencia
+         FROM dars d
+         JOIN permissionarios p ON p.id = d.permissionario_id
+         ORDER BY ${orderBy} DESC`
+      );
+
+      if (!dars.length) {
+        return res.status(404).json({ error: 'Nenhuma DAR encontrada.' });
+      }
+
+      const doc = new PDFDocument({ size: 'A4', margins: abntMargins(0.5, 0.5) });
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'secti-'));
+      const filePath = path.join(tmpDir, `relatorio_dars_${Date.now()}.pdf`);
+      const stream = fs.createWriteStream(filePath);
+      doc.pipe(stream);
+
+      const tokenDoc = await gerarTokenDocumento('RELATORIO_DARS', null, db);
+
+      applyLetterhead(doc, { imagePath: path.join(__dirname, '..', 'assets', 'papel-timbrado-secti.png') });
+
+      doc.x = doc.page.margins.left;
+      doc.y = doc.page.margins.top;
+
+      printToken(doc, tokenDoc);
+      doc.on('pageAdded', () => printToken(doc, tokenDoc));
+
+      doc.fillColor('#333').fontSize(16).text('Relatório de DARs', { align: 'center' });
+      doc.moveDown(2);
+      generateDarsTable(doc, dars);
+      doc.end();
+
+      await new Promise((resolve, reject) => {
+        stream.on('finish', resolve);
+        stream.on('error', reject);
+      });
+
+      await dbRun(
+        `INSERT INTO documentos (tipo, caminho, token) VALUES (?, ?, ?)
+         ON CONFLICT(token) DO UPDATE SET caminho = excluded.caminho`,
+        ['RELATORIO_DARS', filePath, tokenDoc]
+      );
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', 'attachment; filename="relatorio_dars.pdf"');
+      res.setHeader('X-Document-Token', tokenDoc);
+      const fileStream = fs.createReadStream(filePath);
+      fileStream.pipe(res);
+      fileStream.on('close', () => {
+        fs.unlink(filePath, () => {
+          fs.rm(tmpDir, { recursive: true }, () => {});
+        });
+      });
+    } catch (error) {
+      console.error('Erro ao gerar relatório de DARs:', error);
+      res.status(500).json({ error: 'Erro ao gerar o relatório de DARs.' });
+    }
+  }
+);
+
+/* ===========================================================
    Render helpers (tabelas + token)
    =========================================================== */
 function generateTable(doc, data) {
@@ -642,6 +727,59 @@ function generateDebtorsTable(doc, data) {
       item.cnpj,
       item.quantidade_dars,
       Number(item.total_devido).toFixed(2),
+    ];
+    drawRow(row, y);
+    y += rowHeight;
+  }
+}
+
+function generateDarsTable(doc, data) {
+  let y = doc.y;
+  const rowHeight = 30;
+  const availableWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+  const colWidths = {
+    nome: availableWidth * 0.32,
+    cnpj: availableWidth * 0.18,
+    emissao: availableWidth * 0.18,
+    numero: availableWidth * 0.16,
+    valor: availableWidth * 0.16,
+  };
+  const headers = ['Permissionário', 'CNPJ', 'Emissão', 'Número/Comp.', 'Valor (R$)'];
+
+  const drawRow = (row, currentY, isHeader = false) => {
+    let x = doc.page.margins.left;
+    doc.font(isHeader ? 'Helvetica-Bold' : 'Helvetica').fontSize(isHeader ? 9 : 8);
+    row.forEach((cell, i) => {
+      const key = Object.keys(colWidths)[i];
+      doc.text(String(cell), x + 5, currentY + 10, {
+        width: colWidths[key] - 10,
+        align: 'left',
+        lineBreak: true,
+      });
+      doc.rect(x, currentY, colWidths[key], rowHeight).stroke('#ccc');
+      x += colWidths[key];
+    });
+  };
+
+  drawRow(headers, y, true);
+  y += rowHeight;
+
+  for (const item of data) {
+    if (y + rowHeight > doc.page.height - doc.page.margins.bottom - 10) {
+      doc.addPage();
+      y = doc.page.margins.top; // reinicia na margem superior
+      drawRow(headers, y, true);
+      y += rowHeight;
+    }
+    const numeroComp =
+      item.numero_documento ||
+      `${String(item.mes_referencia).padStart(2, '0')}/${item.ano_referencia}`;
+    const row = [
+      item.nome_empresa,
+      item.cnpj,
+      item.data_emissao ? new Date(item.data_emissao).toLocaleDateString('pt-BR') : '',
+      numeroComp,
+      Number(item.valor).toFixed(2),
     ];
     drawRow(row, y);
     y += rowHeight;
