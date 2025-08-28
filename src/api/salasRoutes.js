@@ -2,6 +2,7 @@
 const express = require('express');
 const authMiddleware = require('../middleware/authMiddleware');
 const db = require('../database/db');
+const reservaSalaService = require('../services/reservaSalaService');
 
 const router = express.Router();
 
@@ -86,20 +87,11 @@ router.post('/reservas', async (req, res) => {
     return res.status(400).json({ error: 'Reserva requer pelo menos 3 pessoas.' });
   }
   try {
-    const sala = await getAsync(`SELECT * FROM salas_reuniao WHERE id = ? AND status = 'disponivel'`, [sala_id]);
-    if (!sala) return res.status(404).json({ error: 'Sala não encontrada ou inativa.' });
-    if (qtd_pessoas > sala.capacidade) {
-      return res.status(400).json({ error: 'Capacidade da sala excedida.' });
-    }
+    await reservaSalaService.validarSalaECapacidade(sala_id, qtd_pessoas);
+    reservaSalaService.validarHorarios(data, horario_inicio, horario_fim);
 
     const inicio = new Date(`${data}T${horario_inicio}:00`);
     const fim = new Date(`${data}T${horario_fim}:00`);
-    if (isNaN(inicio) || isNaN(fim) || inicio >= fim) {
-      return res.status(400).json({ error: 'Horários inválidos.' });
-    }
-    if (inicio.toDateString() !== fim.toDateString()) {
-      return res.status(400).json({ error: 'Reserva deve ocorrer em único dia.' });
-    }
 
     const prevDate = new Date(inicio); prevDate.setDate(prevDate.getDate() - 1);
     const nextDate = new Date(inicio); nextDate.setDate(nextDate.getDate() + 1);
@@ -112,15 +104,12 @@ router.post('/reservas', async (req, res) => {
       return res.status(400).json({ error: 'Não é permitido reservar dias consecutivos.' });
     }
 
-    const conflito = await getAsync(
-      `SELECT id FROM reservas_salas
-         WHERE sala_id = ? AND data = ?
-           AND NOT (? >= hora_fim OR ? <= hora_inicio)`,
-      [sala_id, data, horario_inicio, horario_fim]
+    await reservaSalaService.verificarConflito(
+      sala_id,
+      data,
+      horario_inicio,
+      horario_fim
     );
-    if (conflito) {
-      return res.status(400).json({ error: 'Horário indisponível para a sala.' });
-    }
 
     const result = await runAsync(
       `INSERT INTO reservas_salas (sala_id, permissionario_id, data, hora_inicio, hora_fim, participantes, status, checkin)
@@ -130,7 +119,7 @@ router.post('/reservas', async (req, res) => {
     res.status(201).json({ id: result.lastID });
   } catch (e) {
     console.error(e);
-    res.status(500).json({ error: 'Erro ao criar reserva.' });
+    res.status(e.status || 500).json({ error: e.status ? e.message : 'Erro ao criar reserva.' });
   }
 });
 
