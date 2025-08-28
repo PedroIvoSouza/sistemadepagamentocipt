@@ -77,9 +77,7 @@ async function ensureSchema() {
   await ensureColumn('dars', 'pdf_url', 'TEXT');
   await ensureColumn('dars', 'linha_digitavel', 'TEXT');
   await ensureColumn('dars', 'data_emissao', 'TEXT');
-  await dbRunAsync(
-    `UPDATE dars SET data_emissao = CURRENT_TIMESTAMP WHERE data_emissao IS NULL`
-  );
+  await ensureColumn('dars', 'emitido_por_id', 'INTEGER');
   await ensureColumn('permissionarios', 'numero_documento', 'TEXT');
   await ensureColumn('permissionarios', 'telefone_cobranca', 'TEXT');
 }
@@ -305,9 +303,17 @@ router.post('/:id/emitir', authMiddleware, async (req, res) => {
          SET numero_documento = ?,
              pdf_url = ?,
              linha_digitavel = COALESCE(?, linha_digitavel),
-             status = 'Emitido'
+             status = 'Emitido',
+             emitido_por_id = ?,
+             data_emissao = CURRENT_TIMESTAMP
        WHERE id = ?`,
-      [sefazResponse.numeroGuia, sefazResponse.pdfBase64, sefazResponse.linhaDigitavel || null, darId]
+      [
+        sefazResponse.numeroGuia,
+        sefazResponse.pdfBase64,
+        sefazResponse.linhaDigitavel || null,
+        userId,
+        darId,
+      ]
     );
 
     // Compat com campos antigos: preenche codigo_barras/link_pdf se possível

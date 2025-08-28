@@ -555,8 +555,10 @@ router.get(
     try {
       const cols = await dbAll(`PRAGMA table_info(dars)`);
       const hasDataEmissao = cols.some(c => c.name === 'data_emissao');
+      const hasEmitidoPorId = cols.some(c => c.name === 'emitido_por_id');
       const emissaoSelect = hasDataEmissao ? 'd.data_emissao' : 'NULL';
       const orderBy = hasDataEmissao ? 'd.data_emissao' : 'd.id';
+      const whereEmitido = hasEmitidoPorId ? 'WHERE d.emitido_por_id IS NOT NULL' : '';
 
       const dars = await dbAll(
         `SELECT
@@ -569,6 +571,7 @@ router.get(
             d.ano_referencia
          FROM dars d
          JOIN permissionarios p ON p.id = d.permissionario_id
+         ${whereEmitido}
          ORDER BY ${orderBy} DESC`
       );
 
