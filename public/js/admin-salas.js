@@ -1,5 +1,8 @@
 // public/js/admin-salas.js
 
+let modalReserva;
+let eventoSelecionado;
+
 document.addEventListener('DOMContentLoaded', () => {
   const calendarEl = document.getElementById('calendar');
   if (calendarEl && window.FullCalendar) {
@@ -19,6 +22,15 @@ document.addEventListener('DOMContentLoaded', () => {
       const el = document.getElementById(id);
       if (el) el.addEventListener('change', () => calendar.refetchEvents());
     });
+  }
+
+  const modalEl = document.getElementById('modalReserva');
+  if (modalEl && window.bootstrap) {
+    modalReserva = new bootstrap.Modal(modalEl);
+    const btnCanc = document.getElementById('btnCancelarReserva');
+    const btnCheck = document.getElementById('btnRegistrarCheckin');
+    btnCanc?.addEventListener('click', cancelarReserva);
+    btnCheck?.addEventListener('click', registrarCheckin);
   }
 
   carregarSalas();
@@ -61,7 +73,45 @@ function onEventClick(info) {
         if (resp.ok) alert('Uso registrado');
         else alert('Falha ao registrar uso');
       });
+  eventoSelecionado = info.event;
+  modalReserva?.show();
+}
+
+  if (!eventoSelecionado) return;
+  try {
+    const resp = await fetch(`/api/admin/salas/reservas/${eventoSelecionado.id}`, { method: 'DELETE' });
+    if (!resp.ok) throw new Error('Falha ao cancelar reserva');
+    eventoSelecionado.remove();
+    mostrarMensagem('Reserva cancelada com sucesso', 'success');
+  } catch (err) {
+    console.error(err);
+    mostrarMensagem('Falha ao cancelar reserva', 'danger');
+  } finally {
+    modalReserva.hide();
   }
+}
+
+async function registrarCheckin() {
+  if (!eventoSelecionado) return;
+  try {
+    const resp = await fetch(`/api/admin/salas/reservas/${eventoSelecionado.id}/checkin`, { method: 'POST' });
+    if (!resp.ok) throw new Error('Falha ao registrar check-in');
+    mostrarMensagem('Check-in registrado com sucesso', 'success');
+  } catch (err) {
+    console.error(err);
+    mostrarMensagem('Falha ao registrar check-in', 'danger');
+  } finally {
+    modalReserva.hide();
+  }
+}
+
+function mostrarMensagem(texto, tipo = 'success') {
+  const el = document.getElementById('mensagem');
+  if (!el) return;
+  el.innerHTML = `<div class="alert alert-${tipo}" role="alert">${texto}</div>`;
+  setTimeout(() => {
+    el.innerHTML = '';
+  }, 4000);
 }
 
 function onEventChange(info) {

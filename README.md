@@ -36,3 +36,6 @@ npx sequelize-cli db:migrate
 ```
 
 O projeto também tenta rodar esse comando automaticamente na inicialização, mas executar manualmente garante que o schema esteja atualizado.
+
+Após atualizar o código para versões mais recentes, execute novamente as migrações para criar novas estruturas de banco de dados,
+como a tabela de auditoria de reservas (`reservas_audit`).
