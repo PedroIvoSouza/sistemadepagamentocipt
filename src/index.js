@@ -6,7 +6,7 @@ console.log('[BOOT] BOT_SHARED_KEY len =', (process.env.BOT_SHARED_KEY || '').le
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const { scheduleConciliacao } = require('../cron/conciliarPagamentos');
+const { scheduleConciliacao } = require('../cron/conciliarPagamentosmes');
 const db = require('./database/db');
 
 // ===== Helpers de boot =====
