@@ -69,6 +69,22 @@ db.serialize(() => {
         }
         console.log('Tabela "certidoes_quitacao" verificada/criada com sucesso.');
     });
+
+    // Tabela 4: Auditoria de Reservas
+    db.run(`
+        CREATE TABLE IF NOT EXISTS reservas_audit (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            reserva_id INTEGER NOT NULL,
+            acao TEXT NOT NULL,
+            detalhes TEXT,
+            data_registro TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+    `, (err) => {
+        if (err) {
+            return console.error('Erro ao criar a tabela "reservas_audit":', err.message);
+        }
+        console.log('Tabela "reservas_audit" verificada/criada com sucesso.');
+    });
 });
 
 db.close((err) => {
