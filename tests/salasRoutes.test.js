@@ -174,10 +174,10 @@ test('Admin realiza check-in', async () => {
   );
 
   await supertest(app)
-    .post(`/api/admin/salas/reservas/${reservaId}/checkin`)
+    .post(`/api/admin/salas/reservas/${reservaId}/uso`)
     .set('Authorization', `Bearer ${adminToken}`)
     .expect(200)
-    .then(res => assert.equal(res.body.message, 'Check-in realizado'));
+    .then(res => assert.equal(res.body.message, 'Uso registrado'));
   const audit = await allAsync('SELECT * FROM reservas_audit WHERE reserva_id = ?', [reservaId]);
   assert.equal(audit[0].acao, 'CHECKIN');
 });
