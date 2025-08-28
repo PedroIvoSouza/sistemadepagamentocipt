@@ -196,6 +196,93 @@ router.post(
 );
 
 /**
+ * POST /api/admin/dars/:id/reemitir
+ * Reemite a guia na SEFAZ permitindo atualizar valor e vencimento.
+ */
+router.post(
+  '/:id/reemitir',
+  [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN'])],
+  async (req, res) => {
+    try {
+      const darId = req.params.id;
+      const { valor, data_vencimento } = req.body || {};
+
+      const dar = await dbGetAsync(`SELECT * FROM dars WHERE id = ?`, [darId]);
+      if (!dar) return res.status(404).json({ error: 'DAR não encontrado.' });
+
+      const perm = await dbGetAsync(`SELECT * FROM permissionarios WHERE id = ?`, [dar.permissionario_id]);
+      if (!perm) return res.status(404).json({ error: 'Permissionário não encontrado.' });
+
+      // Base para emissão
+      let guiaSource = { ...dar };
+
+      // Recalcula encargos de atraso se possível
+      if (calcularEncargosAtraso) {
+        try {
+          const calc = await calcularEncargosAtraso(dar);
+          guiaSource.valor = calc?.valorAtualizado ?? guiaSource.valor;
+          guiaSource.data_vencimento = calc?.novaDataVencimento ?? guiaSource.data_vencimento;
+        } catch (e) {
+          console.warn('[AdminDARs] Falha em calcular encargos:', e.message);
+        }
+      }
+
+      // Sobrescreve com valores enviados no body, se houver
+      if (valor) guiaSource.valor = valor;
+      if (data_vencimento) guiaSource.data_vencimento = data_vencimento;
+
+      // Garantir vencimento >= hoje
+      if (toISO(guiaSource.data_vencimento) < isoHojeLocal()) {
+        guiaSource.data_vencimento = isoHojeLocal();
+      }
+
+      // Monta payload e reemite
+      const payload = buildSefazPayloadPermissionario({ perm, darLike: guiaSource });
+      const sefazResponse = await emitirGuiaSefaz(payload);
+
+      if (!sefazResponse || !sefazResponse.numeroGuia || !sefazResponse.pdfBase64) {
+        throw new Error('Retorno da SEFAZ incompleto.');
+      }
+
+      const tokenDoc = await gerarTokenDocumento('DAR', dar.permissionario_id, db);
+      sefazResponse.pdfBase64 = await imprimirTokenEmPdf(sefazResponse.pdfBase64, tokenDoc);
+
+      // Atualiza DAR com novos valores e dados da emissão
+      await dbRunAsync(
+        `UPDATE dars
+           SET valor = ?,
+               data_vencimento = ?,
+               numero_documento = ?,
+               pdf_url = ?,
+               codigo_barras = COALESCE(?, codigo_barras),
+               link_pdf      = COALESCE(?, link_pdf),
+               status = 'Reemitido'
+         WHERE id = ?`,
+        [
+          guiaSource.valor,
+          guiaSource.data_vencimento,
+          sefazResponse.numeroGuia,
+          sefazResponse.pdfBase64,
+          sefazResponse.numeroGuia,
+          sefazResponse.pdfBase64,
+          darId
+        ]
+      );
+
+      return res.status(200).json({ ...sefazResponse, token: tokenDoc });
+    } catch (error) {
+      console.error('[AdminDARs] ERRO POST /:id/reemitir:', error);
+      const isUnavailable =
+        /indispon[ií]vel|Load balancer|ECONNABORTED|ENOTFOUND|EAI_AGAIN|ECONNRESET|ETIMEDOUT|timeout/i.test(
+          error.message || ''
+        );
+      const status = isUnavailable ? 503 : 500;
+      return res.status(status).json({ error: error.message || 'Erro interno do servidor.' });
+    }
+  }
+);
+
+/**
  * GET /api/admin/dars/:id/pdf
  * Retorna o PDF (base64, URL absoluta ou caminho relativo).
  */
