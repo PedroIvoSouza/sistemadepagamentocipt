@@ -40,6 +40,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch {}
 
     const calendarEl = document.getElementById('calendar');
+    const HORARIOS_PADRAO = [
+        '08:00','09:00','10:00','11:00','12:00',
+        '13:00','14:00','15:00','16:00','17:00'
+    ];
+    const somaHora = h => {
+        const [hr, min] = h.split(':').map(Number);
+        const d = new Date(0,0,0,hr,min,0);
+        d.setHours(d.getHours() + 1);
+        return d.toTimeString().slice(0,5);
+    };
     const calendar = new FullCalendar.Calendar(calendarEl, {
         initialView: 'dayGridMonth',
         locale: 'pt-br',
@@ -47,21 +57,46 @@ document.addEventListener('DOMContentLoaded', async () => {
             const salaId = salaSelect.value;
             if (!salaId) { successCallback([]); return; }
             try {
+                const inicio = info.start.toISOString().slice(0,10);
+                const fimDate = new Date(info.end); fimDate.setDate(fimDate.getDate() - 1);
+                const fim = fimDate.toISOString().slice(0,10);
+                const resp = await fetch(`/api/salas/${salaId}/reservas?inicio=${inicio}&fim=${fim}`, { headers });
+                if (!resp.ok) throw new Error('Falha ao carregar reservas');
+                const reservas = await resp.json();
                 const eventos = [];
-                const current = new Date(info.start);
-                while (current < info.end) {
-                    const dataStr = current.toISOString().slice(0,10);
-                    const resp = await fetch(`/api/salas/${salaId}/disponibilidade?data=${dataStr}`, { headers });
-                    if (!resp.ok) throw new Error('Falha ao carregar disponibilidade');
-                    const { horarios } = await resp.json();
-                    horarios.forEach(h => {
-                        const inicio = `${dataStr}T${h}`;
-                        const fimDate = new Date(`${inicio}:00`);
-                        fimDate.setHours(fimDate.getHours() + 1);
-                        const fim = fimDate.toISOString().slice(0,16);
-                        eventos.push({ title: 'Disponível', start: inicio, end: fim });
+                const reservasPorData = {};
+                reservas.forEach(r => {
+                    eventos.push({
+                        title: 'Reservado',
+                        start: r.inicio,
+                        end: r.fim,
+                        backgroundColor: '#dc3545',
+                        borderColor: '#dc3545'
                     });
-                    current.setDate(current.getDate() + 1);
+                    const data = r.inicio.split('T')[0];
+                    if (!reservasPorData[data]) reservasPorData[data] = new Set();
+                    let h = r.inicio.split('T')[1].slice(0,5);
+                    const hf = r.fim.split('T')[1].slice(0,5);
+                    while (h < hf) { reservasPorData[data].add(h); h = somaHora(h); }
+                });
+
+                for (let current = new Date(info.start); current < info.end; current.setDate(current.getDate()+1)) {
+                    const dataStr = current.toISOString().slice(0,10);
+                    const ocupados = reservasPorData[dataStr] || new Set();
+                    HORARIOS_PADRAO.forEach(h => {
+                        if (!ocupados.has(h)) {
+                            const start = `${dataStr}T${h}`;
+                            const fimDate2 = new Date(`${start}:00`);
+                            fimDate2.setHours(fimDate2.getHours()+1);
+                            eventos.push({
+                                title: 'Disponível',
+                                start,
+                                end: fimDate2.toISOString().slice(0,16),
+                                backgroundColor: '#198754',
+                                borderColor: '#198754'
+                            });
+                        }
+                    });
                 }
                 successCallback(eventos);
             } catch (err) {

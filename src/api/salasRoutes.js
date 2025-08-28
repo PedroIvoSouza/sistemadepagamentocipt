@@ -75,6 +75,35 @@ router.get('/:id/disponibilidade', async (req, res) => {
   }
 });
 
+// Reservas da sala em intervalo
+router.get('/:id/reservas', async (req, res) => {
+  const salaId = parseInt(req.params.id, 10);
+  const { inicio, fim } = req.query;
+  if (!inicio || !fim) {
+    return res.status(400).json({
+      error: 'Parâmetros inicio e fim são obrigatórios (AAAA-MM-DD).'
+    });
+  }
+  try {
+    const reservas = await allAsync(
+      `SELECT id, data, hora_inicio, hora_fim, status
+         FROM reservas_salas
+        WHERE sala_id = ? AND data BETWEEN ? AND ?
+        ORDER BY data, hora_inicio`,
+      [salaId, inicio, fim]
+    );
+    const resp = reservas.map(r => ({
+      id: r.id,
+      inicio: `${r.data}T${r.hora_inicio}`,
+      fim: `${r.data}T${r.hora_fim}`,
+      status: r.status
+    }));
+    res.json(resp);
+  } catch (e) {
+    res.status(500).json({ error: 'Erro ao listar reservas.' });
+  }
+});
+
 // Cria reserva com validações
 router.post('/reservas', async (req, res) => {
   const { sala_id, data, horario_inicio, horario_fim, qtd_pessoas } = req.body || {};
