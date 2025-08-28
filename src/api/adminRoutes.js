@@ -730,14 +730,15 @@ function generateDebtorsTable(doc, data) {
 
 function generateDarsTable(doc, dados) {
   let y = doc.y;
-  const rowHeight = 30;
-  const availableWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+  const rowHeight = 40;
+  const availableWidth =
+    doc.page.width - doc.page.margins.left - doc.page.margins.right;
   const colWidths = {
-    empresa: availableWidth * 0.32,
-    cnpj: availableWidth * 0.18,
-    emissao: availableWidth * 0.18,
-    dar: availableWidth * 0.16,
-    valor: availableWidth * 0.16,
+    empresa: availableWidth * 0.30,
+    cnpj: availableWidth * 0.17,
+    emissao: availableWidth * 0.17,
+    dar: availableWidth * 0.22,
+    valor: availableWidth * 0.14,
   };
   const headers = ['Empresa', 'CNPJ', 'Emissão', 'DAR/Comp.', 'Valor (R$)'];
 
