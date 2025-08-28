@@ -140,6 +140,9 @@ router.delete('/reservas/:id', async (req, res) => {
   try {
     const reserva = await getAsync(`SELECT * FROM reservas_salas WHERE id = ?`, [id]);
     if (!reserva) return res.status(404).json({ error: 'Reserva não encontrada.' });
+    if (reserva.permissionario_id !== req.user.id) {
+      return res.status(403).json({ error: 'Reserva pertencente a outro permissionário' });
+    }
     const inicio = new Date(`${reserva.data}T${reserva.hora_inicio}:00`);
     const diff = inicio.getTime() - Date.now();
     if (diff < 24 * 60 * 60 * 1000) {
