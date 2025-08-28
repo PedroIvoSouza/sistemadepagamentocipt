@@ -181,9 +181,14 @@ router.post('/', async (req, res) => {
                 };
                 const respostaSefaz = await emitirGuiaSefaz(payloadSefaz);
                 
-                // 4. Salva a DAR no nosso banco de dados
-                const darSql = `INSERT INTO dars (permissionario_id, tipo_permissionario, valor, mes_referencia, ano_referencia, data_vencimento, status, numero_documento, linha_digitavel, codigo_barras, pdf_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+                // 4. Salva a DAR no nosso banco de dados (permitindo data_emissao explícita)
+                const darCols = ['permissionario_id', 'tipo_permissionario', 'valor', 'mes_referencia', 'ano_referencia', 'data_vencimento', 'status', 'numero_documento', 'linha_digitavel', 'codigo_barras', 'pdf_url'];
                 const darParams = [null, 'Evento', dadosDar.valor, dadosDar.mes_referencia, dadosDar.ano_referencia, dadosDar.data_vencimento, 'Pendente', respostaSefaz.numeroDocumento, respostaSefaz.linhaDigitavel, respostaSefaz.codigoBarras, respostaSefaz.urlPdf];
+                if (parcela.data_emissao) {
+                    darCols.push('data_emissao');
+                    darParams.push(parcela.data_emissao);
+                }
+                const darSql = `INSERT INTO dars (${darCols.join(', ')}) VALUES (${darCols.map(() => '?').join(', ')})`;
 
                 const darId = await new Promise((resolve, reject) => {
                     db.run(darSql, darParams, function(err) {

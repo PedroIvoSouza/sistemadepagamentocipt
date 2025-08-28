@@ -40,6 +40,7 @@ db.serialize(() => {
             valor REAL NOT NULL,
             data_vencimento TEXT NOT NULL,
             status TEXT NOT NULL,
+            data_emissao TEXT DEFAULT CURRENT_TIMESTAMP,
             codigo_barras TEXT,
             link_pdf TEXT,
             FOREIGN KEY (permissionario_id) REFERENCES permissionarios (id),

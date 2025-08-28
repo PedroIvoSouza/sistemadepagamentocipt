@@ -554,14 +554,9 @@ router.get(
   async (req, res) => {
     try {
       const cols = await dbAll(`PRAGMA table_info(dars)`);
-      const hasCreatedAt = cols.some(c => c.name === 'created_at');
       const hasDataEmissao = cols.some(c => c.name === 'data_emissao');
-      const emissaoSelect = hasCreatedAt
-        ? 'd.created_at'
-        : hasDataEmissao
-        ? 'd.data_emissao'
-        : 'NULL';
-      const orderBy = emissaoSelect !== 'NULL' ? emissaoSelect : 'd.id';
+      const emissaoSelect = hasDataEmissao ? 'd.data_emissao' : 'NULL';
+      const orderBy = hasDataEmissao ? 'd.data_emissao' : 'd.id';
 
       const dars = await dbAll(
         `SELECT
