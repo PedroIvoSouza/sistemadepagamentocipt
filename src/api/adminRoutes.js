@@ -733,18 +733,18 @@ function generateDebtorsTable(doc, data) {
   }
 }
 
-function generateDarsTable(doc, data) {
+function generateDarsTable(doc, dados) {
   let y = doc.y;
   const rowHeight = 30;
   const availableWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
   const colWidths = {
-    nome: availableWidth * 0.32,
+    empresa: availableWidth * 0.32,
     cnpj: availableWidth * 0.18,
     emissao: availableWidth * 0.18,
-    numero: availableWidth * 0.16,
+    dar: availableWidth * 0.16,
     valor: availableWidth * 0.16,
   };
-  const headers = ['Permissionário', 'CNPJ', 'Emissão', 'Número/Comp.', 'Valor (R$)'];
+  const headers = ['Empresa', 'CNPJ', 'Emissão', 'DAR/Comp.', 'Valor (R$)'];
 
   const drawRow = (row, currentY, isHeader = false) => {
     let x = doc.page.margins.left;
@@ -764,7 +764,7 @@ function generateDarsTable(doc, data) {
   drawRow(headers, y, true);
   y += rowHeight;
 
-  for (const item of data) {
+  for (const item of dados) {
     if (y + rowHeight > doc.page.height - doc.page.margins.bottom - 10) {
       doc.addPage();
       y = doc.page.margins.top; // reinicia na margem superior
