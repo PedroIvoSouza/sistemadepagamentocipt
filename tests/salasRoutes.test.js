@@ -10,6 +10,30 @@ process.env.SQLITE_STORAGE = path.resolve(__dirname, 'salas.test.db');
 
 const db = require('../src/database/db');
 
+function runAsync(sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.run(sql, params, function (err) {
+      if (err) {
+        reject(err);
+      } else {
+        resolve(this);
+      }
+    });
+  });
+}
+
+function allAsync(sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.all(sql, params, (err, rows) => {
+      if (err) {
+        reject(err);
+      } else {
+        resolve(rows);
+      }
+    });
+  });
+}
+
 function resetDb() {
   return new Promise((resolve, reject) => {
     db.serialize(() => {
@@ -75,7 +99,6 @@ function insertReserva(data, inicio, fim, permissionario = 1) {
 
 test('Reserva válida', async () => {
   const app = setupUserApp();
-  const token = userToken();
   await supertest(app)
     .post('/api/salas/reservas')
     .set('Authorization', `Bearer ${userToken}`)
@@ -95,7 +118,6 @@ test('Reserva válida', async () => {
 
 test('Falha por menos de 3 participantes', async () => {
   const app = setupUserApp();
-  const token = userToken();
   await supertest(app)
     .post('/api/salas/reservas')
     .set('Authorization', `Bearer ${userToken}`)
@@ -116,7 +138,6 @@ test('Falha por menos de 3 participantes', async () => {
 
 test('Bloqueio de reservas em dias consecutivos', async () => {
   const app = setupUserApp();
-  const token = userToken();
   await supertest(app)
     .post('/api/salas/reservas')
     .set('Authorization', `Bearer ${userToken}`)
@@ -159,16 +180,6 @@ test('Cancelamento com menos de 24h', async () => {
   const reservaId = await insertReserva(data, inicio, fim);
 
   const app = setupUserApp();
-  const token = userToken();
-  const now = new Date(Date.now() + 60 * 60 * 1000);
-  const data = now.toISOString().slice(0, 10);
-  const inicio = now.toTimeString().slice(0, 5);
-  const fim = new Date(now.getTime() + 60 * 60 * 1000).toTimeString().slice(0, 5);
-  const result = await runAsync(
-    `INSERT INTO reservas_salas (sala_id, permissionario_id, data, hora_inicio, hora_fim, participantes, status, checkin)
-     VALUES (1, 1, ?, ?, ?, 3, 'pendente', NULL)`,
-    [data, inicio, fim]
-  );
   await supertest(app)
     .delete(`/api/salas/reservas/${reservaId}`)
     .set('Authorization', `Bearer ${userToken}`)
@@ -179,8 +190,7 @@ test('Cancelamento com menos de 24h', async () => {
 test('Admin altera status', async () => {
   const reservaId = await insertReserva('2025-10-10', '09:00', '10:00');
   const app = setupAdminApp();
-  const token = adminToken();
-  const result = await runAsync(
+  await runAsync(
     `INSERT INTO reservas_salas (sala_id, permissionario_id, data, hora_inicio, hora_fim, participantes, status, checkin)
      VALUES (1, 1, '2025-10-10', '10:00', '11:00', 3, 'pendente', NULL)`
   );
@@ -197,8 +207,7 @@ test('Admin altera status', async () => {
 test('Admin realiza check-in', async () => {
   const reservaId = await insertReserva('2025-10-10', '09:00', '10:00');
   const app = setupAdminApp();
-  const token = adminToken();
-  const result = await runAsync(
+  await runAsync(
     `INSERT INTO reservas_salas (sala_id, permissionario_id, data, hora_inicio, hora_fim, participantes, status, checkin)
      VALUES (1, 1, '2025-10-10', '10:00', '11:00', 3, 'pendente', NULL)`
   );
