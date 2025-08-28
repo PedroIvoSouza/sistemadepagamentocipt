@@ -60,11 +60,23 @@ async function fetchReservas(fetchInfo, successCallback, failureCallback) {
 }
 
 function onEventClick(info) {
+  const acao = prompt('Digite "c" para cancelar ou "u" para registrar uso:');
+  if (acao === 'c') {
+    fetch(`/api/admin/salas/reservas/${info.event.id}`, { method: 'DELETE' })
+      .then(resp => {
+        if (resp.ok) info.event.remove();
+        else alert('Falha ao cancelar reserva');
+      });
+  } else if (acao === 'u') {
+    fetch(`/api/admin/salas/reservas/${info.event.id}/uso`, { method: 'POST' })
+      .then(resp => {
+        if (resp.ok) alert('Uso registrado');
+        else alert('Falha ao registrar uso');
+      });
   eventoSelecionado = info.event;
   modalReserva?.show();
 }
 
-async function cancelarReserva() {
   if (!eventoSelecionado) return;
   try {
     const resp = await fetch(`/api/admin/salas/reservas/${eventoSelecionado.id}`, { method: 'DELETE' });

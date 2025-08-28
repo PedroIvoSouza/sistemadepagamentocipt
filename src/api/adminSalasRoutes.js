@@ -234,23 +234,6 @@ router.patch(
   }
 );
 
-// POST /reservas/:id/checkin - marca uso da reserva
-router.post(
-  '/reservas/:id/checkin',
-  [authMiddleware, authorizeRole(['SUPER_ADMIN', 'SALAS_ADMIN'])],
-  async (req, res) => {
-    const id = parseInt(req.params.id, 10);
-    try {
-      await runAsync(`UPDATE reservas_salas SET checkin = CURRENT_TIMESTAMP WHERE id = ?`, [id]);
-      await reservaAuditService.logCheckin(id, {});
-      res.json({ message: 'Check-in realizado' });
-    } catch (e) {
-      console.error(e);
-      res.status(500).json({ error: 'Erro ao registrar check-in.' });
-    }
-  }
-);
-
 // POST /reservas/:id/uso - alias para check-in
 router.post(
   '/reservas/:id/uso',
