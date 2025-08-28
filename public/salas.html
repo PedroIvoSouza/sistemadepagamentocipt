@@ -90,16 +90,21 @@
 
                 <div class="card mt-4">
                     <div class="card-body">
-                        <h5 class="card-title">Cancelar Reserva</h5>
-                        <form id="cancelForm" class="row g-3">
-                            <div class="col-md-6">
-                                <label for="reservaId" class="form-label">ID da Reserva</label>
-                                <input type="text" id="reservaId" class="form-control" required>
-                            </div>
-                            <div class="col-12 text-end">
-                                <button type="submit" class="btn btn-danger">Cancelar</button>
-                            </div>
-                        </form>
+                        <h5 class="card-title">Minhas Reservas</h5>
+                        <div class="table-responsive">
+                            <table id="reservasTable" class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Sala</th>
+                                        <th>Data</th>
+                                        <th>Início</th>
+                                        <th>Fim</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </main>
