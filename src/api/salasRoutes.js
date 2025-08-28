@@ -38,18 +38,7 @@ router.get('/', async (_req, res) => {
   }
 });
 
-const HORARIOS_PADRAO = [
-  '08:00', '09:00', '10:00', '11:00', '12:00',
-  '13:00', '14:00', '15:00', '16:00', '17:00'
-];
-const somaHora = h => {
-  const [hr, min] = h.split(':').map(Number);
-  const d = new Date(0, 0, 0, hr, min, 0);
-  d.setHours(d.getHours() + 1);
-  return d.toTimeString().slice(0,5);
-};
-
-// Disponibilidade da sala por dia
+// Disponibilidade da sala por dia (retorna apenas intervalos já reservados)
 router.get('/:id/disponibilidade', async (req, res) => {
   const salaId = parseInt(req.params.id, 10);
   const data = req.query.data;
@@ -61,16 +50,8 @@ router.get('/:id/disponibilidade', async (req, res) => {
       `SELECT hora_inicio, hora_fim FROM reservas_salas WHERE sala_id = ? AND data = ?`,
       [salaId, data]
     );
-    const ocupados = new Set();
-    reservas.forEach(r => {
-      let h = r.hora_inicio;
-      while (h < r.hora_fim) {
-        ocupados.add(h);
-        h = somaHora(h);
-      }
-    });
-    const livres = HORARIOS_PADRAO.filter(h => !ocupados.has(h));
-    res.json({ horarios: livres });
+    const intervalos = reservas.map(r => ({ inicio: r.hora_inicio, fim: r.hora_fim }));
+    res.json(intervalos);
   } catch (e) {
     res.status(500).json({ error: 'Erro ao verificar disponibilidade.' });
   }
@@ -131,25 +112,11 @@ router.post('/reservas', async (req, res) => {
       error: 'Campos obrigatórios: sala_id, data, horario_inicio, horario_fim, qtd_pessoas.'
     });
   }
-  if (qtd_pessoas < 3) {
-    return res.status(400).json({ error: 'Reserva requer pelo menos 3 pessoas.' });
-  }
   try {
-    await reservaSalaService.validarSalaECapacidade(sala_id, qtd_pessoas);
-    reservaSalaService.validarHorarios(data, horario_inicio, horario_fim);
-
     const inicio = new Date(`${data}T${horario_inicio}:00`);
     const fim = new Date(`${data}T${horario_fim}:00`);
-
-    const prevDate = new Date(inicio); prevDate.setDate(prevDate.getDate() - 1);
-    const nextDate = new Date(inicio); nextDate.setDate(nextDate.getDate() + 1);
-    const permissionarioId = req.user.id;
-    const consec = await getAsync(
-      `SELECT id FROM reservas_salas WHERE permissionario_id = ? AND data IN (?, ?)`,
-      [permissionarioId, prevDate.toISOString().slice(0,10), nextDate.toISOString().slice(0,10)]
-    );
-    if (consec) {
-      return res.status(400).json({ error: 'Não é permitido reservar dias consecutivos.' });
+    if (isNaN(inicio) || isNaN(fim) || inicio >= fim || inicio.toDateString() !== fim.toDateString()) {
+      return res.status(400).json({ error: 'Horários inválidos.' });
     }
 
     await reservaSalaService.verificarConflito(
@@ -159,6 +126,7 @@ router.post('/reservas', async (req, res) => {
       horario_fim
     );
 
+    const permissionarioId = req.user.id;
     const result = await runAsync(
       `INSERT INTO reservas_salas (sala_id, permissionario_id, data, hora_inicio, hora_fim, participantes, status, checkin)
        VALUES (?, ?, ?, ?, ?, ?, 'pendente', NULL)`,

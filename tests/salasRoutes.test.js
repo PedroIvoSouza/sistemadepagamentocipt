@@ -91,36 +91,23 @@ test('Reserva válida', async () => {
   await supertest(app)
     .post('/api/salas/reservas')
     .set('Authorization', `Bearer ${userToken}`)
-    .send({ sala_id:1, data:'2025-10-10', horario_inicio:'09:00', horario_fim:'10:00', qtd_pessoas:3 })
+    .send({ sala_id:1, data:'2025-10-10', horario_inicio:'09:00', horario_fim:'10:00', qtd_pessoas:2 })
     .expect(201)
     .then(res => { newId = res.body.id; assert.ok(newId); });
   const audit = await allAsync('SELECT * FROM reservas_audit WHERE reserva_id = ?', [newId]);
   assert.equal(audit[0].acao, 'CRIACAO');
 });
 
-test('Falha por menos de 3 participantes', async () => {
+test('Lista disponibilidade retorna reservas existentes', async () => {
+  await insertReserva('2025-10-10','09:00','10:30');
   const app = setupUserApp();
   await supertest(app)
-    .post('/api/salas/reservas')
+    .get('/api/salas/1/disponibilidade?data=2025-10-10')
     .set('Authorization', `Bearer ${userToken}`)
-    .send({ sala_id:1, data:'2025-10-10', horario_inicio:'09:00', horario_fim:'10:00', qtd_pessoas:2 })
-    .expect(400)
-    .then(res => assert.equal(res.body.error, 'Reserva requer pelo menos 3 pessoas.'));
-});
-
-test('Bloqueio de reservas em dias consecutivos', async () => {
-  const app = setupUserApp();
-  await supertest(app)
-    .post('/api/salas/reservas')
-    .set('Authorization', `Bearer ${userToken}`)
-    .send({ sala_id:1, data:'2025-10-10', horario_inicio:'09:00', horario_fim:'10:00', qtd_pessoas:3 })
-    .expect(201);
-  await supertest(app)
-    .post('/api/salas/reservas')
-    .set('Authorization', `Bearer ${userToken}`)
-    .send({ sala_id:1, data:'2025-10-11', horario_inicio:'09:00', horario_fim:'10:00', qtd_pessoas:3 })
-    .expect(400)
-    .then(res => assert.equal(res.body.error, 'Não é permitido reservar dias consecutivos.'));
+    .expect(200)
+    .then(res => {
+      assert.deepEqual(res.body, [{ inicio: '09:00', fim: '10:30' }]);
+    });
 });
 
 test('Cancelamento com menos de 24h', async () => {
