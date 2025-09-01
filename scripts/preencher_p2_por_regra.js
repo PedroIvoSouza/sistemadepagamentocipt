@@ -42,4 +42,3 @@ for(const r of rows){
 
 fs.writeFileSync(OUT, stringify(rows,{header:true}), 'utf8');
 console.log(`Gerado ${OUT} | campos preenchidos: ${alteradas}`);
-NODE
