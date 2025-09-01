@@ -1,4 +1,6 @@
-// Torna dars.permissionario_id, mes_referencia e ano_referencia NULLABLE preservando dados.
+// Reconstrói a tabela dars a partir do schema efetivo (PRAGMA), tornando
+// permissionario_id, mes_referencia e ano_referencia NULLABLE sem perder dados.
+// Mantém tipos, defaults, PKs e TODAS as FKs originais.
 const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
 
@@ -8,67 +10,89 @@ const DB_PATH = process.env.SQLITE_STORAGE
 
 const db = new sqlite3.Database(DB_PATH);
 
-// helpers com parênteses corretos
-const get = (sql, p = []) => new Promise((res, rej) =>
-  db.get(sql, p, (e, r) => (e ? rej(e) : res(r)))
-);
-const all = (sql, p = []) => new Promise((res, rej) =>
-  db.all(sql, p, (e, r) => (e ? rej(e) : res(r)))
-);
-const run = (sql, p = []) => new Promise((res, rej) =>
-  db.run(sql, p, function (e) { return e ? rej(e) : res(this); })
-);
+const Q = {
+  get: (sql, p=[]) => new Promise((res, rej) => db.get(sql, p, (e, r)=> e?rej(e):res(r))),
+  all: (sql, p=[]) => new Promise((res, rej) => db.all(sql, p, (e, r)=> e?rej(e):res(r))),
+  run: (sql, p=[]) => new Promise((res, rej) => db.run(sql, p, function(e){ e?rej(e):res(this); })),
+};
+
+const TARGET_NULLABLE = new Set(['permissionario_id','mes_referencia','ano_referencia']);
 
 (async () => {
   try {
-    const row = await get("SELECT sql FROM sqlite_master WHERE type='table' AND name='dars';");
-    if (!row || !row.sql) throw new Error('Não encontrei CREATE TABLE dars no sqlite_master.');
-    const originalCreate = row.sql;
+    // 1) Ler definição efetiva
+    const cols = await Q.all("PRAGMA table_info(dars);"); // cid,name,type,notnull,dflt_value,pk
+    if (!cols || cols.length === 0) throw new Error("Tabela dars não encontrada.");
+    const fks  = await Q.all("PRAGMA foreign_key_list(dars);"); // id,seq,table,from,to,on_update,on_delete,match
 
-    // Remove "NOT NULL" apenas das colunas alvo (mantém tipo/PK/FKs)
-    const relax = (sql, col) =>
-      sql.replace(
-        new RegExp(`(\\b${col}\\b\\s+[A-Z]+(?:\\s*\\(\\d+\\))?\\s*)(NOT\\s+NULL\\s*)`, 'i'),
-        (_m, p1) => p1
-      );
-
-    let replaced = originalCreate;
-    ['permissionario_id', 'mes_referencia', 'ano_referencia'].forEach(c => {
-      replaced = relax(replaced, c);
-    });
-
-    if (replaced === originalCreate) {
-      console.log('Nada para alterar (já é NULLABLE ou colunas sem NOT NULL).');
+    // Ver se há algo a alterar
+    const needChange = cols.some(c => TARGET_NULLABLE.has(c.name) && c.notnull === 1);
+    if (!needChange) {
+      console.log("Nada para alterar (já está NULLABLE ou colunas ausentes).");
       process.exit(0);
     }
 
-    // nomes de colunas para copiar 1:1
-    const cols = await all("PRAGMA table_info(dars);");
-    const colNames = cols.map(c => c.name).join(',');
+    // 2) Montar CREATE TABLE novo a partir do PRAGMA, alterando notnull das 3 colunas
+    const colDefs = cols.map(c => {
+      const parts = [];
+      parts.push(JSON.stringify(c.name).slice(1,-1)); // nome "cru" sem aspas
+      if (c.type && c.type.trim()) parts.push(c.type.trim()); // tipo
+      // NOT NULL apenas se NÃO for uma das colunas-alvo
+      const makeNullable = TARGET_NULLABLE.has(c.name) ? 0 : c.notnull;
+      if (makeNullable === 1) parts.push('NOT NULL');
+      if (c.dflt_value !== null && c.dflt_value !== undefined) {
+        // dflt_value já vem pronto (pode ter aspas ou funções)
+        parts.push('DEFAULT ' + c.dflt_value);
+      }
+      if (c.pk === 1) parts.push('PRIMARY KEY');
+      return parts.join(' ');
+    });
 
-    await run('PRAGMA foreign_keys = OFF;');
-    await run('BEGIN;');
+    // 3) Constraints de FK (copiar todas)
+    // group by fk id
+    const fkGroups = {};
+    for (const fk of fks) {
+      if (!fkGroups[fk.id]) fkGroups[fk.id] = [];
+      fkGroups[fk.id].push(fk);
+    }
+    const fkClauses = Object.values(fkGroups).map(group => {
+      // pode haver FK multi-coluna
+      const fromCols = group.map(g => g.from).join(', ');
+      const toCols   = group.map(g => g.to).join(', ');
+      const t        = group[0].table;
+      let clause = `FOREIGN KEY(${fromCols}) REFERENCES ${t}(${toCols})`;
+      if (group[0].on_update && group[0].on_update.toUpperCase() !== 'NO ACTION') {
+        clause += ` ON UPDATE ${group[0].on_update}`;
+      }
+      if (group[0].on_delete && group[0].on_delete.toUpperCase() !== 'NO ACTION') {
+        clause += ` ON DELETE ${group[0].on_delete}`;
+      }
+      if (group[0].match && group[0].match.toUpperCase() !== 'NONE') {
+        clause += ` MATCH ${group[0].match}`;
+      }
+      return clause;
+    });
 
-    // renomeia tabela antiga
-    await run(`ALTER TABLE dars RENAME TO dars__backup_evt;`);
+    const createSQL = `CREATE TABLE dars (\n  ${[...colDefs, ...fkClauses].join(',\n  ')}\n);`;
 
-    // recria com NOT NULL removido
-    const createNew = replaced.replace(/CREATE\s+TABLE\s+(\S+)/i, 'CREATE TABLE dars');
-    await run(createNew);
+    // 4) Rebuild seguro
+    await Q.run('PRAGMA foreign_keys = OFF;');
+    await Q.run('BEGIN;');
 
-    // copia dados
-    await run(`INSERT INTO dars (${colNames}) SELECT ${colNames} FROM dars__backup_evt;`);
+    await Q.run(`ALTER TABLE dars RENAME TO dars__backup_evt;`);
+    await Q.run(createSQL);
 
-    // descarta backup
-    await run(`DROP TABLE dars__backup_evt;`);
+    const colNames = cols.map(c => c.name).join(', ');
+    await Q.run(`INSERT INTO dars (${colNames}) SELECT ${colNames} FROM dars__backup_evt;`);
+    await Q.run(`DROP TABLE dars__backup_evt;`);
 
-    await run('COMMIT;');
-    await run('PRAGMA foreign_keys = ON;');
+    await Q.run('COMMIT;');
+    await Q.run('PRAGMA foreign_keys = ON;');
 
-    console.log('OK: dars.permissionario_id/mes/ano agora são NULLABLE.');
+    console.log('OK: dars.permissionario_id/mes_referencia/ano_referencia agora são NULLABLE.');
   } catch (e) {
     console.error('Falha ao reconstruir dars:', e.message);
-    try { await run('ROLLBACK;'); } catch {}
+    try { await Q.run('ROLLBACK;'); } catch {}
     process.exit(1);
   } finally {
     db.close();
