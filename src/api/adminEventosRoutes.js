@@ -466,14 +466,14 @@ router.get('/:eventoId/dars', async (req, res) => {
   try {
     const sql = `
       SELECT
-         de.numero_parcela,
-         de.valor_parcela,
-         d.id AS dar_id,
-         d.data_vencimento AS dar_venc,
-         d.status AS dar_status,
-         d.pdf_url AS dar_pdf
-       FROM DARs_Eventos de
-       JOIN dars d ON d.id = de.id_dar
+        de.numero_parcela,
+        COALESCE(de.valor_parcela, d.valor) AS valor,
+        d.id                                AS dar_id,
+        d.data_vencimento                   AS venc,
+        d.status                            AS status,
+        d.pdf_url                           AS pdf_url
+      FROM DARs_Eventos de
+      JOIN dars d ON d.id = de.id_dar
       WHERE de.id_evento = ?
       ORDER BY de.numero_parcela ASC`;
     const rows = await dbAll(sql, [eventoId], 'listar-dars-por-evento');
