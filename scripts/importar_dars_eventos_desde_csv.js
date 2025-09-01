@@ -126,6 +126,22 @@ async function existeParcelaIgual(db, idEvento, parcela, vencISO, valor) {
   const hasTipoPerm = darsCols.some(c => c.name === 'tipo_permissionario');
   const hasDataEmissao = darsCols.some(c => c.name === 'data_emissao');
 
+// Procura uma DAR já existente SEM vínculo para reusar (mesmo valor + vencimento).
+async function pickExistingDar(db, valor, venc, hasTipoPerm) {
+  // Tenta filtrar por 'Evento' se a coluna existir; senão, reusa qualquer DAR solta
+  const baseSql = `
+    SELECT d.id
+      FROM dars d
+      LEFT JOIN DARs_Eventos de ON de.id_dar = d.id
+     WHERE de.id IS NULL
+       AND ROUND(d.valor * 100) = ROUND(? * 100)
+       AND d.data_vencimento = ?
+  `;
+  const sql = hasTipoPerm ? baseSql + ` AND COALESCE(d.tipo_permissionario,'') IN ('Evento','')` : baseSql;
+  return await get(db, sql + ` ORDER BY d.id DESC LIMIT 1`, [valor, venc]);
+}
+
+  
   console.log('\n--- VERIFICANDO VARIÁVEIS DE AMBIENTE CARREGADAS ---');
   console.log('SEFAZ_MODE:', `[${process.env.SEFAZ_MODE || ''}]`);
   console.log('SEFAZ_TLS_INSECURE:', `[${process.env.SEFAZ_TLS_INSECURE || ''}]`);
@@ -188,6 +204,32 @@ async function existeParcelaIgual(db, idEvento, parcela, vencISO, valor) {
         darVals.push('Evento');
       }
 
+// Tenta reusar uma DAR “solta” (criada no run anterior e nunca vinculada)
+let darId;
+const reuse = await pickExistingDar(db, valor, venc, hasTipoPerm);
+if (reuse?.id) {
+  darId = reuse.id;
+  // garante marcação 'Evento' se a coluna existir
+  if (hasTipoPerm) {
+    await run(db, `UPDATE dars SET tipo_permissionario = COALESCE(tipo_permissionario, 'Evento') WHERE id = ?`, [darId]);
+  }
+} else {
+  // cria DAR nova (emissão ajusta número/código depois)
+  const darCols = ['valor','data_vencimento','status','mes_referencia','ano_referencia','permissionario_id'];
+  const darVals = [valor, venc, 'Pendente', mes, ano, null];
+  if (hasTipoPerm) {
+    darCols.push('tipo_permissionario');
+    darVals.push('Evento');
+  }
+  const darIns = await run(db,
+    `INSERT INTO dars (${darCols.join(',')}) VALUES (${darCols.map(()=>'?').join(',')})`,
+    darVals
+  );
+  darId = darIns.lastID;
+  created++;
+}
+
+      
       const darIns = await run(db,
         `INSERT INTO dars (${darCols.join(',')}) VALUES (${darCols.map(()=>'?').join(',')})`,
         darVals
