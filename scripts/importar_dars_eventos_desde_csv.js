@@ -8,9 +8,7 @@
 // Sem --emitir: cria + vincula.
 // Com --emitir: cria + vincula + emite as com acao=CRIAR+VINCULAR+EMITIR.
 
-require('dotenv').config({
-  path: require('path').resolve(__dirname, '../.env')
-});
+require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
 const path = require('path');
 const fs = require('fs');
 const sqlite3 = require('sqlite3').verbose();
@@ -19,9 +17,24 @@ const DB_PATH = process.env.SQLITE_STORAGE
   ? path.resolve(process.env.SQLITE_STORAGE)
   : path.resolve(__dirname, '../sistemacipt.db');
 
-const { parse } = require('csv-parse/sync');
-const { emitirGuiaSefaz } = require('../src/services/sefazService');
+let parse;
+try { ({ parse } = require('csv-parse/sync')); }
+catch {
+  // fallback simples se o pacote não estiver instalado (não trata vírgulas em campos entre aspas)
+  parse = (txt, opts = {}) => {
+    if (!opts.columns) throw new Error('Fallback simples requer { columns: true }');
+    const lines = txt.replace(/\r\n?/g, '\n').trim().split('\n');
+    const headers = lines.shift().split(',').map(s => s.trim());
+    return lines.filter(Boolean).map(l => {
+      const cols = l.split(',');
+      const obj = {};
+      headers.forEach((h, i) => obj[h] = (cols[i] ?? '').trim());
+      return obj;
+    });
+  };
+}
 
+const { emitirGuiaSefaz } = require('../src/services/sefazService');
 const csvPath = path.resolve(process.argv[2] || './dars_eventos_import.csv');
 const SHOULD_EMIT = process.argv.includes('--emitir');
 
@@ -39,23 +52,17 @@ if (!fs.existsSync(csvPath)) {
 
 function run(db, sql, params = []) {
   return new Promise((resolve, reject) => {
-    db.run(sql, params, function (err) {
-      if (err) reject(err); else resolve(this);
-    });
+    db.run(sql, params, function (err) { err ? reject(err) : resolve(this); });
   });
 }
 function get(db, sql, params = []) {
   return new Promise((resolve, reject) => {
-    db.get(sql, params, (err, row) => {
-      if (err) reject(err); else resolve(row);
-    });
+    db.get(sql, params, (err, row) => { err ? reject(err) : resolve(row); });
   });
 }
 function all(db, sql, params = []) {
   return new Promise((resolve, reject) => {
-    db.all(sql, params, (err, rows) => {
-      if (err) reject(err); else resolve(rows);
-    });
+    db.all(sql, params, (err, rows) => { err ? reject(err) : resolve(rows); });
   });
 }
 
@@ -82,14 +89,13 @@ async function getEventoByIdOrProc(db, idEvento, procNorm) {
 
   if (!where.length) return null;
 
-  const ev = await get(db, `
+  return await get(db, `
     SELECT e.id, e.nome_evento, e.id_cliente, ce.nome_razao_social AS cliente_nome, ce.documento AS cliente_doc,
            e.data_vigencia_final, e.datas_evento
       FROM Eventos e
       JOIN Clientes_Eventos ce ON ce.id = e.id_cliente
      WHERE ${where.join(' OR ')}
      LIMIT 1`, args);
-  return ev || null;
 }
 
 function pickVencimento(ev, vencCsv) {
@@ -121,27 +127,25 @@ async function existeParcelaIgual(db, idEvento, parcela, vencISO, valor) {
   const db = new sqlite3.Database(DB_PATH);
   await run(db, 'PRAGMA foreign_keys = ON;');
 
-  // === detectar colunas da dars (evita erro de "no column named tipo_permissionario") ===
+  // detectar colunas da dars (ex.: tipo_permissionario, data_emissao)
   const darsCols = await all(db, 'PRAGMA table_info(dars)');
   const hasTipoPerm = darsCols.some(c => c.name === 'tipo_permissionario');
   const hasDataEmissao = darsCols.some(c => c.name === 'data_emissao');
 
-// Procura uma DAR já existente SEM vínculo para reusar (mesmo valor + vencimento).
-async function pickExistingDar(db, valor, venc, hasTipoPerm) {
-  // Tenta filtrar por 'Evento' se a coluna existir; senão, reusa qualquer DAR solta
-  const baseSql = `
-    SELECT d.id
-      FROM dars d
-      LEFT JOIN DARs_Eventos de ON de.id_dar = d.id
-     WHERE de.id IS NULL
-       AND ROUND(d.valor * 100) = ROUND(? * 100)
-       AND d.data_vencimento = ?
-  `;
-  const sql = hasTipoPerm ? baseSql + ` AND COALESCE(d.tipo_permissionario,'') IN ('Evento','')` : baseSql;
-  return await get(db, sql + ` ORDER BY d.id DESC LIMIT 1`, [valor, venc]);
-}
+  // Reusar DAR sem vínculo (mesmo valor + vencimento). Se existir tipo_permissionario, preferir Evento/ vazio
+  async function pickExistingDar(valor, venc) {
+    const baseSql = `
+      SELECT d.id
+        FROM dars d
+        LEFT JOIN DARs_Eventos de ON de.id_dar = d.id
+       WHERE de.id IS NULL
+         AND ROUND(d.valor * 100) = ROUND(? * 100)
+         AND d.data_vencimento = ?
+    `;
+    const sql = hasTipoPerm ? baseSql + ` AND COALESCE(d.tipo_permissionario,'') IN ('Evento','')` : baseSql;
+    return await get(db, sql + ` ORDER BY d.id DESC LIMIT 1`, [valor, venc]);
+  }
 
-  
   console.log('\n--- VERIFICANDO VARIÁVEIS DE AMBIENTE CARREGADAS ---');
   console.log('SEFAZ_MODE:', `[${process.env.SEFAZ_MODE || ''}]`);
   console.log('SEFAZ_TLS_INSECURE:', `[${process.env.SEFAZ_TLS_INSECURE || ''}]`);
@@ -191,52 +195,33 @@ async function pickExistingDar(db, valor, venc, hasTipoPerm) {
         continue;
       }
 
+      // se já existe exatamente a mesma parcela vinculada, pula
       if (await existeParcelaIgual(db, evento.id, parcela, venc, valor)) {
         console.log('[OK] Já existe parcela igual — pulando (idempotente):', { idEvento: evento.id, parcela, venc, valor });
         continue;
       }
 
-      // monta colunas dinamicamente
-      const darCols = ['valor','data_vencimento','status','mes_referencia','ano_referencia','permissionario_id'];
-      const darVals = [valor, venc, 'Pendente', mes, ano, null];
-      if (hasTipoPerm) {
-        darCols.push('tipo_permissionario');
-        darVals.push('Evento');
+      // Reusar DAR “solta” ou criar uma nova
+      let darId;
+      const reuse = await pickExistingDar(valor, venc);
+      if (reuse?.id) {
+        darId = reuse.id;
+        if (hasTipoPerm) {
+          await run(db, `UPDATE dars SET tipo_permissionario = COALESCE(tipo_permissionario, 'Evento') WHERE id = ?`, [darId]);
+        }
+      } else {
+        const darCols = ['valor','data_vencimento','status','mes_referencia','ano_referencia','permissionario_id'];
+        const darVals = [valor, venc, 'Pendente', mes, ano, null];
+        if (hasTipoPerm) { darCols.push('tipo_permissionario'); darVals.push('Evento'); }
+        const darIns = await run(db,
+          `INSERT INTO dars (${darCols.join(',')}) VALUES (${darCols.map(()=>'?').join(',')})`,
+          darVals
+        );
+        darId = darIns.lastID;
+        created++;
       }
 
-// Tenta reusar uma DAR “solta” (criada no run anterior e nunca vinculada)
-let darId;
-const reuse = await pickExistingDar(db, valor, venc, hasTipoPerm);
-if (reuse?.id) {
-  darId = reuse.id;
-  // garante marcação 'Evento' se a coluna existir
-  if (hasTipoPerm) {
-    await run(db, `UPDATE dars SET tipo_permissionario = COALESCE(tipo_permissionario, 'Evento') WHERE id = ?`, [darId]);
-  }
-} else {
-  // cria DAR nova (emissão ajusta número/código depois)
-  const darCols = ['valor','data_vencimento','status','mes_referencia','ano_referencia','permissionario_id'];
-  const darVals = [valor, venc, 'Pendente', mes, ano, null];
-  if (hasTipoPerm) {
-    darCols.push('tipo_permissionario');
-    darVals.push('Evento');
-  }
-  const darIns = await run(db,
-    `INSERT INTO dars (${darCols.join(',')}) VALUES (${darCols.map(()=>'?').join(',')})`,
-    darVals
-  );
-  darId = darIns.lastID;
-  created++;
-}
-
-      
-      const darIns = await run(db,
-        `INSERT INTO dars (${darCols.join(',')}) VALUES (${darCols.map(()=>'?').join(',')})`,
-        darVals
-      );
-      const darId = darIns.lastID;
-      created++;
-
+      // vincula na tabela de junção
       await run(db, `
         INSERT INTO DARs_Eventos (id_dar, id_evento, numero_parcela, valor_parcela, data_vencimento)
         VALUES (?,?,?,?,?)`,
@@ -244,12 +229,14 @@ if (reuse?.id) {
       );
       linked++;
 
+      // marcar como pago, se for o caso
       if (statusDesejado.toLowerCase().startsWith('pago') || acao.includes('MARCAR_PAGO')) {
         const hoje = new Date().toISOString().slice(0,10);
         await run(db, `UPDATE dars SET status='Pago', data_pagamento=? WHERE id=?`, [venc || hoje, darId]);
         markedPaid++;
       }
 
+      // emitir se solicitado e se a linha pedir emissão
       if (SHOULD_EMIT && acao.includes('EMITIR')) {
         const contrib = { nome: evento.cliente_nome, documento: evento.cliente_doc };
         const guiaLike = { id: darId, valor, data_vencimento: venc, mes_referencia: mes, ano_referencia: ano };
@@ -269,14 +256,12 @@ if (reuse?.id) {
             [numero, codBarras, pdfUrl, darId]
           );
 
-          // se existir data_emissao e status ainda Pendente, marque como Emitido
-          if (hasDataEmissao) {
-            await run(db, `
-              UPDATE dars
-                 SET data_emissao = COALESCE(data_emissao, date('now')),
-                     status = CASE WHEN status='Pendente' THEN 'Emitido' ELSE status END
-               WHERE id = ?`, [darId]);
-          }
+          // status 'Emitido' (mesmo se não existir data_emissao)
+          await run(db, `
+            UPDATE dars
+               SET ${hasDataEmissao ? "data_emissao = COALESCE(data_emissao, date('now')), " : ""}
+                   status = CASE WHEN status='Pendente' THEN 'Emitido' ELSE status END
+             WHERE id = ?`, [darId]);
 
           emitted++;
         } catch (e) {
