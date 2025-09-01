@@ -1,7 +1,7 @@
 // cron/gerarDarsMensais.js
-require('dotenv').config();
-
 const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
+
 const cron = require('node-cron');
 const sqlite3 = require('sqlite3').verbose();
 const { enviarEmailNovaDar } = require('../src/services/emailService');
