@@ -13,4 +13,3 @@ const rows=parse(fs.readFileSync(IN,'utf8'),{columns:true,skip_empty_lines:true}
 const pend=rows.filter(r=>String(r.acao||'').toUpperCase().startsWith('CRIAR') && (!Number.isFinite(toNum(r.valor)) || !iso(r.data_vencimento)));
 if(!pend.length){ console.log('Sem pendências'); process.exit(0); }
 fs.writeFileSync(OUT, stringify(pend,{header:true}), 'utf8'); console.log(`Gerado ${OUT} com ${pend.length} linhas`);
-NODE
