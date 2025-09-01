@@ -16,6 +16,16 @@ module.exports = {
       });
     }
     if (table['data_emissao']) {
+      const columnType = table['data_emissao'].type || '';
+      const isDate = columnType.toLowerCase().includes('date');
+
+      if (!isDate) {
+        await queryInterface.changeColumn('dars', 'data_emissao', {
+          type: Sequelize.DATE,
+          allowNull: true,
+          defaultValue: null,
+        });
+      }
       const [dars] = await queryInterface.sequelize.query(
         "SELECT id, data_emissao FROM dars"
       );
