@@ -1218,6 +1218,7 @@ function normalizarEvento(payload){
       body: JSON.stringify({ evento_id: eventoId, ...extra })
     });
     const json = await resp.json().catch(() => ({}));
+    if (json.error) throw new Error(json.error);
     if (resp.ok) return json;
     throw new Error('Não foi possível reemitir a DAR.');
   }
@@ -1372,7 +1373,7 @@ function normalizarEvento(payload){
           await abrirModalDARs(eventoId); // recarrega lista
           await carregarEventos();        // atualiza status geral
         }catch(err){
-          alert(err.message || 'Não foi possível reemitir.');
+          alert(err.message);
         }finally{
           btnReem.disabled = false; btnReem.innerHTML = original;
         }
