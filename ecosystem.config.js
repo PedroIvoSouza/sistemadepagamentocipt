@@ -3,7 +3,7 @@ module.exports = {
   apps: [
     {
       name: 'cipt-api',
-      script: 'index.js',          // <-- troque para o caminho correto do seu entrypoint
+      script: 'src/index.js',      // <-- troque para o caminho correto do seu entrypoint
       instances: 1,
       exec_mode: 'fork',
       watch: false,
