@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 /**
  * Importa e processa DARs conforme plano CSV:
  * - CRIAR+VINCULAR+EMITIR
@@ -23,7 +22,7 @@ const minimist = require('minimist');
 const { parse } = require('csv-parse/sync');
 
 const args = minimist(process.argv.slice(2), {
-  string: ['csv','map','api-base','header'],
+  string: ['csv','map','api-base','header','resolver'], // <- incluir resolver como string
   boolean: ['emitir','marcar-pago','dry-run'],
   alias: { h: 'header' },
   default: { emitir: false, 'marcar-pago': false, 'dry-run': true }
@@ -68,6 +67,7 @@ function iso(s) {
   return s;
 }
 
+// --- normalizador de processo (sem if/guard) ---
 function normProc(s) {
   if (!s) return '';
   let up = String(s).toUpperCase().trim();
@@ -89,6 +89,18 @@ function normProc(s) {
   return `${base}.${seqn}/${ano}`;
 }
 
+// --- suporte a --resolver PROC=ID (pode repetir a flag) ---
+let resolver = {};
+function addResolverPair(pair){
+  if(!pair) return;
+  const i = String(pair).indexOf('=');
+  if(i <= 0) return;
+  const proc = normProc(pair.slice(0,i));
+  const id   = String(pair.slice(i+1)).trim();
+  if(proc && id) resolver[proc] = id;
+}
+[].concat(args.resolver || []).forEach(addResolverPair);
+  
 // Axios com interceptor de log
 const api = axios.create({ baseURL: API_BASE, headers: HEADERS, timeout: 30000 });
 api.interceptors.request.use((cfg) => {
@@ -215,13 +227,14 @@ async function findDarInEvento(idEvento, numeroParcela, dataVenc, valor) {
 const planoCSV = fs.readFileSync(args.csv, 'utf8');
 const plano = parse(planoCSV, { columns: true, skip_empty_lines: true });
 
-let resolver = {};
+// mescla os mapeamentos do arquivo no objeto resolver existente
 if (args.map && fs.existsSync(args.map)) {
   const mapCSV = fs.readFileSync(args.map, 'utf8');
   const rows = parse(mapCSV, { columns: true, skip_empty_lines: true });
   rows.forEach(r => {
     const key = normProc(r.processo_norm || r.processo || r.numero_processo || '');
-    if (key && r.id_evento) resolver[key] = String(r.id_evento);
+    const val = r.id_evento && String(r.id_evento).trim();
+    if (key && val) resolver[key] = val;
   });
 }
 
