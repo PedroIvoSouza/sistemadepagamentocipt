@@ -101,7 +101,7 @@ async function findEventoByNumeroProcesso(dbGet, numero) {
 
   // 1) match direto (UPPER) e normalizado
   let row = await dbGet(
-    `SELECT id, id_cliente, status, numero_processo, nome
+    `SELECT id, id_cliente, status, numero_processo, COALESCE(nome_evento, '') AS nome
        FROM Eventos
       WHERE UPPER(numero_processo) = ?
          OR REPLACE(REPLACE(REPLACE(UPPER(numero_processo),'E:',''),'.',''),' ','') = ?
@@ -210,9 +210,9 @@ async function findEventoByNumeroProcesso(dbGet, numero) {
       try {
         const whereAno = yr ? ` AND numero_processo LIKE '%/${yr}%' ` : '';
         const cand = await all(
-          `SELECT id, nome, numero_processo
+          `SELECT id, nome_evento AS nome, numero_processo
              FROM Eventos
-            WHERE UPPER(nome) LIKE ? ${whereAno}
+            WHERE UPPER(nome_evento) LIKE ? ${whereAno}
             LIMIT 5`,
           ['%' + String(empresa || '').toUpperCase() + '%']
         );
