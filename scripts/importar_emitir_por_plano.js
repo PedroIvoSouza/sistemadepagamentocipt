@@ -13,6 +13,7 @@
  *    --map scripts/resolver_map_sugerido.csv \
  *    --api-base http://localhost:3000 \
  *    [--emitir] [--marcar-pago] [--dry-run] \
+ *    [--resolver "30010.592/2024=233"] \
  *    [--header "x-bot-key:Secti@2025#"] [--header "Authorization: Bearer <TOKEN>"]
  */
 
@@ -23,7 +24,7 @@ const minimist = require('minimist');
 const { parse } = require('csv-parse/sync');
 
 const args = minimist(process.argv.slice(2), {
-  string: ['csv','map','api-base','header'],
+  string: ['csv','map','api-base','header','resolver'],
   boolean: ['emitir','marcar-pago','dry-run'],
   alias: { h: 'header' },
   default: { emitir: false, 'marcar-pago': false, 'dry-run': true }
@@ -39,6 +40,8 @@ if (!args.csv) {
 }
 
 const API_BASE = args['api-base'].replace(/\/+$/,''); // sem barra final
+
+// ---------- Headers opcionais ----------
 const HEADERS = {};
 ([].concat(args.header || [])).forEach(h => {
   const idx = String(h).indexOf(':');
@@ -49,38 +52,53 @@ const HEADERS = {};
   }
 });
 
+// ---------- Helpers ----------
+function detectDelimiter(sample) {
+  const first = (sample.split(/\r?\n/)[0] || '').replace(/\r/g,'');
+  const counts = { ',': 0, ';': 0, '\t': 0 };
+  for (const ch of Object.keys(counts)) counts[ch] = (first.match(new RegExp('\\' + ch, 'g')) || []).length;
+  let best = ',', max = -1;
+  for (const [ch, c] of Object.entries(counts)) { if (c > max) { max = c; best = ch; } }
+  return best;
+}
+
 function toNum(x) {
-  if (x === null || x === undefined || x === '') return NaN;
-  const s = String(x).replace(',','.');
-  const f = parseFloat(s);
-  return Number.isFinite(f) ? f : NaN;
+  if (x === null || x === undefined) return NaN;
+  let s = String(x).trim();
+  if (!s) return NaN;
+  // remove R$, espaços e NBSP
+  s = s.replace(/[R$\s\u00A0]/gi, '');
+  // vírgula decimal? troca e remove milhares
+  if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.');
+  const n = Number(s);
+  return Number.isFinite(n) ? n : NaN;
 }
 
 function iso(s) {
   if (!s) return '';
-  const m = String(s).match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (m) return s;
-  const m2 = String(s).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (m2) {
-    const [_, d, mo, y] = m2;
+  const t = String(s).trim();
+  let m = t.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (m) return t;
+  m = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m) {
+    const [_, d, mo, y] = m;
     return `${y}-${String(mo).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
   }
-  return s;
+  return t; // deixa como veio (será validado mais adiante)
 }
 
+// Normaliza "E:30010.0000000592/2024" -> "30010.592/2024"
 function normProc(s) {
   if (!s) return '';
   let up = String(s).toUpperCase().trim();
   up = up.replace(/^E:/,'').replace(/\s+/g,'');
   const m = up.match(/^(\d+)\.(\d+)\/(\d{4})$/);
   if (!m) {
-    const m2 = up.match(/^.*?(\d{4})$/);
+    const m2 = up.match(/(\d{4})$/);
     const ano = m2 ? m2[1] : null;
     let base = null, seq = null;
     const baseSeq = up.replace(/\/?\d{4}$/,'');
-    if (baseSeq.includes('.')) {
-      [base, seq] = baseSeq.split('.');
-    }
+    if (baseSeq.includes('.')) [base, seq] = baseSeq.split('.');
     if (seq) seq = seq.replace(/^0+/,'') || '0';
     return (base && ano) ? `${base}.${seq}/${ano}` : up;
   }
@@ -89,91 +107,72 @@ function normProc(s) {
   return `${base}.${seqn}/${ano}`;
 }
 
-// Axios com interceptor de log
+// pega o primeiro campo não-vazio dentre os nomes passados
+function pick(row, ...names) {
+  for (const n of names) {
+    if (row[n] !== undefined && row[n] !== null && String(row[n]).trim() !== '') return row[n];
+  }
+  return '';
+}
+
+// ---------- Resolver (CLI) ----------
+let resolver = {};
+function addResolverPair(pair){
+  if(!pair) return;
+  const i = String(pair).indexOf('=');
+  if(i <= 0) return;
+  const proc = normProc(pair.slice(0,i));
+  const id   = String(pair.slice(i+1)).trim();
+  if(proc && id) resolver[proc] = id;
+}
+[].concat(args.resolver || []).forEach(addResolverPair);
+
+// ---------- Axios ----------
 const api = axios.create({ baseURL: API_BASE, headers: HEADERS, timeout: 30000 });
 api.interceptors.request.use((cfg) => {
   console.log(`→ ${cfg.method?.toUpperCase()} ${cfg.baseURL}${cfg.url}`);
   return cfg;
 });
 
-// Tentativa de múltiplos endpoints (fallback)
+// ---------- Endpoints ----------
 async function tryEndpoints(candidates) {
   let lastErr;
   for (const c of candidates) {
-    try {
-      const res = await c();
-      return res;
-    } catch (err) {
+    try { return await c(); }
+    catch (err) {
       lastErr = err;
-      // Se 404/405, tenta próximo
       if (err.response && [404,405].includes(err.response.status)) continue;
-      // outros erros (500 etc.) também merecem tentar o próximo
       continue;
     }
   }
   throw lastErr || new Error('Nenhum endpoint compatível respondeu');
 }
 
-// Criar + vincular DAR a um Evento
 async function createAndLinkDAR({ idEvento, numeroParcela, valor, dataVenc }) {
-  // 1) Tenta endpoint que já cria e vincula
   try {
     const res1 = await tryEndpoints([
-      () => api.post(`/eventos/${idEvento}/dars`, {
-        numero_parcela: Number(numeroParcela),
-        valor: Number(valor),
-        data_vencimento: dataVenc
-      }),
-      () => api.post(`/eventos/${idEvento}/dars/criar`, {
-        numero_parcela: Number(numeroParcela),
-        valor: Number(valor),
-        data_vencimento: dataVenc
-      }),
+      () => api.post(`/eventos/${idEvento}/dars`, { numero_parcela: Number(numeroParcela), valor: Number(valor), data_vencimento: dataVenc }),
+      () => api.post(`/eventos/${idEvento}/dars/criar`, { numero_parcela: Number(numeroParcela), valor: Number(valor), data_vencimento: dataVenc }),
     ]);
-    // esperar { id_dar, ... } na resposta
     const id_dar = res1.data?.id_dar || res1.data?.id || res1.data?.dar_id;
     if (!id_dar) throw new Error('Resposta sem id_dar');
     return id_dar;
-  } catch (_) {
-    // 2) Fallback em 2 etapas: criar DAR e depois vincular
+  } catch {
     const resCreate = await tryEndpoints([
-      () => api.post(`/dars`, {
-        valor: Number(valor),
-        data_vencimento: dataVenc,
-        status: 'Pendente',
-        tipo_permissionario: 'Evento' // útil pro seu schema
-      }),
-      () => api.post(`/dars/criar`, {
-        valor: Number(valor),
-        data_vencimento: dataVenc,
-        status: 'Pendente',
-        tipo_permissionario: 'Evento'
-      })
+      () => api.post(`/dars`, { valor: Number(valor), data_vencimento: dataVenc, status: 'Pendente', tipo_permissionario: 'Evento' }),
+      () => api.post(`/dars/criar`, { valor: Number(valor), data_vencimento: dataVenc, status: 'Pendente', tipo_permissionario: 'Evento' })
     ]);
     const id_dar = resCreate.data?.id || resCreate.data?.id_dar;
     if (!id_dar) throw new Error('DAR criada mas id não retornado');
 
-    // Vincular
     await tryEndpoints([
-      () => api.post(`/eventos/${idEvento}/vincular-dar`, {
-        id_dar: id_dar,
-        numero_parcela: Number(numeroParcela),
-        valor_parcela: Number(valor),
-        data_vencimento: dataVenc
-      }),
-      () => api.post(`/dars_eventos`, {
-        id_evento: idEvento,
-        id_dar: id_dar,
-        numero_parcela: Number(numeroParcela),
-        valor_parcela: Number(valor),
-        data_vencimento: dataVenc
-      })
+      () => api.post(`/eventos/${idEvento}/vincular-dar`, { id_dar, numero_parcela: Number(numeroParcela), valor_parcela: Number(valor), data_vencimento: dataVenc }),
+      () => api.post(`/dars_eventos`, { id_evento: idEvento, id_dar, numero_parcela: Number(numeroParcela), valor_parcela: Number(valor), data_vencimento: dataVenc })
     ]);
     return id_dar;
   }
 }
 
-// Emitir DAR
 async function emitirDAR(idDar) {
   const res = await tryEndpoints([
     () => api.post(`/dars/${idDar}/emitir`, {}),
@@ -182,7 +181,6 @@ async function emitirDAR(idDar) {
   return res.data;
 }
 
-// Marcar Pago
 async function marcarPago(idDar, dataPagamento /* yyyy-mm-dd ou '' */) {
   const payload = dataPagamento ? { status: 'Pago', data_pagamento: dataPagamento } : { status: 'Pago' };
   await tryEndpoints([
@@ -192,7 +190,6 @@ async function marcarPago(idDar, dataPagamento /* yyyy-mm-dd ou '' */) {
   ]);
 }
 
-// Buscar DAR existente para um evento (parcela/venc/valor)
 async function findDarInEvento(idEvento, numeroParcela, dataVenc, valor) {
   try {
     const res = await tryEndpoints([
@@ -211,59 +208,61 @@ async function findDarInEvento(idEvento, numeroParcela, dataVenc, valor) {
   }
 }
 
-// --------- Carrega CSVs ---------
+// ---------- Carrega CSV do plano ----------
 const planoCSV = fs.readFileSync(args.csv, 'utf8');
-const plano = parse(planoCSV, { columns: true, skip_empty_lines: true });
+const delimPlano = detectDelimiter(planoCSV);
+const plano = parse(planoCSV, { columns: true, skip_empty_lines: true, delimiter: delimPlano });
 
-let resolver = {};
+// ---------- Mescla resolver do CSV (se existir) ----------
 if (args.map && fs.existsSync(args.map)) {
   const mapCSV = fs.readFileSync(args.map, 'utf8');
-  const rows = parse(mapCSV, { columns: true, skip_empty_lines: true });
+  const delimMap = detectDelimiter(mapCSV);
+  const rows = parse(mapCSV, { columns: true, skip_empty_lines: true, delimiter: delimMap });
   rows.forEach(r => {
     const key = normProc(r.processo_norm || r.processo || r.numero_processo || '');
-    if (key && r.id_evento) resolver[key] = String(r.id_evento);
+    const val = r.id_evento && String(r.id_evento).trim();
+    if (key && val) resolver[key] = val;
   });
 }
 
-// métricas
+// ---------- Loop principal ----------
 let m = { criados:0, vinculados:0, emitidos:0, pagos:0, pulados:0, erros:0 };
 
-// --------- Loop principal ---------
 (async () => {
   for (const row of plano) {
-    const processoNorm = normProc(row.processo_norm || row.processo_plan || row.processo_sistema || '');
-    const idEventoPlano = row.id_evento ? String(row.id_evento).trim() : '';
-    const idEvento = idEventoPlano || resolver[processoNorm] || '';
+    const processoNorm = normProc(pick(row, 'processo_norm','processo_plan','processo_sistema','processo','numero_processo'));
+    const idEventoPlano = pick(row, 'id_evento','evento_id');
+    const idEvento = (idEventoPlano ? String(idEventoPlano).trim() : '') || resolver[processoNorm] || '';
 
-    const parcela = String(row.parcela || '1').trim();
-    const valor = toNum(row.valor);
-    const venc = iso(row.data_vencimento);
-    const acao = String(row.acao || '').trim().toUpperCase();
-    const pagoPlan = String(row.pago_plan || 'Não').toLowerCase() === 'sim';
-    const obs = row.observacao || '';
+    const parcela = String(pick(row, 'parcela','numero_parcela','n_parcela') || '1').trim();
+
+    const valorRaw = pick(row, 'valor','valor_parcela','valor_dar','valorParcela');
+    const valor = toNum(valorRaw);
+
+    const vencRaw = pick(row, 'data_vencimento','vencimento','data_venc','venc');
+    const venc = iso(vencRaw);
+
+    const pagoPlan = String(pick(row, 'pago_plan','pago','pago?') || 'Nao').toLowerCase().startsWith('s');
+    const acao = String(pick(row, 'acao','ação') || '').trim().toUpperCase();
+    const obs = pick(row, 'observacao','observação','obs');
 
     if (!processoNorm) { console.log(`! Sem processo_norm, pulando`); m.pulados++; continue; }
-    if (!idEvento) { console.log(`! Evento não resolvido para ${processoNorm} (${obs})`); m.pulados++; continue; }
+    if (!idEvento) { console.log(`! Evento não resolvido para ${processoNorm} (${obs || 'SEM_OBS'})`); m.pulados++; continue; }
     if (!Number.isFinite(valor) || !venc) { console.log(`! Linha inválida (valor/venc): ${processoNorm} P${parcela}`); m.pulados++; continue; }
 
     console.log(`\n=== ${processoNorm} | parcela ${parcela} | R$ ${valor.toFixed(2)} | venc ${venc} | ação ${acao}`);
 
-    // DRY-RUN?
-    if (args['dry-run']) { continue; }
+    if (args['dry-run']) continue;
 
     try {
-      // localizar DAR existente
-      let darId = null;
-      darId = await findDarInEvento(idEvento, parcela, venc, valor);
+      let darId = await findDarInEvento(idEvento, parcela, venc, valor);
 
       if (!darId && (acao.startsWith('CRIAR') || acao==='APENAS_EMITIR' || acao==='APENAS_MARCAR_PAGO')) {
-        // cria + vincula
         darId = await createAndLinkDAR({ idEvento, numeroParcela: parcela, valor, dataVenc: venc });
         m.criados++; m.vinculados++;
         console.log(`✓ Criada e vinculada DAR #${darId}`);
       }
 
-      // emitir quando necessário
       if ((acao.includes('EMITIR') || acao==='APENAS_EMITIR') && args.emitir) {
         if (!darId) throw new Error('Sem id_dar para emitir');
         await emitirDAR(darId);
@@ -271,10 +270,9 @@ let m = { criados:0, vinculados:0, emitidos:0, pagos:0, pulados:0, erros:0 };
         console.log(`✓ Emitida DAR #${darId}`);
       }
 
-      // marcar pago quando necessário
       if ((pagoPlan || acao.includes('MARCAR_PAGO') || acao==='APENAS_MARCAR_PAGO') && args['marcar-pago']) {
         if (!darId) throw new Error('Sem id_dar para marcar pago');
-        const dataPg = iso(row.data_pagamento || ''); // se vier no plano
+        const dataPg = iso(pick(row, 'data_pagamento','pagamento_em','data_pg') || '');
         await marcarPago(darId, dataPg);
         m.pagos++;
         console.log(`✓ Pago DAR #${darId} ${dataPg ? `(data ${dataPg})` : ''}`);
