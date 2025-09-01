@@ -40,3 +40,30 @@ O projeto também tenta rodar esse comando automaticamente na inicialização, m
 
 Após atualizar o código para versões mais recentes, execute novamente as migrações para criar novas estruturas de banco de dados,
 como a tabela de auditoria de reservas (`reservas_audit`).
+
+## Salas de Reunião
+
+Para habilitar o módulo de salas:
+
+1. Execute as migrações do projeto:
+
+   ```bash
+   npm run migrate
+   ```
+
+   > Caso o script `migrate` não esteja configurado, utilize o comando equivalente:
+   >
+   > ```bash
+   > npx sequelize-cli db:migrate
+   > ```
+
+2. Popule a tabela `salas_reuniao` com os registros iniciais:
+
+   ```bash
+   npx sequelize-cli db:seed --seed src/migrations/20250819150001-seed-salas.js
+   ```
+
+3. Acesso às interfaces:
+
+   - **Portal do Permissionário** (`/salas.html`): requer autenticação de um permissionário. O token `authToken` é obtido via `/login.html`.
+   - **Painel de Gestão** (`/admin/salas.html`): restrito a administradores. Utilize as credenciais criadas pelo script `criar_admin.js` (padrão `supcti@secti.al.gov.br` / `Supcti@2025#`).
