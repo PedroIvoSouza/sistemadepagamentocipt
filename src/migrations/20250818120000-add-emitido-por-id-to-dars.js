@@ -58,7 +58,10 @@ module.exports = {
   },
 
   async down(queryInterface, Sequelize) {
-    await queryInterface.removeColumn('dars', 'emitido_por_id');
+    const table = await queryInterface.describeTable('dars');
+    if (table['emitido_por_id']) {
+      await queryInterface.removeColumn('dars', 'emitido_por_id');
+    }
     await queryInterface.changeColumn('dars', 'data_emissao', {
       type: Sequelize.DATE,
       allowNull: false,
