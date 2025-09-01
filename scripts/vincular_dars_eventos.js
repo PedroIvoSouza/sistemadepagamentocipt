@@ -1,22 +1,24 @@
 /**
  * Vincular DARs de uma planilha de eventos a Eventos já existentes no banco,
- * gerando as parcelas (dars) e a tabela de vínculo DARs_Eventos.
+ * gerando as parcelas (dars) e o vínculo em DARs_Eventos.
  *
  * Recursos:
- *  - Detecção de "PAGO" na célula da parcela (cria já como Pago e define data_pagamento)
- *  - Normalização e matching robusto do numero_processo (remove E:, pontos, espaços, barras)
- *  - Sugestões por nome+ano quando não encontra o evento
+ *  - Detecta "PAGO" na célula da parcela (marca Pago e define data_pagamento)
+ *  - Matching robusto do numero_processo (tira E:, pontos, espaços, zeros à esquerda da sequência)
+ *  - Sugestões por nome_evento quando não encontra
+ *  - Mapeamento manual com --resolver "texto=ID,texto2=ID2"
  *
  * Uso:
  *   npm i xlsx
  *   node vincular_dars_eventos.js --excel "/caminho/Eventos PAGOS CIPT.xlsx" --db "/var/www/api/sistemacipt.db"
  *
  * Flags:
- *   --excel           caminho para a planilha .xlsx
- *   --db              caminho do SQLite (default: ./sistemacipt.db)
- *   --dry-run         não altera o banco; apenas mostra as operações
- *   --marcar-pago     (opcional) marca TODAS as DARs do evento como Pago (além da detecção por parcela)
- *   --pag-data=hoje|venc   (default: 'venc') controla a data_pagamento quando marcamos Pago
+ *   --excel                 caminho para a planilha .xlsx
+ *   --db                    caminho do SQLite (default: ./sistemacipt.db)
+ *   --dry-run               não altera o banco; só imprime operações
+ *   --marcar-pago           marca TODAS as parcelas como Pago (além do PAGO por célula)
+ *   --pag-data=hoje|venc    (default: venc) data_pagamento quando marca Pago
+ *   --resolver              ex.: "E:30010.0000000296/2025=5,E:30010.0000000412/2025=8"
  */
 
 const fs = require('fs');
@@ -32,35 +34,28 @@ function brMoneyToFloat(v) {
   if (v === null || v === undefined) return NaN;
   let s = String(v).trim();
   if (!s) return NaN;
-  // Extrai o primeiro número padrão BR "1.234,56" dentro da string
-  const m = s.match(/(\d{1,3}(?:\.\d{3})*|\d+)(,\d{2})?/);
+  const m = s.match(/(\d{1,3}(?:\.\d{3})*|\d+)(,\d{2})?/); // pega 1º número BR
   if (!m) return NaN;
   s = m[0].replace(/\./g, '').replace(',', '.');
   const n = parseFloat(s);
   return Number.isFinite(n) ? n : NaN;
 }
 function parsePagoFlag(cellValue) {
-  // Considera "pago" se houver a palavra, ignorando acentuação e caixa
-  const txt = String(cellValue || '')
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const txt = String(cellValue || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   return /(^|\s)pago(\s|$)/i.test(txt);
 }
 function parseDatePtBR(s) {
   if (!s) return null;
   const txt = String(s).trim();
-  // dd/mm/yyyy
-  let m = txt.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  let m = txt.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/); // dd/mm/yyyy
   if (m) {
     const d = m[1].padStart(2, '0');
     const mo = m[2].padStart(2, '0');
     const y = m[3].length === 2 ? ('20' + m[3]) : m[3];
     return `${y}-${mo}-${d}`;
   }
-  // yyyy-mm-dd (com ou sem hora)
-  m = txt.match(/^(\d{4})-(\d{2})-(\d{2})(?:\s+\d{2}:\d{2}:\d{2})?$/);
+  m = txt.match(/^(\d{4})-(\d{2})-(\d{2})(?:\s+\d{2}:\d{2}:\d{2})?$/); // yyyy-mm-dd
   if (m) return `${m[1]}-${m[2]}-${m[3]}`;
-
-  // fallback simples: dayfirst se parece dd/mm/yy
   const parts = txt.split(/[T\s]/)[0].split(/[\/\-]/);
   if (parts.length === 3) {
     let [a, b, c] = parts;
@@ -83,49 +78,95 @@ function argValue(name, def = null) {
   if (i >= 0 && i + 1 < process.argv.length) return process.argv[i + 1];
   return def;
 }
+function parseResolverArg(s) {
+  const map = new Map();
+  if (!s) return map;
+  for (const pair of String(s).split(',')) {
+    const [k, v] = pair.split('=');
+    const id = parseInt((v || '').trim(), 10);
+    if (k && Number.isInteger(id)) map.set(k.trim(), id);
+  }
+  return map;
+}
 
 // ----------------- Normalização & busca de Evento -----------------
-function normProc(s) {
+function parseProcParts(s) {
   const up = String(s || '').toUpperCase().trim();
-  const noDotsSpaces = up.replace(/[.\s]/g, '');
-  const noPrefix = noDotsSpaces.replace(/^E:/, '');
-  const noSlash = noPrefix.replace(/\//g, '');
-  const digitsOnly = up.replace(/\D/g, '');
-  const m = up.match(/(\d{3,})\/(\d{4})/); // pega segmento final + ano (ex.: 0000000592/2024)
-  const segAno = m ? (m[1] + '/' + m[2]) : null;
-  return { rawUpper: up, noPrefix, noSlash, digitsOnly, segAno };
+  const clean = up.replace(/^E:/, '').replace(/\s+/g, '');
+  // exemplos: 30010.0000000296/2025 | 30010.0296/2025 | 30010.592/2024
+  const m = clean.match(/^(\d+)\.(\d+)\/(\d{4})$/);
+  if (!m) return { raw: up, base: null, seq: null, seqNorm: null, ano: null, clean };
+  const base = m[1];
+  const seq = m[2];
+  const seqNorm = seq.replace(/^0+/, '') || '0';
+  const ano = m[3];
+  return { raw: up, base, seq, seqNorm, ano, clean };
 }
 
 async function findEventoByNumeroProcesso(dbGet, numero) {
-  const { rawUpper, noPrefix, noSlash, digitsOnly, segAno } = normProc(numero);
-
-  // 1) match direto (UPPER) e normalizado
-  let row = await dbGet(
-    `SELECT id, id_cliente, status, numero_processo, COALESCE(nome_evento, '') AS nome
-       FROM Eventos
-      WHERE UPPER(numero_processo) = ?
-         OR REPLACE(REPLACE(REPLACE(UPPER(numero_processo),'E:',''),'.',''),' ','') = ?
-         OR REPLACE(REPLACE(REPLACE(REPLACE(UPPER(numero_processo),'E:',''),'.',''),' ','') , '/','') = ?
-      LIMIT 1`,
-    [rawUpper, noPrefix, noSlash]
-  );
-  if (row) return row;
-
-  // 2) Fallbacks com LIKE (cautela)
-  const likes = [];
-  if (segAno) likes.push('%' + segAno + '%');
-  if (digitsOnly.length >= 6) likes.push('%' + digitsOnly.slice(-6) + '%'); // últimos 6 dígitos como pista
-
-  for (const pat of likes) {
-    row = await dbGet(
-      `SELECT id, id_cliente, status, numero_processo, COALESCE(nome_evento, '') AS nome
+  const q = parseProcParts(numero);
+  if (!q.base || !q.ano) {
+    const rawUpper = String(numero || '').toUpperCase().trim();
+    const noPrefix = rawUpper.replace(/^E:/, '').replace(/[.\s]/g, '');
+    const noSlash = noPrefix.replace(/\//g, '');
+    let row = await dbGet(
+      `SELECT id, id_cliente, status, numero_processo, COALESCE(nome_evento,'') AS nome
          FROM Eventos
-        WHERE UPPER(numero_processo) LIKE ?
-           OR REPLACE(REPLACE(UPPER(numero_processo),'.',''),' ','') LIKE ?
+        WHERE UPPER(numero_processo) = ?
+           OR REPLACE(REPLACE(REPLACE(UPPER(numero_processo),'E:',''),'.',''),' ','') = ?
+           OR REPLACE(REPLACE(REPLACE(REPLACE(UPPER(numero_processo),'E:',''),'.',''),' ','') , '/','') = ?
         LIMIT 1`,
-      [pat, pat]
+      [rawUpper, noPrefix, noSlash]
     );
-    if (row) return row;
+    return row || null;
+  }
+
+  // 1) candidatos por base+ano
+  let row = await dbGet(
+    `SELECT id, id_cliente, status, numero_processo, COALESCE(nome_evento,'') AS nome
+       FROM Eventos
+      WHERE (UPPER(numero_processo) LIKE ? OR UPPER(numero_processo) LIKE ?)
+        AND UPPER(numero_processo) LIKE ?
+      LIMIT 1`,
+    [
+      `${q.base}.%/${q.ano}`.toUpperCase(),
+      `%${q.base}.%/${q.ano}%`.toUpperCase(),
+      `%/${q.ano}`.toUpperCase()
+    ]
+  );
+  if (row) {
+    const got = parseProcParts(row.numero_processo);
+    if (got.base === q.base && got.ano === q.ano && got.seqNorm === q.seqNorm) return row;
+  }
+
+  // 2) lista ampla por ano e base; filtra por seq normalizada
+  const listRow = await dbGet(
+    `SELECT GROUP_CONCAT(id || '|' || numero_processo, ';') AS cat
+       FROM (
+         SELECT id, numero_processo
+           FROM Eventos
+          WHERE UPPER(numero_processo) LIKE ?
+             OR UPPER(numero_processo) LIKE ?
+             OR UPPER(numero_processo) LIKE ?
+          LIMIT 50
+       )`,
+    [
+      `${q.base}.%/${q.ano}`.toUpperCase(),
+      `%${q.base}.%/${q.ano}%`.toUpperCase(),
+      `%/${q.ano}%`.toUpperCase()
+    ]
+  );
+  const items = (listRow && listRow.cat ? listRow.cat.split(';') : []).map(s => {
+    const [idStr, np] = s.split('|'); return { id: parseInt(idStr, 10), numero_processo: np };
+  });
+  for (const c of items) {
+    const got = parseProcParts(c.numero_processo);
+    if (got.base === q.base && got.ano === q.ano && got.seqNorm === q.seqNorm) {
+      return await dbGet(
+        `SELECT id, id_cliente, status, numero_processo, COALESCE(nome_evento,'') AS nome
+           FROM Eventos WHERE id = ? LIMIT 1`, [c.id]
+      );
+    }
   }
   return null;
 }
@@ -136,7 +177,8 @@ async function findEventoByNumeroProcesso(dbGet, numero) {
   const DBPATH = argValue('--db', './sistemacipt.db');
   const DRY = argFlag('--dry-run');
   const MARK_PAID_ALL = argFlag('--marcar-pago');
-  const PAG_DATA = (argValue('--pag-data', 'venc') || 'venc').toLowerCase(); // 'venc' ou 'hoje'
+  const PAG_DATA = (argValue('--pag-data', 'venc') || 'venc').toLowerCase(); // 'venc' | 'hoje'
+  const RESOLVER = parseResolverArg(argValue('--resolver', ''));
 
   if (!EXCEL || !fs.existsSync(EXCEL)) {
     console.error('Erro: informe --excel com o caminho do arquivo .xlsx');
@@ -152,7 +194,6 @@ async function findEventoByNumeroProcesso(dbGet, numero) {
   const ws = workbook.Sheets[sheetName];
   const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
 
-  // Mapeia colunas (tolerando variações)
   function findCol(possibles) {
     const cols = Object.keys(rows[0] || {});
     for (const p of possibles) {
@@ -165,19 +206,17 @@ async function findEventoByNumeroProcesso(dbGet, numero) {
     }
     return null;
   }
+
   const headers = Object.keys(rows[0] || {});
   const COL_EMPRESA = findCol(['EMPRESA']);
   const COL_DOC     = findCol(['CNPJ/CPF', 'CNPJ/CPF ']);
   const COL_PROC    = findCol(['N º DO PROCESSO','Nº DO PROCESSO','NUMERO DO PROCESSO','N° DO PROCESSO']);
   const COL_PAR1    = findCol(['1ª PARCELA','1ª PARCELA ']);
   const COL_DUE1    = findCol(['DATA LIMITE PARA PAGAMENTO','DATA LIMITE PARA PAGAMENTO ']);
-
-  // pode haver 2 colunas "DATA LIMITE PARA PAGAMENTO"
   const dueCandidates = headers.filter(h => h.toLowerCase().startsWith('data limite para pagamento'));
-  const COL_DUE2      = dueCandidates.length > 1 ? dueCandidates[1] : null;
-  const COL_PAR2      = findCol(['2ª PARCELA']);
+  const COL_DUE2    = dueCandidates.length > 1 ? dueCandidates[1] : null;
+  const COL_PAR2    = findCol(['2ª PARCELA']);
 
-  // Conexão SQLite
   const db = new sqlite3.Database(DBPATH);
   const run = (sql, params = []) => new Promise((resolve, reject) => {
     if (DRY) { console.log('[DRY-RUN][SQL]', sql, params); return resolve({ changes: 0, lastID: 0 }); }
@@ -196,21 +235,27 @@ async function findEventoByNumeroProcesso(dbGet, numero) {
     const empresa     = String(r[COL_EMPRESA] || '').trim();
     const docDigits   = onlyDigits(r[COL_DOC] || '');
     const numProcesso = String(r[COL_PROC] || '').trim();
-    if (!numProcesso) {
-      console.warn('[AVISO] Sem número de processo — pulando:', empresa);
-      skipped++;
-      continue;
+    if (!numProcesso) { console.warn('[AVISO] Sem número de processo — pulando:', empresa); skipped++; continue; }
+
+    // RESOLVER manual tem prioridade
+    const mappedId = RESOLVER.get(numProcesso);
+    let ev = null;
+    if (mappedId) {
+      ev = await get(
+        `SELECT id, id_cliente, status, numero_processo, COALESCE(nome_evento,'') AS nome
+           FROM Eventos WHERE id = ? LIMIT 1`, [mappedId]
+      );
+    } else {
+      ev = await findEventoByNumeroProcesso(get, numProcesso);
     }
 
-    const ev = await findEventoByNumeroProcesso(get, numProcesso);
     if (!ev) {
       console.warn('[NÃO ENCONTRADO] Evento não localizado por numero_processo:', numProcesso, '-', empresa);
-      // Sugestões (até 5) por nome e ano (se extraído)
       const yr = (String(numProcesso).match(/(\d{4})/) || [])[1];
       try {
         const whereAno = yr ? ` AND numero_processo LIKE '%/${yr}%' ` : '';
         const cand = await all(
-          `SELECT id, nome_evento AS nome, numero_processo
+          `SELECT id, COALESCE(nome_evento,'') AS nome, numero_processo
              FROM Eventos
             WHERE UPPER(nome_evento) LIKE ? ${whereAno}
             LIMIT 5`,
@@ -220,29 +265,22 @@ async function findEventoByNumeroProcesso(dbGet, numero) {
           console.warn('  Sugestões:');
           for (const c of cand) console.warn(`   - [${c.id}] ${c.nome} :: ${c.numero_processo}`);
         }
-      } catch (e) { /* ignore */ }
+      } catch (e) {}
       notFound++;
       continue;
     }
 
-    // PARCELA 1
-    const v1Raw = r[COL_PAR1];
-    const isPago1 = parsePagoFlag(v1Raw);
-    const v1 = brMoneyToFloat(v1Raw);
-    const due1 = parseDatePtBR(r[COL_DUE1]);
-
-    // PARCELA 2
-    const v2Raw = r[COL_PAR2];
-    const isPago2 = parsePagoFlag(v2Raw);
-    const v2 = brMoneyToFloat(v2Raw);
-    const due2 = COL_DUE2 ? parseDatePtBR(r[COL_DUE2]) : null;
+    // PARCELAS
+    const v1Raw = r[COL_PAR1]; const isPago1 = parsePagoFlag(v1Raw); const v1 = brMoneyToFloat(v1Raw);
+    const due1  = parseDatePtBR(r[COL_DUE1]);
+    const v2Raw = r[COL_PAR2]; const isPago2 = parsePagoFlag(v2Raw); const v2 = brMoneyToFloat(v2Raw);
+    const due2  = COL_DUE2 ? parseDatePtBR(r[COL_DUE2]) : null;
 
     const parcelas = [];
     if (Number.isFinite(v1) && v1 > 0 && due1) parcelas.push({ n: 1, valor: v1, venc: due1, pago: isPago1 });
     if (Number.isFinite(v2) && v2 > 0 && due2) parcelas.push({ n: 2, valor: v2, venc: due2, pago: isPago2 });
 
     for (const p of parcelas) {
-      // Já existe vínculo igual?
       const existing = await get(
         `SELECT d.id AS dar_id, d.status
            FROM DARs_Eventos de
@@ -255,13 +293,10 @@ async function findEventoByNumeroProcesso(dbGet, numero) {
       );
 
       if (existing?.dar_id) {
-        // Se já existe e precisa marcar pago:
         if ((p.pago || MARK_PAID_ALL) && existing.status !== 'Pago') {
           const dataPg = (PAG_DATA === 'hoje') ? new Date().toISOString().slice(0,10) : p.venc;
-          const upd = await run(
-            `UPDATE dars SET status='Pago', data_pagamento=COALESCE(data_pagamento, ?) WHERE id=?`,
-            [dataPg, existing.dar_id]
-          );
+          const upd = await run(`UPDATE dars SET status='Pago', data_pagamento=COALESCE(data_pagamento, ?) WHERE id=?`,
+            [dataPg, existing.dar_id]);
           markedPaid += upd.changes || 0;
         } else {
           alreadyLinked++;
@@ -269,7 +304,6 @@ async function findEventoByNumeroProcesso(dbGet, numero) {
         continue;
       }
 
-      // Criar DAR nova
       const { ano, mes } = ymdToYearMonth(p.venc);
       const initialStatus = (p.pago || MARK_PAID_ALL) ? 'Pago' : 'Pendente';
       const dataPg = (initialStatus === 'Pago')
@@ -294,13 +328,13 @@ async function findEventoByNumeroProcesso(dbGet, numero) {
     }
   }
 
+  // Fim
   db.close();
-
   console.log('--- RESUMO ---');
-  console.log('DARs criadas:          ', createdDARs);
-  console.log('Vínculos criados:      ', linkedDARs);
+  console.log('DARs criadas:           ', createdDARs);
+  console.log('Vínculos criados:       ', linkedDARs);
   console.log('Já vinculadas (mantidas)', alreadyLinked);
-  console.log('Eventos não achados:   ', notFound);
-  console.log('Linhas puladas:        ', skipped);
-  console.log('DARs marcadas "Pago":  ', markedPaid);
+  console.log('Eventos não achados:    ', notFound);
+  console.log('Linhas puladas:         ', skipped);
+  console.log('DARs marcadas "Pago":   ', markedPaid);
 })();
