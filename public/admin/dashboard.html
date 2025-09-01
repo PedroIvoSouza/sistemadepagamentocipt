@@ -62,12 +62,16 @@
         </li>
 
         <li class="nav-item"><a class="nav-link" href="/admin/relatorios.html"><i class="bi bi-file-earmark-bar-graph"></i>Relatórios</a></li>
+        <li class="nav-item">
+          <a class="nav-link" href="/admin/salas.html">
+            <i class="bi bi-calendar-event"></i>Salas de reunião
+          </a>
+        </li>
         <li class="nav-item"><a class="nav-link" href="/admin/admin-management.html"><i class="bi bi-person-badge-fill"></i>Administradores</a></li>
         <li class="nav-item"><a id="logoutButton" class="nav-link" href="#" style="color: #ffc107;"><i class="bi bi-box-arrow-right"></i>Sair</a></li>
     </ul>
     <div class="sidebar-footer"><img src="/images/logo-secti-vertical.png" alt="Logo SECTI"></div>
 </aside>
-
         <div class="main-content">
             <header class="topbar">
                 <div id="userInfo" class="text-end">
@@ -113,6 +117,7 @@
             </main>
         </div>
     </div>
+<script src="/js/admin-sidebar.js"></script>
 <script src="/js/admin-guard.js"></script>
 <script defer src="/js/mobile-adapter.js"></script>
   <script defer src="/js/ui-kit.js"></script>
@@ -130,35 +135,6 @@ window.onload = async () => {
   // Sempre manter padronizado em 'adminToken'
   localStorage.setItem('adminToken', token);
   localStorage.removeItem('adminAuthToken'); // limpa a antiga, se existir
-
-  // --- LÓGICA DO MENU (igual) ---
-  const path = window.location.pathname; 
-  const navLinks = document.querySelectorAll('.sidebar-nav .nav-link');
-  navLinks.forEach(link => {
-    const href = link.getAttribute('href');
-    if (path.endsWith(href)) {
-      link.classList.add('active'); 
-      const parentDropdown = link.closest('.menu-dropdown');
-      if (parentDropdown) {
-        parentDropdown.querySelector('.submenu').style.display = 'block';
-      }
-    }
-  });
-  const dropdownToggles = document.querySelectorAll('.menu-dropdown > a');
-  dropdownToggles.forEach(toggle => {
-    toggle.addEventListener('click', (e) => {
-      e.preventDefault();
-      const submenu = toggle.nextElementSibling;
-      submenu.style.display = submenu.style.display === 'block' ? 'none' : 'block';
-    });
-  });
-
-  // Logout: limpe a chave padronizada
-  document.getElementById('logoutButton').addEventListener('click', (e) => {
-    e.preventDefault();
-    localStorage.removeItem('adminToken');
-    window.location.href = '/admin/login.html';
-  });
 
   // 2) Mostrar nome do admin a partir do JWT de forma segura (base64url)
   try {

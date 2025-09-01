@@ -165,7 +165,7 @@ function adicionarSalaUI(sala) {
         : chkDisp.checked
           ? 'disponivel'
           : 'indisponivel';
-      atualizarSala(sala.id, status);
+      atualizarSala(sala.id, status);   
     });
   }
 

@@ -92,12 +92,16 @@
           </ul>
         </li>
         <li class="nav-item"><a class="nav-link" href="/admin/relatorios.html"><i class="bi bi-file-earmark-bar-graph"></i>Relatórios</a></li>
+        <li class="nav-item">
+          <a class="nav-link" href="/admin/salas.html">
+            <i class="bi bi-calendar-event"></i>Salas de reunião
+          </a>
+        </li>
         <li class="nav-item"><a class="nav-link" href="/admin/admin-management.html"><i class="bi bi-person-badge-fill"></i>Administradores</a></li>
         <li class="nav-item"><a id="logoutButton" class="nav-link" href="#" style="color:#ffc107;"><i class="bi bi-box-arrow-right"></i>Sair</a></li>
       </ul>
       <div class="sidebar-footer"><img src="/images/logo-secti-vertical.png" alt="Logo SECTI"></div>
     </aside>
-
     <div class="main-content">
       <header class="topbar">
         <div id="userInfo" class="text-end">
@@ -395,6 +399,7 @@
   <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
   <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/pt.js"></script>
   <script src="https://unpkg.com/imask"></script>
+  <script src="/js/admin-sidebar.js"></script>
   <script src="/js/admin-guard.js"></script>
   <script defer src="/js/mobile-adapter.js"></script>
   <script defer src="/js/ui-kit.js"></script>
@@ -449,27 +454,7 @@ window.onload = () => {
   // Topo / menu
   // =======================
   (function bootMenu(){
-    const path = window.location.pathname;
-    document.querySelectorAll('.sidebar-nav .nav-link').forEach(link => {
-      const href = link.getAttribute('href');
-      if (href && path.endsWith(href)) {
-        link.classList.add('active');
-        const parent = link.closest('.menu-dropdown');
-        if (parent) parent.querySelector('.submenu').style.display = 'block';
-      }
-    });
-    document.querySelectorAll('.menu-dropdown > a').forEach(toggle => {
-      toggle.addEventListener('click', e => {
-        e.preventDefault();
-        const sub = toggle.nextElementSibling;
-        sub.style.display = sub.style.display === 'block' ? 'none' : 'block';
-      });
-    });
-    document.getElementById('logoutButton')?.addEventListener('click', e => {
-      e.preventDefault();
-      localStorage.removeItem('adminAuthToken');
-      window.location.href = '/admin/login.html';
-    });
+    // Lógica de menu e logout movida para admin-sidebar.js
     try {
       const p = JSON.parse(atob(token.split('.')[1]));
       if (p?.nome) document.getElementById('adminName').innerText = p.nome;

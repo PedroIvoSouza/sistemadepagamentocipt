@@ -269,6 +269,50 @@ router.delete(
 );
 
 // ========== Salas ==========
+// POST /api/admin/salas - cria nova sala
+router.post(
+  '/',
+  [authMiddleware, authorizeRole(['SUPER_ADMIN', 'SALAS_ADMIN'])],
+  async (req, res) => {
+    try {
+      const { numero, capacidade, status = 'disponivel' } = req.body || {};
+
+      if (!numero || typeof numero !== 'string' || !numero.trim()) {
+        return res.status(400).json({ error: 'Número da sala é obrigatório.' });
+      }
+
+      const cap = parseInt(capacidade, 10);
+      if (Number.isNaN(cap) || cap <= 0) {
+        return res.status(400).json({ error: 'Capacidade inválida.' });
+      }
+
+      const validStatus = ['disponivel', 'manutencao', 'indisponivel'];
+      if (!validStatus.includes(status)) {
+        return res.status(400).json({ error: 'Status inválido.' });
+      }
+
+      // opcional: garantir unicidade do número da sala
+      const existente = await getAsync(
+        'SELECT id FROM salas_reuniao WHERE numero = ?',
+        [numero]
+      );
+      if (existente) {
+        return res.status(400).json({ error: 'Número da sala já existente.' });
+      }
+
+      const result = await runAsync(
+        'INSERT INTO salas_reuniao (numero, capacidade, status) VALUES (?,?,?)',
+        [numero, cap, status]
+      );
+
+      res.status(201).json({ id: result.lastID });
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ error: 'Erro ao criar sala.' });
+    }
+  }
+);
+
 // GET /api/admin/salas - lista todas as salas
 router.get(
   '/',
