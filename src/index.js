@@ -2,7 +2,7 @@
 require('dotenv').config();
 
 // Garante que as migrações do Sequelize sejam executadas ao iniciar
-require('./database/init');
+const initPromise = require('./database/init');
 
 console.log('[BOOT] BOT_SHARED_KEY len =', (process.env.BOT_SHARED_KEY || '').length);
 
@@ -169,16 +169,29 @@ function ensureEventosColumns(db) {
 }
 
 // ===== Start =====
-const server = app.listen(PORT, () => {
-  console.log(`Servidor rodando na porta ${PORT}.`);
-  try {
-    require('../cron/gerarDarsMensais.js');
-    console.log('[INFO] Agendador de tarefas (cron) iniciado com sucesso.');
-  } catch (error) {
-    console.error('[ERRO DE CRON] Falha ao iniciar o agendador de tarefas:', error.message);
-  }
-});
+initPromise
+  .then(async () => {
+    try {
+      await adminRoutes.ensureIndexes();
+    } catch (e) {
+      console.error('[adminRoutes] ensureIndexes error:', e.message);
+    }
 
-server.on('error', error => {
-  console.error('[ERRO DE SERVIDOR] Ocorreu um erro:', error);
-});
+    const server = app.listen(PORT, () => {
+      console.log(`Servidor rodando na porta ${PORT}.`);
+      try {
+        require('../cron/gerarDarsMensais.js');
+        console.log('[INFO] Agendador de tarefas (cron) iniciado com sucesso.');
+      } catch (error) {
+        console.error('[ERRO DE CRON] Falha ao iniciar o agendador de tarefas:', error.message);
+      }
+    });
+
+    server.on('error', error => {
+      console.error('[ERRO DE SERVIDOR] Ocorreu um erro:', error);
+    });
+  })
+  .catch(err => {
+    console.error('[BOOT] Falha ao executar migrações:', err.message);
+    process.exit(1);
+  });

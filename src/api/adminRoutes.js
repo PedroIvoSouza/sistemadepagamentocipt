@@ -45,14 +45,24 @@ async function ensureIndexes() {
   try {
     await dbRun(`PRAGMA journal_mode = WAL;`);
   } catch {}
+
+  const tableInfo = await dbAll(`PRAGMA table_info(dars);`);
+  if (!tableInfo || tableInfo.length === 0) {
+    console.warn('[ensureIndexes] Tabela "dars" não encontrada; índices não serão criados.');
+    return;
+  }
+
   await dbRun(`CREATE INDEX IF NOT EXISTS idx_dars_status             ON dars(status);`);
   await dbRun(`CREATE INDEX IF NOT EXISTS idx_dars_data_vencimento    ON dars(data_vencimento);`);
   await dbRun(`CREATE INDEX IF NOT EXISTS idx_dars_status_venc        ON dars(status, data_vencimento);`);
   await dbRun(`CREATE INDEX IF NOT EXISTS idx_dars_permissionario     ON dars(permissionario_id);`);
   await dbRun(`CREATE INDEX IF NOT EXISTS idx_perm_nome               ON permissionarios(nome_empresa);`);
   await dbRun(`CREATE INDEX IF NOT EXISTS idx_perm_cnpj               ON permissionarios(cnpj);`);
+
+  console.log('[ensureIndexes] Índices criados/verificados.');
 }
-ensureIndexes().catch(e => console.error('[adminRoutes] ensureIndexes error:', e.message));
+
+// export for external invocation
 
 // Status em aberto (considera masculino e feminino)
 const OPEN_STATUSES = `('Pendente','Emitido','Emitida','Vencido','Vencida')`;
@@ -804,3 +814,4 @@ function printToken(doc, token) {
 }
 
 module.exports = router;
+module.exports.ensureIndexes = ensureIndexes;
