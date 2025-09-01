@@ -18,16 +18,15 @@
  */
 
 const fs = require('fs');
-const path = require('path');
 const axios = require('axios');
 const minimist = require('minimist');
 const { parse } = require('csv-parse/sync');
 
 const args = minimist(process.argv.slice(2), {
   string: ['csv','map','api-base','header','resolver'],
-  boolean: ['emitir','marcar-pago','dry-run'],
+  boolean: ['emitir','marcar-pago','dry-run','debug'],
   alias: { h: 'header' },
-  default: { emitir: false, 'marcar-pago': false, 'dry-run': true }
+  default: { emitir: false, 'marcar-pago': false, 'dry-run': true, debug: false }
 });
 
 if (!args['api-base']) {
@@ -66,10 +65,8 @@ function toNum(x) {
   if (x === null || x === undefined) return NaN;
   let s = String(x).trim();
   if (!s) return NaN;
-  // remove R$, espaços e NBSP
-  s = s.replace(/[R$\s\u00A0]/gi, '');
-  // vírgula decimal? troca e remove milhares
-  if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.');
+  s = s.replace(/[R$\s\u00A0]/gi, '');        // tira "R$", espaços e NBSP
+  if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.'); // 1.234,56 -> 1234.56
   const n = Number(s);
   return Number.isFinite(n) ? n : NaN;
 }
@@ -84,7 +81,7 @@ function iso(s) {
     const [_, d, mo, y] = m;
     return `${y}-${String(mo).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
   }
-  return t; // deixa como veio (será validado mais adiante)
+  return t; // deixa como veio
 }
 
 // Normaliza "E:30010.0000000592/2024" -> "30010.592/2024"
@@ -94,13 +91,12 @@ function normProc(s) {
   up = up.replace(/^E:/,'').replace(/\s+/g,'');
   const m = up.match(/^(\d+)\.(\d+)\/(\d{4})$/);
   if (!m) {
-    const m2 = up.match(/(\d{4})$/);
-    const ano = m2 ? m2[1] : null;
-    let base = null, seq = null;
+    const ano = (up.match(/(\d{4})$/)||[])[1];
     const baseSeq = up.replace(/\/?\d{4}$/,'');
-    if (baseSeq.includes('.')) [base, seq] = baseSeq.split('.');
-    if (seq) seq = seq.replace(/^0+/,'') || '0';
-    return (base && ano) ? `${base}.${seq}/${ano}` : up;
+    if (!ano || !baseSeq.includes('.')) return up;
+    let [base, seq] = baseSeq.split('.');
+    seq = (seq||'').replace(/^0+/,'') || '0';
+    return `${base}.${seq}/${ano}`;
   }
   const [, base, seq, ano] = m;
   const seqn = String(seq).replace(/^0+/,'') || '0';
@@ -115,8 +111,43 @@ function pick(row, ...names) {
   return '';
 }
 
-// ---------- Resolver (CLI) ----------
+// ---------- Normalização de cabeçalho ----------
+function normalizeHeaderName(h) {
+  return String(h || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'') // tira acentos
+    .toLowerCase()
+    .replace(/\?/g,'')
+    .replace(/[^\w]+/g,'_') // tudo que não for \w vira _
+    .replace(/^_+|_+$/g,''); // tira underscores nas pontas
+}
+
+// ---------- Carrega CSV do plano (normalizando cabeçalhos) ----------
+const planoCSV = fs.readFileSync(args.csv, 'utf8');
+const delimPlano = detectDelimiter(planoCSV);
+const plano = parse(planoCSV, {
+  columns: header => header.map(normalizeHeaderName),
+  skip_empty_lines: true,
+  delimiter: delimPlano
+});
+
+// ---------- Mescla resolver do CSV (se existir) ----------
 let resolver = {};
+if (args.map && fs.existsSync(args.map)) {
+  const mapCSV = fs.readFileSync(args.map, 'utf8');
+  const delimMap = detectDelimiter(mapCSV);
+  const rows = parse(mapCSV, {
+    columns: header => header.map(normalizeHeaderName),
+    skip_empty_lines: true,
+    delimiter: delimMap
+  });
+  rows.forEach(r => {
+    const key = normProc(r.processo_norm || r.processo || r.numero_processo || '');
+    const val = r.id_evento && String(r.id_evento).trim();
+    if (key && val) resolver[key] = val;
+  });
+}
+
+// ---------- Resolver também via CLI (--resolver PROC=ID, pode repetir) ----------
 function addResolverPair(pair){
   if(!pair) return;
   const i = String(pair).indexOf('=');
@@ -208,21 +239,27 @@ async function findDarInEvento(idEvento, numeroParcela, dataVenc, valor) {
   }
 }
 
-// ---------- Carrega CSV do plano ----------
-const planoCSV = fs.readFileSync(args.csv, 'utf8');
-const delimPlano = detectDelimiter(planoCSV);
-const plano = parse(planoCSV, { columns: true, skip_empty_lines: true, delimiter: delimPlano });
+// ---------- Valor/Venc por parcela (com MUITOS aliases) ----------
+function getValorEVencPorParcela(row, parcela) {
+  const p = String(parcela).replace(/\D/g, '') || '1';
 
-// ---------- Mescla resolver do CSV (se existir) ----------
-if (args.map && fs.existsSync(args.map)) {
-  const mapCSV = fs.readFileSync(args.map, 'utf8');
-  const delimMap = detectDelimiter(mapCSV);
-  const rows = parse(mapCSV, { columns: true, skip_empty_lines: true, delimiter: delimMap });
-  rows.forEach(r => {
-    const key = normProc(r.processo_norm || r.processo || r.numero_processo || '');
-    const val = r.id_evento && String(r.id_evento).trim();
-    if (key && val) resolver[key] = val;
-  });
+  const valorRaw = pick(
+    row,
+    'valor','valor_parcela','valor_dar','valorparcela',
+    `valor_p${p}`, `parcela${p}_valor`, `valor_parc_${p}`,
+    p === '1' ? 'valor_p1' : 'valor_p2',
+    p === '1' ? 'primeira_parcela_valor' : 'segunda_parcela_valor'
+  );
+
+  const vencRaw = pick(
+    row,
+    'data_vencimento','vencimento','data_venc','venc',
+    `venc_p${p}`, `vencimento_p${p}`, `parcela${p}_vencimento`,
+    p === '1' ? 'primeira_parcela_vencimento' : 'segunda_parcela_vencimento',
+    p === '1' ? 'venc_p1' : 'venc_p2'
+  );
+
+  return { valor: toNum(valorRaw), venc: iso(vencRaw) };
 }
 
 // ---------- Loop principal ----------
@@ -236,19 +273,21 @@ let m = { criados:0, vinculados:0, emitidos:0, pagos:0, pulados:0, erros:0 };
 
     const parcela = String(pick(row, 'parcela','numero_parcela','n_parcela') || '1').trim();
 
-    const valorRaw = pick(row, 'valor','valor_parcela','valor_dar','valorParcela');
-    const valor = toNum(valorRaw);
+    const { valor, venc } = getValorEVencPorParcela(row, parcela);
 
-    const vencRaw = pick(row, 'data_vencimento','vencimento','data_venc','venc');
-    const venc = iso(vencRaw);
-
-    const pagoPlan = String(pick(row, 'pago_plan','pago','pago?') || 'Nao').toLowerCase().startsWith('s');
-    const acao = String(pick(row, 'acao','ação') || '').trim().toUpperCase();
-    const obs = pick(row, 'observacao','observação','obs');
+    const pagoPlan = String(pick(row, 'pago_plan','pago','pago_','pago__','pago?') || 'Nao').toLowerCase().startsWith('s');
+    const acao = String(pick(row, 'acao','acao_','ação') || '').trim().toUpperCase();
+    const obs = pick(row, 'observacao','observacao_','observação','obs');
 
     if (!processoNorm) { console.log(`! Sem processo_norm, pulando`); m.pulados++; continue; }
     if (!idEvento) { console.log(`! Evento não resolvido para ${processoNorm} (${obs || 'SEM_OBS'})`); m.pulados++; continue; }
-    if (!Number.isFinite(valor) || !venc) { console.log(`! Linha inválida (valor/venc): ${processoNorm} P${parcela}`); m.pulados++; continue; }
+    if (!Number.isFinite(valor) || !venc) {
+      console.log(`! Linha inválida (valor/venc): ${processoNorm} P${parcela}`);
+      if (args.debug) {
+        console.log('  chaves disponiveis:', Object.keys(row).join(', '));
+      }
+      m.pulados++; continue;
+    }
 
     console.log(`\n=== ${processoNorm} | parcela ${parcela} | R$ ${valor.toFixed(2)} | venc ${venc} | ação ${acao}`);
 
