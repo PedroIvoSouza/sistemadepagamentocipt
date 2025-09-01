@@ -62,7 +62,6 @@
       </ul>
       <div class="sidebar-footer"><img src="/images/logo-secti-vertical.png" alt="Logo SECTI"></div>
     </aside>
-
     <div class="main-content">
       <header class="topbar">
         <div id="userInfo" class="text-end">
@@ -124,6 +123,7 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="/js/admin-sidebar.js"></script>
   <script src="/js/admin-guard.js"></script>
   <script defer src="/js/mobile-adapter.js"></script>
   <script defer src="/js/ui-kit.js"></script>
@@ -141,31 +141,6 @@
     document.addEventListener('DOMContentLoaded', () => {
       const token = localStorage.getItem('adminAuthToken');
       if (!token) { window.location.href = '/admin/login.html'; return; }
-
-      // --- menu ativo + dropdown ---
-      const path = window.location.pathname;
-      document.querySelectorAll('.sidebar-nav .nav-link').forEach(link=>{
-        const href = link.getAttribute('href');
-        if (href && path.endsWith(href)) {
-          link.classList.add('active');
-          const parentDropdown = link.closest('.menu-dropdown');
-          if (parentDropdown) parentDropdown.querySelector('.submenu').style.display = 'block';
-        }
-      });
-      document.querySelectorAll('.menu-dropdown > a').forEach(toggle=>{
-        toggle.addEventListener('click', (e)=>{
-          e.preventDefault();
-          const submenu = toggle.nextElementSibling;
-          submenu.style.display = submenu.style.display === 'block' ? 'none' : 'block';
-        });
-      });
-
-      // logout (corrigido)
-      document.getElementById('logoutButton').addEventListener('click', (e)=>{
-        e.preventDefault();
-        localStorage.removeItem('adminAuthToken');
-        window.location.href = '/admin/login.html';
-      });
 
       // nome do admin (seguro)
       try {

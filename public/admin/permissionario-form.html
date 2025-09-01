@@ -67,7 +67,6 @@
     </ul>
     <div class="sidebar-footer"><img src="/images/logo-secti-vertical.png" alt="Logo SECTI"></div>
 </aside>
-
         <div class="main-content">
             <header class="topbar">
                 <div id="userInfo" class="text-end">
@@ -138,6 +137,7 @@
         </div>
     </div>
     
+    <script src="/js/admin-sidebar.js"></script>
     <script src="/js/admin-guard.js"></script>
    <script src="https://unpkg.com/imask"></script>
    <script defer src="/js/mobile-adapter.js"></script>
@@ -162,32 +162,7 @@
 
         // --- INÍCIO DA LÓGICA DO MENU ---
         const path = window.location.pathname;
-        document.querySelectorAll('.sidebar-nav .nav-link').forEach(link => {
-            const href = link.getAttribute('href');
-            if (path.endsWith(href)) {
-                link.classList.add('active');
-                const parentDropdown = link.closest('.menu-dropdown');
-                if (parentDropdown) {
-                    parentDropdown.querySelector('.submenu').style.display = 'block';
-                }
-            }
-        });
-        
-        const dropdownToggles = document.querySelectorAll('.menu-dropdown > a');
-        dropdownToggles.forEach(toggle => {
-            toggle.addEventListener('click', (e) => {
-                e.preventDefault();
-                const submenu = toggle.nextElementSibling;
-                submenu.style.display = submenu.style.display === 'block' ? 'none' : 'block';
-            });
-        });
-        
-        document.getElementById('logoutButton').addEventListener('click', (e) => {
-            e.preventDefault();
-            localStorage.removeItem('adminAuthToken');
-            window.location.href = '/admin/login.html';
-        });
-        // --- FIM DA LÓGICA DO MENU ---
+        // Lógica de menu e logout tratada em admin-sidebar.js
 
         try {
             const payload = JSON.parse(atob(token.split('.')[1]));
