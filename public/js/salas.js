@@ -26,18 +26,30 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Carrega salas disponíveis para o select
     const salaSelect = document.getElementById('sala');
+    const submitBtn = document.querySelector('#reserveForm button[type="submit"]');
+    submitBtn.disabled = true;
     try {
         const respSalas = await fetch('/api/salas', { headers });
-        if (respSalas.ok) {
-            const salas = await respSalas.json();
+        if (!respSalas.ok) throw new Error(`Status ${respSalas.status}`);
+        const salas = await respSalas.json();
+        if (!salas.length) {
+            salaSelect.innerHTML = '<option value="">Nenhuma sala disponível</option>';
+            alert('Nenhuma sala disponível');
+            console.warn('Nenhuma sala disponível');
+        } else {
             salas.forEach(s => {
                 const opt = document.createElement('option');
                 opt.value = s.id;
                 opt.textContent = s.nome;
                 salaSelect.appendChild(opt);
             });
+            submitBtn.disabled = false;
         }
-    } catch {}
+    } catch (err) {
+        console.error('Erro ao carregar salas', err);
+        salaSelect.innerHTML = '<option value="">Nenhuma sala disponível</option>';
+        alert('Erro ao carregar salas');
+    }
 
     const calendarEl = document.getElementById('calendar');
     const calendar = new FullCalendar.Calendar(calendarEl, {
