@@ -58,14 +58,22 @@ module.exports = {
   },
 
   async down(queryInterface, Sequelize) {
-    const table = await queryInterface.describeTable('dars');
-    if (table['emitido_por_id']) {
+    let table;
+    try {
+      table = await queryInterface.describeTable('dars');
+    } catch (error) {
+      return;
+    }
+
+    if (table.emitido_por_id) {
       await queryInterface.removeColumn('dars', 'emitido_por_id');
     }
-    await queryInterface.changeColumn('dars', 'data_emissao', {
-      type: Sequelize.DATE,
-      allowNull: false,
-      defaultValue: Sequelize.literal('CURRENT_TIMESTAMP'),
-    });
-  }
+
+    if (table.data_emissao) {
+      await queryInterface.changeColumn('dars', 'data_emissao', {
+        type: Sequelize.DATE,
+        allowNull: false,
+        defaultValue: Sequelize.literal('CURRENT_TIMESTAMP'),
+      });
+    }
 };
