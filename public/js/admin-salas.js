@@ -131,28 +131,29 @@ async function carregarSalas() {
         tr.innerHTML = `
           <td>${sala.nome}</td>
           <td><input type="checkbox" class="chk-disponivel" ${sala.status === 'disponivel' ? 'checked' : ''}></td>
-          <td><input type="checkbox" class="chk-manutencao" ${sala.status === 'manutencao' ? 'checked' : ''}></td>`;
+          <td><input type="checkbox" class="chk-manutencao" ${sala.status === 'manutencao' ? 'checked' : ''}></td>
+          <td><input type="checkbox" class="chk-indisponivel" ${sala.status === 'indisponivel' ? 'checked' : ''}></td>`;
         tabela.appendChild(tr);
         const chkDisp = tr.querySelector('.chk-disponivel');
         const chkManu = tr.querySelector('.chk-manutencao');
-        chkDisp.addEventListener('change', () => {
-          if (chkDisp.checked) chkManu.checked = false;
+        const chkIndisp = tr.querySelector('.chk-indisponivel');
+        const checkboxes = [chkDisp, chkManu, chkIndisp];
+        const atualizar = () => {
+          checkboxes.forEach((chk, idx) => {
+            if (chk.checked) {
+              checkboxes.forEach((outro, j) => { if (j !== idx) outro.checked = false; });
+            }
+          });
           const status = chkDisp.checked
             ? 'disponivel'
             : chkManu.checked
               ? 'manutencao'
-              : 'indisponivel';
+              : chkIndisp.checked
+                ? 'indisponivel'
+                : 'indisponivel';
           atualizarSala(sala.id, status);
-        });
-        chkManu.addEventListener('change', () => {
-          if (chkManu.checked) chkDisp.checked = false;
-          const status = chkManu.checked
-            ? 'manutencao'
-            : chkDisp.checked
-              ? 'disponivel'
-              : 'indisponivel';
-          atualizarSala(sala.id, status);
-        });
+        };
+        checkboxes.forEach(chk => chk.addEventListener('change', atualizar));
       }
 
       if (selectSala) {
