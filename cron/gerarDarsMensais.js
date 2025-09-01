@@ -8,8 +8,8 @@ const { enviarEmailNovaDar } = require('../src/services/emailService');
 
 // ================== Config ==================
 const DB_PATH = process.env.SQLITE_STORAGE
-  ? path.resolve(process.cwd(), process.env.SQLITE_STORAGE)
-  : path.resolve(process.cwd(), './sistemacipt.db');
+  ? path.resolve(__dirname, '..', process.env.SQLITE_STORAGE)
+  : path.resolve(__dirname, '../sistemacipt.db');
 
 // Se quiser testar com apenas 1 permissionário, defina TEST_PERMISSIONARIO_ID no .env (ex.: 26)
 const TEST_PERMISSIONARIO_ID = process.env.TEST_PERMISSIONARIO_ID
