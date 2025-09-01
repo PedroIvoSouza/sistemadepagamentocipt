@@ -37,30 +37,8 @@ module.exports = new Promise((resolve, reject) => {
       console.log('Tabela "permissionarios" verificada/criada com sucesso.');
     });
 
-    // Tabela 2: DARs (Versão correta com a trava de segurança)
-    db.run(`
-        CREATE TABLE IF NOT EXISTS dars (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            permissionario_id INTEGER NOT NULL,
-            mes_referencia INTEGER NOT NULL,
-            ano_referencia INTEGER NOT NULL,
-            valor REAL NOT NULL,
-            data_vencimento TEXT NOT NULL,
-            status TEXT NOT NULL,
-            data_emissao TEXT DEFAULT CURRENT_TIMESTAMP,
-            codigo_barras TEXT,
-            link_pdf TEXT,
-            FOREIGN KEY (permissionario_id) REFERENCES permissionarios (id),
-            UNIQUE (permissionario_id, mes_referencia, ano_referencia)
-        );
-    `, (err) => {
-      if (err) {
-        return console.error('Erro ao criar a tabela "dars":', err.message);
-      }
-      console.log('Tabela "dars" verificada/criada com sucesso.');
-    });
+    // Tabela 2: Certidoes de Quitacao
 
-    // Tabela 3: Certidões de Quitação
     db.run(`
         CREATE TABLE IF NOT EXISTS certidoes_quitacao (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
