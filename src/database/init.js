@@ -86,23 +86,10 @@ db.close((err) => {
     try {
         console.log('Executando migrações do Sequelize...');
         const absolutePath = path.resolve(DB_PATH);
-        execSync(`npx sequelize-cli db:migrate --url sqlite:${absolutePath}`, {
+        execSync(`npx sequelize-cli db:migrate --migrations-path src/migrations --url sqlite:${absolutePath}`, {
             stdio: 'inherit',
         });
         console.log('Migrações executadas com sucesso.');
-
-        const dbIndex = new sqlite3.Database(DB_PATH);
-        dbIndex.run(`
-            CREATE UNIQUE INDEX IF NOT EXISTS reservas_salas_unica
-            ON reservas_salas (sala_id, data, hora_inicio, hora_fim)
-        `, (err) => {
-            if (err) {
-                console.error('Erro ao criar índice "reservas_salas_unica":', err.message);
-            } else {
-                console.log('Índice "reservas_salas_unica" verificado/criado com sucesso.');
-            }
-            dbIndex.close();
-        });
     } catch (error) {
         console.error('Erro ao executar migrações:', error.message);
     }
