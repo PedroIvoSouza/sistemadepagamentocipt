@@ -1,6 +1,7 @@
 // public/js/admin-salas.js
 
 let modalReserva;
+let modalNovaSala;
 let eventoSelecionado;
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -31,6 +32,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnCheck = document.getElementById('btnRegistrarCheckin');
     btnCanc?.addEventListener('click', cancelarReserva);
     btnCheck?.addEventListener('click', registrarCheckin);
+  }
+
+  const modalNovaSalaEl = document.getElementById('modalNovaSala');
+  if (modalNovaSalaEl && window.bootstrap) {
+    modalNovaSala = new bootstrap.Modal(modalNovaSalaEl);
   }
 
   carregarSalas();
@@ -119,51 +125,104 @@ function onEventChange(info) {
 }
 
 async function carregarSalas() {
-  const tabela = document.querySelector('#tabelaSalas tbody');
-  const selectSala = document.getElementById('filtroSala');
   try {
     const resp = await fetch('/api/admin/salas');
     if (!resp.ok) throw new Error('Falha ao carregar salas');
     const salas = await resp.json();
-    salas.forEach(sala => {
-      if (tabela) {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td>${sala.nome}</td>
-          <td><input type="checkbox" class="chk-disponivel" ${sala.status === 'disponivel' ? 'checked' : ''}></td>
-          <td><input type="checkbox" class="chk-manutencao" ${sala.status === 'manutencao' ? 'checked' : ''}></td>`;
-        tabela.appendChild(tr);
-        const chkDisp = tr.querySelector('.chk-disponivel');
-        const chkManu = tr.querySelector('.chk-manutencao');
-        chkDisp.addEventListener('change', () => {
-          if (chkDisp.checked) chkManu.checked = false;
-          const status = chkDisp.checked
-            ? 'disponivel'
-            : chkManu.checked
-              ? 'manutencao'
-              : 'indisponivel';
-          atualizarSala(sala.id, status);
-        });
-        chkManu.addEventListener('change', () => {
-          if (chkManu.checked) chkDisp.checked = false;
-          const status = chkManu.checked
-            ? 'manutencao'
-            : chkDisp.checked
-              ? 'disponivel'
-              : 'indisponivel';
-          atualizarSala(sala.id, status);
-        });
-      }
-
-      if (selectSala) {
-        const opt = document.createElement('option');
-        opt.value = sala.id;
-        opt.textContent = sala.nome;
-        selectSala.appendChild(opt);
-      }
-    });
+    salas.forEach(s => adicionarSalaUI(s));
   } catch (err) {
     console.error(err);
+  }
+}
+
+function adicionarSalaUI(sala) {
+  const tabela = document.querySelector('#tabelaSalas tbody');
+  const selectSala = document.getElementById('filtroSala');
+
+  if (tabela) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${sala.nome}</td>
+      <td><input type="checkbox" class="chk-disponivel" ${sala.status === 'disponivel' ? 'checked' : ''}></td>
+      <td><input type="checkbox" class="chk-manutencao" ${sala.status === 'manutencao' ? 'checked' : ''}></td>`;
+    tabela.appendChild(tr);
+
+    const chkDisp = tr.querySelector('.chk-disponivel');
+    const chkManu = tr.querySelector('.chk-manutencao');
+    chkDisp.addEventListener('change', () => {
+      if (chkDisp.checked) chkManu.checked = false;
+      const status = chkDisp.checked
+        ? 'disponivel'
+        : chkManu.checked
+          ? 'manutencao'
+          : 'indisponivel';
+      atualizarSala(sala.id, status);
+    });
+    chkManu.addEventListener('change', () => {
+      if (chkManu.checked) chkDisp.checked = false;
+      const status = chkManu.checked
+        ? 'manutencao'
+        : chkDisp.checked
+          ? 'disponivel'
+          : 'indisponivel';
+      atualizarSala(sala.id, status);
+    });
+  }
+
+  if (selectSala) {
+    const opt = document.createElement('option');
+    opt.value = sala.id;
+    opt.textContent = sala.nome;
+    selectSala.appendChild(opt);
+  }
+}
+
+function abrirModalNovaSala() {
+  const numero = document.getElementById('novaSalaNumero');
+  const capacidade = document.getElementById('novaSalaCapacidade');
+  const status = document.getElementById('novaSalaStatus');
+  if (numero) numero.value = '';
+  if (capacidade) capacidade.value = '';
+  if (status) status.value = 'disponivel';
+  modalNovaSala?.show();
+}
+
+async function salvarNovaSala() {
+  const numeroEl = document.getElementById('novaSalaNumero');
+  const capacidadeEl = document.getElementById('novaSalaCapacidade');
+  const statusEl = document.getElementById('novaSalaStatus');
+  const numero = numeroEl?.value.trim();
+  const capacidade = parseInt(capacidadeEl?.value, 10);
+  const status = statusEl?.value || 'disponivel';
+
+  if (!numero || isNaN(capacidade)) {
+    mostrarMensagem('Preencha todos os campos', 'danger');
+    return;
+  }
+
+  try {
+    const resp = await fetch('/api/admin/salas', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ numero, capacidade, status })
+    });
+    if (!resp.ok) throw new Error('Falha ao criar sala');
+    const sala = await resp.json();
+
+    adicionarSalaUI({
+      id: sala.id,
+      nome: sala.nome || sala.numero || numero,
+      status: sala.status || status
+    });
+
+    modalNovaSala.hide();
+    numeroEl.value = '';
+    capacidadeEl.value = '';
+    statusEl.value = 'disponivel';
+    mostrarMensagem('Sala criada com sucesso', 'success');
+  } catch (err) {
+    console.error(err);
+    mostrarMensagem('Falha ao criar sala', 'danger');
   }
 }
 
