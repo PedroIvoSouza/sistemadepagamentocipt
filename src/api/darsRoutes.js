@@ -64,6 +64,10 @@ async function getTableColumns(table) {
 }
 async function ensureColumn(table, column, type) {
   const cols = await getTableColumns(table);
+  if (!cols.length) {
+    console.warn(`[MIGRATE] Tabela ${table} ausente; pulando ${column}.`);
+    return;
+  }
   const exists = cols.some(c => String(c.name).toLowerCase() === String(column).toLowerCase());
   if (!exists) {
     console.log(`[MIGRATE] Criando coluna ${table}.${column} ${type}...`);
