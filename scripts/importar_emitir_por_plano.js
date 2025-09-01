@@ -14,7 +14,8 @@
  *    --api-base http://localhost:3000 \
  *    [--emitir] [--marcar-pago] [--dry-run] \
  *    [--resolver "30010.592/2024=233"] \
- *    [--header "x-bot-key:Secti@2025#"] [--header "Authorization: Bearer <TOKEN>"]
+ *    [--header "x-bot-key:Secti@2025#"] [--header "Authorization: Bearer <TOKEN>"] \
+ *    [--debug]
  */
 
 const fs = require('fs');
