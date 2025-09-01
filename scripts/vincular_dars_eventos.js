@@ -118,7 +118,7 @@ async function findEventoByNumeroProcesso(dbGet, numero) {
 
   for (const pat of likes) {
     row = await dbGet(
-      `SELECT id, id_cliente, status, numero_processo, nome
+      `SELECT id, id_cliente, status, numero_processo, COALESCE(nome_evento, '') AS nome
          FROM Eventos
         WHERE UPPER(numero_processo) LIKE ?
            OR REPLACE(REPLACE(UPPER(numero_processo),'.',''),' ','') LIKE ?
