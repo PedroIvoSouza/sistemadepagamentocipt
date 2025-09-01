@@ -3,18 +3,20 @@
 
 document.addEventListener('DOMContentLoaded', () => {
     const container = document.getElementById('sidebar-container');
-    if (!container) return;
-
-    fetch('/admin/admin-sidebar.html')
-        .then(resp => {
-            if (!resp.ok) throw new Error('Não foi possível carregar o sidebar');
-            return resp.text();
-        })
-        .then(html => {
-            container.outerHTML = html;
-            initSidebarBehaviour();
-        })
-        .catch(err => console.error('Erro ao injetar sidebar:', err));
+    if (container) {
+        fetch('/admin/admin-sidebar.html')
+            .then(resp => {
+                if (!resp.ok) throw new Error('Não foi possível carregar o sidebar');
+                return resp.text();
+            })
+            .then(html => {
+                container.outerHTML = html;
+            })
+            .then(() => initSidebarBehaviour())
+            .catch(err => console.error('Erro ao injetar sidebar:', err));
+    } else {
+        initSidebarBehaviour(); // Sidebar já está no HTML
+    }
 });
 
 function initSidebarBehaviour() {
