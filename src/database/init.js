@@ -3,9 +3,12 @@ const { execSync } = require('child_process');
 const path = require('path');
 
 const DB_PATH = process.env.SQLITE_STORAGE || './sistemacipt.db';
-const db = new sqlite3.Database(DB_PATH);
 
-db.serialize(() => {
+// Export a promise that resolves when migrations finish
+module.exports = new Promise((resolve, reject) => {
+  const db = new sqlite3.Database(DB_PATH);
+
+  db.serialize(() => {
     console.log('Iniciando a verificação/criação das tabelas...');
 
     // Tabela 1: Permissionários (A que estava faltando)
@@ -28,13 +31,14 @@ db.serialize(() => {
             email_notificacao TEXT
         );
     `, (err) => {
-        if (err) {
-            return console.error('Erro ao criar a tabela "permissionarios":', err.message);
-        }
-        console.log('Tabela "permissionarios" verificada/criada com sucesso.');
+      if (err) {
+        return console.error('Erro ao criar a tabela "permissionarios":', err.message);
+      }
+      console.log('Tabela "permissionarios" verificada/criada com sucesso.');
     });
 
     // Tabela 2: Certidoes de Quitacao
+
     db.run(`
         CREATE TABLE IF NOT EXISTS certidoes_quitacao (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -45,29 +49,32 @@ db.serialize(() => {
             FOREIGN KEY (permissionario_id) REFERENCES permissionarios (id)
         );
     `, (err) => {
-        if (err) {
-            return console.error('Erro ao criar a tabela "certidoes_quitacao":', err.message);
-        }
-        console.log('Tabela "certidoes_quitacao" verificada/criada com sucesso.');
+      if (err) {
+        return console.error('Erro ao criar a tabela "certidoes_quitacao":', err.message);
+      }
+      console.log('Tabela "certidoes_quitacao" verificada/criada com sucesso.');
     });
+  });
 
-});
-
-
-db.close((err) => {
+  db.close((err) => {
     if (err) {
-        return console.error(err.message);
+      console.error(err.message);
+      return reject(err);
     }
     console.log('Conexão com o banco de dados fechada.');
 
     try {
-        console.log('Executando migrações do Sequelize...');
-        const absolutePath = path.resolve(DB_PATH);
-        execSync(`npx sequelize-cli db:migrate --migrations-path src/migrations --url sqlite:${absolutePath}`, {
-            stdio: 'inherit',
-        });
-        console.log('Migrações executadas com sucesso.');
+      console.log('Executando migrações do Sequelize...');
+      const absolutePath = path.resolve(DB_PATH);
+      execSync(`npx sequelize-cli db:migrate --migrations-path src/migrations --url sqlite:${absolutePath}`, {
+        stdio: 'inherit',
+      });
+      console.log('Migrações executadas com sucesso.');
+      resolve();
     } catch (error) {
-        console.error('Erro ao executar migrações:', error.message);
+      console.error('Erro ao executar migrações:', error.message);
+      reject(error);
     }
+  });
 });
+

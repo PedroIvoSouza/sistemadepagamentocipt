@@ -16,6 +16,10 @@ const dbRun = (sql, params=[]) => new Promise((resolve, reject) => {
 async function ensureColumn(table, column, type) {
   try {
     const rows = await dbAll(`PRAGMA table_info(${table})`);
+    if (!rows.length) {
+      console.warn(`[DB] Tabela ${table} inexistente; pulando ${column}.`);
+      return;
+    }
     if (!rows.some(r => r.name === column)) {
       await dbRun(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
       console.log(`[DB] ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
