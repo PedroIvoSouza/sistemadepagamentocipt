@@ -227,9 +227,15 @@ router.post(
       // 1) doc/tipo saneados
       const doc  = String(numeroInscricao || '').replace(/\D/g, '');
       const tipo = Number(codigoTipoInscricao) || (doc.length === 11 ? 3 : 4);
+      console.log(
+        '[AdminDARs][emitir] dar=%s tipo=%s doc=%s nome=%s ibge=%s perm_id=%s',
+        dar.id, tipo, doc, nome, codigoIbgeMunicipio, dar.permissionario_id ?? null
+      );
       if (!(doc.length === 11 || doc.length === 14)) {
         return res.status(400).json({ error: 'Documento inválido (CPF 11 dígitos ou CNPJ 14).' });
       }
+
+
 
       // 2) dados da DAR
       const mes  = dar.mes_referencia || Number(String(dar.data_vencimento).slice(5, 7));
@@ -324,6 +330,10 @@ router.post(
 
       const doc  = String(numeroInscricao || '').replace(/\D/g, '');
       const tipo = Number(codigoTipoInscricao) || (doc.length === 11 ? 3 : 4);
+      console.log(
+        '[AdminDARs][emitir] dar=%s tipo=%s doc=%s nome=%s ibge=%s perm_id=%s',
+        dar.id, tipo, doc, nome, codigoIbgeMunicipio, dar.permissionario_id ?? null
+      );
       if (!(doc.length === 11 || doc.length === 14)) {
         return res.status(400).json({ error: 'Documento inválido (CPF 11 dígitos ou CNPJ 14).' });
       }
