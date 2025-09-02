@@ -267,6 +267,11 @@ if (ld || cb) {
 }
 
 return res.json({ ok: true, numero: sefaz.numeroGuia });
+} catch (err) {
+  console.error('[AdminDARs] ERRO POST /:id/emitir:', err);
+  return res.status(400).json({ error: err.message || 'Falha ao emitir a DAR.' });
+}
+});
 
 
 /**
@@ -366,6 +371,11 @@ if (ld || cb) {
 
 return res.json({ ok: true, numero: sefaz.numeroGuia });
 
+} catch (err) {
+  console.error('[AdminDARs] ERRO POST /:id/reemitir:', err);
+  return res.status(400).json({ error: err.message || 'Falha ao reemitir a DAR.' });
+}
+});
 
 
 
