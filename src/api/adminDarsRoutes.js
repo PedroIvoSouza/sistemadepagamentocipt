@@ -1,4 +1,4 @@
-// src/api/adminDarsRoutes.js
+Q// src/api/adminDarsRoutes.js
 const express = require('express');
 
 const authMiddleware = require('../middleware/authMiddleware');
@@ -221,39 +221,28 @@ router.post(
   async (req, res) => {
     try {
       const darId = Number(req.params.id);
-      const {
-        codigoTipoInscricao,
-        numeroInscricao,
-        nome,
-        codigoIbgeMunicipio,
-        dar
-      } = await getContribuinteEmitenteForDar(darId);
+      const { codigoTipoInscricao, numeroInscricao, nome, codigoIbgeMunicipio, dar } =
+        await getContribuinteEmitenteForDar(darId);
 
-      // 1) Doc sanitizado + validação (usa o que veio do helper)
-      const doc = String(numeroInscricao || '').replace(/\D/g, '');
-      if (!(doc.length === 11 || doc.length === 14)) {
+      // 1) doc/tipo válidos
+      const doc  = String(numeroInscricao || '').replace(/\D/g, '');
+      if (doc.length !== 11 && doc.length !== 14) {
         return res.status(400).json({ error: 'Documento inválido (CPF 11 dígitos ou CNPJ 14).' });
       }
-      const tipo = doc.length === 11 ? 3 : 4; // 3=CPF, 4=CNPJ
+      const tipo = (doc.length === 11) ? 3 : 4; // 3=CPF, 4=CNPJ
 
-      // 2) Campos de guia
+      // 2) dados da guia
       const mes  = dar.mes_referencia || Number(String(dar.data_vencimento).slice(5, 7));
       const ano  = dar.ano_referencia || Number(String(dar.data_vencimento).slice(0, 4));
       const venc = String(dar.data_vencimento).slice(0, 10);
 
-      // Regra de receita (ajuste se necessário)
-      const receitaCodigo = tipo === 3 ? 20165 : 20164; // CPF=20165, CNPJ=20164
+      const receitaCodigo = (tipo === 3) ? 20165 : 20164;
       const obsPrefix = dar.permissionario_id ? 'Aluguel CIPT' : 'Evento CIPT';
       const observacao = nome ? `${obsPrefix} - ${nome}` : obsPrefix;
 
-      // 3) Tenta payload único
+      // 3) tentativa: payload único
       const payload = {
-        contribuinteEmitente: {
-          codigoTipoInscricao: tipo,
-          numeroInscricao: doc,
-          nome,
-          codigoIbgeMunicipio
-        },
+        contribuinteEmitente: { codigoTipoInscricao: tipo, numeroInscricao: doc, nome, codigoIbgeMunicipio },
         receitas: [{
           codigo: receitaCodigo,
           competencia: { mes, ano },
@@ -265,13 +254,8 @@ router.post(
         observacao
       };
 
-      // 4) Fallback assinatura em 2 args
-      const contrib = {
-        codigoTipoInscricao: tipo,
-        numeroInscricao: doc,
-        nome,
-        codigoIbgeMunicipio
-      };
+      // 4) fallback: (contribuinte, guiaLike)
+      const contrib = { codigoTipoInscricao: tipo, numeroInscricao: doc, nome, codigoIbgeMunicipio };
       const guiaLike = {
         id: dar.id,
         valor: Number(dar.valor),
@@ -279,14 +263,13 @@ router.post(
         mes_referencia: mes,
         ano_referencia: ano,
         observacao,
-        codigo_receita: receitaCodigo
+        codigo_receita: receitaCodigo,
       };
 
       let sefaz;
       try {
         sefaz = await emitirGuiaSefaz(payload);
       } catch (e1) {
-        // se a função reclamar de argumentos, tenta a forma (contrib, guiaLike)
         if (/argument|param/i.test(String(e1?.message || ''))) {
           sefaz = await emitirGuiaSefaz(contrib, guiaLike);
         } else {
@@ -298,7 +281,7 @@ router.post(
         return res.status(502).json({ error: 'Retorno da SEFAZ incompleto (sem numeroGuia/pdfBase64).' });
       }
 
-      // 5) Persistência
+      // 5) persistência
       const tokenDoc = `DAR-${sefaz.numeroGuia}`;
       const pdfComToken = await imprimirTokenEmPdf(sefaz.pdfBase64, tokenDoc);
 
@@ -339,37 +322,25 @@ router.post(
   async (req, res) => {
     try {
       const darId = Number(req.params.id);
-      const {
-        codigoTipoInscricao,
-        numeroInscricao,
-        nome,
-        codigoIbgeMunicipio,
-        dar
-      } = await getContribuinteEmitenteForDar(darId);
+      const { codigoTipoInscricao, numeroInscricao, nome, codigoIbgeMunicipio, dar } =
+        await getContribuinteEmitenteForDar(darId);
 
-      // 1) Doc sanitizado + validação
-      const doc = String(numeroInscricao || '').replace(/\D/g, '');
-      if (!(doc.length === 11 || doc.length === 14)) {
+      const doc  = String(numeroInscricao || '').replace(/\D/g, '');
+      if (doc.length !== 11 && doc.length !== 14) {
         return res.status(400).json({ error: 'Documento inválido (CPF 11 dígitos ou CNPJ 14).' });
       }
-      const tipo = doc.length === 11 ? 3 : 4;
+      const tipo = (doc.length === 11) ? 3 : 4;
 
-      // 2) Campos de guia (podem ser atualizados no futuro via req.body, se quiser)
       const mes  = dar.mes_referencia || Number(String(dar.data_vencimento).slice(5, 7));
       const ano  = dar.ano_referencia || Number(String(dar.data_vencimento).slice(0, 4));
       const venc = String(dar.data_vencimento).slice(0, 10);
 
-      const receitaCodigo = tipo === 3 ? 20165 : 20164;
+      const receitaCodigo = (tipo === 3) ? 20165 : 20164;
       const obsPrefix = dar.permissionario_id ? 'Aluguel CIPT' : 'Evento CIPT';
       const observacao = nome ? `${obsPrefix} - ${nome}` : obsPrefix;
 
       const payload = {
-        contribuinteEmitente: {
-          codigoTipoInscricao: tipo,
-          numeroInscricao: doc,
-          nome,
-          codigoIbgeMunicipio
-        },
+        contribuinteEmitente: { codigoTipoInscricao: tipo, numeroInscricao: doc, nome, codigoIbgeMunicipio },
         receitas: [{
           codigo: receitaCodigo,
           competencia: { mes, ano },
@@ -381,12 +352,7 @@ router.post(
         observacao
       };
 
-      const contrib = {
-        codigoTipoInscricao: tipo,
-        numeroInscricao: doc,
-        nome,
-        codigoIbgeMunicipio
-      };
+      const contrib = { codigoTipoInscricao: tipo, numeroInscricao: doc, nome, codigoIbgeMunicipio };
       const guiaLike = {
         id: dar.id,
         valor: Number(dar.valor),
@@ -394,7 +360,7 @@ router.post(
         mes_referencia: mes,
         ano_referencia: ano,
         observacao,
-        codigo_receita: receitaCodigo
+        codigo_receita: receitaCodigo,
       };
 
       let sefaz;
@@ -444,6 +410,7 @@ router.post(
     }
   }
 );
+
 
 
 /**
