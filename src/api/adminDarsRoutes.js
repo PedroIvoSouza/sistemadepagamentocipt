@@ -180,9 +180,12 @@ router.post(
       const darId = Number(req.params.id);
       const { codigoTipoInscricao, numeroInscricao, nome, codigoIbgeMunicipio, dar } =
         await getContribuinteEmitenteForDar(darId);
-
-      // Saneia/valida doc e tipo
-      const doc  = String(numeroInscricao || '').replace(/\D/g, '');
+      console.log('[AdminDARs][emitir] darId=', darId, {
+    codigoTipoInscricao, numeroInscricao, nome, codigoIbgeMunicipio,
+      permiss: dar?.permissionario_id || null
+    });
+    const _docLog = String(numeroInscricao || '').replace(/\D/g,'');
+    console.log('[AdminDARs][emitir] doc=', _docLog, 'len=', _docLog.length);
       const tipo = codigoTipoInscricao || (doc.length === 11 ? 3 : 4);
       if (!(doc.length === 11 || doc.length === 14)) {
         return res.status(400).json({ error: 'Documento inválido (CPF 11 dígitos ou CNPJ 14).' });
@@ -279,8 +282,12 @@ router.post(
       const darId = Number(req.params.id);
       const { codigoTipoInscricao, numeroInscricao, nome, codigoIbgeMunicipio, dar } =
         await getContribuinteEmitenteForDar(darId);
-
-      const doc  = String(numeroInscricao || '').replace(/\D/g, '');
+        console.log('[AdminDARs][emitir] darId=', darId, {
+          codigoTipoInscricao, numeroInscricao, nome, codigoIbgeMunicipio,
+          permiss: dar?.permissionario_id || null
+        });
+        const _docLog = String(numeroInscricao || '').replace(/\D/g,'');
+        console.log('[AdminDARs][emitir] doc=', _docLog, 'len=', _docLog.length);
       const tipo = codigoTipoInscricao || (doc.length === 11 ? 3 : 4);
       if (!(doc.length === 11 || doc.length === 14)) {
         return res.status(400).json({ error: 'Documento inválido (CPF 11 dígitos ou CNPJ 14).' });
