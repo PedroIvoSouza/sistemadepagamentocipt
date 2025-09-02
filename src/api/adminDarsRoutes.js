@@ -181,7 +181,6 @@ router.post(
       const { codigoTipoInscricao, numeroInscricao, nome, codigoIbgeMunicipio, dar } =
         await getContribuinteEmitenteForDar(darId);
 
-      / tipo/doc já saneados acima:
 const mes  = dar.mes_referencia || Number(String(dar.data_vencimento).slice(5, 7));
 const ano  = dar.ano_referencia || Number(String(dar.data_vencimento).slice(0, 4));
 const venc = String(dar.data_vencimento).slice(0, 10);
@@ -287,7 +286,6 @@ router.post(
       const { codigoTipoInscricao, numeroInscricao, nome, codigoIbgeMunicipio, dar } =
         await getContribuinteEmitenteForDar(darId);
 
-     / tipo/doc já saneados acima:
 const mes  = dar.mes_referencia || Number(String(dar.data_vencimento).slice(5, 7));
 const ano  = dar.ano_referencia || Number(String(dar.data_vencimento).slice(0, 4));
 const venc = String(dar.data_vencimento).slice(0, 10);
