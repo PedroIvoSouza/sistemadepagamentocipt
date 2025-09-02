@@ -242,6 +242,7 @@ router.post(
       const observacao = nome ? `${obsPrefix} - ${nome}` : obsPrefix;
 
       // 4) Payload único (preferido)
+      console.log('[DAR emit]', { darId, tipo, doc, len: doc.length });
       const payload = {
         contribuinteEmitente: { codigoTipoInscricao: tipo, numeroInscricao: doc, nome, codigoIbgeMunicipio },
         receitas: [{
@@ -256,6 +257,7 @@ router.post(
       };
 
       // 5) Fallback (contrib, guiaLike) – formato aceito pelo serviço
+      console.log('[DAR emit]', { darId, tipo, doc, len: doc.length });
       const contrib = { codigoTipoInscricao: tipo, numeroInscricao: doc, nome, codigoIbgeMunicipio };
       const guiaLike = {
         id: dar.id,
