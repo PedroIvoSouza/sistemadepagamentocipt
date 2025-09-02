@@ -255,27 +255,40 @@ router.post(
       };
 
       // 4) fallback: (contribuinte, guiaLike)
-      const contrib = { codigoTipoInscricao: tipo, numeroInscricao: doc, nome, codigoIbgeMunicipio };
-      const guiaLike = {
-        id: dar.id,
-        valor: Number(dar.valor),
-        data_vencimento: venc,
-        mes_referencia: mes,
-        ano_referencia: ano,
-        observacao,
-        codigo_receita: receitaCodigo,
-      };
+      // contribuinte
+        const contrib = {
+          codigoTipoInscricao: tipo,        // 3=CPF, 4=CNPJ
+          numeroInscricao: doc,             // só dígitos
+          nome,
+          codigoIbgeMunicipio               // 2704302
+        };
+        
+        // guiaLike (formato esperado pelo serviço)
+        const guiaLike = {
+          id: dar.id,
+          valor: Number(dar.valor),
+          data_vencimento: String(dar.data_vencimento).slice(0,10),
+          mes_referencia: dar.mes_referencia || Number(String(dar.data_vencimento).slice(5,7)),
+          ano_referencia: dar.ano_referencia || Number(String(dar.data_vencimento).slice(0,4)),
+          observacao,                       // 'Aluguel CIPT - NOME' ou 'Evento CIPT - NOME'
+          codigo_receita: (tipo === 3) ? 20165 : 20164
+        };
 
-      let sefaz;
-      try {
-        sefaz = await emitirGuiaSefaz(payload);
-      } catch (e1) {
-        if (/argument|param/i.test(String(e1?.message || ''))) {
-          sefaz = await emitirGuiaSefaz(contrib, guiaLike);
-        } else {
-          throw e1;
+      
+        try {
+          // 1ª tentativa: payload único
+          sefaz = await emitirGuiaSefaz(payload);
+        } catch (e1) {
+          console.warn('[SEFAZ] payload único falhou -> tentando (contrib, guiaLike):', e1?.message);
+          try {
+            // 2ª tentativa: assinatura em 2 argumentos
+            sefaz = await emitirGuiaSefaz(contrib, guiaLike);
+          } catch (e2) {
+            const msg = e2?.response?.data?.message || e2?.message || e1?.message || 'Falha ao emitir a DAR.';
+            return res.status(400).json({ error: msg });
+          }
         }
-      }
+
 
       if (!sefaz || !sefaz.numeroGuia || !sefaz.pdfBase64) {
         return res.status(502).json({ error: 'Retorno da SEFAZ incompleto (sem numeroGuia/pdfBase64).' });
@@ -363,16 +376,21 @@ router.post(
         codigo_receita: receitaCodigo,
       };
 
-      let sefaz;
-      try {
-        sefaz = await emitirGuiaSefaz(payload);
-      } catch (e1) {
-        if (/argument|param/i.test(String(e1?.message || ''))) {
-          sefaz = await emitirGuiaSefaz(contrib, guiaLike);
-        } else {
-          throw e1;
+      
+        try {
+          // 1ª tentativa: payload único
+          sefaz = await emitirGuiaSefaz(payload);
+        } catch (e1) {
+          console.warn('[SEFAZ] payload único falhou -> tentando (contrib, guiaLike):', e1?.message);
+          try {
+            // 2ª tentativa: assinatura em 2 argumentos
+            sefaz = await emitirGuiaSefaz(contrib, guiaLike);
+          } catch (e2) {
+            const msg = e2?.response?.data?.message || e2?.message || e1?.message || 'Falha ao emitir a DAR.';
+            return res.status(400).json({ error: msg });
+          }
         }
-      }
+
 
       if (!sefaz || !sefaz.numeroGuia || !sefaz.pdfBase64) {
         return res.status(502).json({ error: 'Retorno da SEFAZ incompleto (sem numeroGuia/pdfBase64).' });
