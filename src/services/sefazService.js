@@ -402,8 +402,6 @@ async function _postEmitir(payload) {
  * Compat: emitirGuiaSefaz(contribuinte, guiaLike) → monta payload perm.
  */
 
-const axios = require('axios');
-
 function isPayload(obj) {
   return obj && typeof obj === 'object'
     && obj.contribuinteEmitente
