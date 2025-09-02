@@ -6,7 +6,7 @@ const authorizeRole = require('../middleware/roleMiddleware');
 const { calcularEncargosAtraso } = require('../services/cobrancaService');
 const { notificarDarGerado } = require('../services/notificacaoService');
 const { emitirGuiaSefaz } = require('../services/sefazService');
-const { isoHojeLocal, toISO, buildSefazPayloadPermissionario } = require('../utils/sefazPayload');
+const { isoHojeLocal, toISO } = require('../utils/sefazPayload');
 const { gerarTokenDocumento, imprimirTokenEmPdf } = require('../utils/token');
 const db = require('../database/db');
 
@@ -181,59 +181,58 @@ router.post(
       const { codigoTipoInscricao, numeroInscricao, nome, codigoIbgeMunicipio, dar } =
         await getContribuinteEmitenteForDar(darId);
 
-      // >>> A PARTIR DAQUI <<<
-      // 1) Doc sanitizado + validação
-      const doc = String(numeroInscricao || '').replace(/\D/g, '');
-      if (!(doc.length === 11 || doc.length === 14)) {
-        return res.status(400).json({ error: 'Documento inválido (CPF 11 dígitos ou CNPJ 14).' });
-      }
-      const tipo = (doc.length === 11) ? 3 : 4; // 3=CPF, 4=CNPJ
+      / tipo/doc já saneados acima:
+const mes  = dar.mes_referencia || Number(String(dar.data_vencimento).slice(5, 7));
+const ano  = dar.ano_referencia || Number(String(dar.data_vencimento).slice(0, 4));
+const venc = String(dar.data_vencimento).slice(0, 10);
 
-      // 2) Competência e vencimento
-      const mes  = dar.mes_referencia || Number(String(dar.data_vencimento).slice(5, 7));
-      const ano  = dar.ano_referencia || Number(String(dar.data_vencimento).slice(0, 4));
-      const venc = String(dar.data_vencimento).slice(0, 10);
+const receitaCodigo = (tipo === 3) ? 20165 : 20164; // CPF=20165, CNPJ=20164 (ajuste se necessário)
+const obsPrefix = dar.permissionario_id ? 'Aluguel CIPT' : 'Evento CIPT';
+const observacao = nome ? `${obsPrefix} - ${nome}` : obsPrefix;
 
-      // 3) Receita e observação
-      const receitaCodigo = (tipo === 3) ? 20165 : 20164;
-      const obsPrefix = dar.permissionario_id ? 'Aluguel CIPT' : 'Evento CIPT';
-      const observacao = nome ? `${obsPrefix} - ${nome}` : obsPrefix;
+// forma 1: payload único (preferida)
+const payload = {
+  contribuinteEmitente: {
+    codigoTipoInscricao: tipo,
+    numeroInscricao: doc,
+    nome,
+    codigoIbgeMunicipio
+  },
+  receitas: [{
+    codigo: receitaCodigo,
+    competencia: { mes, ano },
+    valorPrincipal: Number(dar.valor),
+    valorDesconto: 0,
+    dataVencimento: venc
+  }],
+  dataLimitePagamento: venc,
+  observacao
+};
 
-      // 4) Contribuinte padronizado
-      const contrib = {
-        codigoTipoInscricao: tipo,
-        numeroInscricao: doc,
-        nome,
-        codigoIbgeMunicipio
-      };
+// forma 2: assinatura em 2 argumentos (fallback)
+const contrib = {
+  codigoTipoInscricao: tipo,
+  numeroInscricao: doc,
+  nome,
+  codigoIbgeMunicipio
+};
+const guia = {
+  codigo: receitaCodigo,
+  competencia: { mes, ano },
+  valorPrincipal: Number(dar.valor),
+  valorDesconto: 0,
+  dataVencimento: venc,
+  observacao
+};
 
-      // 5) Payload “pronto” (preferido)
-      const payload = buildSefazPayloadPermissionario(contrib, {
-        codigoReceita: receitaCodigo,
-        mes,
-        ano,
-        valor: Number(dar.valor),
-        dataVencimento: venc,
-        observacao
-      });
-
-      // 6) Guia (fallback p/ assinatura de 2 argumentos)
-      const guia = {
-        codigo: receitaCodigo,
-        competencia: { mes, ano },
-        valorPrincipal: Number(dar.valor),
-        valorDesconto: 0,
-        dataVencimento: venc,
-        observacao
-      };
-
-      // 7) Chamada SEFAZ com fallback de assinatura
-      let sefaz;
-      try {
-        sefaz = await emitirGuiaSefaz(payload);
-      } catch (e1) {
-        try {
-          sefaz = await emitirGuiaSefaz(contrib, guia);
+let sefaz;
+try {
+  // tenta payload único
+  sefaz = await emitirGuiaSefaz(payload);
+} catch (e1) {
+  // fallback: (contribuinte, guiaLike)
+  sefaz = await emitirGuiaSefaz(contrib, guia);
+}
         } catch (e2) {
           const msg = e2?.message || e1?.message || 'Falha ao emitir a DAR.';
           return res.status(400).json({ error: msg });
@@ -288,41 +287,41 @@ router.post(
       const { codigoTipoInscricao, numeroInscricao, nome, codigoIbgeMunicipio, dar } =
         await getContribuinteEmitenteForDar(darId);
 
-      const doc = String(numeroInscricao || '').replace(/\D/g, '');
-if (!(doc.length === 11 || doc.length === 14)) {
-  return res.status(400).json({ error: 'Documento inválido (CPF 11 dígitos ou CNPJ 14).' });
-}
-const tipo = (doc.length === 11) ? 3 : 4; // 3=CPF, 4=CNPJ
-
-// Competência e vencimento
+     / tipo/doc já saneados acima:
 const mes  = dar.mes_referencia || Number(String(dar.data_vencimento).slice(5, 7));
 const ano  = dar.ano_referencia || Number(String(dar.data_vencimento).slice(0, 4));
 const venc = String(dar.data_vencimento).slice(0, 10);
 
-// Receita e observação
-const receitaCodigo = (tipo === 3) ? 20165 : 20164;
+const receitaCodigo = (tipo === 3) ? 20165 : 20164; // CPF=20165, CNPJ=20164 (ajuste se necessário)
 const obsPrefix = dar.permissionario_id ? 'Aluguel CIPT' : 'Evento CIPT';
 const observacao = nome ? `${obsPrefix} - ${nome}` : obsPrefix;
 
-// 1) contrib padronizado
+// forma 1: payload único (preferida)
+const payload = {
+  contribuinteEmitente: {
+    codigoTipoInscricao: tipo,
+    numeroInscricao: doc,
+    nome,
+    codigoIbgeMunicipio
+  },
+  receitas: [{
+    codigo: receitaCodigo,
+    competencia: { mes, ano },
+    valorPrincipal: Number(dar.valor),
+    valorDesconto: 0,
+    dataVencimento: venc
+  }],
+  dataLimitePagamento: venc,
+  observacao
+};
+
+// forma 2: assinatura em 2 argumentos (fallback)
 const contrib = {
   codigoTipoInscricao: tipo,
   numeroInscricao: doc,
   nome,
   codigoIbgeMunicipio
 };
-
-// 2) payload “pronto” com o helper oficial (forma preferida)
-const payload = buildSefazPayloadPermissionario(contrib, {
-  codigoReceita: receitaCodigo,
-  mes,
-  ano,
-  valor: Number(dar.valor),
-  dataVencimento: venc,
-  observacao
-});
-
-// 3) guia (fallback p/ assinatura de 2 argumentos)
 const guia = {
   codigo: receitaCodigo,
   competencia: { mes, ano },
@@ -334,12 +333,12 @@ const guia = {
 
 let sefaz;
 try {
-  // tenta payload único (versão mais nova)
+  // tenta payload único
   sefaz = await emitirGuiaSefaz(payload);
 } catch (e1) {
-  try {
-    // fallback: assinatura (contribuinte, guia) com shape correto
-    sefaz = await emitirGuiaSefaz(contrib, guia);
+  // fallback: (contribuinte, guiaLike)
+  sefaz = await emitirGuiaSefaz(contrib, guia);
+}
   } catch (e2) {
     const msg = e2?.message || e1?.message || 'Falha ao emitir a DAR.';
     return res.status(400).json({ error: msg });
