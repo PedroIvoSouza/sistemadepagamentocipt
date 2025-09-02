@@ -224,23 +224,24 @@ router.post(
       const { codigoTipoInscricao, numeroInscricao, nome, codigoIbgeMunicipio, dar } =
         await getContribuinteEmitenteForDar(darId);
 
-      // 1) doc/tipo válidos
+      // 1) Doc/tipo normalizados + validação
       const doc  = String(numeroInscricao || '').replace(/\D/g, '');
-      if (doc.length !== 11 && doc.length !== 14) {
+      const tipo = codigoTipoInscricao || (doc.length === 11 ? 3 : 4);
+      if (!(doc.length === 11 || doc.length === 14)) {
         return res.status(400).json({ error: 'Documento inválido (CPF 11 dígitos ou CNPJ 14).' });
       }
-      const tipo = (doc.length === 11) ? 3 : 4; // 3=CPF, 4=CNPJ
 
-      // 2) dados da guia
+      // 2) Competência / vencimento
       const mes  = dar.mes_referencia || Number(String(dar.data_vencimento).slice(5, 7));
       const ano  = dar.ano_referencia || Number(String(dar.data_vencimento).slice(0, 4));
       const venc = String(dar.data_vencimento).slice(0, 10);
 
-      const receitaCodigo = (tipo === 3) ? 20165 : 20164;
+      // 3) Código de receita e observação
+      const receitaCodigo = (tipo === 3) ? 20165 : 20164; // CPF=20165, CNPJ=20164
       const obsPrefix = dar.permissionario_id ? 'Aluguel CIPT' : 'Evento CIPT';
       const observacao = nome ? `${obsPrefix} - ${nome}` : obsPrefix;
 
-      // 3) tentativa: payload único
+      // 4) Payload único (preferido)
       const payload = {
         contribuinteEmitente: { codigoTipoInscricao: tipo, numeroInscricao: doc, nome, codigoIbgeMunicipio },
         receitas: [{
@@ -254,47 +255,37 @@ router.post(
         observacao
       };
 
-      // 4) fallback: (contribuinte, guiaLike)
-      // contribuinte
-        const contrib = {
-          codigoTipoInscricao: tipo,        // 3=CPF, 4=CNPJ
-          numeroInscricao: doc,             // só dígitos
-          nome,
-          codigoIbgeMunicipio               // 2704302
-        };
-        
-        // guiaLike (formato esperado pelo serviço)
-        const guiaLike = {
-          id: dar.id,
-          valor: Number(dar.valor),
-          data_vencimento: String(dar.data_vencimento).slice(0,10),
-          mes_referencia: dar.mes_referencia || Number(String(dar.data_vencimento).slice(5,7)),
-          ano_referencia: dar.ano_referencia || Number(String(dar.data_vencimento).slice(0,4)),
-          observacao,                       // 'Aluguel CIPT - NOME' ou 'Evento CIPT - NOME'
-          codigo_receita: (tipo === 3) ? 20165 : 20164
-        };
+      // 5) Fallback (contrib, guiaLike) – formato aceito pelo serviço
+      const contrib = { codigoTipoInscricao: tipo, numeroInscricao: doc, nome, codigoIbgeMunicipio };
+      const guiaLike = {
+        id: dar.id,
+        valor: Number(dar.valor),
+        data_vencimento: venc,
+        mes_referencia: mes,
+        ano_referencia: ano,
+        observacao,
+        codigo_receita: receitaCodigo,
+      };
 
-      
+      // 6) Chamada ao serviço com fallback robusto
+      let sefaz;
+      try {
+        sefaz = await emitirGuiaSefaz(payload);
+      } catch (e1) {
+        console.warn('[SEFAZ][emitir] payload único falhou -> tentando (contrib, guiaLike):', e1?.message);
         try {
-          // 1ª tentativa: payload único
-          sefaz = await emitirGuiaSefaz(payload);
-        } catch (e1) {
-          console.warn('[SEFAZ] payload único falhou -> tentando (contrib, guiaLike):', e1?.message);
-          try {
-            // 2ª tentativa: assinatura em 2 argumentos
-            sefaz = await emitirGuiaSefaz(contrib, guiaLike);
-          } catch (e2) {
-            const msg = e2?.response?.data?.message || e2?.message || e1?.message || 'Falha ao emitir a DAR.';
-            return res.status(400).json({ error: msg });
-          }
+          sefaz = await emitirGuiaSefaz(contrib, guiaLike);
+        } catch (e2) {
+          const msg = e2?.response?.data?.message || e2?.message || e1?.message || 'Falha ao emitir a DAR.';
+          return res.status(400).json({ error: msg });
         }
-
+      }
 
       if (!sefaz || !sefaz.numeroGuia || !sefaz.pdfBase64) {
         return res.status(502).json({ error: 'Retorno da SEFAZ incompleto (sem numeroGuia/pdfBase64).' });
       }
 
-      // 5) persistência
+      // 7) Persistência
       const tokenDoc = `DAR-${sefaz.numeroGuia}`;
       const pdfComToken = await imprimirTokenEmPdf(sefaz.pdfBase64, tokenDoc);
 
@@ -328,6 +319,7 @@ router.post(
   }
 );
 
+
 // POST /api/admin/dars/:id/reemitir
 router.post(
   '/:id/reemitir',
@@ -339,10 +331,10 @@ router.post(
         await getContribuinteEmitenteForDar(darId);
 
       const doc  = String(numeroInscricao || '').replace(/\D/g, '');
-      if (doc.length !== 11 && doc.length !== 14) {
+      const tipo = codigoTipoInscricao || (doc.length === 11 ? 3 : 4);
+      if (!(doc.length === 11 || doc.length === 14)) {
         return res.status(400).json({ error: 'Documento inválido (CPF 11 dígitos ou CNPJ 14).' });
       }
-      const tipo = (doc.length === 11) ? 3 : 4;
 
       const mes  = dar.mes_referencia || Number(String(dar.data_vencimento).slice(5, 7));
       const ano  = dar.ano_referencia || Number(String(dar.data_vencimento).slice(0, 4));
@@ -376,21 +368,18 @@ router.post(
         codigo_receita: receitaCodigo,
       };
 
-      
+      let sefaz;
+      try {
+        sefaz = await emitirGuiaSefaz(payload);
+      } catch (e1) {
+        console.warn('[SEFAZ][reemitir] payload único falhou -> tentando (contrib, guiaLike):', e1?.message);
         try {
-          // 1ª tentativa: payload único
-          sefaz = await emitirGuiaSefaz(payload);
-        } catch (e1) {
-          console.warn('[SEFAZ] payload único falhou -> tentando (contrib, guiaLike):', e1?.message);
-          try {
-            // 2ª tentativa: assinatura em 2 argumentos
-            sefaz = await emitirGuiaSefaz(contrib, guiaLike);
-          } catch (e2) {
-            const msg = e2?.response?.data?.message || e2?.message || e1?.message || 'Falha ao emitir a DAR.';
-            return res.status(400).json({ error: msg });
-          }
+          sefaz = await emitirGuiaSefaz(contrib, guiaLike);
+        } catch (e2) {
+          const msg = e2?.response?.data?.message || e2?.message || e1?.message || 'Falha ao reemitir a DAR.';
+          return res.status(400).json({ error: msg });
         }
-
+      }
 
       if (!sefaz || !sefaz.numeroGuia || !sefaz.pdfBase64) {
         return res.status(502).json({ error: 'Retorno da SEFAZ incompleto (sem numeroGuia/pdfBase64).' });
@@ -428,6 +417,7 @@ router.post(
     }
   }
 );
+
 
 
 
