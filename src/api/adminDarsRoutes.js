@@ -1,4 +1,4 @@
-Q// src/api/adminDarsRoutes.js
+// src/api/adminDarsRoutes.js
 const express = require('express');
 
 const authMiddleware = require('../middleware/authMiddleware');
