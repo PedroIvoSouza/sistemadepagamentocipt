@@ -175,208 +175,161 @@ router.post(
  * POST /api/admin/dars/:id/emitir
  * Emite a guia na SEFAZ pelo admin (independe do usuário logado ser o permissionário).
  */
+// POST /api/admin/dars/:id/emitir
 router.post(
   '/:id/emitir',
   [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN'])],
   async (req, res) => {
     try {
-    const darId = Number(req.params.id);
-    const { codigoTipoInscricao, numeroInscricao, nome, codigoIbgeMunicipio, dar } =
-      await getContribuinteEmitenteForDar(darId);
+      const darId = Number(req.params.id);
+      const { codigoTipoInscricao, numeroInscricao, nome, codigoIbgeMunicipio, dar } =
+        await getContribuinteEmitenteForDar(darId);
 
-   // saneia competência/vencimento
-const mes = dar.mes_referencia || Number(String(dar.data_vencimento).slice(5, 7));
-const ano = dar.ano_referencia || Number(String(dar.data_vencimento).slice(0, 4));
+      // Sanitiza e valida documento
+      const doc = String(numeroInscricao || '').replace(/\D/g, '');
+      if (!(doc.length === 11 || doc.length === 14)) {
+        return res.status(400).json({ error: `Documento inválido (${doc}).` });
+      }
+      const tipo = (doc.length === 11) ? 3 : 4; // 3=CPF, 4=CNPJ
 
-// 1) código de receita por tipo
-const receitaCodigo = (codigoTipoInscricao === 3 ? 20165 : 20164);
+      // Competência e vencimento
+      const mes = dar.mes_referencia || Number(String(dar.data_vencimento).slice(5, 7));
+      const ano = dar.ano_referencia || Number(String(dar.data_vencimento).slice(0, 4));
+      const venc = String(dar.data_vencimento).slice(0, 10);
 
-// 2) observação diferenciada
-const obsPrefix = dar.permissionario_id ? 'Aluguel CIPT' : 'Evento CIPT';
-const observacao = nome ? `${obsPrefix} - ${nome}` : obsPrefix;
+      // Receita e observação
+      const receitaCodigo = (tipo === 3) ? 20165 : 20164;
+      const obsPrefix = dar.permissionario_id ? 'Aluguel CIPT' : 'Evento CIPT';
+      const observacao = nome ? `${obsPrefix} - ${nome}` : obsPrefix;
 
-// monta objetos para a chamada no formato do CLI (mais seguro)
-const contrib = { codigoTipoInscricao, numeroInscricao, nome, codigoIbgeMunicipio };
-const guiaLike = {
-  id: dar.id,
-  valor: Number(dar.valor),
-  data_vencimento: String(dar.data_vencimento).slice(0,10),
-  mes_referencia: mes,
-  ano_referencia: ano,
-  observacao,
-  codigo_receita: receitaCodigo,
-};
+      // Payload único (padrão)
+      const payload = {
+        contribuinteEmitente: { codigoTipoInscricao: tipo, numeroInscricao: doc, nome, codigoIbgeMunicipio },
+        receitas: [{
+          codigo: receitaCodigo,
+          competencia: { mes, ano },
+          valorPrincipal: Number(dar.valor),
+          valorDesconto: 0,
+          dataVencimento: venc
+        }],
+        dataLimitePagamento: venc,
+        observacao
+      };
 
-let sefaz;
-try {
-  // 3) tente a assinatura (contrib, guiaLike)
-  sefaz = await emitirGuiaSefaz(contrib, guiaLike);
-} catch (e) {
-  // fallback para versões que aceitam payload único
-  if (/argument|param/i.test(String(e.message || ''))) {
-    const payload = {
-      contribuinteEmitente: {
-        codigoTipoInscricao, numeroInscricao, nome, codigoIbgeMunicipio
-      },
-      receitas: [{
-        codigo: receitaCodigo,
-        competencia: { mes, ano },
-        valorPrincipal: Number(dar.valor),
-        valorDesconto: 0,
-        dataVencimento: guiaLike.data_vencimento
-      }],
-      dataLimitePagamento: guiaLike.data_vencimento,
-      observacao
-    };
-    sefaz = await emitirGuiaSefaz(payload);
-  } else {
-    throw e;
+      // Chama SEFAZ
+      const sefaz = await emitirGuiaSefaz(payload);
+      if (!sefaz || !sefaz.numeroGuia || !sefaz.pdfBase64) {
+        return res.status(502).json({ error: 'Retorno da SEFAZ incompleto (sem numeroGuia/pdfBase64).' });
+      }
+
+      // Marca no PDF e persiste
+      const tokenDoc = `DAR-${sefaz.numeroGuia}`;
+      const pdfComToken = await imprimirTokenEmPdf(sefaz.pdfBase64, tokenDoc);
+
+      await dbRunAsync(`
+        UPDATE dars
+           SET numero_documento = ?,
+               pdf_url          = ?,
+               status           = CASE WHEN COALESCE(status,'') IN ('','Pendente','Vencido','Vencida') THEN 'Emitido' ELSE status END,
+               data_emissao     = COALESCE(data_emissao, date('now')),
+               emitido_por_id   = COALESCE(emitido_por_id, ?)
+         WHERE id = ?`,
+        [sefaz.numeroGuia, pdfComToken, req.user?.id || null, darId]
+      );
+
+      const ld = sefaz.linhaDigitavel || sefaz.linha_digitavel || null;
+      const cb = sefaz.codigoBarras  || sefaz.codigo_barras  || null;
+      if (ld || cb) {
+        await dbRunAsync(
+          `UPDATE dars SET linha_digitavel = COALESCE(?, linha_digitavel),
+                           codigo_barras  = COALESCE(?, codigo_barras)
+           WHERE id = ?`,
+          [ld, cb, darId]
+        );
+      }
+
+      return res.json({ ok: true, numero: sefaz.numeroGuia });
+    } catch (err) {
+      console.error('[AdminDARs] ERRO POST /:id/emitir:', err);
+      return res.status(400).json({ error: err.message || 'Falha ao emitir a DAR.' });
+    }
   }
-}
-
-if (!sefaz || !sefaz.numeroGuia || !sefaz.pdfBase64) {
-  return res.status(502).json({ error: 'Retorno da SEFAZ incompleto (sem numeroGuia/pdfBase64).' });
-}
-
-// imprime token no PDF e salva
-const tokenDoc = `DAR-${sefaz.numeroGuia}`;
-const pdfComToken = await imprimirTokenEmPdf(sefaz.pdfBase64, tokenDoc);
-
-// 4) grava também emitido_por_id (auditoria)
-await dbRunAsync(`
-  UPDATE dars
-     SET numero_documento = ?,
-         pdf_url          = ?,
-         status           = CASE WHEN COALESCE(status,'') IN ('','Pendente','Vencido','Vencida') THEN 'Emitido' ELSE status END,
-         data_emissao     = COALESCE(data_emissao, date('now')),
-         emitido_por_id   = COALESCE(emitido_por_id, ?)
-   WHERE id = ?`,
-  [sefaz.numeroGuia, pdfComToken, req.user?.id || null, darId]
 );
 
-// linha digitável / código de barras (se vierem)
-const ld = sefaz.linhaDigitavel || sefaz.linha_digitavel || null;
-const cb = sefaz.codigoBarras  || sefaz.codigo_barras  || null;
-if (ld || cb) {
-  await dbRunAsync(
-    `UPDATE dars SET linha_digitavel = COALESCE(?, linha_digitavel),
-                     codigo_barras  = COALESCE(?, codigo_barras)
-     WHERE id = ?`,
-    [ld, cb, darId]
-  );
-}
-
-return res.json({ ok: true, numero: sefaz.numeroGuia });
-      
-} catch (err) {
-  console.error('[AdminDARs] ERRO POST /:id/emitir:', err);
-  return res.status(400).json({ error: err.message || 'Falha ao emitir a DAR.' });
-}
-});
-
-
-/**
- * POST /api/admin/dars/:id/reemitir
- * Reemite a guia na SEFAZ permitindo atualizar valor e vencimento.
- */
+// POST /api/admin/dars/:id/reemitir
 router.post(
   '/:id/reemitir',
   [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN'])],
   async (req, res) => {
-   try {
-    const darId = Number(req.params.id);
-    const { codigoTipoInscricao, numeroInscricao, nome, codigoIbgeMunicipio, dar } =
-      await getContribuinteEmitenteForDar(darId);
+    try {
+      const darId = Number(req.params.id);
+      const { codigoTipoInscricao, numeroInscricao, nome, codigoIbgeMunicipio, dar } =
+        await getContribuinteEmitenteForDar(darId);
 
-  // saneia competência/vencimento
-const mes = dar.mes_referencia || Number(String(dar.data_vencimento).slice(5, 7));
-const ano = dar.ano_referencia || Number(String(dar.data_vencimento).slice(0, 4));
+      const doc = String(numeroInscricao || '').replace(/\D/g, '');
+      if (!(doc.length === 11 || doc.length === 14)) {
+        return res.status(400).json({ error: `Documento inválido (${doc}).` });
+      }
+      const tipo = (doc.length === 11) ? 3 : 4;
 
-// 1) código de receita por tipo
-const receitaCodigo = (codigoTipoInscricao === 3 ? 20165 : 20164);
+      const mes = dar.mes_referencia || Number(String(dar.data_vencimento).slice(5, 7));
+      const ano = dar.ano_referencia || Number(String(dar.data_vencimento).slice(0, 4));
+      const venc = String(dar.data_vencimento).slice(0, 10);
 
-// 2) observação diferenciada
-const obsPrefix = dar.permissionario_id ? 'Aluguel CIPT' : 'Evento CIPT';
-const observacao = nome ? `${obsPrefix} - ${nome}` : obsPrefix;
+      const receitaCodigo = (tipo === 3) ? 20165 : 20164;
+      const obsPrefix = dar.permissionario_id ? 'Aluguel CIPT' : 'Evento CIPT';
+      const observacao = nome ? `${obsPrefix} - ${nome}` : obsPrefix;
 
-// monta objetos para a chamada no formato do CLI (mais seguro)
-const contrib = { codigoTipoInscricao, numeroInscricao, nome, codigoIbgeMunicipio };
-const guiaLike = {
-  id: dar.id,
-  valor: Number(dar.valor),
-  data_vencimento: String(dar.data_vencimento).slice(0,10),
-  mes_referencia: mes,
-  ano_referencia: ano,
-  observacao,
-  codigo_receita: receitaCodigo,
-};
+      const payload = {
+        contribuinteEmitente: { codigoTipoInscricao: tipo, numeroInscricao: doc, nome, codigoIbgeMunicipio },
+        receitas: [{
+          codigo: receitaCodigo,
+          competencia: { mes, ano },
+          valorPrincipal: Number(dar.valor),
+          valorDesconto: 0,
+          dataVencimento: venc
+        }],
+        dataLimitePagamento: venc,
+        observacao
+      };
 
-let sefaz;
-try {
-  // 3) tente a assinatura (contrib, guiaLike)
-  sefaz = await emitirGuiaSefaz(contrib, guiaLike);
-} catch (e) {
-  // fallback para versões que aceitam payload único
-  if (/argument|param/i.test(String(e.message || ''))) {
-    const payload = {
-      contribuinteEmitente: {
-        codigoTipoInscricao, numeroInscricao, nome, codigoIbgeMunicipio
-      },
-      receitas: [{
-        codigo: receitaCodigo,
-        competencia: { mes, ano },
-        valorPrincipal: Number(dar.valor),
-        valorDesconto: 0,
-        dataVencimento: guiaLike.data_vencimento
-      }],
-      dataLimitePagamento: guiaLike.data_vencimento,
-      observacao
-    };
-    sefaz = await emitirGuiaSefaz(payload);
-  } else {
-    throw e;
+      const sefaz = await emitirGuiaSefaz(payload);
+      if (!sefaz || !sefaz.numeroGuia || !sefaz.pdfBase64) {
+        return res.status(502).json({ error: 'Retorno da SEFAZ incompleto (sem numeroGuia/pdfBase64).' });
+      }
+
+      const tokenDoc = `DAR-${sefaz.numeroGuia}`;
+      const pdfComToken = await imprimirTokenEmPdf(sefaz.pdfBase64, tokenDoc);
+
+      await dbRunAsync(`
+        UPDATE dars
+           SET numero_documento = ?,
+               pdf_url          = ?,
+               status           = CASE WHEN COALESCE(status,'') IN ('','Pendente','Vencido','Vencida') THEN 'Emitido' ELSE status END,
+               data_emissao     = COALESCE(data_emissao, date('now')),
+               emitido_por_id   = COALESCE(emitido_por_id, ?)
+         WHERE id = ?`,
+        [sefaz.numeroGuia, pdfComToken, req.user?.id || null, darId]
+      );
+
+      const ld = sefaz.linhaDigitavel || sefaz.linha_digitavel || null;
+      const cb = sefaz.codigoBarras  || sefaz.codigo_barras  || null;
+      if (ld || cb) {
+        await dbRunAsync(
+          `UPDATE dars SET linha_digitavel = COALESCE(?, linha_digitavel),
+                           codigo_barras  = COALESCE(?, codigo_barras)
+           WHERE id = ?`,
+          [ld, cb, darId]
+        );
+      }
+
+      return res.json({ ok: true, numero: sefaz.numeroGuia });
+    } catch (err) {
+      console.error('[AdminDARs] ERRO POST /:id/reemitir:', err);
+      return res.status(400).json({ error: err.message || 'Falha ao emitir a DAR.' });
+    }
   }
-}
-
-if (!sefaz || !sefaz.numeroGuia || !sefaz.pdfBase64) {
-  return res.status(502).json({ error: 'Retorno da SEFAZ incompleto (sem numeroGuia/pdfBase64).' });
-}
-
-// imprime token no PDF e salva
-const tokenDoc = `DAR-${sefaz.numeroGuia}`;
-const pdfComToken = await imprimirTokenEmPdf(sefaz.pdfBase64, tokenDoc);
-
-// 4) grava também emitido_por_id (auditoria)
-await dbRunAsync(`
-  UPDATE dars
-     SET numero_documento = ?,
-         pdf_url          = ?,
-         status           = CASE WHEN COALESCE(status,'') IN ('','Pendente','Vencido','Vencida') THEN 'Emitido' ELSE status END,
-         data_emissao     = COALESCE(data_emissao, date('now')),
-         emitido_por_id   = COALESCE(emitido_por_id, ?)
-   WHERE id = ?`,
-  [sefaz.numeroGuia, pdfComToken, req.user?.id || null, darId]
 );
-
-// linha digitável / código de barras (se vierem)
-const ld = sefaz.linhaDigitavel || sefaz.linha_digitavel || null;
-const cb = sefaz.codigoBarras  || sefaz.codigo_barras  || null;
-if (ld || cb) {
-  await dbRunAsync(
-    `UPDATE dars SET linha_digitavel = COALESCE(?, linha_digitavel),
-                     codigo_barras  = COALESCE(?, codigo_barras)
-     WHERE id = ?`,
-    [ld, cb, darId]
-  );
-}
-
-return res.json({ ok: true, numero: sefaz.numeroGuia });
-
-} catch (err) {
-  console.error('[AdminDARs] ERRO POST /:id/reemitir:', err);
-  return res.status(400).json({ error: err.message || 'Falha ao reemitir a DAR.' });
-}
-});
 
 
 
