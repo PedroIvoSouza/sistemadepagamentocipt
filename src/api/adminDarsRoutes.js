@@ -221,30 +221,39 @@ router.post(
   async (req, res) => {
     try {
       const darId = Number(req.params.id);
-      const { codigoTipoInscricao, numeroInscricao, nome, codigoIbgeMunicipio, dar } =
-        await getContribuinteEmitenteForDar(darId);
-      console.log('[AdminDARs][emitir] darId=', darId, {
-    codigoTipoInscricao, numeroInscricao, nome, codigoIbgeMunicipio,
-      permiss: dar?.permissionario_id || null
-    });
-    const _docLog = String(numeroInscricao || '').replace(/\D/g,'');
-    console.log('[AdminDARs][emitir] doc=', _docLog, 'len=', _docLog.length);
-      const tipo = codigoTipoInscricao || (doc.length === 11 ? 3 : 4);
+      const {
+        codigoTipoInscricao,
+        numeroInscricao,
+        nome,
+        codigoIbgeMunicipio,
+        dar
+      } = await getContribuinteEmitenteForDar(darId);
+
+      // 1) Doc sanitizado + validação (usa o que veio do helper)
+      const doc = String(numeroInscricao || '').replace(/\D/g, '');
       if (!(doc.length === 11 || doc.length === 14)) {
         return res.status(400).json({ error: 'Documento inválido (CPF 11 dígitos ou CNPJ 14).' });
       }
+      const tipo = doc.length === 11 ? 3 : 4; // 3=CPF, 4=CNPJ
 
+      // 2) Campos de guia
       const mes  = dar.mes_referencia || Number(String(dar.data_vencimento).slice(5, 7));
       const ano  = dar.ano_referencia || Number(String(dar.data_vencimento).slice(0, 4));
       const venc = String(dar.data_vencimento).slice(0, 10);
 
-      const receitaCodigo = (tipo === 3) ? 20165 : 20164; // ajuste se tiver regra diferente
+      // Regra de receita (ajuste se necessário)
+      const receitaCodigo = tipo === 3 ? 20165 : 20164; // CPF=20165, CNPJ=20164
       const obsPrefix = dar.permissionario_id ? 'Aluguel CIPT' : 'Evento CIPT';
       const observacao = nome ? `${obsPrefix} - ${nome}` : obsPrefix;
 
-      // Forma 1: payload único
+      // 3) Tenta payload único
       const payload = {
-        contribuinteEmitente: { codigoTipoInscricao: tipo, numeroInscricao: doc, nome, codigoIbgeMunicipio },
+        contribuinteEmitente: {
+          codigoTipoInscricao: tipo,
+          numeroInscricao: doc,
+          nome,
+          codigoIbgeMunicipio
+        },
         receitas: [{
           codigo: receitaCodigo,
           competencia: { mes, ano },
@@ -256,26 +265,32 @@ router.post(
         observacao
       };
 
-      // Forma 2: assinatura (contribuinte, guiaLike)
-      const contrib = { codigoTipoInscricao: tipo, numeroInscricao: doc, nome, codigoIbgeMunicipio };
-      const guia    = {
-        codigo: receitaCodigo,
-        competencia: { mes, ano },
-        valorPrincipal: Number(dar.valor),
-        valorDesconto: 0,
-        dataVencimento: venc,
-        observacao
+      // 4) Fallback assinatura em 2 args
+      const contrib = {
+        codigoTipoInscricao: tipo,
+        numeroInscricao: doc,
+        nome,
+        codigoIbgeMunicipio
+      };
+      const guiaLike = {
+        id: dar.id,
+        valor: Number(dar.valor),
+        data_vencimento: venc,
+        mes_referencia: mes,
+        ano_referencia: ano,
+        observacao,
+        codigo_receita: receitaCodigo
       };
 
       let sefaz;
       try {
         sefaz = await emitirGuiaSefaz(payload);
       } catch (e1) {
-        try {
-          sefaz = await emitirGuiaSefaz(contrib, guia);
-        } catch (e2) {
-          const msg = e2?.message || e1?.message || 'Falha ao emitir a DAR.';
-          return res.status(400).json({ error: msg });
+        // se a função reclamar de argumentos, tenta a forma (contrib, guiaLike)
+        if (/argument|param/i.test(String(e1?.message || ''))) {
+          sefaz = await emitirGuiaSefaz(contrib, guiaLike);
+        } else {
+          throw e1;
         }
       }
 
@@ -283,7 +298,8 @@ router.post(
         return res.status(502).json({ error: 'Retorno da SEFAZ incompleto (sem numeroGuia/pdfBase64).' });
       }
 
-      const tokenDoc   = `DAR-${sefaz.numeroGuia}`;
+      // 5) Persistência
+      const tokenDoc = `DAR-${sefaz.numeroGuia}`;
       const pdfComToken = await imprimirTokenEmPdf(sefaz.pdfBase64, tokenDoc);
 
       await dbRunAsync(`
@@ -323,29 +339,37 @@ router.post(
   async (req, res) => {
     try {
       const darId = Number(req.params.id);
-      const { codigoTipoInscricao, numeroInscricao, nome, codigoIbgeMunicipio, dar } =
-        await getContribuinteEmitenteForDar(darId);
-        console.log('[AdminDARs][emitir] darId=', darId, {
-          codigoTipoInscricao, numeroInscricao, nome, codigoIbgeMunicipio,
-          permiss: dar?.permissionario_id || null
-        });
-        const _docLog = String(numeroInscricao || '').replace(/\D/g,'');
-        console.log('[AdminDARs][emitir] doc=', _docLog, 'len=', _docLog.length);
-      const tipo = codigoTipoInscricao || (doc.length === 11 ? 3 : 4);
+      const {
+        codigoTipoInscricao,
+        numeroInscricao,
+        nome,
+        codigoIbgeMunicipio,
+        dar
+      } = await getContribuinteEmitenteForDar(darId);
+
+      // 1) Doc sanitizado + validação
+      const doc = String(numeroInscricao || '').replace(/\D/g, '');
       if (!(doc.length === 11 || doc.length === 14)) {
         return res.status(400).json({ error: 'Documento inválido (CPF 11 dígitos ou CNPJ 14).' });
       }
+      const tipo = doc.length === 11 ? 3 : 4;
 
+      // 2) Campos de guia (podem ser atualizados no futuro via req.body, se quiser)
       const mes  = dar.mes_referencia || Number(String(dar.data_vencimento).slice(5, 7));
       const ano  = dar.ano_referencia || Number(String(dar.data_vencimento).slice(0, 4));
       const venc = String(dar.data_vencimento).slice(0, 10);
 
-      const receitaCodigo = (tipo === 3) ? 20165 : 20164;
+      const receitaCodigo = tipo === 3 ? 20165 : 20164;
       const obsPrefix = dar.permissionario_id ? 'Aluguel CIPT' : 'Evento CIPT';
       const observacao = nome ? `${obsPrefix} - ${nome}` : obsPrefix;
 
       const payload = {
-        contribuinteEmitente: { codigoTipoInscricao: tipo, numeroInscricao: doc, nome, codigoIbgeMunicipio },
+        contribuinteEmitente: {
+          codigoTipoInscricao: tipo,
+          numeroInscricao: doc,
+          nome,
+          codigoIbgeMunicipio
+        },
         receitas: [{
           codigo: receitaCodigo,
           competencia: { mes, ano },
@@ -357,25 +381,30 @@ router.post(
         observacao
       };
 
-      const contrib = { codigoTipoInscricao: tipo, numeroInscricao: doc, nome, codigoIbgeMunicipio };
-      const guia    = {
-        codigo: receitaCodigo,
-        competencia: { mes, ano },
-        valorPrincipal: Number(dar.valor),
-        valorDesconto: 0,
-        dataVencimento: venc,
-        observacao
+      const contrib = {
+        codigoTipoInscricao: tipo,
+        numeroInscricao: doc,
+        nome,
+        codigoIbgeMunicipio
+      };
+      const guiaLike = {
+        id: dar.id,
+        valor: Number(dar.valor),
+        data_vencimento: venc,
+        mes_referencia: mes,
+        ano_referencia: ano,
+        observacao,
+        codigo_receita: receitaCodigo
       };
 
       let sefaz;
       try {
         sefaz = await emitirGuiaSefaz(payload);
       } catch (e1) {
-        try {
-          sefaz = await emitirGuiaSefaz(contrib, guia);
-        } catch (e2) {
-          const msg = e2?.message || e1?.message || 'Falha ao reemitir a DAR.';
-          return res.status(400).json({ error: msg });
+        if (/argument|param/i.test(String(e1?.message || ''))) {
+          sefaz = await emitirGuiaSefaz(contrib, guiaLike);
+        } else {
+          throw e1;
         }
       }
 
@@ -383,7 +412,7 @@ router.post(
         return res.status(502).json({ error: 'Retorno da SEFAZ incompleto (sem numeroGuia/pdfBase64).' });
       }
 
-      const tokenDoc   = `DAR-${sefaz.numeroGuia}`;
+      const tokenDoc = `DAR-${sefaz.numeroGuia}`;
       const pdfComToken = await imprimirTokenEmPdf(sefaz.pdfBase64, tokenDoc);
 
       await dbRunAsync(`
@@ -415,7 +444,6 @@ router.post(
     }
   }
 );
-
 
 
 /**
