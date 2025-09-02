@@ -402,50 +402,88 @@ async function _postEmitir(payload) {
  * Compat: emitirGuiaSefaz(contribuinte, guiaLike) → monta payload perm.
  */
 async function emitirGuiaSefaz(arg1, arg2) {
-    // payload pronto?
-    if (arg1 && typeof arg1 === 'object' && arg1.versao && arg1.contribuinteEmitente && arg1.receitas) {
-      return _postEmitir(arg1);
-    }
-    // Compat (contribuinte, guiaLike)
-    if (arg1 && arg2) {
-      const contrib = arg1 || {};
-      const guia = arg2 || {};
-    const doc = onlyDigits(contrib.documento || contrib.cnpj || contrib.cpf || '');
-    const fakeDarLike = {
-      valor: guia.valor || guia.valorPrincipal || 0,
-      data_vencimento: guia.data_vencimento || guia.vencimento || guia.dataVencimento,
-      mes_referencia: guia.mes_referencia || guia.competencia?.mes || guia.mes,
-      ano_referencia: guia.ano_referencia || guia.competencia?.ano || guia.ano,
-      id: guia.id || guia.referencia || null,
-      numero_documento: guia.numero_documento || null,
-    };
-    if (doc.length === 14) {
-      const payload = buildSefazPayloadPermissionario({
-        perm: { cnpj: doc, nome_empresa: contrib.nomeRazaoSocial || contrib.nome },
-        darLike: fakeDarLike,
-        receitaCodigo: RECEITA_CODIGO_PERMISSIONARIO,
-      });
-      return _postEmitir(payload);
-    }
-    if (doc.length === 11) {
-      const payload = buildSefazPayloadEvento({
-        cliente: { documento: doc, nome_razao_social: contrib.nomeRazaoSocial || contrib.nome },
-        parcela: {
-          valor: fakeDarLike.valor,
-          vencimento: fakeDarLike.data_vencimento,
-          competenciaMes: fakeDarLike.mes_referencia,
-          competenciaAno: fakeDarLike.ano_referencia,
-          id: fakeDarLike.id,
-        },
-        // receitaCodigo opcional; pickReceitaEventoByDoc decide
-      });
-      return _postEmitir(payload);
-    }
-    throw new Error('Documento inválido (CPF 11 dígitos ou CNPJ 14).');
-    }
-    throw new Error('emitirGuiaSefaz: chame com payload pronto ou (contribuinte, guiaLike).');
+    // 1) payload único
+  if (args.length === 1 && isPayload(args[0])) {
+    const payload = normalizePayload(args[0]);
+    return await emitirComPayload(payload); // sua função interna atual
+  }
+
+  // 2) dois argumentos (contribuinte, guiaLike)
+  if (args.length === 2 && isContrib(args[0]) && isGuiaLike(args[1])) {
+    const payload = fromContribGuia(args[0], args[1]); // monta payload único
+    return await emitirComPayload(payload);
+  }
+
+  throw new Error('emitirGuiaSefaz: chame com payload pronto ou (contribuinte, guiaLike).');
 }
 
+function isContrib(c){
+  return c && (c.codigoTipoInscricao===3 || c.codigoTipoInscricao===4)
+     && typeof c.numeroInscricao === 'string'
+     && c.numeroInscricao.replace(/\D/g,'').length>=11
+     && c.codigoIbgeMunicipio;
+}
+
+function isGuiaLike(g){
+  return g && (g.codigo || g.codigo_receita)
+     && ((g.competencia && (g.competencia.mes && g.competencia.ano))
+         || (g.mes_referencia && g.ano_referencia))
+     && (g.dataVencimento || g.data_vencimento)
+     && (g.valorPrincipal != null || g.valor != null);
+}
+
+function isPayload(p){
+  return p && p.contribuinteEmitente && Array.isArray(p.receitas) && p.receitas.length>0;
+}
+
+function fromContribGuia(c, g){
+  const mes = g.competencia?.mes ?? g.mes_referencia;
+  const ano = g.competencia?.ano ?? g.ano_referencia;
+  const codigo = g.codigo ?? g.codigo_receita;
+  const valorPrincipal = Number(g.valorPrincipal ?? g.valor);
+  const dataVencimento = g.dataVencimento ?? g.data_vencimento;
+  const dataLimite = g.dataLimitePagamento ?? g.data_vencimento ?? g.dataVencimento ?? dataVencimento;
+  return {
+    contribuinteEmitente: {
+      codigoTipoInscricao: Number(c.codigoTipoInscricao),
+      numeroInscricao: String(c.numeroInscricao).replace(/\D/g,''),
+      nome: c.nome,
+      codigoIbgeMunicipio: c.codigoIbgeMunicipio
+    },
+    receitas: [{
+      codigo,
+      competencia: { mes: Number(mes), ano: Number(ano) },
+      valorPrincipal,
+      valorDesconto: Number(g.valorDesconto ?? 0),
+      dataVencimento
+    }],
+    dataLimitePagamento: dataLimite,
+    observacao: g.observacao || ''
+  };
+}
+
+function normalizePayload(p){
+  // garanta numeroInscricao sem máscara e numero/mes/ano numéricos
+  const c = p.contribuinteEmitente || {};
+  const r = (p.receitas || [])[0] || {};
+  return {
+    contribuinteEmitente: {
+      codigoTipoInscricao: Number(c.codigoTipoInscricao),
+      numeroInscricao: String(c.numeroInscricao || '').replace(/\D/g,''),
+      nome: c.nome,
+      codigoIbgeMunicipio: c.codigoIbgeMunicipio
+    },
+    receitas: [{
+      codigo: r.codigo,
+      competencia: { mes: Number(r.competencia?.mes), ano: Number(r.competencia?.ano) },
+      valorPrincipal: Number(r.valorPrincipal),
+      valorDesconto: Number(r.valorDesconto ?? 0),
+      dataVencimento: r.dataVencimento
+    }],
+    dataLimitePagamento: p.dataLimitePagamento || r.dataVencimento,
+    observacao: p.observacao || ''
+  };
+}
 
 // ==========================
 // Consultas
