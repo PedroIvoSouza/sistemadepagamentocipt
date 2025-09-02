@@ -24,49 +24,92 @@ const dbRunAsync = (sql, params = []) =>
   new Promise((resolve, reject) => db.run(sql, params, function (err) { return err ? reject(err) : resolve(this); }));
 // helper: pega contribuinte conforme DAR ser de permissionário OU de evento
 async function getContribuinteEmitenteForDar(darId) {
-  // busca a DAR
+  // 1) Busca a DAR
   const dar = await dbGetAsync(`SELECT * FROM dars WHERE id = ?`, [darId]);
   if (!dar) throw new Error('DAR não encontrada.');
 
-  // se tiver permissionário, segue o fluxo atual
+  // 2) Se for por permissionário, pega do cadastro do permissionário
   if (dar.permissionario_id) {
     const perm = await dbGetAsync(`
-      SELECT nome_empresa AS nome, COALESCE(cnpj, cpf) AS doc
-        FROM permissionarios
-       WHERE id = ?`, [dar.permissionario_id]);
-    if (!perm || !perm.doc) throw new Error('Permissionário não encontrado.');
+      SELECT 
+        nome_empresa                                     AS nome,
+        COALESCE(NULLIF(TRIM(cnpj), ''), NULLIF(TRIM(cpf), '')) AS doc
+      FROM permissionarios
+      WHERE id = ?`, [dar.permissionario_id]);
 
-    const numero = String(perm.doc).replace(/\D/g, '');
+    const nome = (perm?.nome || '').trim() || 'Contribuinte';
+    let doc = String(perm?.doc || '').replace(/\D/g, '');
+    // fallback: tenta outras colunas comuns, se existirem no schema
+    if (!doc) {
+      const alt = await dbGetAsync(`
+        SELECT 
+          COALESCE(NULLIF(TRIM(cnpj), ''), NULLIF(TRIM(cpf), '')) AS doc
+        FROM permissionarios WHERE id = ?`, [dar.permissionario_id]);
+      doc = String(alt?.doc || '').replace(/\D/g, '');
+    }
+
+    if (!(doc.length === 11 || doc.length === 14)) {
+      throw new Error('Documento do permissionário ausente ou inválido.');
+    }
+    const tipo = (doc.length === 11) ? 3 : 4; // 3=CPF, 4=CNPJ
+
     return {
-      codigoTipoInscricao: numero.length === 14 ? 4 : 3, // CNPJ=4, CPF=3
-      numeroInscricao: numero,
-      nome: perm.nome,
+      codigoTipoInscricao: tipo,
+      numeroInscricao: doc,
+      nome,
       codigoIbgeMunicipio: 2704302,
-      dar, // devolve a própria DAR para uso do chamador
+      dar,
     };
   }
 
-  // FALLBACK: DAR de EVENTO
+  // 3) Caso seja DAR de EVENTO, extrai do cliente do evento
   const ev = await dbGetAsync(`
-    SELECT ce.nome_razao_social AS nome, ce.documento AS doc
-      FROM DARs_Eventos de
-      JOIN Eventos e       ON e.id = de.id_evento
-      JOIN Clientes_Eventos ce ON ce.id = e.id_cliente
-     WHERE de.id_dar = ?
-     LIMIT 1`, [darId]);
+    SELECT 
+      COALESCE(NULLIF(TRIM(ce.nome_razao_social), ''), 'Contribuinte') AS nome,
+      COALESCE(
+        NULLIF(TRIM(ce.documento), ''),
+        NULLIF(TRIM(ce.documento_responsavel), '')
+      ) AS doc_raw
+    FROM DARs_Eventos de
+    JOIN Eventos e        ON e.id = de.id_evento
+    JOIN Clientes_Eventos ce ON ce.id = e.id_cliente
+    WHERE de.id_dar = ?
+    LIMIT 1`, [darId]);
 
-  if (!ev || !ev.doc) throw new Error('Evento/cliente do evento não encontrado.');
+  if (!ev) throw new Error('Evento/cliente do evento não encontrado.');
 
-  const numero = String(ev.doc).replace(/\D/g, '');
+  const nome = ev.nome;
+  let doc = String(ev.doc_raw || '').replace(/\D/g, '');
+
+  // última tentativa: buscar direto no cliente, caso tenha ficado vazio
+  if (!(doc.length === 11 || doc.length === 14)) {
+    const ev2 = await dbGetAsync(`
+      SELECT 
+        COALESCE(
+          NULLIF(TRIM(documento), ''),
+          NULLIF(TRIM(documento_responsavel), '')
+        ) AS doc2
+      FROM Clientes_Eventos
+      WHERE id = (SELECT e.id_cliente
+                  FROM DARs_Eventos de 
+                  JOIN Eventos e ON e.id = de.id_evento
+                  WHERE de.id_dar = ? LIMIT 1)`, [darId]);
+    doc = String(ev2?.doc2 || '').replace(/\D/g, '');
+  }
+
+  if (!(doc.length === 11 || doc.length === 14)) {
+    throw new Error('Documento do cliente do evento ausente ou inválido.');
+  }
+  const tipo = (doc.length === 11) ? 3 : 4;
+
   return {
-    codigoTipoInscricao: numero.length === 14 ? 4 : 3, // CNPJ=4, CPF=3
-    numeroInscricao: numero,
-    nome: ev.nome,
+    codigoTipoInscricao: tipo,
+    numeroInscricao: doc,
+    nome,
     codigoIbgeMunicipio: 2704302,
     dar,
   };
 }
-
 
 /**
  * GET /api/admin/dars
