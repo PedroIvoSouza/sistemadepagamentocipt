@@ -401,7 +401,7 @@ async function _postEmitir(payload) {
  *
  * Compat: emitirGuiaSefaz(contribuinte, guiaLike) → monta payload perm.
  */
-async function emitirGuiaSefaz(arg1, arg2) {
+async function emitirGuiaSefaz(...args) {
     // 1) payload único
   if (args.length === 1 && isPayload(args[0])) {
     const payload = normalizePayload(args[0]);
