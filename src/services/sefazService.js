@@ -401,6 +401,130 @@ async function _postEmitir(payload) {
  *
  * Compat: emitirGuiaSefaz(contribuinte, guiaLike) → monta payload perm.
  */
+
+const axios = require('axios');
+
+function isPayload(obj) {
+  return obj && typeof obj === 'object'
+    && obj.contribuinteEmitente
+    && Array.isArray(obj.receitas)
+    && obj.receitas.length > 0;
+}
+
+function isContrib(obj) {
+  if (!obj || typeof obj !== 'object') return false;
+  const { codigoTipoInscricao, numeroInscricao, nome, codigoIbgeMunicipio } = obj;
+  return (codigoTipoInscricao === 3 || codigoTipoInscricao === 4)
+      && typeof numeroInscricao === 'string'
+      && numeroInscricao.replace(/\D/g, '').length > 0
+      && typeof nome === 'string'
+      && (codigoIbgeMunicipio ? true : true); // não travar se vier 0/undefined
+}
+
+function isGuiaLike(obj) {
+  if (!obj || typeof obj !== 'object') return false;
+  // aceita tanto formato “simples” quanto já pronto (com competencia)
+  return (
+    typeof obj === 'object' &&
+    (
+      (obj.codigo && obj.competencia && obj.dataVencimento && (obj.valorPrincipal ?? obj.valor)) ||
+      (obj.data_vencimento && (obj.valor ?? obj.valorPrincipal))
+    )
+  );
+}
+
+function normalizePayload(p) {
+  // Garante tipos e chaves mínimas
+  const cp = { ...p };
+  const rec = { ...cp.receitas[0] };
+
+  // aceita competencia {mes,ano} como string/number
+  if (rec.competencia) {
+    rec.competencia = {
+      mes: Number(rec.competencia.mes),
+      ano: Number(rec.competencia.ano),
+    };
+  }
+
+  // normaliza campos de valor e data
+  if (rec.valor == null && rec.valorPrincipal != null) rec.valor = rec.valorPrincipal;
+  if (!rec.dataVencimento && cp.dataLimitePagamento) rec.dataVencimento = cp.dataLimitePagamento;
+
+  cp.receitas = [rec];
+  return cp;
+}
+
+function fromContribGuia(contrib, guiaLike) {
+  // guiaLike pode vir nos dois jeitos; convertemos para a receita única esperada
+  const mes = guiaLike.competencia?.mes ?? Number(String(guiaLike.mes_referencia || guiaLike.mes).replace(/\D/g, ''));
+  const ano = guiaLike.competencia?.ano ?? Number(String(guiaLike.ano_referencia || guiaLike.ano).replace(/\D/g, ''));
+  const venc = guiaLike.dataVencimento || guiaLike.data_vencimento;
+
+  const codigo = guiaLike.codigo || guiaLike.codigo_receita;
+
+  const valorPrincipal = Number(
+    guiaLike.valorPrincipal != null ? guiaLike.valorPrincipal : guiaLike.valor
+  );
+
+  return normalizePayload({
+    contribuinteEmitente: {
+      codigoTipoInscricao: contrib.codigoTipoInscricao,
+      numeroInscricao: String(contrib.numeroInscricao).replace(/\D/g, ''),
+      nome: contrib.nome,
+      codigoIbgeMunicipio: contrib.codigoIbgeMunicipio || 2704302,
+    },
+    receitas: [{
+      codigo,
+      competencia: { mes, ano },
+      valorPrincipal,
+      valorDesconto: Number(guiaLike.valorDesconto || 0),
+      dataVencimento: String(venc).slice(0, 10),
+    }],
+    dataLimitePagamento: String(venc).slice(0, 10),
+    observacao: guiaLike.observacao || '',
+  });
+}
+
+async function emitirComPayload(payload) {
+  // Se houver algum executor interno legado, use-o aqui:
+  if (typeof emitirGuiaSefazComPayload === 'function') {
+    return await emitirGuiaSefazComPayload(payload);
+  }
+  if (typeof emitirGuiaViaApp === 'function') {
+    return await emitirGuiaViaApp(payload);
+  }
+
+  // Fallback HTTP direto (ajuste se sua URL/rota for outra)
+  const baseURL =
+    process.env.SEFAZ_APP_URL ||
+    process.env.SEFAZ_BASE_URL ||
+    process.env.SEFAZ_API_URL;
+  const token = process.env.SEFAZ_APP_TOKEN || process.env.SEFAZ_TOKEN;
+
+  if (!baseURL || !token) {
+    throw new Error('Config SEFAZ ausente: defina SEFAZ_APP_URL/SEFAZ_BASE_URL e SEFAZ_APP_TOKEN.');
+  }
+
+  // Ex.: POST {baseURL}/guias/emitir  (AJUSTE A ROTA CONFORME O SEU BACKEND/PROXY)
+  const url = `${baseURL.replace(/\/+$/, '')}/guias/emitir`;
+
+  const { data } = await axios.post(url, payload, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    timeout: 30000,
+  });
+
+  // Normaliza campos de retorno
+  return {
+    numeroGuia: data.numeroGuia || data.numero || data.guiaNumero || data.id || null,
+    pdfBase64: data.pdfBase64 || data.pdf || data.pdf_b64 || null,
+    linhaDigitavel: data.linhaDigitavel || data.linha_digitavel || null,
+    codigoBarras: data.codigoBarras || data.codigo_barras || null,
+  };
+}
+
 async function emitirGuiaSefaz(...args) {
     // 1) payload único
   if (args.length === 1 && isPayload(args[0])) {
