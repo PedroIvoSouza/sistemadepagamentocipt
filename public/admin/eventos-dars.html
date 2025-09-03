@@ -1084,7 +1084,7 @@ function normalizarEvento(payload){
     // 2. Se estiver vazia, calcula a partir da maior data em datas_evento.
     if (!data_vigencia_final && datas_evento.length > 0) {
         // Ordena as datas e pega a última (a maior)
-        const ultimaData = datas_evento.sort().pop();
+        const ultimaData = [...datas_evento].sort().pop();
         data_vigencia_final = ultimaData;
     }
     
@@ -1123,7 +1123,8 @@ function normalizarEvento(payload){
       area_m2,
       numero_oficio_sei,
       valor_final,
-      evento_gratuito
+      evento_gratuito,
+      parcelas: payload.parcelas || ev.parcelas || []
     };
   }
     async function editarEvento(eventoId){
