@@ -70,6 +70,14 @@ async function criarEventoComDars(db, data, helpers) {
   await dbRun(db, 'BEGIN TRANSACTION');
   try {
     const datasEventoStr = JSON.stringify(datasEvento || []);
+    const colsEvento = [
+      'id_cliente', 'nome_evento', 'espaco_utilizado', 'area_m2', 'datas_evento',
+      'datas_evento_original', 'data_vigencia_final', 'total_diarias', 'valor_bruto',
+      'tipo_desconto', 'desconto_manual', 'valor_final', 'numero_oficio_sei',
+      'hora_inicio', 'hora_fim', 'hora_montagem', 'hora_desmontagem',
+      'numero_processo', 'numero_termo', 'remarcacao_solicitada', 'datas_evento_solicitada', 'data_aprovacao_remarcacao',
+      'evento_gratuito', 'justificativa_gratuito', 'status'
+    ];
     const eventoStmt = await dbRun(
       db,
       `INSERT INTO Eventos (
@@ -85,6 +93,7 @@ async function criarEventoComDars(db, data, helpers) {
         ?, ?, ?, ?,
         ?, ?, ?, ?, ?
       )`,
+      `INSERT INTO Eventos (${colsEvento.join(', ')}) VALUES (${colsEvento.map(() => '?').join(', ')})`,
       [
         idCliente,
         nomeEvento,
@@ -105,6 +114,9 @@ async function criarEventoComDars(db, data, helpers) {
         horaDesmontagem || null,
         numeroProcesso || null,
         numeroTermo || null,
+        0,
+        null,
+        null,
         eventoGratuito ? 1 : 0,
         justificativaGratuito || null,
         'Pendente'
