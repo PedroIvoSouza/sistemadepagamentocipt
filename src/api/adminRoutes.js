@@ -637,6 +637,83 @@ router.get(
 );
 
 /* ===========================================================
+   GET /api/admin/relatorios/eventos-dars
+   =========================================================== */
+router.get(
+  '/relatorios/eventos-dars',
+  [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN'])],
+  async (req, res) => {
+    try {
+      const { dataInicio, dataFim } = req.query;
+      if (!dataInicio || !dataFim) {
+        return res.status(400).json({ error: 'Parâmetros dataInicio e dataFim são obrigatórios.' });
+      }
+
+      const dars = await dbAll(
+        `SELECT e.nome_evento, c.nome_razao_social AS cliente, d.numero_documento,
+                d.data_emissao, d.valor
+           FROM DARs_Eventos de
+           JOIN dars d ON d.id = de.id_dar
+           JOIN Eventos e ON e.id = de.id_evento
+           JOIN Clientes_Eventos c ON c.id = e.id_cliente
+          WHERE d.status = 'Emitido' AND DATE(d.data_emissao) BETWEEN ? AND ?
+          ORDER BY d.data_emissao DESC`,
+        [dataInicio, dataFim]
+      );
+
+      if (!dars.length) {
+        return res.status(204).send();
+      }
+
+      const doc = new PDFDocument({ size: 'A4', margins: abntMargins(0.5, 0.5) });
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'secti-'));
+      const filePath = path.join(tmpDir, `relatorio_eventos_dars_${Date.now()}.pdf`);
+      const stream = fs.createWriteStream(filePath);
+      doc.pipe(stream);
+
+      const tokenDoc = await gerarTokenDocumento('RELATORIO_EVENTOS_DARS', null, db);
+
+      applyLetterhead(doc, { imagePath: path.join(__dirname, '..', 'assets', 'papel-timbrado-secti.png') });
+
+      doc.x = doc.page.margins.left;
+      doc.y = doc.page.margins.top;
+      printToken(doc, tokenDoc);
+      doc.on('pageAdded', () => printToken(doc, tokenDoc));
+
+      doc.fillColor('#333').fontSize(16).text('Relatório DARs de Eventos', { align: 'center' });
+      doc.moveDown(2);
+      generateEventoDarsTable(doc, dars);
+      doc.end();
+
+      await new Promise((resolve, reject) => {
+        stream.on('finish', resolve);
+        stream.on('error', reject);
+      });
+
+      await dbRun(
+        `INSERT INTO documentos (tipo, caminho, token) VALUES (?, ?, ?)
+         ON CONFLICT(token) DO UPDATE SET caminho = excluded.caminho`,
+        ['RELATORIO_EVENTOS_DARS', filePath, tokenDoc]
+      );
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', 'attachment; filename="relatorio_eventos_dars.pdf"');
+      res.setHeader('X-Document-Token', tokenDoc);
+      const fileStream = fs.createReadStream(filePath);
+      fileStream.pipe(res);
+      fileStream.on('close', () => {
+        fs.unlink(filePath, () => {
+          fs.rm(tmpDir, { recursive: true }, () => {});
+        });
+      });
+    } catch (error) {
+      console.error('Erro ao gerar relatório de DARs de eventos:', error);
+      res.status(500).json({ error: 'Erro ao gerar o relatório de DARs de eventos.' });
+    }
+  }
+);
+
+/* ===========================================================
    Render helpers (tabelas + token)
    =========================================================== */
 function generateTable(doc, data) {
@@ -733,6 +810,57 @@ function generateDebtorsTable(doc, data) {
       item.cnpj,
       item.quantidade_dars,
       Number(item.total_devido).toFixed(2),
+    ];
+    drawRow(row, y);
+    y += rowHeight;
+  }
+}
+
+function generateEventoDarsTable(doc, dados) {
+  let y = doc.y;
+  const rowHeight = 40;
+  const availableWidth =
+    doc.page.width - doc.page.margins.left - doc.page.margins.right;
+  const colWidths = {
+    evento: availableWidth * 0.30,
+    cliente: availableWidth * 0.30,
+    emissao: availableWidth * 0.15,
+    dar: availableWidth * 0.15,
+    valor: availableWidth * 0.10,
+  };
+  const headers = ['Evento', 'Cliente', 'Emissão', 'DAR', 'Valor (R$)'];
+
+  const drawRow = (row, currentY, isHeader = false) => {
+    let x = doc.page.margins.left;
+    doc.font(isHeader ? 'Helvetica-Bold' : 'Helvetica').fontSize(isHeader ? 9 : 8);
+    row.forEach((cell, i) => {
+      const key = Object.keys(colWidths)[i];
+      doc.text(String(cell), x + 5, currentY + 10, {
+        width: colWidths[key] - 10,
+        align: 'left',
+        lineBreak: true,
+      });
+      doc.rect(x, currentY, colWidths[key], rowHeight).stroke('#ccc');
+      x += colWidths[key];
+    });
+  };
+
+  drawRow(headers, y, true);
+  y += rowHeight;
+
+  for (const item of dados) {
+    if (y + rowHeight > doc.page.height - doc.page.margins.bottom - 10) {
+      doc.addPage();
+      y = doc.page.margins.top; // reinicia na margem superior
+      drawRow(headers, y, true);
+      y += rowHeight;
+    }
+    const row = [
+      item.nome_evento,
+      item.cliente,
+      item.data_emissao ? new Date(item.data_emissao).toLocaleDateString('pt-BR') : '',
+      item.numero_documento,
+      Number(item.valor).toFixed(2),
     ];
     drawRow(row, y);
     y += rowHeight;

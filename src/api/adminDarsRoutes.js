@@ -333,6 +333,12 @@ router.post(
       const { codigoTipoInscricao, numeroInscricao, nome, codigoIbgeMunicipio, dar } =
         await getContribuinteEmitenteForDar(darId);
 
+      const enc = await calcularEncargosAtraso(darId).catch(() => null);
+      if (enc) {
+        if (enc.valorAtualizado != null) dar.valor = enc.valorAtualizado;
+        if (enc.novaDataVencimento) dar.data_vencimento = enc.novaDataVencimento;
+      }
+
       // ===== dados saneados do contribuinte/DAR =====
 const doc  = String(numeroInscricao || '').replace(/\D/g, '');
 const tipo = Number(codigoTipoInscricao) || (doc.length === 11 ? 3 : 4);
@@ -402,15 +408,17 @@ if (!sefaz || !sefaz.numeroGuia || !sefaz.pdfBase64) {
 const tokenDoc = `DAR-${sefaz.numeroGuia}`;
 const pdfComToken = await imprimirTokenEmPdf(sefaz.pdfBase64, tokenDoc);
 
-await dbRunAsync(`
-  UPDATE dars
-     SET numero_documento = ?,
-         pdf_url          = ?,
-         status           = CASE WHEN COALESCE(status,'') IN ('','Pendente','Vencido','Vencida') THEN 'Emitido' ELSE status END,
-         data_emissao     = COALESCE(data_emissao, date('now')),
-         emitido_por_id   = COALESCE(emitido_por_id, ?)
-   WHERE id = ?`,
-  [sefaz.numeroGuia, pdfComToken, req.user?.id || null, darId]
+await dbRunAsync(
+  `UPDATE dars
+      SET numero_documento = ?,
+          pdf_url          = ?,
+          status           = CASE WHEN COALESCE(status,'') IN ('','Pendente','Vencido','Vencida') THEN 'Reemitido' ELSE status END,
+          data_emissao     = COALESCE(data_emissao, date('now')),
+          emitido_por_id   = COALESCE(emitido_por_id, ?),
+          valor            = ?,
+          data_vencimento  = ?
+    WHERE id = ?`,
+  [sefaz.numeroGuia, pdfComToken, req.user?.id || null, dar.valor, dar.data_vencimento, darId]
 );
 
 // linha digitável / código de barras (se vierem)

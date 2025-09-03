@@ -67,3 +67,11 @@ Para habilitar o módulo de salas:
 
    - **Portal do Permissionário** (`/salas.html`): requer autenticação de um permissionário. O token `authToken` é obtido via `/login.html`.
    - **Painel de Gestão** (`/admin/salas.html`): restrito a administradores. Utilize as credenciais criadas pelo script `criar_admin.js` (padrão `supcti@secti.al.gov.br` / `Supcti@2025#`).
+
+## Relatório de DARs de Eventos
+
+Endpoint disponível para administradores:
+
+`GET /api/admin/relatorios/eventos-dars?dataInicio=YYYY-MM-DD&dataFim=YYYY-MM-DD`
+
+Retorna um PDF com as DARs de eventos emitidas no intervalo informado. Quando não existem registros, a resposta é `204 No Content`.
