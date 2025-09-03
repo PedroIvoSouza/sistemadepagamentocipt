@@ -153,7 +153,10 @@ window.onload = async () => {
   const fetchStats = async (tipo = '') => {
     try {
       console.log("Iniciando busca de dados do dashboard com o token:", token);
-      const url = `/api/admin/dashboard-stats${tipo ? `?tipo=${tipo}` : ''}&t=${Date.now()}`;
+      const params = new URLSearchParams();
+      if (tipo) params.set('tipo', tipo);
+      params.set('t', Date.now());
+      const url = `/api/admin/dashboard-stats?${params.toString()}`;
       const response = await fetch(url, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
