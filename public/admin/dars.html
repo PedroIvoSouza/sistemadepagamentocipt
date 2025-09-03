@@ -171,14 +171,18 @@
           Pendente: 'bg-warning text-dark',
           Pago: 'bg-success text-white',
           Vencido: 'bg-danger text-white',
-          Vencida: 'bg-danger text-white'
+          Vencida: 'bg-danger text-white',
+          Emitido: 'bg-primary text-white',
+          Reemitido: 'bg-primary text-white'
         };
         const rows = dars.map(dar=>{
           const statusColor = statusColors[dar.status] || 'bg-secondary text-white';
           const acaoBotao =
-            (dar.status==='Pendente' || dar.status==='Vencido' || dar.status==='Vencida')
+            (dar.status==='Pendente' || dar.status==='Vencido' || dar.status==='Vencida' || dar.status==='Emitido' || dar.status==='Reemitido')
             ? `<button class="btn btn-sm btn-outline-info enviar-notificacao-btn" data-id="${esc(dar.id)}" title="Enviar notificação por e-mail"><i class="bi bi-envelope-fill"></i> Notificar</button>`
-            : `<span class="text-muted"><i class="bi bi-check-circle-fill text-success"></i> Pago</span>`;
+            : (dar.status==='Pago'
+              ? `<span class="text-muted"><i class="bi bi-check-circle-fill text-success"></i> Pago</span>`
+              : '');
           return `
             <tr>
               <td>
