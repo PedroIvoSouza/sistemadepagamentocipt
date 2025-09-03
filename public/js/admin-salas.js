@@ -12,6 +12,7 @@ document.addEventListener('DOMContentLoaded', () => {
       initialView: 'dayGridMonth',
       locale: 'pt-br',
       editable: true,
+      themeSystem: 'bootstrap5',
       eventSources: [fetchReservas],
       eventClick: onEventClick,
       eventDrop: onEventChange,
