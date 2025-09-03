@@ -247,9 +247,12 @@
             blocoRemarcar = `<div class="mt-3"><span class="badge bg-warning text-dark">Remarcado</span><div class="mt-2">Nova data: ${dataNovaFmt}</div></div>`;
           } else if (ev.remarcacao_solicitada) {
             blocoRemarcar = `<div class="mt-3"><span class="badge bg-secondary">Remarcação pendente</span><div class="input-group input-group-sm mt-2" style="max-width:240px;"><input type="date" class="form-control" disabled value="${ev.nova_data || ''}"><button class="btn btn-outline-secondary" disabled>Pendente</button></div></div>`;
-          } else {
-            blocoRemarcar = `<div class="mt-3" id="remarcar-${evId}"><div class="input-group input-group-sm" style="max-width:240px;"><input type="date" class="form-control" id="nova-data-${evId}"><button class="btn btn-outline-primary" data-remarcar="${evId}">Remarcar</button></div></div>`;
-          }
+        } else {
+            blocoRemarcar = `<div class="mt-3" id="remarcar-${evId}">
+              <div class="mb-2"><textarea class="form-control form-control-sm" id="justificativa-${evId}" placeholder="Justificativa" rows="2"></textarea></div>
+              <div class="input-group input-group-sm" style="max-width:240px;"><input type="date" class="form-control" id="nova-data-${evId}"><button class="btn btn-outline-primary" data-remarcar="${evId}">Remarcar</button></div>
+            </div>`;
+        }
 
           return `
           <div class="accordion-item ${(ev.remarcado ? 'border border-warning' : (ev.remarcacao_solicitada ? 'border border-secondary' : ''))}">
@@ -309,11 +312,17 @@
                 alert('Selecione a nova data.');
                 return;
               }
+              const textarea = document.getElementById(`justificativa-${eventoId}`);
+              const justificativa = textarea?.value.trim();
+              if (!justificativa) {
+                alert('Informe a justificativa.');
+                return;
+              }
               try {
                 const r = await fetch(`/api/portal/eventos/${eventoId}/remarcar`, {
                   method: 'PUT',
                   headers,
-                  body: JSON.stringify({ nova_data: novaData, remarcacao_solicitada: 1 })
+                  body: JSON.stringify({ nova_data: novaData, justificativa })
                 });
                 if (r.ok) {
                   location.reload();

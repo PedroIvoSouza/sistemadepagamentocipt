@@ -468,7 +468,7 @@ router.get('/', async (req, res) => {
 router.get('/remarcacoes', async (req, res) => {
   try {
     const sql = `
-      SELECT e.*, c.nome_razao_social AS nome_cliente
+      SELECT e.*, e.justificativa_remarcacao, c.nome_razao_social AS nome_cliente
         FROM Eventos e
         JOIN Clientes_Eventos c ON c.id = e.id_cliente
        WHERE e.remarcacao_solicitada = 1
@@ -499,7 +499,7 @@ router.put('/:id/remarcar', async (req, res) => {
     }
 
     const ev = await dbGet(
-      `SELECT datas_evento, datas_evento_original, datas_evento_solicitada, remarcacao_solicitada
+      `SELECT datas_evento, datas_evento_original, datas_evento_solicitada, remarcacao_solicitada, justificativa_remarcacao
          FROM Eventos WHERE id = ?`,
       [id],
       'remarcar/get-evento'
@@ -515,7 +515,8 @@ router.put('/:id/remarcar', async (req, res) => {
         `UPDATE Eventos
             SET remarcacao_solicitada = 0,
                 datas_evento_solicitada = NULL,
-                data_pedido_remarcacao = NULL
+                data_pedido_remarcacao = NULL,
+                justificativa_remarcacao = NULL
           WHERE id = ?`,
         [id],
         'remarcar/rejeitar'
@@ -539,7 +540,8 @@ router.put('/:id/remarcar', async (req, res) => {
               remarcado = 1,
               remarcacao_solicitada = 0,
               data_aprovacao_remarcacao = datetime('now'),
-              datas_evento_solicitada = NULL
+              datas_evento_solicitada = NULL,
+              justificativa_remarcacao = NULL
         WHERE id = ?`,
       [datasOrig, datasNovas, novaDataFinal, id],
       'remarcar/aprovar'

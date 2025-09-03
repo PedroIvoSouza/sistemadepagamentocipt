@@ -152,8 +152,11 @@ clientRouter.post('/:id/termo/assinafy/link', async (req, res) => {
 clientRouter.put('/:id/remarcar', async (req, res) => {
   try {
     const eventoId = req.params.id;
-    const { nova_data } = req.body || {};
+    const { nova_data, justificativa } = req.body || {};
     if (!nova_data) return res.status(400).json({ error: 'Nova data é obrigatória.' });
+    if (!justificativa || !String(justificativa).trim()) {
+      return res.status(400).json({ error: 'Justificativa é obrigatória.' });
+    }
 
     const ev = await dbGet(
       `SELECT remarcado, remarcacao_solicitada FROM Eventos WHERE id = ? AND id_cliente = ?`,
@@ -172,9 +175,10 @@ clientRouter.put('/:id/remarcar', async (req, res) => {
          SET remarcacao_solicitada = 1,
              data_pedido_remarcacao = ?,
              datas_evento_solicitada = ?,
+             justificativa_remarcacao = ?,
              remarcado = 0
        WHERE id = ?`,
-      [agora, datasNovas, eventoId]
+      [agora, datasNovas, justificativa, eventoId]
     );
 
     res.json({ ok: true, pending: true });
