@@ -34,6 +34,18 @@ const fmtArea = (n) => {
   const num = Number(n || 0);
   return num ? `${num.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} m²` : '-';
 };
+function toLocalDateFromISO(isoLike) {
+  if (!isoLike) return null;
+  const s = String(isoLike).trim();
+  // Trata 'YYYY-MM-DD' como data local
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (m) {
+    const [_, y, mo, d] = m.map(Number);
+    return new Date(y, mo - 1, d); // local time
+  }
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
 const fmtDataExtenso = (iso) => {
   if (!iso) return '';
   const d = new Date(iso);
@@ -301,18 +313,36 @@ async function gerarTermoEventoPdfkitEIndexar(eventoId) {
   );
   if (!ev) throw new Error('Evento não encontrado');
 
-  // 2) Parcelas (para datas do 50% e saldo)
+  // 2) Parcelas (pega, por parcela, a DAR mais recente e válida)
   const parcelas = await dbAll(
-    `SELECT de.numero_parcela, de.valor_parcela, de.data_vencimento, d.status
-       FROM DARs_Eventos de
-       JOIN dars d ON d.id = de.id_dar
+    `
+    SELECT p.numero_parcela, p.valor_parcela, p.data_vencimento, p.status
+    FROM (
+      SELECT
+        de.numero_parcela,
+        de.valor_parcela,
+        COALESCE(d.data_vencimento, de.data_vencimento) AS data_vencimento,
+        d.status,
+        COALESCE(d.updated_at, d.created_at, d.data_vencimento, de.data_vencimento) AS ord
+      FROM DARs_Eventos de
+      JOIN dars d ON d.id = de.id_dar
       WHERE de.id_evento = ?
-      ORDER BY de.numero_parcela ASC`,
+        AND (d.status IS NULL OR d.status NOT IN ('Cancelado','Cancelada','Excluído','Excluída'))
+      ORDER BY de.numero_parcela ASC, ord DESC
+    ) AS p
+    GROUP BY p.numero_parcela
+    ORDER BY p.numero_parcela ASC
+    `,
     [eventoId],
-    'termo/get-parcelas'
+    'termo/get-parcelas-efetivas'
   );
+  
+  // 50% = 1ª parcela; saldo = última parcela existente
   const sinalISO = parcelas[0]?.data_vencimento || null;
-  const saldoISO = parcelas[1]?.data_vencimento || parcelas[0]?.data_vencimento || null;
+  const saldoISO = parcelas.length > 1
+    ? parcelas[parcelas.length - 1].data_vencimento
+    : parcelas[0]?.data_vencimento || null;
+
 
   // 3) Placeholders/env
   const orgUF  = process.env.ORG_UF || 'ESTADO DE ALAGOAS';
@@ -327,6 +357,7 @@ async function gerarTermoEventoPdfkitEIndexar(eventoId) {
   const permitenteRepCg = process.env.PERMITENTE_REP_CARGO || 'SECRETÁRIO';
   const permitenteRepCpf= process.env.PERMITENTE_REP_CPF || '053.549.204-93';
 
+  // Datas do evento
   let datasArr = [];
   try {
     if (typeof ev.datas_evento === 'string') {
@@ -337,9 +368,19 @@ async function gerarTermoEventoPdfkitEIndexar(eventoId) {
       datasArr = ev.datas_evento;
     }
   } catch { /* noop */ }
-  const primeiraDataISO = datasArr[0] || '';
-  const dataMontagem = datasArr[0] || '';
-  const dataDesmontagem = datasArr[datasArr.length - 1] || dataMontagem;
+  
+  // Preferência pela "data real" do evento, se existir na tabela Eventos:
+  const dataRealEventoISO =
+    ev.data_real_evento || ev.data_realizacao || ev.data_evento || ev.data_unica || null;
+  
+  const realizacaoExt = fmtDataExtenso(dataRealEventoISO)
+    || (datasArr.length ? fmtDataExtenso(datasArr[0]) : '-'); // fallback
+  
+  // Montagem/Desmontagem: se tiver colunas específicas, usa; senão 1º/último da lista
+  const dataMontagemISO = ev.data_montagem || datasArr[0] || null;
+  const dataDesmontagemISO = ev.data_desmontagem || (datasArr.length ? datasArr[datasArr.length - 1] : null);
+  
+  // Período ainda pode ser útil em textos (Cláusula 1), sem afetar a tabela:
   const periodoEvento = mkPeriodo(datasArr) || datasArr.map(fmtDataExtenso).join(', ');
   const dataEventoExt = periodoEvento || '-';
 
@@ -402,15 +443,15 @@ async function gerarTermoEventoPdfkitEIndexar(eventoId) {
 
   // Tabela
   tabelaDiscriminacao(doc, {
-    discriminacao: `${localEspaco} do ${imovelNome}`,
-    realizacao: dataEventoExt || '-',
-    montagem: fmtDataExtenso(dataMontagem) || '-',
-    desmontagem: fmtDataExtenso(dataDesmontagem) || '-',
-    area: fmtArea(ev.area_m2),
-    capacidade: capDefault,
-    dias: ev.total_diarias || (datasArr.length || 1),
-    valor: ev.valor_final || 0,
-  });
+  discriminacao: `${localEspaco} do ${imovelNome}`,
+  realizacao: realizacaoExt || '-', // <<< AGORA A DATA REAL
+  montagem: fmtDataExtenso(dataMontagemISO) || '-',
+  desmontagem: fmtDataExtenso(dataDesmontagemISO) || '-',
+  area: fmtArea(ev.area_m2),
+  capacidade: capDefault,
+  dias: ev.total_diarias || (datasArr.length || 1),
+  valor: ev.valor_final || 0,
+});
 
   if (ev.remarcado) {
     let origArr = [];
