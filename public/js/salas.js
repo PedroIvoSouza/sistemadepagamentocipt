@@ -55,6 +55,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const calendar = new FullCalendar.Calendar(calendarEl, {
         initialView: 'dayGridMonth',
         locale: 'pt-br',
+        themeSystem: 'bootstrap5',
         events: async (info, successCallback, failureCallback) => {
             const salaId = salaSelect.value;
             if (!salaId) { successCallback([]); return; }

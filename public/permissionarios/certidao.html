@@ -188,9 +188,18 @@
         }
 
       const ct = res.headers.get('content-type') || '';
+      if(!res.ok){
+        if(ct.includes('application/json')){
+          const data = await res.json();
+          throw new Error(`(${res.status}) ${data.error || 'Erro ao gerar certidão.'}`);
+        }
+        const text = await res.text();
+        throw new Error(`(${res.status}) ${text || 'Erro ao gerar certidão.'}`);
+      }
+
       if(!ct.includes('application/pdf')){
         // Se veio HTML (ex.: redirect login), trata como erro
-        throw new Error('Resposta não é PDF (possível redirecionamento para login).');
+        throw new Error(`(${res.status}) Resposta não é PDF (possível redirecionamento para login).`);
       }
 
       const blob = await res.blob();
