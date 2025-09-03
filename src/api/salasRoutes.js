@@ -127,6 +127,7 @@ router.post('/reservas', async (req, res) => {
     );
 
     const permissionarioId = req.user.id;
+    await reservaSalaService.verificarClienteInapto(permissionarioId);
     await reservaSalaService.verificarDiasConsecutivos(permissionarioId, sala_id, data);
     const result = await runAsync(
       `INSERT INTO reservas_salas (sala_id, permissionario_id, data, hora_inicio, hora_fim, participantes, status, checkin)

@@ -78,9 +78,28 @@ async function verificarDiasConsecutivos(permissionarioId, salaId, data) {
   }
 }
 
+async function verificarClienteInapto(permissionarioId) {
+  try {
+    const row = await getAsync(
+      `SELECT inapto_ate FROM Clientes_Eventos WHERE id = ?`,
+      [permissionarioId]
+    );
+    if (row && row.inapto_ate) {
+      const ate = new Date(row.inapto_ate);
+      if (!isNaN(ate) && ate > new Date()) {
+        throw validationError(`Cliente inapto até ${row.inapto_ate}`);
+      }
+    }
+  } catch (e) {
+    if (/(no such table)/i.test(e.message || '')) return;
+    throw e;
+  }
+}
+
 module.exports = {
   validarSalaECapacidade,
   validarHorarios,
   verificarConflito,
   verificarDiasConsecutivos,
+  verificarClienteInapto,
 };
