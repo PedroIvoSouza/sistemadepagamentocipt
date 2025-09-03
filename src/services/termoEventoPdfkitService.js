@@ -380,6 +380,23 @@ async function gerarTermoEventoPdfkitEIndexar(eventoId) {
     valor: ev.valor_final || 0,
   });
 
+  if (ev.remarcado) {
+    let origArr = [];
+    try {
+      if (typeof ev.datas_evento_original === 'string') {
+        origArr = ev.datas_evento_original.trim().startsWith('[')
+          ? JSON.parse(ev.datas_evento_original)
+          : ev.datas_evento_original.split(',').map(s => s.trim()).filter(Boolean);
+      } else if (Array.isArray(ev.datas_evento_original)) {
+        origArr = ev.datas_evento_original;
+      }
+    } catch { /* noop */ }
+    const novaStr = datasArr.map(fmtDataExtenso).join(', ');
+    const origStr = origArr.map(fmtDataExtenso).join(', ');
+    const pedidoStr = fmtDataExtenso(ev.data_pedido_remarcacao);
+    paragrafo(doc, `Parágrafo Único - Evento remarcado. Data original: ${origStr || '-'}; pedido em: ${pedidoStr || '-'}; nova data: ${novaStr || '-'}.`);
+  }
+
   // CLÁUSULA 2 – (texto inteiro em uma única chamada, sem quebras manuais)
   tituloClausula(doc, 'Cláusula Segunda – Da Vigência');
   paragrafo(doc,

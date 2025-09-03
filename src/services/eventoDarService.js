@@ -69,11 +69,12 @@ async function criarEventoComDars(db, data, helpers) {
 
   await dbRun(db, 'BEGIN TRANSACTION');
   try {
+    const datasEventoStr = JSON.stringify(datasEvento || []);
     const eventoStmt = await dbRun(
       db,
       `INSERT INTO Eventos (
          id_cliente, nome_evento, espaco_utilizado, area_m2, datas_evento,
-         data_vigencia_final, total_diarias, valor_bruto,
+         datas_evento_original, data_vigencia_final, total_diarias, valor_bruto,
          tipo_desconto, desconto_manual, valor_final, numero_oficio_sei,
          hora_inicio, hora_fim, hora_montagem, hora_desmontagem,
          numero_processo, numero_termo, evento_gratuito, justificativa_gratuito, status
@@ -89,7 +90,8 @@ async function criarEventoComDars(db, data, helpers) {
         nomeEvento,
         JSON.stringify(espacosUtilizados || []),
         areaM2 != null ? Number(areaM2) : null,
-        JSON.stringify(datasEvento || []),
+        datasEventoStr,
+        datasEventoStr,
         dataVigenciaFinal,
         Number(totalDiarias || 0),
         Number(valorBruto || 0),
