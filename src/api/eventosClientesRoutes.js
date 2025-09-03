@@ -145,6 +145,47 @@ clientRouter.post('/:id/termo/assinafy/link', async (req, res) => {
   }
 });
 
+/**
+ * PUT /api/portal/eventos/:id/remarcar
+ * Permite ao cliente remarcar o evento uma única vez.
+ */
+clientRouter.put('/:id/remarcar', async (req, res) => {
+  try {
+    const eventoId = req.params.id;
+    const { nova_data } = req.body || {};
+    if (!nova_data) return res.status(400).json({ error: 'Nova data é obrigatória.' });
+
+    const ev = await dbGet(
+      `SELECT remarcado, datas_evento, datas_evento_original FROM Eventos WHERE id = ? AND id_cliente = ?`,
+      [eventoId, req.user.id]
+    );
+    if (!ev) return res.status(404).json({ error: 'Evento não encontrado.' });
+    if (Number(ev.remarcado)) {
+      return res.status(400).json({ error: 'Evento já remarcado anteriormente.' });
+    }
+
+    const agora = new Date().toISOString();
+    const datasOrig = ev.datas_evento_original || ev.datas_evento;
+    const datasNovas = JSON.stringify([nova_data]);
+
+    await dbRun(
+      `UPDATE Eventos
+         SET datas_evento = ?,
+             data_vigencia_final = ?,
+             remarcado = 1,
+             data_pedido_remarcacao = ?,
+             datas_evento_original = ?
+       WHERE id = ?`,
+      [datasNovas, nova_data, agora, datasOrig, eventoId]
+    );
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[PORTAL] /:id/remarcar erro:', err);
+    res.status(500).json({ error: 'Erro ao remarcar o evento.' });
+  }
+});
+
 clientRouter.get('/me', async (req, res) => {
   const clienteId = req.user.id;
   try {

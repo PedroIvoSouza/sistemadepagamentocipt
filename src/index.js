@@ -159,12 +159,26 @@ function ensureEventosColumns(db) {
   db.all(`PRAGMA table_info(Eventos)`, [], (err, cols) => {
     if (err) { console.error('[DB] PRAGMA Eventos falhou:', err.message); return; }
     const names = new Set((cols || []).map(c => c.name.toLowerCase()));
+    const adds = [];
     if (!names.has('data_vigencia_final')) {
-      db.run(`ALTER TABLE Eventos ADD COLUMN data_vigencia_final TEXT`, [], e => {
-        if (e) console.warn('[DB] Migração ignorada/erro:', e.message);
-        else console.log('[DB] Eventos.data_vigencia_final adicionada.');
-      });
+      adds.push(`ALTER TABLE Eventos ADD COLUMN data_vigencia_final TEXT`);
     }
+    if (!names.has('remarcado')) {
+      adds.push(`ALTER TABLE Eventos ADD COLUMN remarcado INTEGER DEFAULT 0`);
+    }
+    if (!names.has('datas_evento_original')) {
+      adds.push(`ALTER TABLE Eventos ADD COLUMN datas_evento_original TEXT`);
+    }
+    if (!names.has('data_pedido_remarcacao')) {
+      adds.push(`ALTER TABLE Eventos ADD COLUMN data_pedido_remarcacao TEXT`);
+    }
+    (function runNext(i = 0) {
+      if (i >= adds.length) return;
+      db.run(adds[i], [], e => {
+        if (e) console.warn('[DB] Migração ignorada/erro:', e.message);
+        runNext(i + 1);
+      });
+    })();
   });
 }
 
