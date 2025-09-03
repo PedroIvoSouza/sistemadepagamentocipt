@@ -5,7 +5,7 @@ const PDFDocument = require('pdfkit');
 const sqlite3 = require('sqlite3').verbose();
 
 const { applyLetterhead, abntMargins } = require('../utils/pdfLetterhead');
-const { imprimirTokenEmPdf } = require('../utils/token');
+const { gerarTokenDocumento, imprimirTokenEmPdf } = require('../utils/token');
 
 const DB_PATH = path.resolve(process.cwd(), process.env.SQLITE_STORAGE || './sistemacipt.db');
 const db = new sqlite3.Database(DB_PATH);
@@ -71,9 +71,18 @@ async function ensureDocumentosSchema() {
 }
 
 // ================== Função principal ==================
-async function gerarAdvertenciaPdfEIndexar({ evento = {}, cliente = {}, dosFatos = '', clausulas = [], resumoSancao = '', token }) {
+async function gerarAdvertenciaPdfEIndexar({ advertenciaId = null, evento = {}, cliente = {}, dosFatos = '', clausulas = [], resumoSancao = '', token = null }) {
   console.log('[ADVERTENCIA][SERVICE] gerarAdvertenciaPdfEIndexar');
   await ensureDocumentosSchema();
+
+  // Gera token caso não tenha sido fornecido
+  if (!token) {
+    try {
+      token = await gerarTokenDocumento('ADVERTENCIA', cliente.id || null, db);
+    } catch (e) {
+      console.error('[ADVERTENCIA][SERVICE] erro ao gerar token:', e.message);
+    }
+  }
 
   const publicDir = path.join(process.cwd(), 'public', 'documentos');
   fs.mkdirSync(publicDir, { recursive: true });
@@ -139,6 +148,19 @@ async function gerarAdvertenciaPdfEIndexar({ evento = {}, cliente = {}, dosFatos
     [token || null, evento.id || null, cliente.id || null, filePath, publicUrl, createdAt],
     'advertencia/upsert-documento'
   );
+
+  // Atualiza o registro da advertência com o token gerado e o caminho do PDF
+  if (advertenciaId) {
+    try {
+      await dbRun(
+        `UPDATE Advertencias SET token = ?, pdf_url = ?, status = 'gerado' WHERE id = ?`,
+        [token, publicUrl, advertenciaId],
+        'advertencia/update-record'
+      );
+    } catch (e) {
+      console.error('[ADVERTENCIA][SERVICE] erro ao atualizar Advertencias:', e.message);
+    }
+  }
 
   return { filePath, token };
 }
