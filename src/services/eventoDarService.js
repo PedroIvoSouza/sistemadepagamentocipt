@@ -105,37 +105,37 @@ async function criarEventoComDars(db, data, helpers) {
       'numero_processo', 'numero_termo', 'remarcacao_solicitada', 'datas_evento_solicitada', 'data_aprovacao_remarcacao',
       'evento_gratuito', 'justificativa_gratuito', 'status'
     ];
-    const eventoStmt = await dbRun(
-      db,
-      `INSERT INTO Eventos (${colsEvento.join(', ')}) VALUES (${colsEvento.map(() => '?').join(', ')})`,
-      [
-        idCliente,
-        nomeEvento,
-        JSON.stringify(espacosUtilizados || []),
-        areaM2 != null ? Number(areaM2) : null,
-        datasEventoStr,
-        datasEventoStr,
-        dataVigenciaFinal,
-        Number(totalDiarias || 0),
-        Number(valorBruto || 0),
-        String(tipoDescontoAuto || 'Geral'),
-        Number(descontoManualPercent || 0),
-        Number(valorFinal || 0),
-        numeroOficioSei || null,
-        horaInicio || null,
-        horaFim || null,
-        horaMontagem || null,
-        horaDesmontagem || null,
-        numeroProcesso || null,
-        numeroTermo || null,
-        0,
-        null,
-        null,
-        eventoGratuito ? 1 : 0,
-        justificativaGratuito || null,
-        'Pendente'
-      ]
-    );
+      const eventoStmt = await dbRun(
+        db,
+        `INSERT INTO Eventos (${colsEvento.join(', ')}) VALUES (${colsEvento.map(() => '?').join(', ')})`,
+        [
+          idCliente,
+          nomeEvento,
+          JSON.stringify(espacosUtilizados || []),
+          areaM2 != null ? Number(areaM2) : null,
+          datasEventoStr,
+          datasEventoStr,
+          dataVigenciaFinal,
+          Number(totalDiarias || 0),
+          Number(valorBruto || 0),
+          String(tipoDescontoAuto || 'Geral'),
+          Number(descontoManualPercent || 0),
+          Number(valorFinal || 0),
+          numeroOficioSei || null,
+          horaInicio || null,
+          horaFim || null,
+          horaMontagem || null,
+          horaDesmontagem || null,
+          numeroProcesso || null,
+          numeroTermo || null,
+          0,
+          null,
+          null,
+          eventoGratuito ? 1 : 0,
+          justificativaGratuito || null,
+          'Pendente'
+        ]
+      );
 
     const eventoId = eventoStmt.lastID;
 
