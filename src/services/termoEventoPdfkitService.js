@@ -313,25 +313,31 @@ async function gerarTermoEventoPdfkitEIndexar(eventoId) {
   );
   if (!ev) throw new Error('Evento não encontrado');
 
-  // 2) Parcelas (pega, por parcela, a DAR mais recente e válida)
+  // 2) Parcelas (pega, por parcela, a DAR mais recente e válida, via dar_id DESC)
   const parcelas = await dbAll(
     `
-    SELECT p.numero_parcela, p.valor_parcela, p.data_vencimento, p.status
-    FROM (
+    WITH base AS (
       SELECT
         de.numero_parcela,
         de.valor_parcela,
         COALESCE(d.data_vencimento, de.data_vencimento) AS data_vencimento,
         d.status,
-        COALESCE(d.updated_at, d.created_at, d.data_vencimento, de.data_vencimento) AS ord
+        d.id AS dar_id
       FROM DARs_Eventos de
       JOIN dars d ON d.id = de.id_dar
       WHERE de.id_evento = ?
         AND (d.status IS NULL OR d.status NOT IN ('Cancelado','Cancelada','Excluído','Excluída'))
-      ORDER BY de.numero_parcela ASC, ord DESC
-    ) AS p
-    GROUP BY p.numero_parcela
-    ORDER BY p.numero_parcela ASC
+    ),
+    ranked AS (
+      SELECT
+        numero_parcela, valor_parcela, data_vencimento, status, dar_id,
+        ROW_NUMBER() OVER (PARTITION BY numero_parcela ORDER BY dar_id DESC) AS rk
+      FROM base
+    )
+    SELECT numero_parcela, valor_parcela, data_vencimento, status
+    FROM ranked
+    WHERE rk = 1
+    ORDER BY numero_parcela ASC
     `,
     [eventoId],
     'termo/get-parcelas-efetivas'
