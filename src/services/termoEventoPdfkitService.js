@@ -40,6 +40,16 @@ const fmtDataExtenso = (iso) => {
   if (Number.isNaN(d.getTime())) return '';
   return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
 };
+const mkPeriodo = (datas) => {
+  const arr = Array.isArray(datas)
+    ? datas
+    : String(datas || '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+  const ext = arr.map(fmtDataExtenso).filter(Boolean);
+  return ext.length <= 1 ? (ext[0] || '') : `${ext[0]} a ${ext[ext.length - 1]}`;
+};
 const sanitizeForFilename = (s = '') =>
   String(s)
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -328,7 +338,10 @@ async function gerarTermoEventoPdfkitEIndexar(eventoId) {
     }
   } catch { /* noop */ }
   const primeiraDataISO = datasArr[0] || '';
-  const dataEventoExt   = fmtDataExtenso(primeiraDataISO) || '-';
+  const dataMontagem = datasArr[0] || '';
+  const dataDesmontagem = datasArr[datasArr.length - 1] || dataMontagem;
+  const periodoEvento = mkPeriodo(datasArr) || datasArr.map(fmtDataExtenso).join(', ');
+  const dataEventoExt = periodoEvento || '-';
 
   const cidadeUfDefault = process.env.CIDADE_UF || 'Maceió/AL';
   const fundoNome = process.env.FUNDO_NOME || 'FUNDECTES';
@@ -391,8 +404,8 @@ async function gerarTermoEventoPdfkitEIndexar(eventoId) {
   tabelaDiscriminacao(doc, {
     discriminacao: `${localEspaco} do ${imovelNome}`,
     realizacao: dataEventoExt || '-',
-    montagem: fmtDataExtenso(primeiraDataISO) || '-',
-    desmontagem: fmtDataExtenso(primeiraDataISO) || '-',
+    montagem: fmtDataExtenso(dataMontagem) || '-',
+    desmontagem: fmtDataExtenso(dataDesmontagem) || '-',
     area: fmtArea(ev.area_m2),
     capacidade: capDefault,
     dias: ev.total_diarias || (datasArr.length || 1),
