@@ -172,6 +172,15 @@ function ensureEventosColumns(db) {
     if (!names.has('data_pedido_remarcacao')) {
       adds.push(`ALTER TABLE Eventos ADD COLUMN data_pedido_remarcacao TEXT`);
     }
+    if (!names.has('remarcacao_solicitada')) {
+      adds.push(`ALTER TABLE Eventos ADD COLUMN remarcacao_solicitada INTEGER DEFAULT 0`);
+    }
+    if (!names.has('datas_evento_solicitada')) {
+      adds.push(`ALTER TABLE Eventos ADD COLUMN datas_evento_solicitada TEXT`);
+    }
+    if (!names.has('data_aprovacao_remarcacao')) {
+      adds.push(`ALTER TABLE Eventos ADD COLUMN data_aprovacao_remarcacao TEXT`);
+    }
     (function runNext(i = 0) {
       if (i >= adds.length) return;
       db.run(adds[i], [], e => {
