@@ -965,24 +965,26 @@ async function carregarClientes(){
 
   async function fetchRemarcacoes(){
     try {
-      const r = await fetch('/api/admin/eventos?remarcacao_solicitada=1', { headers: AUTH_HEADERS });
+      const r = await fetch('/api/admin/eventos/remarcacoes', { headers: AUTH_HEADERS });
       if (!r.ok) throw new Error('Falha ao buscar remarcações');
       const data = await r.json();
-      renderRemarcacoes(data.eventos || data);
+      const eventos = (data.eventos || data).filter(ev => Number(ev.remarcacao_solicitada) === 1);
+      renderRemarcacoes(eventos);
     } catch (e) {
       remarcacoesTableBody.innerHTML = `<tr><td colspan="6" class="text-center text-danger">${e.message}</td></tr>`;
     }
   }
 
   function renderRemarcacoes(eventos){
-    if (!Array.isArray(eventos) || eventos.length === 0){
+    const filtrados = Array.isArray(eventos) ? eventos.filter(ev => Number(ev.remarcacao_solicitada) === 1) : [];
+    if (filtrados.length === 0){
       remarcacoesTableBody.innerHTML = '<tr><td colspan="6" class="text-center">Nenhuma solicitação.</td></tr>';
       return;
     }
-    remarcacoesTableBody.innerHTML = eventos.map(ev => {
+    remarcacoesTableBody.innerHTML = filtrados.map(ev => {
       const id = evIdOf(ev);
       const original = formatDateBR(parseFirstDate(ev.datas_evento_original));
-      const solicitada = formatDateBR(parseFirstDate(ev.datas_evento));
+      const solicitada = formatDateBR(parseFirstDate(ev.datas_evento_solicitada));
       return `
         <tr>
           <td>${id}</td>
