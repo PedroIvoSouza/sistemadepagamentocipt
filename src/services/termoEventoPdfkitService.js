@@ -314,40 +314,40 @@ async function gerarTermoEventoPdfkitEIndexar(eventoId) {
   if (!ev) throw new Error('Evento não encontrado');
 
   // 2) Parcelas (pega, por parcela, a DAR mais recente e válida, via dar_id DESC)
-  const parcelas = await dbAll(
-    `
-    WITH base AS (
-      SELECT
-        de.numero_parcela,
-        de.valor_parcela,
-        COALESCE(d.data_vencimento, de.data_vencimento) AS data_vencimento,
-        d.status,
-        d.id AS dar_id
-      FROM DARs_Eventos de
-      JOIN dars d ON d.id = de.id_dar
-      WHERE de.id_evento = ?
-        AND (d.status IS NULL OR d.status NOT IN ('Cancelado','Cancelada','Excluído','Excluída'))
-    ),
-    ranked AS (
-      SELECT
-        numero_parcela, valor_parcela, data_vencimento, status, dar_id,
-        ROW_NUMBER() OVER (PARTITION BY numero_parcela ORDER BY dar_id DESC) AS rk
-      FROM base
-    )
-    SELECT numero_parcela, valor_parcela, data_vencimento, status
-    FROM ranked
-    WHERE rk = 1
-    ORDER BY numero_parcela ASC
-    `,
-    [eventoId],
-    'termo/get-parcelas-efetivas'
-  );
-  
-  // 50% = 1ª parcela; saldo = última parcela existente
-  const sinalISO = parcelas[0]?.data_vencimento || null;
-  const saldoISO = parcelas.length > 1
-    ? parcelas[parcelas.length - 1].data_vencimento
-    : parcelas[0]?.data_vencimento || null;
+const parcelas = await dbAll(
+  `
+  WITH base AS (
+    SELECT
+      de.numero_parcela,
+      de.valor_parcela,
+      COALESCE(d.data_vencimento, de.data_vencimento) AS data_vencimento,
+      d.status,
+      d.id AS dar_id
+    FROM DARs_Eventos de
+    JOIN dars d ON d.id = de.id_dar
+    WHERE de.id_evento = ?
+      AND (d.status IS NULL OR d.status NOT IN ('Cancelado','Cancelada','Excluído','Excluída'))
+  ),
+  ranked AS (
+    SELECT
+      numero_parcela, valor_parcela, data_vencimento, status, dar_id,
+      ROW_NUMBER() OVER (PARTITION BY numero_parcela ORDER BY dar_id DESC) AS rk
+    FROM base
+  )
+  SELECT numero_parcela, valor_parcela, data_vencimento, status
+  FROM ranked
+  WHERE rk = 1
+  ORDER BY numero_parcela ASC
+  `,
+  [eventoId],
+  'termo/get-parcelas-efetivas'
+);
+
+// 50% = 1ª parcela; saldo = última parcela existente
+const sinalISO = parcelas[0]?.data_vencimento || null;
+const saldoISO = parcelas.length > 1
+  ? parcelas[parcelas.length - 1].data_vencimento
+  : parcelas[0]?.data_vencimento || null;
 
 
   // 3) Placeholders/env
