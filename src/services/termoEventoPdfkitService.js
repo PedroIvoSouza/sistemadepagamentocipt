@@ -134,8 +134,8 @@ function tabelaDiscriminacao(doc, dados) {
   const cols = [
     { w: largura * 0.47, label: 'Discriminação / Área utilizada', align: 'left',  font: 'Times-Roman' },
     { w: largura * 0.18, label: 'Área (m²) / Capacidade',         align: 'left',  font: 'Times-Roman' },
-    { w: largura * 0.15, label: 'Nº de dias',                      align: 'center',font: 'Times-Roman' },
-    { w: largura * 0.20, label: 'Valor total',                     align: 'right', font: 'Times-Roman' },
+    { w: largura * 0.15, label: 'Nº de dias',                     align: 'center',font: 'Times-Roman' },
+    { w: largura * 0.20, label: 'Valor total',                    align: 'right', font: 'Times-Roman' },
   ];
 
   let x = left;
@@ -217,7 +217,7 @@ function tabelaDiscriminacao(doc, dados) {
   const col2 = `${dados.area} (capacidade para ${dados.capacidade} pessoas)`;
   const col3 = String(dados.dias);
   const col4 = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
-                 .format(Number(dados.valor || 0));
+               .format(Number(dados.valor || 0));
 
   drawRow([col1, col2, col3, col4]);
 
@@ -428,54 +428,55 @@ async function gerarTermoEventoPdfkitEIndexar(eventoId) {
   );
 
   // CLÁUSULA 5 – Permissionária
+  // CORREÇÃO: Adicionadas vírgulas entre os itens do array.
   tituloClausula(doc, 'Cláusula Quinta – Das Obrigações da Permissionária');
   [
-    '5.1 - Utilizar o espaço destinado no imóvel em questão para o fim específico do evento descrito na cláusula primeira.'
-    '5.2 - Conservar o imóvel como se lhe pertencesse, fazendo com que seu uso e gozo sejam pacíficos e harmônicos.'
-    '5.3 - A montagem e desmontagem de materiais e equipamentos do(a) PERMISSIONÁRIO(A) ou de terceiros, dentro do período de vigência, conforme reserva.'
-    '5.4 - A indenização pelos danos causados que, por si, seus empregados, prepostos e participantes do evento causarem ao mobiliário, equipamentos e acessórios das áreas locadas, independente de qualquer vistoria judicial prévia.'
-    '5.5 - A indenização por danos causados a terceiros no imóvel utilizado.'
-    '5.6 - A retirada do material e equipamentos utilizados dentro do período de vigência.'
-    '5.7 - Respeitar a lotação da área utilizada, sob pena do PERMITENTE providenciar a retirada do público excedente.'
-    '5.8 - Responsabilizar-se pelas despesas realizadas com a segurança, manutenção e conservação do bem permitido.'
-    '5.9 - Responsabilizar-se pela limpeza e manutenção da área locada durante a montagem, realização e desmontagem do evento, inclusive a compra dos materiais de limpeza.'
-    '5.10 - Responsabilizar-se pela locação de container e contratação de remoção de lixo durante a montagem, realização e desmontagem do evento.'
+    '5.1 - Utilizar o espaço destinado no imóvel em questão para o fim específico do evento descrito na cláusula primeira.',
+    '5.2 - Conservar o imóvel como se lhe pertencesse, fazendo com que seu uso e gozo sejam pacíficos e harmônicos.',
+    '5.3 - A montagem e desmontagem de materiais e equipamentos do(a) PERMISSIONÁRIO(A) ou de terceiros, dentro do período de vigência, conforme reserva.',
+    '5.4 - A indenização pelos danos causados que, por si, seus empregados, prepostos e participantes do evento causarem ao mobiliário, equipamentos e acessórios das áreas locadas, independente de qualquer vistoria judicial prévia.',
+    '5.5 - A indenização por danos causados a terceiros no imóvel utilizado.',
+    '5.6 - A retirada do material e equipamentos utilizados dentro do período de vigência.',
+    '5.7 - Respeitar a lotação da área utilizada, sob pena do PERMITENTE providenciar a retirada do público excedente.',
+    '5.8 - Responsabilizar-se pelas despesas realizadas com a segurança, manutenção e conservação do bem permitido.',
+    '5.9 - Responsabilizar-se pela limpeza e manutenção da área locada durante a montagem, realização e desmontagem do evento, inclusive a compra dos materiais de limpeza.',
+    '5.10 - Responsabilizar-se pela locação de container e contratação de remoção de lixo durante a montagem, realização e desmontagem do evento.',
     '5.11 - Restituir o espaço permitido em perfeito estado e condições, conforme Termo de Vistoria.',
     '5.12 - O espaço locado deverá ser utilizado para o fim específico do evento descrito na cláusula primeira.',
     '5.13 - Para a locação da referida área, o permissionário deverá, no momento da montagem do evento, participar de um check list de vistoria junto a servidor designado pela SECTI e, ao final do evento, na desmontagem, entregar o espaço nas mesmas condições encontradas, incluindo infraestrutura, mobília e limpeza do ambiente, sob pena de multa no valor de locação do espaço.',
-    '5.14 - O permissionário deverá apresentar o projeto do evento com o layout, incluindo os pontos de iluminação, para que seja atestada a necessidade de ser utilizado ou não gerador. Caso seja atestada a necessidade, o permissionário deverá arcar com o aluguel de um gerador externo para não sobrecarregar a rede elétrica do Centro de Inovação do Jaraguá, de modo a evitar danos à estrutura.'
-    '5.15 - - O permissionário deve enviar a documentação para verificar a necessidade de gerador externo para o e-mail supcti@secti.al.gov.br em até 5 dias após o envio do termo de permissão de uso para assinatura.'
-    '5.16 - Toda estrutura que não for retirada no dia da desmontagem que consta neste termo de permissão de uso será destinada a outros fins, bem como será aplicada multa no valor de 10% da locação.'
-    '5.17 - É vedada a utilização da porta de emergência para fins que não seja de segurança, tais como movimentação de estrutura de eventos, sob pena de multa em caso de desobediência.'
-    '5.18 - É proibido o consumo de comidas/bebidas dentro do auditório ou do anfiteatro, de modo que havendo violação deverá ser aplicada multa de 10% do valor de locação, bem como deverá arcar com o valor de danos, caso tenha ocorrido.'
-    '5.19 - É proibido som e/ou apresentação musical fora do auditório, sob pena de multa.'
-    '5.20 - Não é permitido colocar qualquer estrutura no carpete, tanto do auditório quanto do anfiteatro.’
-    '5.21 - Não é permitido desligar as tomadas das baias.’
-    '5.22 - Deverão constar as logomarcas da SECTI e do CIPT nos materiais de divulgação do evento.’
-    '5.23 - Somente serão considerados válidos os procedimentos, condições ou benefícios expressamente previstos neste Termo. Qualquer exceção às disposições aqui estabelecidas deverá ser formalmente requerida junto à esta Secretaria responsável, por meio de solicitação oficial e devidamente fundamentada, ficando sua concessão condicionada à análise e autorização expressa da referida Secretaria, a seu exclusivo critério.’
-    '5.24 - O Permissionário deve enviar o termo de permissão de uso devidamente assinado no prazo de até 5 (cinco) dias contados da data do envio do documento, sob pena de CANCELAMENTO da reserva da data, sem devolução de qualquer valor pago.’
-
+    '5.14 - O permissionário deverá apresentar o projeto do evento com o layout, incluindo os pontos de iluminação, para que seja atestada a necessidade de ser utilizado ou não gerador. Caso seja atestada a necessidade, o permissionário deverá arcar com o aluguel de um gerador externo para não sobrecarregar a rede elétrica do Centro de Inovação do Jaraguá, de modo a evitar danos à estrutura.',
+    '5.15 - - O permissionário deve enviar a documentação para verificar a necessidade de gerador externo para o e-mail supcti@secti.al.gov.br em até 5 dias após o envio do termo de permissão de uso para assinatura.',
+    '5.16 - Toda estrutura que não for retirada no dia da desmontagem que consta neste termo de permissão de uso será destinada a outros fins, bem como será aplicada multa no valor de 10% da locação.',
+    '5.17 - É vedada a utilização da porta de emergência para fins que não seja de segurança, tais como movimentação de estrutura de eventos, sob pena de multa em caso de desobediência.',
+    '5.18 - É proibido o consumo de comidas/bebidas dentro do auditório ou do anfiteatro, de modo que havendo violação deverá ser aplicada multa de 10% do valor de locação, bem como deverá arcar com o valor de danos, caso tenha ocorrido.',
+    '5.19 - É proibido som e/ou apresentação musical fora do auditório, sob pena de multa.',
+    '5.20 - Não é permitido colocar qualquer estrutura no carpete, tanto do auditório quanto do anfiteatro.',
+    '5.21 - Não é permitido desligar as tomadas das baias.',
+    '5.22 - Deverão constar as logomarcas da SECTI e do CIPT nos materiais de divulgação do evento.',
+    '5.23 - Somente serão considerados válidos os procedimentos, condições ou benefícios expressamente previstos neste Termo. Qualquer exceção às disposições aqui estabelecidas deverá ser formalmente requerida junto à esta Secretaria responsável, por meio de solicitação oficial e devidamente fundamentada, ficando sua concessão condicionada à análise e autorização expressa da referida Secretaria, a seu exclusivo critério.',
+    '5.24 - O Permissionário deve enviar o termo de permissão de uso devidamente assinado no prazo de até 5 (cinco) dias contados da data do envio do documento, sob pena de CANCELAMENTO da reserva da data, sem devolução de qualquer valor pago.'
   ].forEach(p => paragrafo(doc, p));
 
   // CLÁUSULA 6 – Penalidades
+  // CORREÇÃO: Adicionadas vírgulas entre os itens do array.
   tituloClausula(doc, 'Cláusula Sexta – Das Penalidades');
   [
     '6.1 - O descumprimento das cláusulas ora pactuadas por qualquer das partes acarretará a incidência de multa equivalente a 10% (dez por cento) do valor da permissão, a ser paga pela parte que deu causa em favor da parte inocente.',
     '6.2 - O valor descrito no item anterior deverá ser corrigido com base no IPCA do período correspondente, montante sobre o qual incidirão juros moratórios de 1% (um por cento) ao mês, calculado pro rata die.',
     '6.3 - Na hipótese de rescisão ocasionada pelo(a) PERMISSIONÁRIO(A) por desistência ou cancelamento do evento até os 30 (trinta) dias de antecedência o permissionário deverá ser penalizado com a perda da taxa de reserva mais multa de 20% (vinte por cento) sobre o valor do presente termo.',
-    '6.4 - Em caso de violação das normas previstas neste contrato e no regimento interno, e havendo inadimplemento da multa aplicada e/ou ausência de manifestação por parte do permissionário, este poderá ser impedido de realizar reservas dos espaços por até 2 (dois) anos, contados a partir da data da notificação.'
+    '6.4 - Em caso de violação das normas previstas neste contrato e no regimento interno, e havendo inadimplemento da multa aplicada e/ou ausência de manifestação por parte do permissionário, este poderá ser impedido de realizar reservas dos espaços por até 2 (dois) anos, contados a partir da data da notificação.',
     '6.5. No caso de reincidência das infrações cometidas, o permissionário ficará impedido de realizar os espaços por 2 (dois) anos.'
   ].forEach(p => paragrafo(doc, p));
 
   // CLÁUSULA 7 – Rescisão
+  // CORREÇÃO: Adicionadas vírgulas entre os itens do array.
   tituloClausula(doc, 'Cláusula Sétima – Da Rescisão');
   [
-    '7.1 - A inexecução total ou parcial deste termo poderá acarretar em sanções administrativas, conforme disposto nos artigos 104, 137, 138 e 139 da Lei nº 14.133/2021.'
-    '7.2 - Este instrumento poderá ser rescindido a qualquer tempo pelo(a) Permissionário(a), mediante notificação prévia, devidamente protocolada na Secretaria de Estado da Ciência, da Tecnologia e da Inovação de Alagoas – SECTI, com antecedência mínima de 30 (trinta) dias da data prevista para o evento mediante justificativa. Nessa hipótese, o Permissionário terá o prazo de até 1 (um) ano para realizar o evento em nova data, contado a partir da data da abertura do processo administrativo, e desde que haja disponibilidade de agenda. Caso contrário, perderá integralmente os valores já pagos.'
-    '7.3 - A nova data a ser agendada deverá ser informada no prazo máximo de 30 (trinta) dias corridos, contados a partir da comunicação do cancelamento.'
-    '7.4 -  A remarcação do evento será permitida uma única vez. O não cumprimento do prazo para indicação da nova data acarretará a perda do direito à remarcação, sem qualquer restituição dos valores pagos.'
+    '7.1 - A inexecução total ou parcial deste termo poderá acarretar em sanções administrativas, conforme disposto nos artigos 104, 137, 138 e 139 da Lei nº 14.133/2021.',
+    '7.2 - Este instrumento poderá ser rescindido a qualquer tempo pelo(a) Permissionário(a), mediante notificação prévia, devidamente protocolada na Secretaria de Estado da Ciência, da Tecnologia e da Inovação de Alagoas – SECTI, com antecedência mínima de 30 (trinta) dias da data prevista para o evento mediante justificativa. Nessa hipótese, o Permissionário terá o prazo de até 1 (um) ano para realizar o evento em nova data, contado a partir da data da abertura do processo administrativo, e desde que haja disponibilidade de agenda. Caso contrário, perderá integralmente os valores já pagos.',
+    '7.3 - A nova data a ser agendada deverá ser informada no prazo máximo de 30 (trinta) dias corridos, contados a partir da comunicação do cancelamento.',
+    '7.4 -  A remarcação do evento será permitida uma única vez. O não cumprimento do prazo para indicação da nova data acarretará a perda do direito à remarcação, sem qualquer restituição dos valores pagos.',
     '7.5 - Ocorrerá a rescisão do presente termo de permissão, independente de qualquer comunicação prévia ou indenização por parte da PERMITENTE, havendo qualquer sinistro, incêndio ou algo que venha impossibilitar a posse do espaço, independente de dolo ou culpa do PERMITENTE.'
-
   ].forEach(p => paragrafo(doc, p));
 
   // CLÁUSULA 8 – Omissões
