@@ -89,10 +89,29 @@
               <button type="submit" class="btn btn-primary">Gerar Advertência</button>
             </form>
           </div>
-        </div>
-      </main>
-    </div>
   </div>
+</main>
+</div>
+</div>
+  <script>
+    (function() {
+      const token = localStorage.getItem('token');
+      const userNameEl = document.getElementById('userName');
+
+      if (!token) {
+        userNameEl.textContent = 'Visitante';
+        window.location.href = '/login.html';
+        return;
+      }
+
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        userNameEl.textContent = payload.nome_empresa || payload.nome_razao_social || payload.nome || payload.name || 'Cliente';
+      } catch (err) {
+        userNameEl.textContent = 'Cliente';
+      }
+    })();
+  </script>
 
   <script>
     const clausulas = {
