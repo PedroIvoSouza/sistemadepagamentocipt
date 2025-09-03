@@ -90,6 +90,7 @@
                     <th>Cliente</th>
                     <th>Data Original</th>
                     <th>Data Solicitada</th>
+                    <th>Justificativa</th>
                     <th class="text-center">Ações</th>
                   </tr>
                 </thead>
@@ -102,11 +103,26 @@
     </div>
   </div>
 
+  <div class="modal fade" id="justificativaModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Justificativa</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+        </div>
+        <div class="modal-body">
+          <p id="justificativaTexto" class="mb-0"></p>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="/js/admin-sidebar.js"></script>
   <script src="/js/admin-guard.js"></script>
   <script defer src="/js/mobile-adapter.js"></script>
   <script defer src="/js/ui-kit.js"></script>
   <script defer src="/js/mobile-tweaks.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 
   <script>
   window.onload = () => {
@@ -114,6 +130,8 @@
     const AUTH_HEADERS = { Authorization: `Bearer ${token}` };
 
     const remarcacoesTableBody = document.getElementById('remarcacoes-table-body');
+    const justificativaTexto = document.getElementById('justificativaTexto');
+    const justificativaModal = new bootstrap.Modal(document.getElementById('justificativaModal'));
 
     const formatDateBR = iso => {
       if (!iso) return '';
@@ -133,24 +151,27 @@
 
     async function fetchRemarcacoes(){
       try {
-        const r = await fetch('/api/admin/eventos?remarcacao_solicitada=1', { headers: AUTH_HEADERS });
+        const r = await fetch('/api/admin/eventos/remarcacoes', { headers: AUTH_HEADERS });
         if (!r.ok) throw new Error('Falha ao buscar remarcações');
         const data = await r.json();
-        renderRemarcacoes(data.eventos || data);
+        renderRemarcacoes(data.eventos || []);
       } catch (e) {
-        remarcacoesTableBody.innerHTML = `<tr><td colspan="6" class="text-center text-danger">${e.message}</td></tr>`;
+        remarcacoesTableBody.innerHTML = `<tr><td colspan="7" class="text-center text-danger">${e.message}</td></tr>`;
       }
     }
 
     function renderRemarcacoes(eventos){
       if (!Array.isArray(eventos) || eventos.length === 0){
-        remarcacoesTableBody.innerHTML = '<tr><td colspan="6" class="text-center">Nenhuma solicitação.</td></tr>';
+        remarcacoesTableBody.innerHTML = '<tr><td colspan="7" class="text-center">Nenhuma solicitação.</td></tr>';
         return;
       }
       remarcacoesTableBody.innerHTML = eventos.map(ev => {
         const id = evIdOf(ev);
         const original = formatDateBR(parseFirstDate(ev.datas_evento_original));
         const solicitada = formatDateBR(parseFirstDate(ev.datas_evento));
+        const justificativa = ev.justificativa_remarcacao || '';
+        const curta = justificativa.length > 30 ? justificativa.slice(0,30)+'...' : justificativa;
+        const btn = justificativa.length > 30 ? ` <button class="btn btn-link btn-sm p-0 ver-justificativa" data-just="${encodeURIComponent(justificativa)}">ver mais</button>` : '';
         return `
           <tr>
             <td>${id}</td>
@@ -158,6 +179,7 @@
             <td class="text-capitalize">${ev.nome_cliente || ''}</td>
             <td>${original}</td>
             <td>${solicitada}</td>
+            <td>${curta}${btn}</td>
             <td class="text-center">
               <div class="btn-group">
                 <button class="btn btn-sm btn-success btn-aprovar-rem" data-id="${id}">Aprovar</button>
@@ -172,6 +194,12 @@
     async function carregarRemarcacoes(){ return fetchRemarcacoes(); }
 
     remarcacoesTableBody.addEventListener('click', async (e)=>{
+      const verJust = e.target.closest('.ver-justificativa');
+      if (verJust){
+        justificativaTexto.textContent = decodeURIComponent(verJust.dataset.just || '');
+        justificativaModal.show();
+        return;
+      }
       const btnAprovar = e.target.closest('.btn-aprovar-rem');
       const btnRejeitar = e.target.closest('.btn-rejeitar-rem');
       const btnDireto = e.target.closest('.btn-remarcar-direto');
