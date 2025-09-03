@@ -47,6 +47,23 @@ const sanitizeFile = (s='') => String(s)
   .replace(/_{2,}/g,'_')
   .replace(/^_+|_+$/g,'');
 
+function parseEspacoUtilizado(v) {
+  if (!v) return [];
+  if (Array.isArray(v)) return v;
+  if (typeof v === 'string') {
+    const txt = v.trim();
+    if (!txt) return [];
+    try {
+      if (txt.startsWith('[')) {
+        const arr = JSON.parse(txt);
+        if (Array.isArray(arr)) return arr;
+      }
+    } catch { /* ignore */ }
+    return txt.split(',').map(s => s.trim()).filter(Boolean);
+  }
+  return [];
+}
+
 async function ensureDocumentosSchema() {
   await dbRun(`CREATE TABLE IF NOT EXISTS documentos (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -263,7 +280,7 @@ router.get(
         permissionario_representante_cpf: onlyDigits(ev.documento_responsavel || ''),
 
         evento_titulo: ev.nome_evento || '',
-        local_espaco: ev.espaco_utilizado || 'AUDITÓRIO',
+        local_espaco: parseEspacoUtilizado(ev.espaco_utilizado).join(', ') || 'AUDITÓRIO',
         imovel_nome: process.env.IMOVEL_NOME || 'CENTRO DE INOVAÇÃO DO JARAGUÁ',
 
         data_evento: dataExt(primeiraDataISO),
