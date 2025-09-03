@@ -171,21 +171,19 @@
         }
       });
 
+      const ct = res.headers.get('content-type') || '';
       if(!res.ok){
-        // tenta ler JSON de erro; se vier HTML, cai no catch
-        const text = await res.text();
-        try{
-          const data = JSON.parse(text);
-          throw new Error(data.error || `Erro ${res.status} ao gerar certidão.`);
-        }catch{
-          throw new Error('Falha ao gerar certidão. Possível sessão expirada ou erro no servidor.');
+        if(ct.includes('application/json')){
+          const data = await res.json();
+          throw new Error(`(${res.status}) ${data.error || 'Erro ao gerar certidão.'}`);
         }
+        const text = await res.text();
+        throw new Error(`(${res.status}) ${text || 'Erro ao gerar certidão.'}`);
       }
 
-      const ct = res.headers.get('content-type') || '';
       if(!ct.includes('application/pdf')){
         // Se veio HTML (ex.: redirect login), trata como erro
-        throw new Error('Resposta não é PDF (possível redirecionamento para login).');
+        throw new Error(`(${res.status}) Resposta não é PDF (possível redirecionamento para login).`);
       }
 
       const blob = await res.blob();
