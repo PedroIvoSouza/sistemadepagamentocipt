@@ -15,7 +15,8 @@ function prepDb(dbPath) {
   return { db, run, get };
 }
 
-test('POST cria advertencia usa clausulas do payload e envia email', async () => {
+test('POST cria advertencia grava clausulas e envia email', async () => {
+
   const dbPath = path.resolve(__dirname, 'test-advertencia-post.db');
   const { run, get } = prepDb(dbPath);
 
@@ -56,6 +57,14 @@ test('POST cria advertencia usa clausulas do payload e envia email', async () =>
   app.use(express.json());
   app.use('/api/admin', routes);
 
+  const clausulasPayload = [
+    { numero: '5.1', texto: 'Cláusula 5.1 texto' },
+    { numero: '7.3', texto: 'Cláusula 7.3 texto' }
+  ];
+  const payload = {
+    fatos: 'F',
+    clausulas: clausulasPayload,
+
   const texto51 = 'Texto da clausula 5.1';
   const texto73 = 'Texto da clausula 7.3';
   const payload = {
@@ -78,12 +87,12 @@ test('POST cria advertencia usa clausulas do payload e envia email', async () =>
   assert.equal(row.gera_multa, 1);
   assert.equal(row.inapto, 0);
   const saved = JSON.parse(row.clausulas);
-  assert.equal(saved[0].texto, texto51);
-  assert.ok(saved.some(c => c.texto === texto73));
+  assert.deepEqual(saved, clausulasPayload);
 
-  assert.ok(pdfArgs.clausulas.some(c => c.texto === texto73));
+  assert.ok(pdfArgs.clausulas.some(c => c.texto === clausulasPayload[1].texto));
   const pdfContent = fs.readFileSync(fakePath, 'utf8');
-  assert.ok(pdfContent.includes(texto73));
+  assert.ok(pdfContent.includes(clausulasPayload[1].texto));
+
 
   assert.ok(logs.some(l => l.includes('gerar DAR')));
   assert.equal(mailSent, true);

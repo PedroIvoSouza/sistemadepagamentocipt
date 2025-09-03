@@ -5,14 +5,9 @@ const nodemailer = require('nodemailer');
 const adminAuthMiddleware = require('../middleware/adminAuthMiddleware');
 const db = require('../database/db');
 const { gerarAdvertenciaPdfEIndexar } = require('../services/advertenciaPdfService');
-const termoClausulas = require('../constants/termoClausulas');
 
 const router = express.Router();
 router.use(adminAuthMiddleware);
-
-router.get('/advertencias/clausulas', (_req, res) => {
-  res.json(termoClausulas);
-});
 
 // ========= SQLite helpers =========
 const dbRun = (sql, params = []) => new Promise((resolve, reject) => {
@@ -99,6 +94,10 @@ router.post('/eventos/:id/advertencias', async (req, res) => {
                                   FROM Eventos e JOIN Clientes_Eventos ce ON ce.id = e.id_cliente WHERE e.id = ?`, [id]);
     if (!evento) return res.status(404).json({ error: 'Evento não encontrado.' });
 
+    const clausulasDetalhadas = clausulas
+      .map(c => ({ numero: String(c?.numero || '').trim(), texto: String(c?.texto || '').trim() }))
+      .filter(c => c.numero && c.texto);
+    if (clausulasDetalhadas.length !== clausulas.length) {
     const clausulasDetalhadas = (clausulas || [])
       .map((c) => {
         if (typeof c === "string" || typeof c === "number") {
