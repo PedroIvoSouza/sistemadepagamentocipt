@@ -461,6 +461,97 @@ router.get('/', async (req, res) => {
   }
 });
 
+/* ===========================================================
+   GET /api/admin/eventos/remarcacoes
+   Lista eventos com remarcação solicitada
+   =========================================================== */
+router.get('/remarcacoes', async (req, res) => {
+  try {
+    const sql = `
+      SELECT e.*, c.nome_razao_social AS nome_cliente
+        FROM Eventos e
+        JOIN Clientes_Eventos c ON c.id = e.id_cliente
+       WHERE e.remarcacao_solicitada = 1
+       ORDER BY e.data_pedido_remarcacao DESC`;
+    const rows = await dbAll(sql, [], 'listar-remarcacoes');
+    rows.forEach(ev => {
+      ev.evento_gratuito = !!ev.evento_gratuito;
+      ev.remarcacao_solicitada = !!ev.remarcacao_solicitada;
+    });
+    res.json({ eventos: rows });
+  } catch (err) {
+    console.error('[admin/eventos] remarcacoes erro:', err.message);
+    res.status(500).json({ error: 'Erro ao listar remarcações.' });
+  }
+});
+
+/* ===========================================================
+   PUT /api/admin/eventos/:id/remarcar
+   Aprova ou realiza remarcação de evento
+   =========================================================== */
+router.put('/:id/remarcar', async (req, res) => {
+  try {
+    const { id } = req.params;
+    let { nova_data, modo } = req.body || {};
+    modo = String(modo || '').toLowerCase();
+    if (!['aprovar', 'unilateral', 'rejeitar', 'recusar'].includes(modo)) {
+      return res.status(400).json({ error: 'Modo inválido. Use aprovar, unilateral ou rejeitar.' });
+    }
+
+    const ev = await dbGet(
+      `SELECT datas_evento, datas_evento_original, datas_evento_solicitada, remarcacao_solicitada
+         FROM Eventos WHERE id = ?`,
+      [id],
+      'remarcar/get-evento'
+    );
+    if (!ev) return res.status(404).json({ error: 'Evento não encontrado.' });
+
+    if (['aprovar'].includes(modo) && !Number(ev.remarcacao_solicitada)) {
+      return res.status(400).json({ error: 'Nenhuma remarcação solicitada.' });
+    }
+
+    if (modo === 'rejeitar' || modo === 'recusar') {
+      await dbRun(
+        `UPDATE Eventos
+            SET remarcacao_solicitada = 0,
+                datas_evento_solicitada = NULL,
+                data_pedido_remarcacao = NULL
+          WHERE id = ?`,
+        [id],
+        'remarcar/rejeitar'
+      );
+      return res.json({ ok: true, rejeitado: true });
+    }
+
+    const novaDataFinal = nova_data || ev.datas_evento_solicitada;
+    if (!novaDataFinal) {
+      return res.status(400).json({ error: 'Nova data não informada.' });
+    }
+
+    const datasOrig = ev.datas_evento_original || ev.datas_evento;
+    const datasNovas = JSON.stringify([novaDataFinal]);
+
+    await dbRun(
+      `UPDATE Eventos
+          SET datas_evento_original = ?,
+              datas_evento = ?,
+              data_vigencia_final = ?,
+              remarcado = 1,
+              remarcacao_solicitada = 0,
+              data_aprovacao_remarcacao = datetime('now'),
+              datas_evento_solicitada = NULL
+        WHERE id = ?`,
+      [datasOrig, datasNovas, novaDataFinal, id],
+      'remarcar/aprovar'
+    );
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[admin/eventos] remarcar erro:', err.message);
+    res.status(500).json({ error: 'Erro ao remarcar o evento.' });
+  }
+});
+
 router.get('/:eventoId/dars', async (req, res) => {
   const { eventoId } = req.params;
   try {

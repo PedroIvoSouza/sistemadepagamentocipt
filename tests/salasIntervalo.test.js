@@ -8,6 +8,7 @@ const path = require('path');
 process.env.JWT_SECRET = 'testsecret';
 process.env.SQLITE_STORAGE = path.resolve(__dirname, 'salas.test.db');
 
+delete require.cache[require.resolve('../src/database/db')];
 const db = require('../src/database/db');
 
 function resetDb() {

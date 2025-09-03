@@ -40,6 +40,7 @@ async function setupSchema(db) {
     espaco_utilizado TEXT,
     area_m2 REAL,
     datas_evento TEXT,
+    datas_evento_original TEXT,
     data_vigencia_final TEXT,
     total_diarias INTEGER,
     valor_bruto REAL,
@@ -55,7 +56,12 @@ async function setupSchema(db) {
     numero_termo TEXT,
     evento_gratuito INTEGER DEFAULT 0,
     justificativa_gratuito TEXT,
-    status TEXT
+    status TEXT,
+    remarcado INTEGER DEFAULT 0,
+    data_pedido_remarcacao TEXT,
+    remarcacao_solicitada INTEGER DEFAULT 0,
+    datas_evento_solicitada TEXT,
+    data_aprovacao_remarcacao TEXT
   );`);
   await run(db, `CREATE TABLE dars (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
