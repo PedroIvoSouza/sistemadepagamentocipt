@@ -29,7 +29,18 @@
         .main-content { flex-grow: 1; display: flex; flex-direction: column; }
         .topbar { background-color: #ffffff; padding: 1rem 2rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); display: flex; justify-content: flex-end; align-items: center; }
         .content { padding: 2rem; }
-        #calendar { background: #ffffff; border-radius: var(--raio-borda); padding: 1rem; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        #calendar {
+            background: #ffffff;
+            border-radius: var(--raio-borda);
+            padding: 1rem;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            overflow: hidden;
+        }
+
+        #reservasTable {
+            border-radius: var(--raio-borda);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
     </style>
 </head>
 <body>
@@ -92,7 +103,7 @@
                     <div class="card-body">
                         <h5 class="card-title">Minhas Reservas</h5>
                         <div class="table-responsive">
-                            <table id="reservasTable" class="table">
+                            <table id="reservasTable" class="table table-striped table-hover">
                                 <thead>
                                     <tr>
                                         <th>Sala</th>
