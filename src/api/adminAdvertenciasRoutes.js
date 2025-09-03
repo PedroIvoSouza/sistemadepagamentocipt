@@ -100,8 +100,8 @@ router.post('/eventos/:id/advertencias', async (req, res) => {
     if (!evento) return res.status(404).json({ error: 'Evento não encontrado.' });
 
     const clausulasDetalhadas = clausulas
-      .map((n) => ({ numero: String(n), texto: termoClausulas[String(n)] }))
-      .filter((c) => c.texto);
+      .map((c) => ({ numero: String(c.numero), texto: String(c.texto) }))
+      .filter((c) => c.numero && c.texto);
     if (!clausulasDetalhadas.length) {
       return res.status(400).json({ error: 'Cláusulas inválidas.' });
     }
