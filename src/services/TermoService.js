@@ -13,8 +13,25 @@ export default class TermoService {
     return new Intl.DateTimeFormat('pt-BR', {
       day: '2-digit',
       month: 'long',
-      year: 'numeric'
+      year: 'numeric',
+      timeZone: 'America/Sao_Paulo'
     }).format(new Date(date));
+  }
+
+  static composeDataFromEvent(evento) {
+    const vigenciaFim = new Date(evento.dataDesmontagem);
+    vigenciaFim.setDate(vigenciaFim.getDate() + 1);
+    return {
+      valor: evento.valor,
+      data: evento.dataRealizacaoInicio,
+      vigencia: {
+        inicio: evento.dataMontagem,
+        fim: vigenciaFim.toISOString()
+      },
+      saldoPagamento: evento.saldoPagamento,
+      clausulas: evento.clausulas,
+      dars: Array.isArray(evento.dars) ? evento.dars.map(d => ({ ...d })) : []
+    };
   }
 
   static populateTemplate(template, data) {
