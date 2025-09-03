@@ -67,10 +67,13 @@
                                         <label for="filtroDataInicio" class="form-label">Data inicial</label>
                                         <input type="date" id="filtroDataInicio" class="form-control">
                                     </div>
-                                    <div class="col-auto">
-                                        <label for="filtroDataFim" class="form-label">Data final</label>
-                                        <input type="date" id="filtroDataFim" class="form-control">
-                                    </div>
+                                <div class="col-auto">
+                                    <label for="filtroDataFim" class="form-label">Data final</label>
+                                    <input type="date" id="filtroDataFim" class="form-control">
+                                </div>
+                                <div class="col-auto align-self-end">
+                                    <button class="btn btn-primary" onclick="abrirModalNovaReserva()">Nova reserva</button>
+                                </div>
                                 </div>
                                 <div id="calendar"></div>
                             </div>
@@ -103,6 +106,49 @@
                 <div class="modal-footer">
                     <button type="button" class="btn btn-danger" id="btnCancelarReserva">Cancelar reserva</button>
                     <button type="button" class="btn btn-success" id="btnRegistrarCheckin">Registrar check-in</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="modalNovaReserva" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Nova reserva</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="reservaSala" class="form-label">Sala</label>
+                        <select id="reservaSala" class="form-select"></select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="reservaPermissionario" class="form-label">Permissionário</label>
+                        <select id="reservaPermissionario" class="form-select"></select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="reservaData" class="form-label">Data</label>
+                        <input type="date" id="reservaData" class="form-control">
+                    </div>
+                    <div class="row g-2">
+                        <div class="col">
+                            <label for="reservaInicio" class="form-label">Início</label>
+                            <input type="time" id="reservaInicio" class="form-control">
+                        </div>
+                        <div class="col">
+                            <label for="reservaFim" class="form-label">Fim</label>
+                            <input type="time" id="reservaFim" class="form-control">
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <label for="reservaQtdPessoas" class="form-label">Quantidade de pessoas</label>
+                        <input type="number" id="reservaQtdPessoas" class="form-control" min="0">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-primary" onclick="salvarNovaReserva()">Salvar</button>
                 </div>
             </div>
         </div>
