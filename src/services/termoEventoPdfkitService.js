@@ -394,7 +394,14 @@ async function gerarTermoEventoPdfkitEIndexar(eventoId) {
     const novaStr = datasArr.map(fmtDataExtenso).join(', ');
     const origStr = origArr.map(fmtDataExtenso).join(', ');
     const pedidoStr = fmtDataExtenso(ev.data_pedido_remarcacao);
-    paragrafo(doc, `Parágrafo Único - Evento remarcado. Data original: ${origStr || '-'}; pedido em: ${pedidoStr || '-'}; nova data: ${novaStr || '-'}.`);
+    const aprovadoStr = fmtDataExtenso(ev.data_aprovacao_remarcacao);
+    let clausula = `Parágrafo Único - Evento remarcado. Data original: ${origStr || '-'}`;
+    clausula += `; pedido em: ${pedidoStr || '-'}`;
+    if (ev.data_aprovacao_remarcacao) {
+      clausula += `; aprovado em: ${aprovadoStr || '-'}`;
+    }
+    clausula += `; nova data: ${novaStr || '-'}.`;
+    paragrafo(doc, clausula);
   }
 
   // CLÁUSULA 2 – (texto inteiro em uma única chamada, sem quebras manuais)
