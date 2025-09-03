@@ -59,7 +59,7 @@ test('POST cria advertencia mapeia clausulas e envia email', async () => {
 
   const payload = {
     fatos: 'F',
-    clausulas: ['5.1','6.1'],
+    clausulas: ['5.1', '7.3'],
     multa: 50,
     gera_multa: true,
     inapto: false,
@@ -75,10 +75,11 @@ test('POST cria advertencia mapeia clausulas e envia email', async () => {
   assert.equal(row.inapto, 0);
   const saved = JSON.parse(row.clausulas);
   assert.equal(saved[0].texto, termoClausulas['5.1']);
+  assert.ok(saved.some(c => c.texto === termoClausulas['7.3']));
 
-  assert.ok(pdfArgs.clausulas.some(c => c.texto === termoClausulas['6.1']));
+  assert.ok(pdfArgs.clausulas.some(c => c.texto === termoClausulas['7.3']));
   const pdfContent = fs.readFileSync(fakePath, 'utf8');
-  assert.ok(pdfContent.includes(termoClausulas['5.1']));
+  assert.ok(pdfContent.includes(termoClausulas['7.3']));
 
   assert.ok(logs.some(l => l.includes('gerar DAR')));
   assert.equal(mailSent, true);
