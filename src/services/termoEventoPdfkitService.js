@@ -449,12 +449,24 @@ const saldoISO = parcelas.length > 1
   
   const dataMontagemISO = ev.data_montagem || (datasArr.length ? datasArr[0] : null);
   const dataDesmontagemISO = ev.data_desmontagem || (datasArr.length ? datasArr[datasArr.length - 1] : null);
-  
+  const vigenciaFinalISO = (() => {
+    const d = parseLocalDateFlexible(dataDesmontagemISO);
+    if (!d) return null;
+    d.setDate(d.getDate() + 1);
+    return isoLocalFrom(d);
+  })();
+
+  if (vigenciaFinalISO && ev.data_vigencia_final !== vigenciaFinalISO) {
+    await dbRun(
+      'UPDATE Eventos SET data_vigencia_final = ? WHERE id = ?',
+      [vigenciaFinalISO, eventoId],
+      'termo/update-vigencia-final'
+    );
+    ev.data_vigencia_final = vigenciaFinalISO;
+  }
+
   const periodoEvento = mkPeriodo(datasArr) || datasArr.map(fmtDataExtenso).join(', ');
   const dataEventoExt = periodoEvento || '-';
-
-  const vigenciaFim = parseLocalDateFlexible(ev.data_vigencia_final);
-
 
   const cidadeUfDefault = process.env.CIDADE_UF || 'Maceió/AL';
   const fundoNome = process.env.FUNDO_NOME || 'FUNDECTES';
@@ -560,7 +572,7 @@ const saldoISO = parcelas.length > 1
   tituloClausula(doc, 'Cláusula Segunda – Da Vigência');
   paragrafo(doc,
     `2.1 - O prazo de vigência se inicia na data de assinatura do presente termo até ${
-      vigenciaFim ? vigenciaFim.toLocaleDateString('pt-BR') : '-'
+      fmtDataExtenso(vigenciaFinalISO) || '-'
     } às 12h.`
   );
 
@@ -672,7 +684,7 @@ const saldoISO = parcelas.length > 1
     'termo/upsert-documento'
   );
 
-  return { filePath, fileName, pdf_public_url: publicUrl };
+  return { filePath, fileName, pdf_public_url: publicUrl, data_vigencia_final: vigenciaFinalISO };
 }
 
 module.exports = { gerarTermoEventoPdfkitEIndexar };
