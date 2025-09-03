@@ -2,6 +2,7 @@
 
 let modalReserva;
 let modalNovaSala;
+let modalNovaReserva;
 let eventoSelecionado;
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -37,6 +38,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const modalNovaSalaEl = document.getElementById('modalNovaSala');
   if (modalNovaSalaEl && window.bootstrap) {
     modalNovaSala = new bootstrap.Modal(modalNovaSalaEl);
+  }
+
+  const modalNovaReservaEl = document.getElementById('modalNovaReserva');
+  if (modalNovaReservaEl && window.bootstrap) {
+    modalNovaReserva = new bootstrap.Modal(modalNovaReservaEl);
   }
 
   carregarSalas();
@@ -138,6 +144,7 @@ async function carregarSalas() {
 function adicionarSalaUI(sala) {
   const tabela = document.querySelector('#tabelaSalas tbody');
   const selectSala = document.getElementById('filtroSala');
+  const selectReservaSala = document.getElementById('reservaSala');
 
   if (tabela) {
     const tr = document.createElement('tr');
@@ -175,6 +182,33 @@ function adicionarSalaUI(sala) {
     opt.textContent = sala.nome;
     selectSala.appendChild(opt);
   }
+  if (selectReservaSala) {
+    const opt2 = document.createElement('option');
+    opt2.value = sala.id;
+    opt2.textContent = sala.nome;
+    selectReservaSala.appendChild(opt2);
+  }
+}
+
+async function carregarPermissionarios() {
+  try {
+    const resp = await fetch('/api/admin/permissionarios?limit=1000');
+    if (!resp.ok) throw new Error('Falha ao carregar permissionários');
+    const dados = await resp.json();
+    const lista = dados.permissionarios || [];
+    const select = document.getElementById('reservaPermissionario');
+    if (select) {
+      select.innerHTML = '';
+      lista.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.id;
+        opt.textContent = p.nome_empresa;
+        select.appendChild(opt);
+      });
+    }
+  } catch (err) {
+    console.error(err);
+  }
 }
 
 function abrirModalNovaSala() {
@@ -185,6 +219,52 @@ function abrirModalNovaSala() {
   if (capacidade) capacidade.value = '';
   if (status) status.value = 'disponivel';
   modalNovaSala?.show();
+}
+
+function abrirModalNovaReserva() {
+  const fields = ['reservaSala', 'reservaPermissionario', 'reservaData', 'reservaInicio', 'reservaFim', 'reservaQtdPessoas'];
+  fields.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  carregarPermissionarios();
+  modalNovaReserva?.show();
+}
+
+async function salvarNovaReserva() {
+  const salaId = document.getElementById('reservaSala')?.value;
+  const permissionarioId = document.getElementById('reservaPermissionario')?.value;
+  const data = document.getElementById('reservaData')?.value;
+  const inicio = document.getElementById('reservaInicio')?.value;
+  const fim = document.getElementById('reservaFim')?.value;
+  const qtd = parseInt(document.getElementById('reservaQtdPessoas')?.value || '0', 10);
+
+  if (!salaId || !permissionarioId || !data || !inicio || !fim) {
+    mostrarMensagem('Preencha todos os campos obrigatórios', 'danger');
+    return;
+  }
+
+  try {
+    const resp = await fetch('/api/admin/salas/reservas', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sala_id: parseInt(salaId, 10),
+        permissionario_id: parseInt(permissionarioId, 10),
+        data,
+        horario_inicio: inicio,
+        horario_fim: fim,
+        qtd_pessoas: isNaN(qtd) ? 0 : qtd
+      })
+    });
+    if (!resp.ok) throw new Error('Falha ao criar reserva');
+    mostrarMensagem('Reserva criada com sucesso', 'success');
+    modalNovaReserva.hide();
+    window._salasCalendar?.refetchEvents();
+  } catch (err) {
+    console.error(err);
+    mostrarMensagem('Falha ao criar reserva', 'danger');
+  }
 }
 
 async function salvarNovaSala() {
