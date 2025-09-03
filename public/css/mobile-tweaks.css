@@ -141,4 +141,16 @@ input, select, textarea, button { font-size: 16px; }
 @media (max-width: 768px) {
   .card { width: 100%; }
   .d-md-block { display: none !important; }
+
+  body.mobile table.table tbody tr {
+    background: var(--cipt-card);
+    border-radius: var(--cipt-radius);
+    box-shadow: var(--cipt-shadow);
+    padding: 14px;
+    margin: 12px 0;
+  }
+
+  body.mobile table.table tbody td {
+    padding: 4px 0;
+  }
 }
