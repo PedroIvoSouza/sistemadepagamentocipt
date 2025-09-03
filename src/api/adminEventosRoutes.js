@@ -604,7 +604,7 @@ router.get('/:id', async (req, res) => {
     const parcelasSql = `
         SELECT
             de.numero_parcela,
-            de.valor_parcela            AS valor,
+            COALESCE(de.valor_parcela, d.valor) AS valor,
             de.data_vencimento          AS vencimento,
             d.id                        AS dar_id,
             d.status                    AS dar_status,
