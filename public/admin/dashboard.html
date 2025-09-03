@@ -187,9 +187,10 @@ window.onload = async () => {
 
       const meses = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
       const resumoBody = document.getElementById('resumo-mensal-body');
+      const resumoMensal = (stats.resumoMensal || []).slice().reverse();
 
-      if (stats.resumoMensal && stats.resumoMensal.length > 0) {
-        resumoBody.innerHTML = stats.resumoMensal.map(item => `
+      if (resumoMensal.length > 0) {
+        resumoBody.innerHTML = resumoMensal.map(item => `
           <tr>
             <td><strong>${meses[(item.mes||1)-1]}/${item.ano}</strong></td>
             <td>${Number(item.emitidas ?? 0).toLocaleString('pt-BR')}</td>
@@ -202,10 +203,10 @@ window.onload = async () => {
       }
 
       if (document.documentElement.classList.contains('is-mobile')) {
-        const labels = stats.resumoMensal?.map(item => `${meses[(item.mes_referencia||1)-1]}/${item.ano_referencia}`) || [];
-        const emitidas = stats.resumoMensal?.map(item => item.emitidas || 0) || [];
-        const pagas = stats.resumoMensal?.map(item => item.pagas || 0) || [];
-        const vencidas = stats.resumoMensal?.map(item => item.vencidas || 0) || [];
+        const labels = resumoMensal.map(item => `${meses[(item.mes||1)-1]}/${item.ano}`);
+        const emitidas = resumoMensal.map(item => item.emitidas || 0);
+        const pagas = resumoMensal.map(item => item.pagas || 0);
+        const vencidas = resumoMensal.map(item => item.vencidas || 0);
         const hasData = labels.length > 0 &&
           (emitidas.some(v => v > 0) || pagas.some(v => v > 0) || vencidas.some(v => v > 0));
         const chartCanvas = document.getElementById('resumoMensalChart');
