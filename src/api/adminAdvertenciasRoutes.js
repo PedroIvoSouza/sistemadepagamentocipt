@@ -99,9 +99,20 @@ router.post('/eventos/:id/advertencias', async (req, res) => {
                                   FROM Eventos e JOIN Clientes_Eventos ce ON ce.id = e.id_cliente WHERE e.id = ?`, [id]);
     if (!evento) return res.status(404).json({ error: 'Evento não encontrado.' });
 
-    const clausulasDetalhadas = clausulas
-      .map((n) => ({ numero: String(n), texto: termoClausulas[String(n)] }))
-      .filter((c) => c.texto);
+    const clausulasDetalhadas = (clausulas || [])
+      .map((c) => {
+        if (typeof c === "string" || typeof c === "number") {
+          const num = String(c);
+          return { numero: num, texto: termoClausulas[num] };
+        }
+        if (c && typeof c === "object") {
+          const num = String(c.numero || c.num || c.id || "");
+          const texto = c.texto || termoClausulas[num];
+          return { numero: num, texto };
+        }
+        return null;
+      })
+      .filter((c) => c && c.texto);
     if (!clausulasDetalhadas.length) {
       return res.status(400).json({ error: 'Cláusulas inválidas.' });
     }

@@ -54,7 +54,11 @@
         <div class="card">
           <div class="card-body p-4">
             <form id="advertencia-form">
-              <div class="mb-3">
+    <div class="mb-3">
+      <label for="eventoSelect" class="form-label">Evento</label>
+      <select id="eventoSelect" class="form-select"></select>
+    </div>
+    <div class="mb-3">
                 <label for="dosFatos" class="form-label">DOS FATOS</label>
                 <textarea id="dosFatos" class="form-control" rows="4"></textarea>
               </div>
@@ -83,34 +87,71 @@
       </main>
     </div>
   </div>
-
   <script src="/js/admin-sidebar.js"></script>
+  <script src="/js/admin-guard.js"></script>
+  <script src="/js/termo-clausulas.js"></script>
   <script>
-    const container = document.getElementById('clausulasSelect');
-    container.innerHTML = '<option>Carregando...</option>';
+    const clausulas = window.TERMO_CLAUSULAS;
+    const clausulasSelect = document.getElementById("clausulasSelect");
+    Object.entries(clausulas).forEach(([num,texto]) => {
+      const option = document.createElement("option");
+      option.value = num;
+      option.textContent = `Cláusula ${num} – ${texto}`;
+      clausulasSelect.appendChild(option);
+    });
+    new Choices(clausulasSelect, { removeItemButton: true, searchEnabled: true, shouldSort: false });
 
-    fetch('/api/admin/advertencias/clausulas')
+    const eventoSelect = document.getElementById("eventoSelect");
+    eventoSelect.innerHTML = '<option value="">Carregando...</option>';
+    fetch("/api/admin/eventos?limit=1000")
       .then(r => r.json())
       .then(data => {
-        container.innerHTML = '';
-        Object.entries(data).forEach(([num, texto]) => {
-          const option = document.createElement('option');
-          option.value = num;
-          option.textContent = `Cláusula ${num} – ${texto}`;
-          container.appendChild(option);
+        eventoSelect.innerHTML = '';
+        (data.eventos || data || []).forEach(ev => {
+          const option = document.createElement("option");
+          option.value = ev.id;
+          option.textContent = ev.nome_evento;
+          eventoSelect.appendChild(option);
         });
-        new Choices(container, { removeItemButton: true, searchEnabled: true, shouldSort: false });
+        new Choices(eventoSelect, { searchEnabled: true, shouldSort: false });
       })
       .catch(err => {
         console.error(err);
-        container.textContent = 'Não foi possível carregar as cláusulas.';
+        eventoSelect.innerHTML = '<option value="">Não foi possível carregar eventos</option>';
       });
 
-    document.getElementById('advertencia-form').addEventListener('submit', function(e){
+    document.getElementById("advertencia-form").addEventListener("submit", async function(e){
       e.preventDefault();
-      const selecionadas = Array.from(document.getElementById('clausulasSelect').selectedOptions).map(o => o.value);
-      console.log('Cláusulas selecionadas:', selecionadas);
-      alert('Advertência montada com sucesso.');
+      const eventoId = eventoSelect.value;
+      const fatos = document.getElementById("dosFatos").value.trim();
+      const valorMulta = parseFloat(document.getElementById("valorMulta").value) || 0;
+      const dataInaptidao = document.getElementById("dataInaptidao").value;
+      const diasRecurso = parseInt(document.getElementById("diasRecurso").value, 10) || 0;
+      const clausulasSelecionadas = Array.from(clausulasSelect.selectedOptions).map(o => ({ numero: o.value, texto: clausulas[o.value] }));
+      const prazoRecurso = diasRecurso ? new Date(Date.now() + diasRecurso*86400000).toISOString().slice(0,10) : null;
+      const payload = {
+        fatos,
+        clausulas: clausulasSelecionadas,
+        multa: valorMulta,
+        gera_multa: valorMulta > 0,
+        inapto: !!dataInaptidao,
+        inapto_ate: dataInaptidao || null,
+        prazo_recurso: prazoRecurso
+      };
+      try {
+        const resp = await fetch(`/api/admin/eventos/${eventoId}/advertencias`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        if (!resp.ok) throw new Error("Erro ao criar advertência");
+        const result = await resp.json();
+        alert("Advertência gerada com sucesso!");
+        console.log("Advertência criada:", result);
+      } catch(err) {
+        console.error(err);
+        alert("Não foi possível gerar a advertência.");
+      }
     });
   </script>
 </body>
