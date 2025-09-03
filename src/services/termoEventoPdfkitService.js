@@ -46,6 +46,63 @@ function toLocalDateFromISO(isoLike) {
   const d = new Date(s);
   return Number.isNaN(d.getTime()) ? null : d;
 }
+// Trata datas como locais, ignorando timezone/hora:
+//
+// Aceita:
+//  - 'YYYY-MM-DD'
+//  - 'YYYY-MM-DDTHH:mm[:ss][.SSS][Z]' (pega só a parte da data)
+//  - 'YYYY-MM-DD HH:mm:ss'
+//  - Date object
+function parseLocalDateFlexible(v) {
+  if (!v) return null;
+  if (v instanceof Date && !Number.isNaN(v.getTime())) {
+    // Normaliza para Y-M-D local
+    return new Date(v.getFullYear(), v.getMonth(), v.getDate());
+  }
+  const s = String(v).trim();
+  if (!s) return null;
+
+  // Extrai os 10 primeiros caracteres se forem YYYY-MM-DD
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) {
+    const y = Number(m[1]), mo = Number(m[2]), d = Number(m[3]);
+    if (y && mo && d) return new Date(y, mo - 1, d); // LOCAL!
+  }
+
+  // dd/mm/aaaa (se por acaso vier assim)
+  const br = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (br) {
+    const d = Number(br[1]), mo = Number(br[2]), y = Number(br[3]);
+    if (y && mo && d) return new Date(y, mo - 1, d);
+  }
+
+  return null; // não force Date(s) para evitar UTC shift
+}
+
+const fmtDataExtenso = (val) => {
+  const d = parseLocalDateFlexible(val);
+  if (!d) return '';
+  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
+};
+
+// YYYY-MM-DD local para nomes de arquivo etc.
+function isoLocalFrom(val) {
+  const d = parseLocalDateFlexible(val);
+  if (!d) return '';
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+// Hoje (local) como YYYY-MM-DD (sem UTC)
+function isoLocalToday() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
 const fmtDataExtenso = (iso) => {
   if (!iso) return '';
   const d = new Date(iso);
@@ -358,7 +415,6 @@ const saldoISO = parcelas.length > 1
   ? parcelas[parcelas.length - 1].data_vencimento
   : parcelas[0]?.data_vencimento || null;
 
-
   // 3) Placeholders/env
   const orgUF  = process.env.ORG_UF || 'ESTADO DE ALAGOAS';
   const orgSec = process.env.ORG_SECRETARIA || 'SECRETARIA DA CIÊNCIA, TECNOLOGIA E INOVAÇÃO';
@@ -384,20 +440,20 @@ const saldoISO = parcelas.length > 1
     }
   } catch { /* noop */ }
   
-  // Preferência pela "data real" do evento, se existir na tabela Eventos:
+  // Preferência por "data real" explícita do evento (ajuste os nomes conforme seu schema)
   const dataRealEventoISO =
     ev.data_real_evento || ev.data_realizacao || ev.data_evento || ev.data_unica || null;
   
-  const realizacaoExt = fmtDataExtenso(dataRealEventoISO)
-    || (datasArr.length ? fmtDataExtenso(datasArr[0]) : '-'); // fallback
+  const realizacaoExt =
+    fmtDataExtenso(dataRealEventoISO) ||
+    (datasArr.length ? fmtDataExtenso(datasArr[0]) : '-') ;
   
-  // Montagem/Desmontagem: se tiver colunas específicas, usa; senão 1º/último da lista
-  const dataMontagemISO = ev.data_montagem || datasArr[0] || null;
+  const dataMontagemISO = ev.data_montagem || (datasArr.length ? datasArr[0] : null);
   const dataDesmontagemISO = ev.data_desmontagem || (datasArr.length ? datasArr[datasArr.length - 1] : null);
   
-  // Período ainda pode ser útil em textos (Cláusula 1), sem afetar a tabela:
   const periodoEvento = mkPeriodo(datasArr) || datasArr.map(fmtDataExtenso).join(', ');
   const dataEventoExt = periodoEvento || '-';
+
 
   const cidadeUfDefault = process.env.CIDADE_UF || 'Maceió/AL';
   const fundoNome = process.env.FUNDO_NOME || 'FUNDECTES';
@@ -411,9 +467,9 @@ const saldoISO = parcelas.length > 1
   
   // Usa a data REAL do evento para o nome do arquivo; se não tiver, cai no 1º dia do array; por fim, hoje.
   const dataParaArquivoStr =
-    isoForFilename(dataRealEventoISO) ||
-    (datasArr.length ? isoForFilename(datasArr[0]) : '') ||
-    isoForFilename(new Date().toISOString().slice(0, 10)) || 's-d';
+    isoLocalFrom(dataRealEventoISO) ||
+    (datasArr.length ? isoLocalFrom(datasArr[0]) : '') ||
+    isoLocalToday() || 's-d';
   
   const fileName = sanitizeForFilename(
     `TermoPermissao_${String(ev.numero_termo || 's-n').replace(/[\/\\]/g, '-')}_${(ev.nome_razao_social || 'Cliente')}_${dataParaArquivoStr}.pdf`
@@ -508,7 +564,7 @@ const saldoISO = parcelas.length > 1
   // CLÁUSULA 3 – Pagamento
   tituloClausula(doc, 'Cláusula Terceira – Do Pagamento');
   paragrafo(doc,
-    `3.1 - O(A) PERMISSIONÁRIO(A) pagará pela utilização do espaço o valor total de ${fmtMoeda(ev.valor_final || 0)}, através de Documento de Arrecadação – DAR, efetuado em favor da conta do Fundo Estadual de Desenvolvimento Científico, Tecnológico e de Educação Superior (${fundoNome}), devendo ser pago o valor de 50% até ${fmtDataExtenso(sinalISO)} e o restante até ${fmtDataExtenso(saldoISO)}.`
+  `3.1 - O(A) PERMISSIONÁRIO(A) pagará pela utilização do espaço o valor total de ${fmtMoeda(ev.valor_final || 0)}, através de Documento de Arrecadação – DAR, efetuado em favor da conta do Fundo Estadual de Desenvolvimento Científico, Tecnológico e de Educação Superior (${fundoNome}), devendo ser pago o valor de 50% até ${fmtDataExtenso(sinalISO)} e o restante até ${fmtDataExtenso(saldoISO)}.`
   );
   paragrafo(doc, '3.1.1. Fica incluso ao valor estabelecido no item anterior o pagamento relativo somente ao consumo de água, esgoto e energia elétrica.');
   paragrafo(doc, '3.1.2. Após o pagamento a data estará reservada, de modo que não haverá devolução de qualquer valor pago em caso de desistência.');
@@ -584,7 +640,7 @@ const saldoISO = parcelas.length > 1
 
   // Fecho + Data/local
   paragrafo(doc, 'Para firmeza e validade do que foi pactuado, lavra-se o presente instrumento em 3 (três) vias de igual teor e forma, para que surtam um só efeito, as quais, depois de lidas, são assinadas pelos representantes das partes, PERMITENTE e PERMISSIONÁRIO(A) e pelas testemunhas abaixo.');
-  paragrafo(doc, `${cidadeUfDefault}, ${fmtDataExtenso(new Date().toISOString())}.`);
+  paragrafo(doc, `${cidadeUfDefault}, ${fmtDataExtenso(isoLocalToday())}.`);
 
   // Assinaturas (mantém o bloco junto)
   assinaturasKeepTogether(doc);
