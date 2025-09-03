@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Remarcações de Eventos - CIPT</title>
+
+  <link rel="icon" type="image/png" href="/images/logo-cipt.png">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/app-shell.css">
+  <link rel="stylesheet" href="/css/mobile-tweaks.css">
+
+  <style>
+    :root {
+      --cor-primaria: #0056a0;
+      --cor-sidebar: #004480;
+      --raio-borda: 0.5rem;
+    }
+    body { font-family: 'Montserrat', sans-serif; background-color: #f4f7f6; }
+    .wrapper { display: flex; width: 100%; min-height: 100vh; }
+    .sidebar { width: 260px; background-color: var(--cor-sidebar); color: rgba(255, 255, 255, 0.8); display: flex; flex-direction: column; }
+    .sidebar-header { padding: 1.5rem; text-align: center; background-color: rgba(0,0,0,0.1); }
+    .sidebar-header img { max-width: 180px; height: auto; }
+    .sidebar-nav { padding: 1rem 0; flex-grow: 1; }
+    .sidebar-nav .nav-link { color: rgba(255, 255, 255, 0.8); padding: 0.8rem 1.5rem; display: flex; align-items: center; font-weight: 500; text-decoration: none; }
+    .sidebar-nav .nav-link .bi { margin-right: 1rem; font-size: 1.2rem; }
+    .sidebar-nav .nav-link:hover { color: #ffffff; background-color: rgba(255,255,255,0.05); }
+    .sidebar-nav .nav-link.active { color: white; background-color: var(--cor-primaria); }
+    .sidebar-footer { padding: 1.5rem; text-align: center; border-top: 1px solid rgba(255,255,255,0.1); }
+    .sidebar-footer img { max-height: 100px; width: auto; }
+    .main-content { flex-grow: 1; display: flex; flex-direction: column; }
+    .topbar { background-color: #ffffff; padding: 1rem 2rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); display: flex; justify-content: flex-end; align-items: center; }
+    .content { padding: 2rem; }
+    .card { border: none; border-radius: var(--raio-borda); box-shadow: 0 2px 5px rgba(0,0,0,0.05); margin-bottom: 2rem; }
+    .table-light th, #remarcacoes-table-body td { padding: 0.75rem 0.5rem; vertical-align: middle; font-size: 0.9rem; }
+    #remarcacoes-table-body .btn-group { flex-wrap: nowrap; justify-content: center; }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <a href="/admin/dashboard.html"><img src="/images/painel-gestao.png" alt="Painel de Gestão"></a>
+      </div>
+      <ul class="nav flex-column sidebar-nav">
+        <li class="nav-item"><a class="nav-link" href="/admin/dashboard.html"><i class="bi bi-grid-1x2-fill"></i>Dashboard</a></li>
+        <li class="nav-item"><a class="nav-link" href="/admin/permissionarios.html"><i class="bi bi-people-fill"></i>Permissionários</a></li>
+        <li class="nav-item"><a class="nav-link" href="/admin/dars.html"><i class="bi bi-file-earmark-text-fill"></i>DARs</a></li>
+        <li class="nav-item menu-dropdown">
+          <a class="nav-link" href="#"><i class="bi bi-calendar-event-fill"></i>Eventos</a>
+          <ul class="submenu" style="list-style: none; padding-left: 20px; display: none;">
+            <li><a class="nav-link" href="/admin/eventos-clientes.html">Clientes de Eventos</a></li>
+            <li><a class="nav-link" href="/admin/eventos-dars.html">DARs de Eventos</a></li>
+            <li><a class="nav-link" href="/admin/eventos-remarcacoes.html">Remarcações de Eventos</a></li>
+          </ul>
+        </li>
+        <li class="nav-item"><a class="nav-link" href="/admin/relatorios.html"><i class="bi bi-file-earmark-bar-graph"></i>Relatórios</a></li>
+        <li class="nav-item">
+          <a class="nav-link" href="/admin/salas.html">
+            <i class="bi bi-calendar-event"></i>Salas de reunião
+          </a>
+        </li>
+        <li class="nav-item"><a class="nav-link" href="/admin/admin-management.html"><i class="bi bi-person-badge-fill"></i>Administradores</a></li>
+        <li class="nav-item"><a id="logoutButton" class="nav-link" href="#" style="color: #ffc107;"><i class="bi bi-box-arrow-right"></i>Sair</a></li>
+      </ul>
+      <div class="sidebar-footer"><img src="/images/logo-secti-vertical.png" alt="Logo SECTI"></div>
+    </aside>
+
+    <div class="main-content">
+      <header class="topbar">
+        <div id="userInfo" class="text-end">
+          <strong id="adminName">Carregando...</strong>
+        </div>
+      </header>
+      <main class="content">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+          <h1 class="h2">Remarcações de Eventos</h1>
+        </div>
+        <div class="card">
+          <div class="card-body p-4">
+            <h5 class="card-title">Solicitações de Remarcação</h5><hr>
+            <div class="table-responsive">
+              <table class="table table-hover align-middle">
+                <thead class="table-light">
+                  <tr>
+                    <th>ID</th>
+                    <th>Evento</th>
+                    <th>Cliente</th>
+                    <th>Data Original</th>
+                    <th>Data Solicitada</th>
+                    <th class="text-center">Ações</th>
+                  </tr>
+                </thead>
+                <tbody id="remarcacoes-table-body" class="table-group-divider"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script src="/js/admin-sidebar.js"></script>
+  <script src="/js/admin-guard.js"></script>
+  <script defer src="/js/mobile-adapter.js"></script>
+  <script defer src="/js/ui-kit.js"></script>
+  <script defer src="/js/mobile-tweaks.js"></script>
+
+  <script>
+  window.onload = () => {
+    const token = localStorage.getItem('adminToken') || localStorage.getItem('token') || '';
+    const AUTH_HEADERS = { Authorization: `Bearer ${token}` };
+
+    const remarcacoesTableBody = document.getElementById('remarcacoes-table-body');
+
+    const formatDateBR = iso => {
+      if (!iso) return '';
+      const d = new Date(iso);
+      if (isNaN(d)) return '';
+      return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+    };
+
+    const parseFirstDate = val => {
+      if (!val) return null;
+      const arr = Array.isArray(val) ? val : String(val).split(',');
+      const first = arr[0];
+      return first ? new Date(first.trim()) : null;
+    };
+
+    const evIdOf = ev => ev?.id || ev?.evento_id || ev?.id_evento || ev?.eventoId;
+
+    async function fetchRemarcacoes(){
+      try {
+        const r = await fetch('/api/admin/eventos?remarcacao_solicitada=1', { headers: AUTH_HEADERS });
+        if (!r.ok) throw new Error('Falha ao buscar remarcações');
+        const data = await r.json();
+        renderRemarcacoes(data.eventos || data);
+      } catch (e) {
+        remarcacoesTableBody.innerHTML = `<tr><td colspan="6" class="text-center text-danger">${e.message}</td></tr>`;
+      }
+    }
+
+    function renderRemarcacoes(eventos){
+      if (!Array.isArray(eventos) || eventos.length === 0){
+        remarcacoesTableBody.innerHTML = '<tr><td colspan="6" class="text-center">Nenhuma solicitação.</td></tr>';
+        return;
+      }
+      remarcacoesTableBody.innerHTML = eventos.map(ev => {
+        const id = evIdOf(ev);
+        const original = formatDateBR(parseFirstDate(ev.datas_evento_original));
+        const solicitada = formatDateBR(parseFirstDate(ev.datas_evento));
+        return `
+          <tr>
+            <td>${id}</td>
+            <td class="text-capitalize">${ev.nome_evento || ''}</td>
+            <td class="text-capitalize">${ev.nome_cliente || ''}</td>
+            <td>${original}</td>
+            <td>${solicitada}</td>
+            <td class="text-center">
+              <div class="btn-group">
+                <button class="btn btn-sm btn-success btn-aprovar-rem" data-id="${id}">Aprovar</button>
+                <button class="btn btn-sm btn-outline-danger btn-rejeitar-rem" data-id="${id}">Rejeitar</button>
+                <button class="btn btn-sm btn-primary btn-remarcar-direto" data-id="${id}">Remarcar diretamente</button>
+              </div>
+            </td>
+          </tr>`;
+      }).join('');
+    }
+
+    async function carregarRemarcacoes(){ return fetchRemarcacoes(); }
+
+    remarcacoesTableBody.addEventListener('click', async (e)=>{
+      const btnAprovar = e.target.closest('.btn-aprovar-rem');
+      const btnRejeitar = e.target.closest('.btn-rejeitar-rem');
+      const btnDireto = e.target.closest('.btn-remarcar-direto');
+      const id = btnAprovar?.dataset.id || btnRejeitar?.dataset.id || btnDireto?.dataset.id;
+      if (!id) return;
+
+      if (btnAprovar){
+        try{
+          await fetch(`/api/admin/eventos/${id}/remarcar`, {
+            method:'PUT',
+            headers:{'Content-Type':'application/json', ...AUTH_HEADERS},
+            body: JSON.stringify({ mode:'aprovar' })
+          });
+          carregarRemarcacoes();
+        }catch{
+          alert('Falha ao aprovar remarcação.');
+        }
+        return;
+      }
+
+      if (btnRejeitar){
+        try{
+          await fetch(`/api/admin/eventos/${id}/remarcar`, {
+            method:'PUT',
+            headers:{'Content-Type':'application/json', ...AUTH_HEADERS},
+            body: JSON.stringify({ mode:'rejeitar' })
+          });
+          carregarRemarcacoes();
+        }catch{
+          alert('Falha ao rejeitar remarcação.');
+        }
+        return;
+      }
+
+      if (btnDireto){
+        const nova = prompt('Nova data (AAAA-MM-DD)');
+        if (!nova) return;
+        try{
+          await fetch(`/api/admin/eventos/${id}/remarcar`, {
+            method:'PUT',
+            headers:{'Content-Type':'application/json', ...AUTH_HEADERS},
+            body: JSON.stringify({ mode:'unilateral', nova_data: nova })
+          });
+          carregarRemarcacoes();
+        }catch{
+          alert('Falha ao remarcar.');
+        }
+      }
+    });
+
+    carregarRemarcacoes();
+  };
+  </script>
+</body>
+</html>
