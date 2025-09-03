@@ -91,6 +91,22 @@
   <script src="/js/admin-guard.js"></script>
   <script src="/js/termo-clausulas.js"></script>
   <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const token = localStorage.getItem('adminAuthToken');
+      if (!token) {
+        window.location.href = '/admin/login.html';
+        return;
+      }
+
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        document.getElementById('adminName').textContent = payload?.nome || 'Admin';
+      } catch (e) {
+        document.getElementById('adminName').textContent = 'Admin';
+      }
+    });
+  </script>
+  <script>
     const clausulas = window.TERMO_CLAUSULAS;
     const clausulasSelect = document.getElementById("clausulasSelect");
     Object.entries(clausulas).forEach(([num,texto]) => {
