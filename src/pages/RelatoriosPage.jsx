@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import DateRangeModal from '../components/DateRangeModal.jsx';
 
 /**
  * RelatoriosPage component - renders a button that triggers a long running
@@ -7,6 +8,8 @@ import React, { useState } from 'react';
  */
 export default function RelatoriosPage() {
   const [loading, setLoading] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [period, setPeriod] = useState(null);
 
   const handleClick = async () => {
     // Avoid multiple simultaneous clicks
@@ -22,9 +25,29 @@ export default function RelatoriosPage() {
     }
   };
 
+  const handleSelectPeriod = range => {
+    setPeriod(range);
+  };
+
   return (
-    <button onClick={handleClick} disabled={loading}>
-      {loading ? 'Gerando...' : 'Gerar Relatório'}
-    </button>
+    <>
+      <button onClick={() => setShowModal(true)}>Selecionar período</button>
+      {period && (
+        <div>
+          {period.start} - {period.end}
+        </div>
+      )}
+
+      {showModal && (
+        <DateRangeModal
+          onClose={() => setShowModal(false)}
+          onSelect={handleSelectPeriod}
+        />
+      )}
+
+      <button onClick={handleClick} disabled={loading}>
+        {loading ? 'Gerando...' : 'Gerar Relatório'}
+      </button>
+    </>
   );
 }
