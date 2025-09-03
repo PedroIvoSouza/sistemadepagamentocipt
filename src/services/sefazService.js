@@ -3,10 +3,18 @@ require('dotenv').config({ path: require('path').resolve(__dirname, '../../.env'
 const axios = require('axios');
 const https = require('https');
 
+const fs = require('fs');
 const tlsInsecure = String(process.env.SEFAZ_TLS_INSECURE || '').toLowerCase() === 'true';
 
+let extraCa;
+try {
+  if (!tlsInsecure && process.env.NODE_EXTRA_CA_CERTS && fs.existsSync(process.env.NODE_EXTRA_CA_CERTS)) {
+    extraCa = fs.readFileSync(process.env.NODE_EXTRA_CA_CERTS);
+  }
+} catch { /* noop */ }
+
 const httpsAgent = new https.Agent({
-  rejectUnauthorized: !tlsInsecure,   // << chave para "pular" o certificado
+  rejectUnauthorized: !tlsInsecure,   // pular verificação quando true
   ca: tlsInsecure ? undefined : extraCa,
 });
 
@@ -489,6 +497,7 @@ function fromContribGuia(contrib, guiaLike) {
 }
 
 async function emitirComPayload(payload) {
+  return _postEmitir(payload); 
   // Se houver algum executor interno legado, use-o aqui:
   if (typeof emitirGuiaSefazComPayload === 'function') {
     return await emitirGuiaSefazComPayload(payload);
@@ -511,13 +520,6 @@ async function emitirComPayload(payload) {
   // Ex.: POST {baseURL}/guias/emitir  (AJUSTE A ROTA CONFORME O SEU BACKEND/PROXY)
   const url = `${baseURL.replace(/\/+$/, '')}/guias/emitir`;
 
-  const { data } = await axios.post(url, payload, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    timeout: 30000,
-  });
 
   // Normaliza campos de retorno
   return {
