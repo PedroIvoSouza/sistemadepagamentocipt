@@ -662,13 +662,13 @@ router.get(
 
       const dars = await dbAll(
         `SELECT e.nome_evento, c.nome_razao_social AS cliente, d.numero_documento,
-                d.data_emissao, d.valor
+                d.data_vencimento, d.valor
            FROM DARs_Eventos de
            JOIN dars d ON d.id = de.id_dar
            JOIN Eventos e ON e.id = de.id_evento
            JOIN Clientes_Eventos c ON c.id = e.id_cliente
-          WHERE d.status = 'Emitido' AND DATE(d.data_emissao) BETWEEN ? AND ?
-          ORDER BY d.data_emissao DESC`,
+          WHERE d.status = 'Emitido' AND DATE(d.data_vencimento) BETWEEN ? AND ?
+          ORDER BY d.data_vencimento`,
         [dataInicio, dataFim]
       );
 
@@ -835,11 +835,11 @@ function generateEventoDarsTable(doc, dados) {
   const colWidths = {
     evento: availableWidth * 0.30,
     cliente: availableWidth * 0.30,
-    emissao: availableWidth * 0.15,
+    vencimento: availableWidth * 0.15,
     dar: availableWidth * 0.15,
     valor: availableWidth * 0.10,
   };
-  const headers = ['Evento', 'Cliente', 'Emissão', 'DAR', 'Valor (R$)'];
+  const headers = ['Evento', 'Cliente', 'Vencimento', 'DAR', 'Valor (R$)'];
 
   const drawRow = (row, currentY, isHeader = false) => {
     let x = doc.page.margins.left;
@@ -869,7 +869,9 @@ function generateEventoDarsTable(doc, dados) {
     const row = [
       item.nome_evento,
       item.cliente,
-      item.data_emissao ? new Date(item.data_emissao).toLocaleDateString('pt-BR') : '',
+      item.data_vencimento
+        ? new Date(item.data_vencimento).toLocaleDateString('pt-BR')
+        : '',
       item.numero_documento,
       Number(item.valor).toFixed(2),
     ];
