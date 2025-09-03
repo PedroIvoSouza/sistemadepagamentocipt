@@ -565,28 +565,26 @@ router.get(
     try {
       const cols = await dbAll(`PRAGMA table_info(dars)`);
       const hasDataEmissao = cols.some(c => c.name === 'data_emissao');
-      const hasEmitidoPorId = cols.some(c => c.name === 'emitido_por_id');
       const emissaoSelect = hasDataEmissao ? 'd.data_emissao' : 'NULL';
       const orderBy = hasDataEmissao ? 'd.data_emissao' : 'd.id';
-      const whereEmitido = hasEmitidoPorId ? 'WHERE d.emitido_por_id IS NOT NULL' : '';
 
       const dars = await dbAll(
         `SELECT
-            p.nome_empresa,
-            p.cnpj,
+            COALESCE(p.nome_empresa, '') AS nome_empresa,
+            COALESCE(p.cnpj, '') AS cnpj,
             d.numero_documento,
             d.valor,
             ${emissaoSelect} AS data_emissao,
             d.mes_referencia,
             d.ano_referencia
          FROM dars d
-         JOIN permissionarios p ON p.id = d.permissionario_id
-         ${whereEmitido}
+         LEFT JOIN permissionarios p ON p.id = d.permissionario_id
+         WHERE d.status = 'Emitido'
          ORDER BY ${orderBy} DESC`
       );
 
       if (!dars.length) {
-        return res.status(404).json({ error: 'Nenhuma DAR encontrada.' });
+        return res.status(204).send();
       }
 
       const doc = new PDFDocument({ size: 'A4', margins: abntMargins(0.5, 0.5) });
