@@ -4,12 +4,9 @@ const nodemailer = require('nodemailer');
 const authMiddleware = require('../middleware/authMiddleware');
 const authorizeRole = require('../middleware/roleMiddleware');
 const db = require('../database/db');
-const termoClausulas = require('../constants/termoClausulas');
 
 const router = express.Router();
 router.use(authMiddleware, authorizeRole(['CLIENTE_EVENTO']));
-
-router.get('/clausulas', (_req, res) => res.json(termoClausulas));
 
 // DB helpers
 const dbGet = (sql, params = []) => new Promise((resolve, reject) => {
