@@ -15,7 +15,7 @@ function prepDb(dbPath) {
   return { db, run, get };
 }
 
-test('POST cria advertencia, gera DAR e envia email', async () => {
+test('POST cria advertencia mapeia clausulas e envia email', async () => {
   const dbPath = path.resolve(__dirname, 'test-advertencia-post.db');
   const { run, get } = prepDb(dbPath);
 
@@ -33,8 +33,16 @@ test('POST cria advertencia, gera DAR e envia email', async () => {
   process.env.SMTP_USER = 'u';
   process.env.SMTP_PASS = 'p';
 
+  const termoClausulas = require('../src/constants/termoClausulas');
   const pdfSvcPath = path.resolve(__dirname, '../src/services/advertenciaPdfService.js');
-  require.cache[pdfSvcPath] = { exports: { gerarAdvertenciaPdfEIndexar: async () => ({ filePath: '/tmp/adv.pdf', token: 'TOK1' }) } };
+  let pdfArgs;
+  const fakePath = path.resolve(__dirname, 'adv.pdf');
+  try { fs.unlinkSync(fakePath); } catch {}
+  require.cache[pdfSvcPath] = { exports: { gerarAdvertenciaPdfEIndexar: async (args) => {
+    pdfArgs = args;
+    fs.writeFileSync(fakePath, args.clausulas.map(c => `${c.numero}: ${c.texto}`).join('\n'));
+    return { filePath: fakePath, token: 'TOK1' };
+  } } };
 
   const authPath = path.resolve(__dirname, '../src/middleware/adminAuthMiddleware.js');
   require.cache[authPath] = { exports: (_req,_res,next)=>next() };
@@ -51,7 +59,7 @@ test('POST cria advertencia, gera DAR e envia email', async () => {
 
   const payload = {
     fatos: 'F',
-    clausulas: ['1'],
+    clausulas: ['5.1','6.1'],
     multa: 50,
     gera_multa: true,
     inapto: false,
@@ -61,10 +69,16 @@ test('POST cria advertencia, gera DAR e envia email', async () => {
   assert.ok(res.body.id);
   assert.equal(res.body.token, 'TOK1');
 
-  const row = await get('SELECT multa, gera_multa, inapto FROM advertencias WHERE id=?', [res.body.id]);
+  const row = await get('SELECT multa, gera_multa, inapto, clausulas FROM advertencias WHERE id=?', [res.body.id]);
   assert.equal(row.multa, 50);
   assert.equal(row.gera_multa, 1);
   assert.equal(row.inapto, 0);
+  const saved = JSON.parse(row.clausulas);
+  assert.equal(saved[0].texto, termoClausulas['5.1']);
+
+  assert.ok(pdfArgs.clausulas.some(c => c.texto === termoClausulas['6.1']));
+  const pdfContent = fs.readFileSync(fakePath, 'utf8');
+  assert.ok(pdfContent.includes(termoClausulas['5.1']));
 
   assert.ok(logs.some(l => l.includes('gerar DAR')));
   assert.equal(mailSent, true);
