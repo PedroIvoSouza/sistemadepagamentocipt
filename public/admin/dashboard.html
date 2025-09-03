@@ -92,7 +92,15 @@
                     <div class="col-lg-7">
                         <div class="card">
                             <div class="card-body p-4">
-                                <h5 class="card-title">Resumo Mensal de DARs</h5><hr>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <h5 class="card-title mb-0">Resumo Mensal de DARs</h5>
+                                    <select id="dars-filter" class="form-select form-select-sm" style="width:auto;">
+                                        <option value="">Todas as DARs</option>
+                                        <option value="permissionarios">Permissionários</option>
+                                        <option value="eventos">Eventos</option>
+                                    </select>
+                                </div>
+                                <hr>
                                 <div class="d-none d-md-block">
                                     <div class="table-responsive">
                                         <table class="table table-sm">
@@ -146,86 +154,84 @@ window.onload = async () => {
     console.error("Erro ao decodificar token:", e);
   }
 
-  // 3) Buscar estatísticas
-  try {
-    console.log("Iniciando busca de dados do dashboard com o token:", token);
-    const url = `/api/admin/dashboard-stats?t=${Date.now()}`;
-    const response = await fetch(url, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-
-    if (response.status === 401 || response.status === 403) {
-      // token inválido/expirado → limpa e volta ao login
-      localStorage.removeItem('adminToken');
-      return window.location.replace('/admin/login.html');
-    }
-
-    if (!response.ok) {
-      console.error("A resposta da API para /dashboard-stats não foi OK.", response.status, response.statusText);
-      const errorText = await response.text();
-      console.error("Corpo da Resposta de Erro:", errorText);
-      throw new Error(`Falha ao buscar estatísticas (Status: ${response.status})`);
-    }
-    
-    const stats = await response.json();
-
-    document.getElementById('stat-permissionarios').innerText = Number(stats.totalPermissionarios || 0).toLocaleString('pt-BR');
-    document.getElementById('stat-pendentes').innerText      = Number(stats.darsPendentes || 0).toLocaleString('pt-BR');
-    document.getElementById('stat-vencidos').innerText       = Number(stats.darsVencidos || 0).toLocaleString('pt-BR');
-    document.getElementById('stat-receita').innerText =
-      (stats.receitaPendente || 0).toLocaleString('pt-BR', {
-        style: 'currency',
-        currency: 'BRL'
+  const fetchStats = async (tipo = '') => {
+    try {
+      console.log("Iniciando busca de dados do dashboard com o token:", token);
+      const url = `/api/admin/dashboard-stats${tipo ? `?tipo=${tipo}` : ''}&t=${Date.now()}`;
+      const response = await fetch(url, {
+        headers: { 'Authorization': `Bearer ${token}` }
       });
 
-    const meses = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
-    const resumoBody = document.getElementById('resumo-mensal-body');
-    
-    if (stats.resumoMensal && stats.resumoMensal.length > 0) {
-      resumoBody.innerHTML = stats.resumoMensal.map(item => `
-        <tr>
-          <td><strong>${meses[(item.mes||1)-1]}/${item.ano}</strong></td>
-          <td>${Number(item.emitidas ?? 0).toLocaleString('pt-BR')}</td>
-          <td>${Number(item.pagas ?? 0).toLocaleString('pt-BR')}</td>
-          <td><span class="text-danger fw-bold">${Number(item.vencidas ?? 0).toLocaleString('pt-BR')}</span></td>
-        </tr>
-      `).join('');
-    } else {
-      resumoBody.innerHTML = '<tr><td colspan="5" class="text-muted text-center">Nenhum dado mensal para exibir.</td></tr>';
-    }
-
-    if (document.documentElement.classList.contains('is-mobile')) {
-      const labels = stats.resumoMensal?.map(item => `${meses[(item.mes_referencia||1)-1]}/${item.ano_referencia}`) || [];
-      const emitidas = stats.resumoMensal?.map(item => item.emitidas || 0) || [];
-      const pagas = stats.resumoMensal?.map(item => item.pagas || 0) || [];
-      const vencidas = stats.resumoMensal?.map(item => item.vencidas || 0) || [];
-    const hasData = labels.length > 0 &&
-      (emitidas.some(v => v > 0) || pagas.some(v => v > 0) || vencidas.some(v => v > 0));
-      const chartCanvas = document.getElementById('resumoMensalChart');
-      if (hasData) {
-        new Chart(chartCanvas, {
-          type: 'bar',
-          data: {
-            labels,
-            datasets: [
-              { label: 'Emitidas', data: emitidas, backgroundColor: '#0d6efd' },
-              { label: 'Pagas', data: pagas, backgroundColor: '#198754' },
-              { label: 'Vencidas', data: vencidas, backgroundColor: '#dc3545' }
-            ]
-          }
-        });
-      } else {
-        chartCanvas.outerHTML = '<p class="text-muted text-center">Sem dados suficientes para exibir.</p>';
+      if (response.status === 401 || response.status === 403) {
+        localStorage.removeItem('adminToken');
+        return window.location.replace('/admin/login.html');
       }
-    }
 
-    const devedoresList = document.getElementById('maiores-devedores-list');
+      if (!response.ok) {
+        console.error("A resposta da API para /dashboard-stats não foi OK.", response.status, response.statusText);
+        const errorText = await response.text();
+        console.error("Corpo da Resposta de Erro:", errorText);
+        throw new Error(`Falha ao buscar estatísticas (Status: ${response.status})`);
+      }
+
+      const stats = await response.json();
+
+      document.getElementById('stat-permissionarios').innerText = Number(stats.totalPermissionarios || 0).toLocaleString('pt-BR');
+      document.getElementById('stat-pendentes').innerText      = Number(stats.darsPendentes || 0).toLocaleString('pt-BR');
+      document.getElementById('stat-vencidos').innerText       = Number(stats.darsVencidos || 0).toLocaleString('pt-BR');
+      document.getElementById('stat-receita').innerText =
+        (stats.receitaPendente || 0).toLocaleString('pt-BR', {
+          style: 'currency',
+          currency: 'BRL'
+        });
+
+      const meses = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+      const resumoBody = document.getElementById('resumo-mensal-body');
+
+      if (stats.resumoMensal && stats.resumoMensal.length > 0) {
+        resumoBody.innerHTML = stats.resumoMensal.map(item => `
+          <tr>
+            <td><strong>${meses[(item.mes||1)-1]}/${item.ano}</strong></td>
+            <td>${Number(item.emitidas ?? 0).toLocaleString('pt-BR')}</td>
+            <td>${Number(item.pagas ?? 0).toLocaleString('pt-BR')}</td>
+            <td><span class="text-danger fw-bold">${Number(item.vencidas ?? 0).toLocaleString('pt-BR')}</span></td>
+          </tr>
+        `).join('');
+      } else {
+        resumoBody.innerHTML = '<tr><td colspan="5" class="text-muted text-center">Nenhum dado mensal para exibir.</td></tr>';
+      }
+
+      if (document.documentElement.classList.contains('is-mobile')) {
+        const labels = stats.resumoMensal?.map(item => `${meses[(item.mes_referencia||1)-1]}/${item.ano_referencia}`) || [];
+        const emitidas = stats.resumoMensal?.map(item => item.emitidas || 0) || [];
+        const pagas = stats.resumoMensal?.map(item => item.pagas || 0) || [];
+        const vencidas = stats.resumoMensal?.map(item => item.vencidas || 0) || [];
+        const hasData = labels.length > 0 &&
+          (emitidas.some(v => v > 0) || pagas.some(v => v > 0) || vencidas.some(v => v > 0));
+        const chartCanvas = document.getElementById('resumoMensalChart');
+        if (hasData) {
+          if (window.resumoChart) window.resumoChart.destroy();
+          window.resumoChart = new Chart(chartCanvas, {
+            type: 'bar',
+            data: {
+              labels,
+              datasets: [
+                { label: 'Emitidas', data: emitidas, backgroundColor: '#0d6efd' },
+                { label: 'Pagas', data: pagas, backgroundColor: '#198754' },
+                { label: 'Vencidas', data: vencidas, backgroundColor: '#dc3545' }
+              ]
+            }
+          });
+        } else {
+          chartCanvas.outerHTML = '<p class="text-muted text-center">Sem dados suficientes para exibir.</p>';
+        }
+      }
+
+      const devedoresList = document.getElementById('maiores-devedores-list');
       if (stats.maioresDevedores && stats.maioresDevedores.length > 0) {
-        // filtra só quem tem vencido > 0 (se quiser listar todos, remova o filter)
         const lista = (stats.maioresDevedores || []).filter(item => Number(item.total_vencido ?? item.total_devido ?? 0) > 0);
 
         devedoresList.innerHTML = (lista.length ? lista : stats.maioresDevedores).map(item => {
-          // usa vencido se disponível; senão, cai para total_devido (compat)
           const vencido = Number(item.total_vencido ?? item.total_devido ?? 0);
           return `
             <li class="list-group-item d-flex justify-content-between align-items-center">
@@ -237,12 +243,16 @@ window.onload = async () => {
       } else {
         devedoresList.innerHTML = '<li class="list-group-item text-muted text-center">Nenhum devedor encontrado.</li>';
       }
+    } catch (error) {
+      console.error('--- ERRO DETALHADO AO CARREGAR DASHBOARD ---');
+      console.error(error);
+      alert('Ocorreu um erro ao carregar os dados do dashboard.');
+    }
+  };
 
-  } catch (error) {
-    console.error('--- ERRO DETALHADO AO CARREGAR DASHBOARD ---');
-    console.error(error);
-    alert('Ocorreu um erro ao carregar os dados do dashboard.');
-  }
+  await fetchStats();
+
+  document.getElementById('dars-filter').addEventListener('change', (e) => fetchStats(e.target.value));
 };
 </script>
 

@@ -28,6 +28,16 @@ As DARs utilizam os seguintes status padronizados:
 
 O valor legado `Vencida` foi unificado para `Vencido` e não deve mais ser utilizado.
 
+## Dashboard Administrativo
+
+Na página `/admin/dashboard.html` há um seletor ao lado do título **Resumo Mensal de DARs** que permite filtrar os dados por:
+
+- Todas as DARs
+- Permissionários
+- Eventos
+
+Ao alterar o filtro, os indicadores, tabela e gráfico são recarregados com as informações correspondentes.
+
 ## Migrações do Banco de Dados
 
 Para configurar um novo ambiente, execute as migrações do Sequelize antes de iniciar o servidor:
