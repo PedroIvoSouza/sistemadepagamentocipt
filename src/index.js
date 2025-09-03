@@ -10,7 +10,6 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const { scheduleConciliacao } = require('../cron/conciliarPagamentosmes');
-const db = require('./database/db');
 
 // ===== Helpers de boot =====
 function assertRouter(name, r) {
@@ -126,70 +125,6 @@ app.use('/admin', (req, res) => {
   res.sendFile(path.join(publicPath, 'admin', 'login.html'));
 });
 
-// ===== Migrações rápidas (garante colunas) =====
-ensureClientesEventosColumns(db);
-ensureEventosColumns(db);
-
-function ensureClientesEventosColumns(db) {
-  db.all(`PRAGMA table_info(Clientes_Eventos)`, [], (err, cols) => {
-    if (err) { console.error('[DB] PRAGMA Clientes_Eventos falhou:', err.message); return; }
-    const names = new Set((cols || []).map(c => c.name.toLowerCase()));
-
-    const adds = [];
-    if (!names.has('cep'))         adds.push(`ALTER TABLE Clientes_Eventos ADD COLUMN cep TEXT`);
-    if (!names.has('logradouro'))  adds.push(`ALTER TABLE Clientes_Eventos ADD COLUMN logradouro TEXT`);
-    if (!names.has('numero'))      adds.push(`ALTER TABLE Clientes_Eventos ADD COLUMN numero TEXT`);
-    if (!names.has('complemento')) adds.push(`ALTER TABLE Clientes_Eventos ADD COLUMN complemento TEXT`);
-    if (!names.has('bairro'))      adds.push(`ALTER TABLE Clientes_Eventos ADD COLUMN bairro TEXT`);
-    if (!names.has('cidade'))      adds.push(`ALTER TABLE Clientes_Eventos ADD COLUMN cidade TEXT`);
-    if (!names.has('uf'))          adds.push(`ALTER TABLE Clientes_Eventos ADD COLUMN uf TEXT`);
-    if (!names.has('endereco'))    adds.push(`ALTER TABLE Clientes_Eventos ADD COLUMN endereco TEXT`);
-
-    (function runNext(i = 0) {
-      if (i >= adds.length) { console.log('[DB] Clientes_Eventos OK.'); return; }
-      db.run(adds[i], [], (e) => {
-        if (e) console.warn('[DB] Migração ignorada/erro:', adds[i], '-', e.message);
-        runNext(i + 1);
-      });
-    })();
-  });
-}
-
-function ensureEventosColumns(db) {
-  db.all(`PRAGMA table_info(Eventos)`, [], (err, cols) => {
-    if (err) { console.error('[DB] PRAGMA Eventos falhou:', err.message); return; }
-    const names = new Set((cols || []).map(c => c.name.toLowerCase()));
-    const adds = [];
-    if (!names.has('data_vigencia_final')) {
-      adds.push(`ALTER TABLE Eventos ADD COLUMN data_vigencia_final TEXT`);
-    }
-    if (!names.has('remarcado')) {
-      adds.push(`ALTER TABLE Eventos ADD COLUMN remarcado INTEGER DEFAULT 0`);
-    }
-    if (!names.has('datas_evento_original')) {
-      adds.push(`ALTER TABLE Eventos ADD COLUMN datas_evento_original TEXT`);
-    }
-    if (!names.has('data_pedido_remarcacao')) {
-      adds.push(`ALTER TABLE Eventos ADD COLUMN data_pedido_remarcacao TEXT`);
-    }
-    if (!names.has('remarcacao_solicitada')) {
-      adds.push(`ALTER TABLE Eventos ADD COLUMN remarcacao_solicitada INTEGER DEFAULT 0`);
-    }
-    if (!names.has('datas_evento_solicitada')) {
-      adds.push(`ALTER TABLE Eventos ADD COLUMN datas_evento_solicitada TEXT`);
-    }
-    if (!names.has('data_aprovacao_remarcacao')) {
-      adds.push(`ALTER TABLE Eventos ADD COLUMN data_aprovacao_remarcacao TEXT`);
-    }
-    (function runNext(i = 0) {
-      if (i >= adds.length) return;
-      db.run(adds[i], [], e => {
-        if (e) console.warn('[DB] Migração ignorada/erro:', e.message);
-        runNext(i + 1);
-      });
-    })();
-  });
-}
 
 // ===== Start =====
 initPromise
