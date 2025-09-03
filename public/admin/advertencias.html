@@ -86,17 +86,24 @@
 
   <script src="/js/admin-sidebar.js"></script>
   <script>
+    const container = document.getElementById('clausulasSelect');
+    container.innerHTML = '<option>Carregando...</option>';
+
     fetch('/api/admin/advertencias/clausulas')
       .then(r => r.json())
       .then(data => {
-        const select = document.getElementById('clausulasSelect');
+        container.innerHTML = '';
         Object.entries(data).forEach(([num, texto]) => {
           const option = document.createElement('option');
           option.value = num;
           option.textContent = `Cláusula ${num} – ${texto}`;
-          select.appendChild(option);
+          container.appendChild(option);
         });
-        new Choices(select, { removeItemButton: true, searchEnabled: true, shouldSort: false });
+        new Choices(container, { removeItemButton: true, searchEnabled: true, shouldSort: false });
+      })
+      .catch(err => {
+        console.error(err);
+        container.textContent = 'Não foi possível carregar as cláusulas.';
       });
 
     document.getElementById('advertencia-form').addEventListener('submit', function(e){
