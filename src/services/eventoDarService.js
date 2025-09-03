@@ -24,6 +24,33 @@ const dbAll = (db, sql, p = []) =>
     });
   });
 
+const feriadosFixos = [
+  '01/01', '21/04', '01/05', '24/06', '07/09',
+  '16/09', '12/10', '02/11', '15/11', '25/12'
+];
+
+function isFeriado(date) {
+  const dia = String(date.getDate()).padStart(2, '0');
+  const mes = String(date.getMonth() + 1).padStart(2, '0');
+  return feriadosFixos.includes(`${dia}/${mes}`);
+}
+
+function isDiaUtil(date) {
+  const dow = date.getDay();
+  if (dow === 0 || dow === 6) return false;
+  return !isFeriado(date);
+}
+
+function addDiasUteis(data, dias) {
+  const d = new Date(data);
+  let added = 0;
+  while (added < dias) {
+    d.setDate(d.getDate() + 1);
+    if (isDiaUtil(d)) added++;
+  }
+  return d;
+}
+
 async function criarEventoComDars(db, data, helpers) {
   const {
     emitirGuiaSefaz,
@@ -399,8 +426,96 @@ async function atualizarEventoComDars(db, id, data, helpers) {
   }
 }
 
+async function emitirDarAdvertencia(evento, valorMulta, { db, helpers = {}, hoje = new Date() } = {}) {
+  const {
+    emitirGuiaSefaz = require('./sefazService').emitirGuiaSefaz,
+    gerarTokenDocumento = require('../utils/token').gerarTokenDocumento,
+    imprimirTokenEmPdf = require('../utils/token').imprimirTokenEmPdf,
+  } = helpers;
+
+  if (!db) throw new Error('Banco de dados não fornecido');
+  if (!evento || !evento.id || !evento.cliente_id) {
+    throw new Error('Advertência inválida.');
+  }
+
+  const cliente = await dbGet(
+    db,
+    `SELECT nome_razao_social, documento, endereco, cep FROM Clientes WHERE id = ?`,
+    [evento.cliente_id]
+  );
+  if (!cliente) throw new Error('Cliente não encontrado.');
+
+  const receitaCod = Number(String(process.env.RECEITA_CODIGO_EVENTO).replace(/\D/g, ''));
+  if (!receitaCod) throw new Error('RECEITA_CODIGO_EVENTO inválido.');
+
+  const vencimento = addDiasUteis(hoje, 5);
+  const vencimentoISO = vencimento.toISOString().slice(0, 10);
+  const [ano, mes] = vencimentoISO.split('-');
+
+  await dbRun(db, 'BEGIN TRANSACTION');
+  try {
+    const darStmt = await dbRun(
+      db,
+      `INSERT INTO dars (valor, data_vencimento, status, mes_referencia, ano_referencia, permissionario_id, tipo_permissionario, data_emissao)
+       VALUES (?, ?, 'Pendente', ?, ?, NULL, 'Advertencia', ?)`,
+      [Number(valorMulta), vencimentoISO, Number(mes), Number(ano), hoje.toISOString()]
+    );
+    const darId = darStmt.lastID;
+
+    const payloadSefaz = {
+      versao: '1.0',
+      contribuinteEmitente: {
+        codigoTipoInscricao: onlyDigits(cliente.documento).length === 11 ? 3 : 4,
+        numeroInscricao: onlyDigits(cliente.documento),
+        nome: cliente.nome_razao_social,
+        codigoIbgeMunicipio: Number(process.env.COD_IBGE_MUNICIPIO),
+        descricaoEndereco: cliente.endereco,
+        numeroCep: onlyDigits(cliente.cep),
+      },
+      receitas: [{
+        codigo: receitaCod,
+        competencia: { mes: Number(mes), ano: Number(ano) },
+        valorPrincipal: Number(valorMulta),
+        valorDesconto: 0,
+        dataVencimento: vencimentoISO,
+      }],
+      dataLimitePagamento: vencimentoISO,
+      observacao: `CIPT Advertência: ${evento.nome_evento || ''}`,
+    };
+
+    const retorno = await emitirGuiaSefaz(payloadSefaz);
+    const tokenDoc = await gerarTokenDocumento('DAR_ADVERTENCIA', null, db);
+    const pdf = await imprimirTokenEmPdf(retorno.pdfBase64, tokenDoc);
+
+    const extraCols = [];
+    const extraVals = [];
+    if (retorno.linhaDigitavel) {
+      extraCols.push('linha_digitavel = ?');
+      extraVals.push(retorno.linhaDigitavel);
+    }
+    if (retorno.codigoBarras) {
+      extraCols.push('codigo_barras = ?');
+      extraVals.push(retorno.codigoBarras);
+    }
+    await dbRun(
+      db,
+      `UPDATE dars SET numero_documento = ?, pdf_url = ?, status = 'Emitido'${extraCols.length ? ', ' + extraCols.join(', ') : ''} WHERE id = ?`,
+      [retorno.numeroGuia, pdf, ...extraVals, darId]
+    );
+
+    await dbRun(db, `UPDATE Advertencias SET dar_id = ?, valor_multa = ? WHERE id = ?`, [darId, Number(valorMulta), evento.id]);
+
+    await dbRun(db, 'COMMIT');
+    return darId;
+  } catch (err) {
+    try { await dbRun(db, 'ROLLBACK'); } catch {}
+    throw err;
+  }
+}
+
 module.exports = {
   criarEventoComDars,
   atualizarEventoComDars,
+  emitirDarAdvertencia,
 };
 
