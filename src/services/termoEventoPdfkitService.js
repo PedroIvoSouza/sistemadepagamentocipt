@@ -99,10 +99,14 @@ function isoLocalToday() {
   return `${y}-${m}-${day}`;
 }
 const fmtDataExtenso = (iso) => {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
+  const d = parseLocalDateFlexible(iso);
+  return d
+    ? d.toLocaleDateString('pt-BR', {
+        day: '2-digit',
+        month: 'long',
+        year: 'numeric',
+      })
+    : '';
 };
 // Data em YYYY-MM-DD para usar no nome do arquivo (sem problema de fuso)
 function isoForFilename(isoLike) {
@@ -449,6 +453,8 @@ const saldoISO = parcelas.length > 1
   const periodoEvento = mkPeriodo(datasArr) || datasArr.map(fmtDataExtenso).join(', ');
   const dataEventoExt = periodoEvento || '-';
 
+  const vigenciaFim = parseLocalDateFlexible(ev.data_vigencia_final);
+
 
   const cidadeUfDefault = process.env.CIDADE_UF || 'Maceió/AL';
   const fundoNome = process.env.FUNDO_NOME || 'FUNDECTES';
@@ -553,7 +559,9 @@ const saldoISO = parcelas.length > 1
   // CLÁUSULA 2 – (texto inteiro em uma única chamada, sem quebras manuais)
   tituloClausula(doc, 'Cláusula Segunda – Da Vigência');
   paragrafo(doc,
-    `2.1 - O prazo de vigência se inicia na data de assinatura do presente termo até ${ev.data_vigencia_final ? new Date(ev.data_vigencia_final).toLocaleDateString('pt-BR') : '-'} às 12h.`
+    `2.1 - O prazo de vigência se inicia na data de assinatura do presente termo até ${
+      vigenciaFim ? vigenciaFim.toLocaleDateString('pt-BR') : '-'
+    } às 12h.`
   );
 
   // CLÁUSULA 3 – Pagamento
