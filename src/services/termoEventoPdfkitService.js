@@ -79,11 +79,6 @@ function parseLocalDateFlexible(v) {
   return null; // não force Date(s) para evitar UTC shift
 }
 
-const fmtDataExtenso = (val) => {
-  const d = parseLocalDateFlexible(val);
-  if (!d) return '';
-  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
-};
 
 // YYYY-MM-DD local para nomes de arquivo etc.
 function isoLocalFrom(val) {
