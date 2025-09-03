@@ -205,21 +205,21 @@
           <div class="row">
             <div class="col-md-6 mb-3">
               <label for="hora-inicio" class="form-label">Hora de Início</label>
-              <input type="time" class="form-control" id="hora-inicio">
+              <input type="text" class="form-control" id="hora-inicio" placeholder="HH:mm">
             </div>
             <div class="col-md-6 mb-3">
               <label for="hora-fim" class="form-label">Hora de Fim</label>
-              <input type="time" class="form-control" id="hora-fim">
+              <input type="text" class="form-control" id="hora-fim" placeholder="HH:mm">
             </div>
           </div>
           <div class="row">
             <div class="col-md-6 mb-3">
               <label for="hora-montagem" class="form-label">Hora de Montagem</label>
-              <input type="time" class="form-control" id="hora-montagem">
+              <input type="text" class="form-control" id="hora-montagem" placeholder="HH:mm">
             </div>
             <div class="col-md-6 mb-3">
               <label for="hora-desmontagem" class="form-label">Hora de Desmontagem</label>
-              <input type="time" class="form-control" id="hora-desmontagem">
+              <input type="text" class="form-control" id="hora-desmontagem" placeholder="HH:mm">
             </div>
           </div>
           <div class="mb-3">
@@ -502,6 +502,18 @@ window.onload = () => {
   const eventoGratuitoInput = document.getElementById('evento-gratuito');
   const justificativaGratuitoTextarea = document.getElementById('justificativa-gratuito');
   const justificativaGratuitoWrapper = document.getElementById('justificativa-gratuito-wrapper');
+
+  const timePickerOptions = {
+    enableTime: true,
+    noCalendar: true,
+    dateFormat: 'H:i',
+    time_24hr: true,
+    locale: 'pt'
+  };
+  const horaInicioPicker = flatpickr(horaInicioInput, timePickerOptions);
+  const horaFimPicker = flatpickr(horaFimInput, timePickerOptions);
+  const horaMontagemPicker = flatpickr(horaMontagemInput, timePickerOptions);
+  const horaDesmontagemPicker = flatpickr(horaDesmontagemInput, timePickerOptions);
 
   const ESPACOS_INFO = {
     'Auditório': { area: 429.68, capacidade: 313 },
@@ -1123,8 +1135,12 @@ function normalizarEvento(payload){
       const ev  = normalizarEvento(raw); // Usa a função que limpa e padroniza os dados
 
       // Limpa o formulário antes de preencher
-      form.reset(); 
-      fp.clear(); 
+      form.reset();
+      fp.clear();
+      horaInicioPicker.clear();
+      horaFimPicker.clear();
+      horaMontagemPicker.clear();
+      horaDesmontagemPicker.clear();
       parcelasContainer.innerHTML='';
       parcelasMasks.forEach(({valorMask,picker})=>{ try{valorMask.destroy()}catch{} try{picker.destroy()}catch{} });
       parcelasMasks = [];
@@ -1156,10 +1172,10 @@ function normalizarEvento(payload){
       });
       atualizarEspacos();
 
-      horaInicioInput.value = ev.hora_inicio || '';
-      horaFimInput.value = ev.hora_fim || '';
-      horaMontagemInput.value = ev.hora_montagem || '';
-      horaDesmontagemInput.value = ev.hora_desmontagem || '';
+      if (ev.hora_inicio) horaInicioPicker.setDate(ev.hora_inicio, true, 'H:i');
+      if (ev.hora_fim) horaFimPicker.setDate(ev.hora_fim, true, 'H:i');
+      if (ev.hora_montagem) horaMontagemPicker.setDate(ev.hora_montagem, true, 'H:i');
+      if (ev.hora_desmontagem) horaDesmontagemPicker.setDate(ev.hora_desmontagem, true, 'H:i');
       
       eventoGratuitoInput.checked = !!ev.evento_gratuito;
       justificativaGratuitoTextarea.value = ev.justificativa_gratuito || '';
@@ -1564,7 +1580,12 @@ function normalizarEvento(payload){
       alert(modoEdicao ? 'Evento atualizado com sucesso!' : 'Evento e DARs criados com sucesso!');
       modal.style.display='none';
       // reset
-      form.reset(); fp.clear(); parcelasContainer.innerHTML='';
+      form.reset(); fp.clear();
+      horaInicioPicker.clear();
+      horaFimPicker.clear();
+      horaMontagemPicker.clear();
+      horaDesmontagemPicker.clear();
+      parcelasContainer.innerHTML='';
       parcelasMasks.forEach(({valorMask,picker})=>{ try{valorMask.destroy()}catch{} try{picker.destroy()}catch{} });
       parcelasMasks=[]; modoEdicao=false; editEventoId=null;
       btn.textContent = 'Salvar Evento e Gerar DARs';
@@ -1584,6 +1605,10 @@ function normalizarEvento(payload){
   addEventoBtn.addEventListener('click', () => {
   form.reset();
   fp.clear();
+  horaInicioPicker.clear();
+  horaFimPicker.clear();
+  horaMontagemPicker.clear();
+  horaDesmontagemPicker.clear();
   capacidadeEspacoDisplay.textContent = '';
   espacosCheckboxes.forEach(cb => cb.checked = false);
   salaReunioesNumerosInput.value = '';
