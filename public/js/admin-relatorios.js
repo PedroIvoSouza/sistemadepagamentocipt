@@ -23,7 +23,6 @@ window.addEventListener('DOMContentLoaded', () => {
       try {
         const resp = await fetch('/api/admin/relatorios/dars');
         if (resp.status === 404 || resp.status === 204) {
-          await resp.json();
           alert('Nenhuma DAR encontrada.');
           return;
         }
