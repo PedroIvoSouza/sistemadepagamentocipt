@@ -49,7 +49,7 @@
     /* --- Estilos para Harmonização da Tabela de Eventos --- */
     
     /* Ajuste geral para todas as células da tabela */
-    .table-light th, #eventos-table-body td, #remarcacoes-table-body td {
+    .table-light th, #eventos-table-body td {
         padding: 0.75rem 0.5rem; /* Espaçamento interno das células */
         vertical-align: middle;
         font-size: 0.9rem; /* Tamanho da fonte */
@@ -68,7 +68,7 @@
     .table-light th:nth-child(10){ width: 6%; }  /* Ações */
 
     /* Garante que os grupos de botões não quebrem a linha e fiquem centralizados */
-    #eventos-table-body .btn-group, #remarcacoes-table-body .btn-group {
+    #eventos-table-body .btn-group {
         flex-wrap: nowrap;
         justify-content: center;
     }
@@ -89,6 +89,7 @@
           <ul class="submenu" style="list-style: none; padding-left: 20px; display: none;">
             <li><a class="nav-link" href="/admin/eventos-clientes.html">Clientes de Eventos</a></li>
             <li><a class="nav-link" href="/admin/eventos-dars.html">DARs de Eventos</a></li>
+            <li><a class="nav-link" href="/admin/eventos-remarcacoes.html">Remarcações de Eventos</a></li>
           </ul>
         </li>
         <li class="nav-item"><a class="nav-link" href="/admin/relatorios.html"><i class="bi bi-file-earmark-bar-graph"></i>Relatórios</a></li>
@@ -113,26 +114,6 @@
         <div class="d-flex justify-content-between align-items-center mb-4">
       <h1 class="h2">DARs de Eventos</h1>
       <button id="add-evento-btn" class="btn btn-primary fw-bold">Novo Evento</button>
-    </div>
-    <div class="card mb-4">
-      <div class="card-body p-4">
-        <h5 class="card-title">Solicitações de Remarcação</h5><hr>
-        <div class="table-responsive">
-          <table class="table table-hover align-middle">
-            <thead class="table-light">
-              <tr>
-                <th>ID</th>
-                <th>Evento</th>
-                <th>Cliente</th>
-                <th>Data Original</th>
-                <th>Data Solicitada</th>
-                <th class="text-center">Ações</th>
-              </tr>
-            </thead>
-            <tbody id="remarcacoes-table-body" class="table-group-divider"></tbody>
-          </table>
-        </div>
-      </div>
     </div>
     <div class="card">
       <div class="card-body p-4">
@@ -574,7 +555,6 @@ window.onload = () => {
   const parcelamentoFieldset = document.getElementById('parcelamento-fieldset');
 
   const eventosTableBody = document.getElementById('eventos-table-body');
-  const remarcacoesTableBody = document.getElementById('remarcacoes-table-body');
   const searchInput = document.getElementById('searchInput');
   const limitSelect = document.getElementById('limitSelect');
   const paginationNav = document.getElementById('paginationNav');
@@ -963,6 +943,7 @@ async function carregarClientes(){
 
   async function carregarEventos(){ return fetchEventos(); }
 
+
   async function fetchRemarcacoes(){
     try {
       const r = await fetch('/api/admin/eventos/remarcacoes', { headers: AUTH_HEADERS });
@@ -1299,59 +1280,6 @@ function normalizarEvento(payload){
   }
 
   function inicializarEventListeners(){
-    remarcacoesTableBody.addEventListener('click', async (e)=>{
-      const btnAprovar = e.target.closest('.btn-aprovar-rem');
-      const btnRejeitar = e.target.closest('.btn-rejeitar-rem');
-      const btnDireto = e.target.closest('.btn-remarcar-direto');
-      const id = btnAprovar?.dataset.id || btnRejeitar?.dataset.id || btnDireto?.dataset.id;
-      if (!id) return;
-
-      if (btnAprovar){
-        try{
-          await fetch(`/api/admin/eventos/${id}/remarcar`, {
-            method:'PUT',
-            headers:{'Content-Type':'application/json', ...AUTH_HEADERS},
-            body: JSON.stringify({ mode:'aprovar' })
-          });
-          carregarRemarcacoes();
-          carregarEventos();
-        }catch{
-          alert('Falha ao aprovar remarcação.');
-        }
-        return;
-      }
-
-      if (btnRejeitar){
-        try{
-          await fetch(`/api/admin/eventos/${id}/remarcar`, {
-            method:'PUT',
-            headers:{'Content-Type':'application/json', ...AUTH_HEADERS},
-            body: JSON.stringify({ mode:'rejeitar' })
-          });
-          carregarRemarcacoes();
-          carregarEventos();
-        }catch{
-          alert('Falha ao rejeitar remarcação.');
-        }
-        return;
-      }
-
-      if (btnDireto){
-        const nova = prompt('Nova data (AAAA-MM-DD)');
-        if (!nova) return;
-        try{
-          await fetch(`/api/admin/eventos/${id}/remarcar`, {
-            method:'PUT',
-            headers:{'Content-Type':'application/json', ...AUTH_HEADERS},
-            body: JSON.stringify({ mode:'unilateral', nova_data: nova })
-          });
-          carregarRemarcacoes();
-          carregarEventos();
-        }catch{
-          alert('Falha ao remarcar.');
-        }
-      }
-    });
     // Listener de clique para a tabela inteira
     eventosTableBody.addEventListener('click', async (e)=>{
       // Identifica qual botão foi clicado
@@ -1689,7 +1617,6 @@ function normalizarEvento(payload){
   inicializarEventListeners();
   carregarClientes();
   fetchEventos();
-  carregarRemarcacoes();
 };
 </script>
 </body>
