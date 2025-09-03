@@ -101,6 +101,17 @@
   <script>
   window.onload = () => {
     const token = localStorage.getItem('adminToken') || localStorage.getItem('token') || '';
+
+    // Mostra o nome do admin a partir do JWT armazenado
+    try {
+      const base64url = token.split('.')[1] || '';
+      const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(base64url.length / 4) * 4, '=');
+      const payload = JSON.parse(atob(base64));
+      document.getElementById('adminName').innerText = payload?.nome || 'Administrador';
+    } catch (e) {
+      document.getElementById('adminName').innerText = 'Administrador';
+    }
+
     const AUTH_HEADERS = { Authorization: `Bearer ${token}` };
 
     const remarcacoesTableBody = document.getElementById('remarcacoes-table-body');
