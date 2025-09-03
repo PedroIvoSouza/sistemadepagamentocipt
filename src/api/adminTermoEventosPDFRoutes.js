@@ -45,6 +45,23 @@ const dataExtenso = (iso) => {
 };
 const primeiraData = (csv) => (String(csv||'').split(',').map(s=>s.trim()).filter(Boolean)[0] || null);
 
+function parseEspacoUtilizado(v) {
+  if (!v) return [];
+  if (Array.isArray(v)) return v;
+  if (typeof v === 'string') {
+    const txt = v.trim();
+    if (!txt) return [];
+    try {
+      if (txt.startsWith('[')) {
+        const arr = JSON.parse(txt);
+        if (Array.isArray(arr)) return arr;
+      }
+    } catch { /* ignore */ }
+    return txt.split(',').map(s => s.trim()).filter(Boolean);
+  }
+  return [];
+}
+
 /* ========= Monta payload para o termo ========= */
 async function buildPayload(eventoId) {
   const ev = await dbGet(
@@ -108,7 +125,7 @@ async function buildPayload(eventoId) {
     permissionario_representante_cpf: onlyDigits(ev.documento_responsavel || ''),
 
     evento_titulo: ev.nome_evento || '',
-    local_espaco: ev.espaco_utilizado || 'AUDITÓRIO',
+    local_espaco: parseEspacoUtilizado(ev.espaco_utilizado).join(', ') || 'AUDITÓRIO',
     imovel_nome: env.IMOVEL_NOME,
 
     data_evento_iso: dataPrimeira,

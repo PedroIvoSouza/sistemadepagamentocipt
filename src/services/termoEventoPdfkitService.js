@@ -49,6 +49,24 @@ const sanitizeForFilename = (s = '') =>
     .replace(/_{2,}/g, '_')
     .replace(/^_+|_+$/g, '');
 
+// Normaliza espacos_utilizados que podem vir como JSON ou CSV
+function parseEspacos(v) {
+  if (!v) return [];
+  if (Array.isArray(v)) return v;
+  if (typeof v === 'string') {
+    const txt = v.trim();
+    if (!txt) return [];
+    try {
+      if (txt.startsWith('[')) {
+        const arr = JSON.parse(txt);
+        if (Array.isArray(arr)) return arr;
+      }
+    } catch { /* ignore */ }
+    return txt.split(',').map(s => s.trim()).filter(Boolean);
+  }
+  return [];
+}
+
 /* ================== Schema: documentos ================== */
 async function ensureDocumentosSchema() {
   await dbRun(`CREATE TABLE IF NOT EXISTS documentos (
@@ -316,6 +334,7 @@ async function gerarTermoEventoPdfkitEIndexar(eventoId) {
   const fundoNome = process.env.FUNDO_NOME || 'FUNDECTES';
   const imovelNome = process.env.IMOVEL_NOME || 'CENTRO DE INOVAÇÃO DO JARAGUÁ';
   const capDefault = process.env.CAPACIDADE_PADRAO ? Number(process.env.CAPACIDADE_PADRAO) : 313;
+  const localEspaco = parseEspacos(ev.espaco_utilizado).join(', ') || 'AUDITÓRIO';
 
   // 4) Arquivo de saída
   const publicDir = path.join(process.cwd(), 'public', 'documentos');
@@ -365,12 +384,12 @@ async function gerarTermoEventoPdfkitEIndexar(eventoId) {
   // CLÁUSULA 1
   tituloClausula(doc, 'Cláusula Primeira – Do Objeto');
   paragrafo(doc,
-    `1.1 - O presente instrumento tem como objeto o uso pelo(a) PERMISSIONÁRIO(A) de área do ${ev.espaco_utilizado || 'AUDITÓRIO'} do imóvel denominado ${imovelNome}, para realização de “${ev.nome_evento || ''}”, a ser realizada em ${dataEventoExt}, das ${ev.hora_inicio || '-'} às ${ev.hora_fim || '-'}, devendo a montagem ser realizada no mesmo dia do evento e a desmontagem ao final, conforme proposta em anexo, estando disponível o uso do seguinte espaço:`
+    `1.1 - O presente instrumento tem como objeto o uso pelo(a) PERMISSIONÁRIO(A) de área do ${localEspaco} do imóvel denominado ${imovelNome}, para realização de “${ev.nome_evento || ''}”, a ser realizada em ${dataEventoExt}, das ${ev.hora_inicio || '-'} às ${ev.hora_fim || '-'}, devendo a montagem ser realizada no mesmo dia do evento e a desmontagem ao final, conforme proposta em anexo, estando disponível o uso do seguinte espaço:`
   );
 
   // Tabela
   tabelaDiscriminacao(doc, {
-    discriminacao: `${ev.espaco_utilizado || 'AUDITÓRIO'} do ${imovelNome}`,
+    discriminacao: `${localEspaco} do ${imovelNome}`,
     realizacao: dataEventoExt || '-',
     montagem: fmtDataExtenso(primeiraDataISO) || '-',
     desmontagem: fmtDataExtenso(primeiraDataISO) || '-',
