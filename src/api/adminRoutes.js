@@ -75,6 +75,14 @@ router.get(
   [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN'])],
   async (req, res) => {
     try {
+      const { tipo } = req.query || {};
+      let whereTipo = '';
+      if (tipo === 'permissionarios') {
+        whereTipo = "AND (d.tipo_permissionario IS NULL OR d.tipo_permissionario != 'Evento')";
+      } else if (tipo === 'eventos') {
+        whereTipo = "AND d.tipo_permissionario = 'Evento'";
+      }
+
       // Total de permissionários
       const totalPermissionarios = (await dbGet(
         `SELECT COUNT(*) AS count FROM permissionarios`
@@ -83,8 +91,8 @@ router.get(
       // Cards do topo: DARs pendentes e Receita pendente (tudo em aberto)
       const pendRow = await dbGet(
         `SELECT COUNT(*) AS qnt, COALESCE(SUM(valor),0) AS valor
-           FROM dars
-          WHERE status IN ${OPEN_STATUSES}`
+           FROM dars d
+          WHERE d.status IN ${OPEN_STATUSES} ${whereTipo}`
       );
       const darsPendentes   = pendRow?.qnt ?? 0;
       const receitaPendente = Number(pendRow?.valor ?? 0);
@@ -92,28 +100,30 @@ router.get(
       // Card: DARs vencidas (em horário local)
       const vencRow = await dbGet(
         `SELECT COUNT(*) AS qnt
-           FROM dars
-          WHERE status IN ${OPEN_STATUSES}
-            AND DATE(data_vencimento) < DATE('now','localtime')`
+           FROM dars d
+          WHERE d.status IN ${OPEN_STATUSES}
+            AND DATE(d.data_vencimento) < DATE('now','localtime')
+            ${whereTipo}`
       );
       const darsVencidos = vencRow?.qnt ?? 0;
 
       // Resumo mensal por mês de vencimento (não por competência)
          const resumoMensal = await dbAll(`
            SELECT
-             CAST(strftime('%Y', data_vencimento) AS INTEGER) AS ano,
-             CAST(strftime('%m', data_vencimento) AS INTEGER) AS mes,
+             CAST(strftime('%Y', d.data_vencimento) AS INTEGER) AS ano,
+             CAST(strftime('%m', d.data_vencimento) AS INTEGER) AS mes,
              COUNT(*) AS emitidas,
-             SUM(CASE WHEN status = 'Pago' THEN 1 ELSE 0 END) AS pagas,
+             SUM(CASE WHEN d.status = 'Pago' THEN 1 ELSE 0 END) AS pagas,
              SUM(CASE
-                   WHEN status IN ${OPEN_STATUSES}
-                    AND DATE(data_vencimento) < DATE('now','localtime')
+                   WHEN d.status IN ${OPEN_STATUSES}
+                    AND DATE(d.data_vencimento) < DATE('now','localtime')
                  THEN 1 ELSE 0 END) AS vencidas,
              SUM(CASE
-                   WHEN status IN ${OPEN_STATUSES}
-                    AND DATE(data_vencimento) >= DATE('now','localtime')
+                   WHEN d.status IN ${OPEN_STATUSES}
+                    AND DATE(d.data_vencimento) >= DATE('now','localtime')
                  THEN 1 ELSE 0 END) AS a_vencer
-           FROM dars
+           FROM dars d
+           WHERE 1=1 ${whereTipo}
            GROUP BY ano, mes
            ORDER BY ano DESC, mes DESC
            LIMIT 6
@@ -141,6 +151,7 @@ router.get(
          JOIN permissionarios p ON p.id = d.permissionario_id
          WHERE d.status IN ${OPEN_STATUSES}
            AND d.permissionario_id IS NOT NULL
+           ${whereTipo}
          GROUP BY p.id, p.nome_empresa
          HAVING COUNT(*) > 0
          ORDER BY qtd_debitos DESC, total_vencido DESC
