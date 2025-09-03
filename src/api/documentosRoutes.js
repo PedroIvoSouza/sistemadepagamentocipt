@@ -73,6 +73,18 @@ router.get('/', async (_req, res) => {
   }
 });
 
+// Busca documento por token
+router.get('/verify/:token', async (req, res) => {
+  try {
+    const row = await dbGet(`SELECT * FROM documentos WHERE token=?`, [req.params.token]);
+    if (!row) return res.status(404).json({ error: 'Documento não encontrado.' });
+    res.json(row);
+  } catch (e) {
+    console.error('[documentos]/verify erro:', e.message);
+    res.status(500).json({ error: 'Erro ao buscar documento.' });
+  }
+});
+
 // Busca documento por ID
 router.get('/:id', async (req, res) => {
   try {

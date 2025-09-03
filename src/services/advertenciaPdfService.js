@@ -111,8 +111,10 @@ async function gerarAdvertenciaPdfEIndexar({ advertenciaId = null, evento = {}, 
 
   if (clausulas && clausulas.length) {
     doc.font('Times-Bold').text('CLÁUSULAS VIOLADAS');
-    clausulas.forEach((c, i) => {
-      doc.font('Times-Roman').text(`${i + 1}. ${c}`, { align: 'justify' });
+    clausulas.forEach((c) => {
+      doc.font('Times-Bold').text(`${c.numero} `, { continued: true });
+      doc.font('Times-Roman').text(c.texto, { align: 'justify' });
+      doc.moveDown(0.5);
     });
     doc.moveDown();
   }

@@ -57,18 +57,7 @@
               </div>
               <div class="mb-3">
                 <label class="form-label">Cláusulas infringidas</label>
-                <div class="form-check">
-                  <input class="form-check-input" type="checkbox" value="1" id="clausula1">
-                  <label class="form-check-label" for="clausula1">Cláusula 1</label>
-                </div>
-                <div class="form-check">
-                  <input class="form-check-input" type="checkbox" value="2" id="clausula2">
-                  <label class="form-check-label" for="clausula2">Cláusula 2</label>
-                </div>
-                <div class="form-check">
-                  <input class="form-check-input" type="checkbox" value="3" id="clausula3">
-                  <label class="form-check-label" for="clausula3">Cláusula 3</label>
-                </div>
+                <div id="clausulas-container"></div>
               </div>
               <div class="row">
                 <div class="col-md-4 mb-3">
@@ -94,8 +83,33 @@
 
   <script src="/js/admin-sidebar.js"></script>
   <script>
+    fetch('/api/admin/advertencias/clausulas')
+      .then(r => r.json())
+      .then(data => {
+        const container = document.getElementById('clausulas-container');
+        Object.entries(data).forEach(([num, texto]) => {
+          const div = document.createElement('div');
+          div.className = 'form-check';
+          const input = document.createElement('input');
+          input.className = 'form-check-input';
+          input.type = 'checkbox';
+          input.value = num;
+          input.id = `clausula_${num.replace(/\./g, '_')}`;
+          const label = document.createElement('label');
+          label.className = 'form-check-label';
+          label.htmlFor = input.id;
+          const breve = texto.length > 60 ? texto.slice(0, 60) + '...' : texto;
+          label.textContent = `Cláusula ${num} - ${breve}`;
+          div.appendChild(input);
+          div.appendChild(label);
+          container.appendChild(div);
+        });
+      });
+
     document.getElementById('advertencia-form').addEventListener('submit', function(e){
       e.preventDefault();
+      const selecionadas = Array.from(document.querySelectorAll('#clausulas-container input:checked')).map(i => i.value);
+      console.log('Cláusulas selecionadas:', selecionadas);
       alert('Advertência montada com sucesso.');
     });
   </script>

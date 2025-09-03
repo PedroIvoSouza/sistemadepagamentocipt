@@ -5,9 +5,14 @@ const nodemailer = require('nodemailer');
 const adminAuthMiddleware = require('../middleware/adminAuthMiddleware');
 const db = require('../database/db');
 const { gerarAdvertenciaPdfEIndexar } = require('../services/advertenciaPdfService');
+const termoClausulas = require('../constants/termoClausulas');
 
 const router = express.Router();
 router.use(adminAuthMiddleware);
+
+router.get('/advertencias/clausulas', (_req, res) => {
+  res.json(termoClausulas);
+});
 
 // ========= SQLite helpers =========
 const dbRun = (sql, params = []) => new Promise((resolve, reject) => {
@@ -94,12 +99,19 @@ router.post('/eventos/:id/advertencias', async (req, res) => {
                                   FROM Eventos e JOIN Clientes_Eventos ce ON ce.id = e.id_cliente WHERE e.id = ?`, [id]);
     if (!evento) return res.status(404).json({ error: 'Evento não encontrado.' });
 
+    const clausulasDetalhadas = clausulas
+      .map((n) => ({ numero: String(n), texto: termoClausulas[String(n)] }))
+      .filter((c) => c.texto);
+    if (!clausulasDetalhadas.length) {
+      return res.status(400).json({ error: 'Cláusulas inválidas.' });
+    }
+
     const resumoSancao = gera_multa ? `Multa de R$ ${Number(multa).toFixed(2)}` : (inapto ? 'Inaptidão do cliente' : 'Advertência');
     const { filePath, token } = await gerarAdvertenciaPdfEIndexar({
       evento: { id: evento.id, nome_evento: evento.nome_evento },
       cliente: { id: evento.cliente_id, nome_razao_social: evento.cliente_nome, documento: evento.documento },
       dosFatos: fatos,
-      clausulas,
+      clausulas: clausulasDetalhadas,
       resumoSancao,
       token: null,
     });
@@ -109,7 +121,7 @@ router.post('/eventos/:id/advertencias', async (req, res) => {
     const stmt = await dbRun(
       `INSERT INTO advertencias (evento_id,fatos,clausulas,multa,gera_multa,inapto,inapto_ate,prazo_recurso,status,token,pdf_url,pdf_public_url,created_at)
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      [evento.id, fatos, JSON.stringify(clausulas), Number(multa), gera_multa ? 1 : 0, inapto ? 1 : 0, inapto_ate || null, prazo_recurso, 'emitida', token, pdfUrl, pdfPublicUrl, now]
+      [evento.id, fatos, JSON.stringify(clausulasDetalhadas), Number(multa), gera_multa ? 1 : 0, inapto ? 1 : 0, inapto_ate || null, prazo_recurso, 'emitida', token, pdfUrl, pdfPublicUrl, now]
     );
 
     const advertenciaId = stmt.lastID;
@@ -171,16 +183,22 @@ router.put('/advertencias/:id/resolver', async (req, res) => {
     const { resultado } = req.body || {};
     if (!resultado) return res.status(400).json({ error: 'Resultado é obrigatório.' });
 
+    const advInfo = await dbGet(`SELECT prazo_recurso, evento_id FROM advertencias WHERE id = ?`, [id]);
+    if (!advInfo) return res.status(404).json({ error: 'Advertência não encontrada.' });
+    if (advInfo.prazo_recurso && new Date() > new Date(advInfo.prazo_recurso)) {
+      return res.status(400).json({ error: 'Prazo de recurso expirado.' });
+    }
+
     const status = resultado === 'aceito' ? 'recurso_aceito' : 'recurso_negado';
     const resolvedAt = new Date().toISOString();
     await dbRun(`UPDATE advertencias SET status = ?, outcome = ?, resolved_at = ?, multa = CASE WHEN ?='aceito' THEN 0 ELSE multa END, inapto = CASE WHEN ?='aceito' THEN 0 ELSE inapto END, inapto_ate = CASE WHEN ?='aceito' THEN NULL ELSE inapto_ate END WHERE id = ?`,
       [status, resultado, resolvedAt, resultado, resultado, resultado, id]);
 
-    if (resultado === 'aceito') {
+    if (resultado === 'aceito' && advInfo.evento_id) {
       try {
-        const adv = await dbGet(`SELECT e.id_cliente FROM advertencias a JOIN Eventos e ON e.id = a.evento_id WHERE a.id = ?`, [id]);
-        if (adv && adv.id_cliente) {
-          await dbRun(`UPDATE Clientes_Eventos SET inapto_ate = NULL, status_cliente = NULL WHERE id = ?`, [adv.id_cliente]);
+        const ev = await dbGet(`SELECT id_cliente FROM Eventos WHERE id = ?`, [advInfo.evento_id]);
+        if (ev && ev.id_cliente) {
+          await dbRun(`UPDATE Clientes_Eventos SET inapto_ate = NULL, status_cliente = NULL WHERE id = ?`, [ev.id_cliente]);
         }
       } catch (err) {
         console.error('[ADVERTENCIA] erro ao limpar cliente:', err.message);
