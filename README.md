@@ -85,3 +85,17 @@ Endpoint disponível para administradores:
 `GET /api/admin/relatorios/eventos-dars?dataInicio=YYYY-MM-DD&dataFim=YYYY-MM-DD`
 
 Retorna um PDF com as DARs de eventos emitidas no intervalo informado. Quando não existem registros, a resposta é `204 No Content`.
+
+## Advertências
+
+Para registrar uma advertência:
+
+1. No painel de gestão, acesse **Eventos → Advertências**.
+2. Preencha o formulário com:
+   - **DOS FATOS**: relato detalhado do ocorrido.
+   - Marque as cláusulas infringidas.
+   - Informe o **valor da multa**.
+   - Defina a **data de inaptidão**.
+   - Indique o número de **dias para recurso**.
+
+Após o envio, as sanções previstas para as cláusulas selecionadas serão aplicadas, incluindo a cobrança da multa e a inaptidão a partir da data informada.
