@@ -430,24 +430,24 @@ async function gerarTermoEventoPdfkitEIndexar(eventoId) {
   // CLÁUSULA 5 – Permissionária
   tituloClausula(doc, 'Cláusula Quinta – Das Obrigações da Permissionária');
   [
-    '5.1 - Utilizar o espaço destinado no imóvel em questão para o fim específico do evento descrito na cláusula primeira.',
-    '5.2 - Conservar o imóvel como se lhe pertencesse, fazendo com que seu uso e gozo sejam pacíficos e harmônicos.',
-    '5.3 - A montagem e desmontagem de materiais e equipamentos do(a) PERMISSIONÁRIO(A) ou de terceiros, dentro do período de vigência, conforme reserva.',
-    '5.4 - A indenização pelos danos causados que, por si, seus empregados, prepostos e participantes do evento causarem ao mobiliário, equipamentos e acessórios das áreas locadas, independente de qualquer vistoria judicial prévia.',
-    '5.5 - A indenização por danos causados a terceiros no imóvel utilizado.',
-    '5.6 - A retirada do material e equipamentos utilizados dentro do período de vigência.',
-    '5.7 - Respeitar a lotação da área utilizada, sob pena do PERMITENTE providenciar a retirada do público excedente.',
-    '5.8 - Responsabilizar-se pelas despesas realizadas com a segurança, manutenção e conservação do bem permitido.',
-    '5.9 - Responsabilizar-se pela limpeza e manutenção da área locada durante a montagem, realização e desmontagem do evento, inclusive a compra dos materiais de limpeza.',
-    '5.10 - Responsabilizar-se pela locação de container e contratação de remoção de lixo durante a montagem, realização e desmontagem do evento.',
+    '5.1 - Utilizar o espaço destinado no imóvel em questão para o fim específico do evento descrito na cláusula primeira.'
+    '5.2 - Conservar o imóvel como se lhe pertencesse, fazendo com que seu uso e gozo sejam pacíficos e harmônicos.'
+    '5.3 - A montagem e desmontagem de materiais e equipamentos do(a) PERMISSIONÁRIO(A) ou de terceiros, dentro do período de vigência, conforme reserva.'
+    '5.4 - A indenização pelos danos causados que, por si, seus empregados, prepostos e participantes do evento causarem ao mobiliário, equipamentos e acessórios das áreas locadas, independente de qualquer vistoria judicial prévia.'
+    '5.5 - A indenização por danos causados a terceiros no imóvel utilizado.'
+    '5.6 - A retirada do material e equipamentos utilizados dentro do período de vigência.'
+    '5.7 - Respeitar a lotação da área utilizada, sob pena do PERMITENTE providenciar a retirada do público excedente.'
+    '5.8 - Responsabilizar-se pelas despesas realizadas com a segurança, manutenção e conservação do bem permitido.'
+    '5.9 - Responsabilizar-se pela limpeza e manutenção da área locada durante a montagem, realização e desmontagem do evento, inclusive a compra dos materiais de limpeza.'
+    '5.10 - Responsabilizar-se pela locação de container e contratação de remoção de lixo durante a montagem, realização e desmontagem do evento.'
     '5.11 - Restituir o espaço permitido em perfeito estado e condições, conforme Termo de Vistoria.',
     '5.12 - O espaço locado deverá ser utilizado para o fim específico do evento descrito na cláusula primeira.',
     '5.13 - Para a locação da referida área, o permissionário deverá, no momento da montagem do evento, participar de um check list de vistoria junto a servidor designado pela SECTI e, ao final do evento, na desmontagem, entregar o espaço nas mesmas condições encontradas, incluindo infraestrutura, mobília e limpeza do ambiente, sob pena de multa no valor de locação do espaço.',
-    '5.14 - O permissionário deverá apresentar o projeto do evento com o layout, incluindo os pontos de iluminação, para que seja atestada a necessidade de ser utilizado ou não gerador. Caso seja atestada a necessidade, o permissionário deverá arcar com o aluguel de um gerador externo para não sobrecarregar a rede elétrica do Centro de Inovação do Jaraguá, de modo a evitar danos à estrutura.',
+    '5.14 - O permissionário deverá apresentar o projeto do evento com o layout, incluindo os pontos de iluminação, para que seja atestada a necessidade de ser utilizado ou não gerador. Caso seja atestada a necessidade, o permissionário deverá arcar com o aluguel de um gerador externo para não sobrecarregar a rede elétrica do Centro de Inovação do Jaraguá, de modo a evitar danos à estrutura.'
     '5.15 - - O permissionário deve enviar a documentação para verificar a necessidade de gerador externo para o e-mail supcti@secti.al.gov.br em até 5 dias após o envio do termo de permissão de uso para assinatura.'
-    '5.16 - Toda estrutura que não for retirada no dia da desmontagem que consta neste termo de permissão de uso será destinada a outros fins, bem como será aplicada multa no valor de 10% da locação.',
-    '5.17 - É vedada a utilização da porta de emergência para fins que não seja de segurança, tais como movimentação de estrutura de eventos, sob pena de multa em caso de desobediência.',
-    '5.18 - É proibido o consumo de comidas/bebidas dentro do auditório ou do anfiteatro, de modo que havendo violação deverá ser aplicada multa de 10% do valor de locação, bem como deverá arcar com o valor de danos, caso tenha ocorrido.',
+    '5.16 - Toda estrutura que não for retirada no dia da desmontagem que consta neste termo de permissão de uso será destinada a outros fins, bem como será aplicada multa no valor de 10% da locação.'
+    '5.17 - É vedada a utilização da porta de emergência para fins que não seja de segurança, tais como movimentação de estrutura de eventos, sob pena de multa em caso de desobediência.'
+    '5.18 - É proibido o consumo de comidas/bebidas dentro do auditório ou do anfiteatro, de modo que havendo violação deverá ser aplicada multa de 10% do valor de locação, bem como deverá arcar com o valor de danos, caso tenha ocorrido.'
     '5.19 - É proibido som e/ou apresentação musical fora do auditório, sob pena de multa.'
     '5.20 - Não é permitido colocar qualquer estrutura no carpete, tanto do auditório quanto do anfiteatro.’
     '5.21 - Não é permitido desligar as tomadas das baias.’
@@ -470,7 +470,7 @@ async function gerarTermoEventoPdfkitEIndexar(eventoId) {
   // CLÁUSULA 7 – Rescisão
   tituloClausula(doc, 'Cláusula Sétima – Da Rescisão');
   [
-    '7.1 - A inexecução total ou parcial deste termo poderá acarretar em sanções administrativas, conforme disposto nos artigos 104, 137, 138 e 139 da Lei nº 14.133/2021.',
+    '7.1 - A inexecução total ou parcial deste termo poderá acarretar em sanções administrativas, conforme disposto nos artigos 104, 137, 138 e 139 da Lei nº 14.133/2021.'
     '7.2 - Este instrumento poderá ser rescindido a qualquer tempo pelo(a) Permissionário(a), mediante notificação prévia, devidamente protocolada na Secretaria de Estado da Ciência, da Tecnologia e da Inovação de Alagoas – SECTI, com antecedência mínima de 30 (trinta) dias da data prevista para o evento mediante justificativa. Nessa hipótese, o Permissionário terá o prazo de até 1 (um) ano para realizar o evento em nova data, contado a partir da data da abertura do processo administrativo, e desde que haja disponibilidade de agenda. Caso contrário, perderá integralmente os valores já pagos.'
     '7.3 - A nova data a ser agendada deverá ser informada no prazo máximo de 30 (trinta) dias corridos, contados a partir da comunicação do cancelamento.'
     '7.4 -  A remarcação do evento será permitida uma única vez. O não cumprimento do prazo para indicação da nova data acarretará a perda do direito à remarcação, sem qualquer restituição dos valores pagos.'
