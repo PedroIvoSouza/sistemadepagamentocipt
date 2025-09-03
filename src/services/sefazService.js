@@ -444,55 +444,64 @@ function isGuiaLike(obj) {
   );
 }
 
-function normalizePayload(p) {
-  // Garante tipos e chaves mínimas
-  const cp = { ...p };
-  const rec = { ...cp.receitas[0] };
+function normalizePayload(p){
+  // garanta numeroInscricao sem máscara e numero/mes/ano numéricos
+  const c0 = p.contribuinteEmitente || {};
+  const r0 = (p.receitas || [])[0] || {};
 
-  // aceita competencia {mes,ano} como string/number
-  if (rec.competencia) {
-    rec.competencia = {
-      mes: Number(rec.competencia.mes),
-      ano: Number(rec.competencia.ano),
-    };
-  }
+  const r = {
+    codigo: Number(String(r0.codigo).replace(/\D/g,'')),
+    competencia: {
+      mes: Number(r0.competencia?.mes),
+      ano: Number(r0.competencia?.ano),
+    },
+    valorPrincipal: Number(r0.valorPrincipal ?? r0.valor),
+    valorDesconto: Number(r0.valorDesconto ?? 0),
+    dataVencimento: toISO(r0.dataVencimento),
+  };
 
-  // normaliza campos de valor e data
-  if (rec.valor == null && rec.valorPrincipal != null) rec.valor = rec.valorPrincipal;
-  if (!rec.dataVencimento && cp.dataLimitePagamento) rec.dataVencimento = cp.dataLimitePagamento;
+  const dataLimite = toISO(p.dataLimitePagamento) || r.dataVencimento;
 
-  cp.receitas = [rec];
-  return cp;
+  return {
+    versao: p.versao || '1.0', // 👈 OBRIGATÓRIO para a API
+    contribuinteEmitente: {
+      codigoTipoInscricao: Number(c0.codigoTipoInscricao),
+      numeroInscricao: String(c0.numeroInscricao || '').replace(/\D/g,''),
+      nome: c0.nome,
+      codigoIbgeMunicipio: Number(c0.codigoIbgeMunicipio || process.env.COD_IBGE_MUNICIPIO),
+    },
+    receitas: [r],
+    dataLimitePagamento: dataLimite,
+    observacao: (p.observacao || '').slice(0,255),
+  };
 }
 
-function fromContribGuia(contrib, guiaLike) {
-  // guiaLike pode vir nos dois jeitos; convertemos para a receita única esperada
-  const mes = guiaLike.competencia?.mes ?? Number(String(guiaLike.mes_referencia || guiaLike.mes).replace(/\D/g, ''));
-  const ano = guiaLike.competencia?.ano ?? Number(String(guiaLike.ano_referencia || guiaLike.ano).replace(/\D/g, ''));
-  const venc = guiaLike.dataVencimento || guiaLike.data_vencimento;
 
-  const codigo = guiaLike.codigo || guiaLike.codigo_receita;
-
-  const valorPrincipal = Number(
-    guiaLike.valorPrincipal != null ? guiaLike.valorPrincipal : guiaLike.valor
-  );
+function fromContribGuia(c, g){
+  const mes = g.competencia?.mes ?? g.mes_referencia;
+  const ano = g.competencia?.ano ?? g.ano_referencia;
+  const codigo = g.codigo ?? g.codigo_receita;
+  const valorPrincipal = Number(g.valorPrincipal ?? g.valor);
+  const vencISO = toISO(g.dataVencimento ?? g.data_vencimento);
+  const dataLimite = toISO(g.dataLimitePagamento) || vencISO;
 
   return normalizePayload({
+    versao: '1.0', // 👈 garante a versão no topo
     contribuinteEmitente: {
-      codigoTipoInscricao: contrib.codigoTipoInscricao,
-      numeroInscricao: String(contrib.numeroInscricao).replace(/\D/g, ''),
-      nome: contrib.nome,
-      codigoIbgeMunicipio: contrib.codigoIbgeMunicipio || 2704302,
+      codigoTipoInscricao: Number(c.codigoTipoInscricao),
+      numeroInscricao: String(c.numeroInscricao).replace(/\D/g,''),
+      nome: c.nome,
+      codigoIbgeMunicipio: c.codigoIbgeMunicipio || process.env.COD_IBGE_MUNICIPIO,
     },
     receitas: [{
       codigo,
-      competencia: { mes, ano },
+      competencia: { mes: Number(mes), ano: Number(ano) },
       valorPrincipal,
-      valorDesconto: Number(guiaLike.valorDesconto || 0),
-      dataVencimento: String(venc).slice(0, 10),
+      valorDesconto: Number(g.valorDesconto ?? 0),
+      dataVencimento: vencISO,
     }],
-    dataLimitePagamento: String(venc).slice(0, 10),
-    observacao: guiaLike.observacao || '',
+    dataLimitePagamento: dataLimite,
+    observacao: g.observacao || '',
   });
 }
 
