@@ -1,6 +1,7 @@
 // src/services/emailService.js
 const nodemailer = require('nodemailer');
 const path = require('path');
+const fs = require('fs');
 require('dotenv').config({ path: path.resolve(__dirname, '../..', '.env') });
 
 // ---------- Config & Helpers ----------
@@ -156,6 +157,73 @@ async function enviarEmailPrimeiroAcesso(emailDestino, token) {
   }
 }
 
+async function enviarEmailAdvertencia(emailDestino, dados = {}) {
+  const base = (process.env.BASE_URL || '').replace(/\/+$/,'');
+  const nome = dados.nome || dados.nome_empresa || dados.cliente_nome || 'Permissionário(a)';
+
+  // Prazo de recurso
+  let prazoRecurso = null;
+  if (dados.prazo_recurso_data) {
+    prazoRecurso = fmtDataISOParaBR(dados.prazo_recurso_data);
+  } else if (dados.prazoRecursoData) {
+    prazoRecurso = fmtDataISOParaBR(dados.prazoRecursoData);
+  } else if (dados.prazo_recurso_dias || dados.prazoRecursoDias) {
+    const dias = Number(dados.prazo_recurso_dias || dados.prazoRecursoDias);
+    const baseDate = dados.data_advertencia || dados.dataAdvertencia || new Date().toISOString().slice(0,10);
+    try {
+      const prazoDate = new Date(baseDate + 'T00:00:00Z');
+      prazoDate.setUTCDate(prazoDate.getUTCDate() + dias);
+      prazoRecurso = prazoDate.toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+    } catch { /* ignore */ }
+  }
+
+  const valorMulta = Number(dados.valor_multa || dados.valorMulta || 0);
+
+  // Links ou anexos
+  let advertenciaLink = dados.pdf_public_url || dados.pdfPublicUrl || dados.pdfUrl || null;
+  let darLink = dados.dar_public_url || dados.darPublicUrl || dados.darUrl || null;
+
+  const attachments = [];
+
+  if (!advertenciaLink && dados.pdfPath) {
+    const rel = path.relative(path.join(process.cwd(), 'public'), dados.pdfPath);
+    if (!rel.startsWith('..')) advertenciaLink = `${base}/${rel.replace(/\\/g, '/')}`;
+    if (fs.existsSync(dados.pdfPath)) {
+      attachments.push({ filename: path.basename(dados.pdfPath), path: dados.pdfPath });
+    }
+  }
+
+  if (!darLink && dados.darPath) {
+    const relDar = path.relative(path.join(process.cwd(), 'public'), dados.darPath);
+    if (!relDar.startsWith('..')) darLink = `${base}/${relDar.replace(/\\/g, '/')}`;
+    if (fs.existsSync(dados.darPath)) {
+      attachments.push({ filename: path.basename(dados.darPath), path: dados.darPath });
+    }
+  }
+
+  const html = `
+    <div style="font-family: sans-serif; padding: 20px; color: #333;">
+      <h1 style="color:#0056a0;">Termo de Advertência</h1>
+      <p>Olá, <strong>${nome}</strong>,</p>
+      <p>Foi emitido um termo de advertência referente às atividades realizadas no Centro de Inovação.</p>
+      ${valorMulta > 0 ? `<p><strong>Valor da multa:</strong> R$ ${BRL(valorMulta)}</p>` : '<p>Não há multa associada a esta advertência.</p>'}
+      ${prazoRecurso ? `<p><strong>Prazo para recurso:</strong> até ${prazoRecurso}.</p>` : ''}
+      <p><em>Observação:</em> aplica-se a regra padrão de pagamento de 50% do valor devido, salvo orientação em contrário.</p>
+      ${advertenciaLink ? `<p>O termo de advertência está disponível <a href="${advertenciaLink}">neste link</a>.</p>` : ''}
+      ${darLink ? `<p>O Documento de Arrecadação (DAR), quando aplicável, pode ser acessado <a href="${darLink}">aqui</a>.</p>` : ''}
+      <p style="margin-top:24px;font-size:12px;color:#6c757d;">Mensagem automática — não responda.</p>
+    </div>`;
+
+  try {
+    await mailer.sendMail({ to: emailDestino, subject: 'Advertência - Centro de Inovação', html, attachments });
+    console.log(`[MAIL] ADVERTENCIA → ${emailDestino}`);
+    return true;
+  } catch (e) {
+    console.error(`[MAIL][ERRO] ADVERTENCIA → ${emailDestino}:`, e.message || e);
+    return false;
+  }
+}
+
 async function enviarEmailNotificacaoDar(emailDestino, dadosDar) {
   const base = (process.env.BASE_URL || '').replace(/\/+$/,'');
   const linkPortal = `${base}/dars.html`;
@@ -205,6 +273,7 @@ module.exports = {
   enviarEmailNovaDar,
   enviarEmailRedefinicao,
   enviarEmailPrimeiroAcesso,
+  enviarEmailAdvertencia,
   enviarEmailNotificacaoDar,
   enviarEmailDefinirSenha,
 };
