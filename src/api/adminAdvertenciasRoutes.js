@@ -113,6 +113,7 @@ router.post('/eventos/:id/advertencias', async (req, res) => {
         return null;
       })
       .filter((c) => c && c.texto);
+
     if (!clausulasDetalhadas.length) {
       return res.status(400).json({ error: 'Cláusulas inválidas.' });
     }
