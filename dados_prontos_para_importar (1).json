@@ -1,0 +1,3666 @@
+[
+  {
+    "cliente": {
+      "nome_razao_social": "ESCOLA E CRECHE LUCENA KIDS LTDA",
+      "documento": "33191527000108",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Williams Patrik Araújo de Lima",
+      "nome_razao_social_oficial": "ESCOLA E CRECHE LUCENA KIDS LTDA",
+      "cep": "57035690",
+      "logradouro": "HAMILTON DE BARROS SOUTINHO",
+      "numero": "939",
+      "complemento": "",
+      "bairro": "JATIUCA",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "XXX",
+        "numero_termo": "47/2025",
+        "nome_evento": "Espetáculos Natalinos da Escola e Creche Lucena Kids",
+        "datas_evento": [
+          "2025-12-17"
+        ],
+        "hora_inicio": "08:00",
+        "hora_fim": "20:00",
+        "valor_final": 2495.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao Auditório do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "MODELO. Termo de Permissão de Uso .docx",
+    "id_arquivo_drive": "196C4_qTeImL2uL4rxcBgUYnZgzpfagL1"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "EMPRESA M ALBUQUERQUE & CIA LTDA",
+      "documento": "14149596000109",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Kesya Albuquerque de Lucena",
+      "nome_razao_social_oficial": "M ALBUQUERQUE & CIA LTDA",
+      "cep": "57041005",
+      "logradouro": "CLETO CAMPELO",
+      "numero": "72",
+      "complemento": " 72A",
+      "bairro": "JACINTINHO",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000402/2025",
+        "numero_termo": "46/2025",
+        "nome_evento": "Feira Cultural do Colégio 29 de julho",
+        "datas_evento": [
+          "2025-10-10"
+        ],
+        "hora_inicio": "13h",
+        "hora_fim": "23h",
+        "valor_final": 2495.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao Auditório do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "Cópia de 46. Termo de Permissão de Uso - Colégio 29 de julho.docx",
+    "id_arquivo_drive": "14JUrV1aubCMWlpZ0WVfP1QF7zFlCqrYf"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "ECOS, TREINAMENTOS E CURSOS LTDA",
+      "documento": "51543570000169",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Maria Cristina Pereira de Moura",
+      "nome_razao_social_oficial": "ECOS TREINAMENTOS E CURSOS LTDA",
+      "cep": "49020450",
+      "logradouro": "PEDRO PAES DE AZEVEDO",
+      "numero": "130",
+      "complemento": "",
+      "bairro": "SALGADO FILHO",
+      "cidade": "ARACAJU",
+      "uf": "SE"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000021/2025",
+        "numero_termo": "01/2025",
+        "nome_evento": "Pra Frente Nordeste",
+        "datas_evento": [
+          "2025-09-20",
+          "2025-09-21"
+        ],
+        "hora_inicio": "08:00",
+        "hora_fim": "18:00",
+        "valor_final": 4491.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao Auditório"
+      }
+    ],
+    "arquivo_origem": "01. Termo de Permissão de Uso - ECOS.docx",
+    "id_arquivo_drive": "1B7JYs9hNJcVFFAv04ZPmQAOgqd0Ea3qb"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "RMED CURSOS MÉDICOS LTDA",
+      "documento": "17654804000107",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Michele Bhering Fernandes",
+      "nome_razao_social_oficial": "RMED CURSOS MEDICOS LTDA",
+      "cep": "22640102",
+      "logradouro": "DAS AMERICAS",
+      "numero": "03500",
+      "complemento": " BLC 0001 SAL 0706",
+      "bairro": "BARRA DA TIJUCA",
+      "cidade": "RIO DE JANEIRO",
+      "uf": "RJ"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000412/2025",
+        "numero_termo": "48/2025",
+        "nome_evento": "MEDGRUPO Nas Cidades",
+        "datas_evento": [
+          "2025-09-17",
+          "2025-09-17",
+          "2025-09-17"
+        ],
+        "hora_inicio": "17h",
+        "hora_fim": "22h",
+        "valor_final": 1986.0,
+        "espaco_utilizado": "Auditório do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "48. Termo de Permissão de Uso  - MEDGRUPO.docx",
+    "id_arquivo_drive": "1zYAf439CvYXMTNMjfUGosLsWjrLKx_M9"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "EMPRESA M ALBUQUERQUE & CIA LTDA",
+      "documento": "14149596000109",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Kesya Albuquerque de Lucena",
+      "nome_razao_social_oficial": "M ALBUQUERQUE & CIA LTDA",
+      "cep": "57041005",
+      "logradouro": "CLETO CAMPELO",
+      "numero": "72",
+      "complemento": " 72A",
+      "bairro": "JACINTINHO",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000402/2025",
+        "numero_termo": "46/2025",
+        "nome_evento": "Feira Cultural do Colégio 29 de julho",
+        "datas_evento": [
+          "2025-10-10"
+        ],
+        "hora_inicio": "13h",
+        "hora_fim": "23h",
+        "valor_final": 2495.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao Auditório do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "46. Termo de Permissão de Uso - Colégio 29 de julho.docx",
+    "id_arquivo_drive": "1zDOx7ZGNYOy7nll4kCvCefZhP1VrJf-Q"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "G A ENTRETENIMENTO",
+      "documento": "61024498000117",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Beatriz de Oliveira Moura",
+      "nome_razao_social_oficial": "61.024.498 BEATRIZ DE OLIVEIRA MOURA",
+      "cep": "57052765",
+      "logradouro": "DOUTOR OSEAS TENORIO",
+      "numero": "41",
+      "complemento": "APT 1105",
+      "bairro": "GRUTA DE LOURDES",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000409/2025",
+        "numero_termo": "47/2025",
+        "nome_evento": "Show de Comédia “Virou Passeio”",
+        "datas_evento": [
+          "2025-11-09"
+        ],
+        "hora_inicio": "08:00",
+        "hora_fim": "00:00",
+        "valor_final": 2495.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao Auditório do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "47. Termo de Permissão de Uso  - GA PRODUÇÕES.docx",
+    "id_arquivo_drive": "1obldmhImT1wqx5AO06AaLq3viFqmL6XI"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "CM PRODUÇÕES",
+      "documento": "37922328000175",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Diógenes Christiano Marinho Lins",
+      "nome_razao_social_oficial": "DIOGENES CHRISTIANO MARINHO LINS 00747683441",
+      "cep": "57025070",
+      "logradouro": "BRASIL",
+      "numero": "526",
+      "complemento": "",
+      "bairro": "POCO",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000098/2025",
+        "numero_termo": "15/2025",
+        "nome_evento": "Teatro Solidário",
+        "datas_evento": [
+          "2025-07-13",
+          "2025-08-16",
+          "2025-09-13",
+          "2025-10-18",
+          "2025-11-15"
+        ],
+        "hora_inicio": "20:00",
+        "hora_fim": "12:00",
+        "valor_final": 6387.2,
+        "espaco_utilizado": "AUDITÓRIO e ESPAÇO ABERTO EM FRENTE AO AUDITÓRIO do CENTRO DE INOVAÇÃO DO JARAGUÁ"
+      }
+    ],
+    "arquivo_origem": "15. Termo de Permissão de Uso - Teatro Solidário.docx",
+    "id_arquivo_drive": "1M4yg_DJsveAdR3xcYy53Mpz_QE5zRb9h"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "ESCOLA OFICINA DA VIDA",
+      "documento": "31443184000198",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Gabriel de Lima Bandeira",
+      "nome_razao_social_oficial": "C.E.P - CENTRO DE ESTUDOS PSICOPEDAGOGICOS DE MACEIO LTDA",
+      "cep": "57046140",
+      "logradouro": "PRESIDENTE GETULIO VARGAS",
+      "numero": "114",
+      "complemento": "",
+      "bairro": "SERRARIA",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000365/2025",
+        "numero_termo": "45/2025",
+        "nome_evento": "tarde de autógrafos da escola Oficina da Vida",
+        "datas_evento": [
+          "2025-12-03"
+        ],
+        "hora_inicio": "18h",
+        "hora_fim": "21h",
+        "valor_final": 2495.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao Auditório do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "45. Termo de Permissão de Uso - Escola Oficina da Vida.docx",
+    "id_arquivo_drive": "1iDRbouu5SH5h7-dOnxU_py5cvNx-PVOs"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "FREITAS & SILVA INSTRUMENTO MUSICAIS LTDA",
+      "documento": "15629906000147",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "CICERO NAZARENO DA SILVA",
+      "nome_razao_social_oficial": "FREITAS & SILVA INSTRUMENTOS MUSICAIS LTDA",
+      "cep": "57030580",
+      "logradouro": "LUIZ CAMPOS TEIXEIRA",
+      "numero": "921",
+      "complemento": "",
+      "bairro": "PONTA DA TERRA",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000364/2025",
+        "numero_termo": "44/2025",
+        "nome_evento": "Recital de música da Casa Villa Lobos",
+        "datas_evento": [
+          "2025-12-20"
+        ],
+        "hora_inicio": "16h",
+        "hora_fim": "22h",
+        "valor_final": 2495.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao Auditório do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "44. Termo de Permissão de Uso - Villa Lobos.docx",
+    "id_arquivo_drive": "1GLlm-MWVeys4rguwe_ERbcUTWB5G7hPb"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "MULTIEVENTOS PROMOÇÕES E ASSESSORIA",
+      "documento": "02890163000112",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Danubia Silva Rodrigues",
+      "nome_razao_social_oficial": "ANDRE LUIS DE ALMEDA SILVA PROMOCOES E ASSESSORIA LTDA",
+      "cep": "57020520",
+      "logradouro": "BUARQUE DE MACEDO",
+      "numero": "731",
+      "complemento": "",
+      "bairro": "CENTRO",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000362/2025",
+        "numero_termo": "43/2025",
+        "nome_evento": "Colação de Grau da turma 98 de odontologia da UFAL",
+        "datas_evento": [
+          "2025-12-10"
+        ],
+        "hora_inicio": "20h",
+        "hora_fim": "23h",
+        "valor_final": 2495.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao Auditório do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "43. Termo de Permissão de Uso - Multieventos.docx",
+    "id_arquivo_drive": "1G8Z8yY2ZQmZaiqLAgNDMfKfc9sDloy1Q"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "COLÉGIO SANTÍSSIMO SENHOR",
+      "documento": "70003504000140",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Polyana Alécio Lopes de Oliveira",
+      "nome_razao_social_oficial": "M J LOPES DA SILVA & CIA LTDA",
+      "cep": "57046670",
+      "logradouro": "DEPUTADO EDSON LINS",
+      "numero": "302",
+      "complemento": "",
+      "bairro": "SERRARIA",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000339/2025",
+        "numero_termo": "42/2025",
+        "nome_evento": "Noite de Autógrafos",
+        "datas_evento": [
+          "2025-12-09"
+        ],
+        "hora_inicio": "17h",
+        "hora_fim": "22h",
+        "valor_final": 2495.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao Auditório do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "42. Termo de Permissão de Uso - C. Santíssimo Sr..docx",
+    "id_arquivo_drive": "1xGHyDE6Wem7GgVCTCThCDBe-jXOt5ncB"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "ERYKA KARINNE SANTOS CALHEIROS",
+      "documento": "03247219439",
+      "tipo_pessoa": "PF",
+      "nome_responsavel": "ERYKA KARINNE SANTOS CALHEIROS"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000332/2025",
+        "numero_termo": "41/2025",
+        "nome_evento": "Bem-vindo ao mundo do Rock",
+        "datas_evento": [
+          "2025-08-01"
+        ],
+        "hora_inicio": "00h",
+        "hora_fim": "12h",
+        "valor_final": 2495.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao Auditório do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "41. Termo de Permissão de Uso - “Eryka .docx",
+    "id_arquivo_drive": "1g74PatczuOVWSzltZD3X8TDfFNcxaMlM"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "Colégio Maria de Fátima",
+      "documento": "13063572000161",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Beatriz Emanuely Cavalcante Lessa",
+      "nome_razao_social_oficial": "ESCOLA MARIA DE FATIMA LTDA",
+      "cep": "57014190",
+      "logradouro": "PEDRO CARDEAL FARIAS",
+      "numero": "156",
+      "complemento": "",
+      "bairro": "PONTA GROSSA",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000324/2025",
+        "numero_termo": "40/2025",
+        "nome_evento": "Encerramento do Ano Letivo",
+        "datas_evento": [
+          "2025-12-01"
+        ],
+        "hora_inicio": "16h",
+        "hora_fim": null,
+        "valor_final": 2495.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao Auditório do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "40. Termo de Permissão de Uso - Colégio Maria de Fátima.docx",
+    "id_arquivo_drive": "1y0C-c5doZHm87GxzPWRpIa1GqiH3CMzH"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "ATTO ACADEMIA DE ARTES",
+      "documento": "37992577000137",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "ROBERTO MONTENEGRO SILVA JUNIOR",
+      "nome_razao_social_oficial": "ROBERTO MONTENEGRO SILVA JUNIOR 09159772492",
+      "cep": "57035610",
+      "logradouro": "JATIUCA",
+      "numero": "82",
+      "complemento": "QUADRA G;BLOCO 01;APT 002",
+      "bairro": "JATIUCA",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E: 30010.0000000312/2025",
+        "numero_termo": "39/2025",
+        "nome_evento": "espetáculo de teatro da Atto Academia de Artes",
+        "datas_evento": [
+          "2025-12-16"
+        ],
+        "hora_inicio": "17h",
+        "hora_fim": "19h",
+        "valor_final": 2495.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao Auditório do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "39. Termo de Permissão de Uso - Atto Academia.docx",
+    "id_arquivo_drive": "1odnIT3lPoYuOH06IAnp4MJPDkulnkWf4"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "ATTO ACADEMIA DE ARTES",
+      "documento": "37992577000137",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "ROBERTO MONTENEGRO SILVA JUNIOR",
+      "nome_razao_social_oficial": "ROBERTO MONTENEGRO SILVA JUNIOR 09159772492",
+      "cep": "57035610",
+      "logradouro": "JATIUCA",
+      "numero": "82",
+      "complemento": "QUADRA G;BLOCO 01;APT 002",
+      "bairro": "JATIUCA",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000082/2025",
+        "numero_termo": "08/2025",
+        "nome_evento": "espetáculo de teatro da Atto Academia de Artes",
+        "datas_evento": [
+          "2025-06-05",
+          "2025-06-06",
+          "2025-06-07",
+          "2025-06-08"
+        ],
+        "hora_inicio": "8h",
+        "hora_fim": "22h",
+        "valor_final": 7365.24,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao auditório do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "08. Termo de Permissão de Uso - Atto Academia de Artes",
+    "id_arquivo_drive": "1q3WynVG99j6qpydpl9gZXKbH1GxJCWaa"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "Creche Escola A Casa Mágica",
+      "documento": "23077818000108",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Rafaela Martins Gonçalves",
+      "nome_razao_social_oficial": "RAFAELA MARTINS GONCALVES",
+      "cep": "57052635",
+      "logradouro": "JOAO PAULO I",
+      "numero": "875",
+      "complemento": "QUADRAE LOTE 11",
+      "bairro": "GRUTA DE LOURDES",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000309/2025",
+        "numero_termo": "38/2025",
+        "nome_evento": "Apresentação de Fim de Ano da escola de educação infantil A Casa Mágica",
+        "datas_evento": [
+          "2025-12-08"
+        ],
+        "hora_inicio": "13h",
+        "hora_fim": "21h",
+        "valor_final": 2495.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao Auditório do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "38. Termo de Permissão de Uso - Escola Casa Mágica.docx",
+    "id_arquivo_drive": "1r_uVb56xDsFnX2A2l-KD3HWIyL7k9Mmg"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "ESCOLA E CRECHE LUCENA KIDS LTDA",
+      "documento": "33191527000108",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Williams Patrik Araújo de Lima",
+      "nome_razao_social_oficial": "ESCOLA E CRECHE LUCENA KIDS LTDA",
+      "cep": "57035690",
+      "logradouro": "HAMILTON DE BARROS SOUTINHO",
+      "numero": "939",
+      "complemento": "",
+      "bairro": "JATIUCA",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000296/2025",
+        "numero_termo": "37/2025",
+        "nome_evento": "Espetáculos Natalinos da Escola e Creche Lucena Kids",
+        "datas_evento": [
+          "2025-12-17"
+        ],
+        "hora_inicio": "08:00",
+        "hora_fim": "20:00",
+        "valor_final": 2495.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao Auditório do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "37. Termo de Permissão de Uso - Lucena Kids.docx",
+    "id_arquivo_drive": "1SR6kldR29kpSeWWww1BM4PFZWtJQqYFg"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "CENTRO DE PESQUISA CÊNICA - CEPEC",
+      "documento": "17361388000159",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Claudemir dos Santos Silva",
+      "nome_razao_social_oficial": "17.361.388 CLAUDEMIR DOS SANTOS SILVA",
+      "cep": "57030050",
+      "logradouro": "BASILEU MENDES",
+      "numero": "165",
+      "complemento": "SALA A",
+      "bairro": "PAJUCARA",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000291/2025",
+        "numero_termo": "36/2025",
+        "nome_evento": "Residência Artística do CEPEC/ ano letivo 2025",
+        "datas_evento": [
+          "2025-11-16"
+        ],
+        "hora_inicio": "16h",
+        "hora_fim": "22h",
+        "valor_final": 2495.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao Auditório"
+      }
+    ],
+    "arquivo_origem": "36. Termo de Permissão de Uso - CEPEC.docx",
+    "id_arquivo_drive": "1PjgbSl86qoswLwrIxu4e4Ujcp2Gxz0NF"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "PRODUTORA KR",
+      "documento": "13181652000111",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": null,
+      "nome_razao_social_oficial": "KARLA ALEXSANDRA ROCHA 90321367472",
+      "cep": "57035000",
+      "logradouro": "ENGENHEIRO MARIO DE GUSMAO",
+      "numero": "1112",
+      "complemento": "",
+      "bairro": "PONTA VERDE",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000289/2025",
+        "numero_termo": "35/2025",
+        "nome_evento": "Colação de Grau",
+        "datas_evento": [
+          "2025-12-18",
+          "2025-12-19"
+        ],
+        "hora_inicio": "08:00",
+        "hora_fim": null,
+        "valor_final": 2495.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao Auditório do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "35. Termo de Permissão de Uso - Colação de Grau - KR.docx",
+    "id_arquivo_drive": "1C1PjjzuMxPeOUbFjsY3wi4plXzmLImJo"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "CARINA PRISCILLA DE PAULA REIS",
+      "documento": "04489388632",
+      "tipo_pessoa": "PF",
+      "nome_responsavel": "CARINA PRISCILLA DE PAULA REIS"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000277/2025",
+        "numero_termo": "34/2025",
+        "nome_evento": "Festival Alagoano de Danças Árabes",
+        "datas_evento": [
+          "2025-11-23"
+        ],
+        "hora_inicio": "17h",
+        "hora_fim": "12h",
+        "valor_final": 2495.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao Auditório do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "34. Termo de Permissão de Uso - Festival Alagoano de Danças Árabes.docx",
+    "id_arquivo_drive": "1ti2g501ghuCx1v4Gdqi6AL1k7iDmd6z6"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "ALLEGRO STUDIO DE DANÇA E ARTE",
+      "documento": "49453700000120",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Maria Isabel Tavares de Vasconcelos Medeiros",
+      "nome_razao_social_oficial": "TAVARES DIEGUES ESTUDIO DE DANCA LTDA",
+      "cep": "57035330",
+      "logradouro": "DEPUTADO JOSE LAGES",
+      "numero": "851",
+      "complemento": "SALA 01 E 02 QUADRA0139 GALERIA PONTO",
+      "bairro": "PONTA VERDE",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000045/2025",
+        "numero_termo": "02/2025",
+        "nome_evento": "Espetáculos de encerramento do semestre do Allegro Studio de Dança e de Arte",
+        "datas_evento": [
+          "2025-12-21"
+        ],
+        "hora_inicio": "8h",
+        "hora_fim": "23h",
+        "valor_final": 2495.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao Auditório"
+      }
+    ],
+    "arquivo_origem": "02. Termo de Permissão de Uso - ALLEGRO STUDIO .docx",
+    "id_arquivo_drive": "1tJT8W1t4kYH4brmhy_UsK7ZRVXFlsctv"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "CONVEM HONDA",
+      "documento": "12388278000167",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Emanuelle Borba",
+      "nome_razao_social_oficial": "CONVEM COMERCIO DE VEICULOS E MOTORES LTDA - EM RECUPERACAO JUDICIAL",
+      "cep": "57057780",
+      "logradouro": "COMENDADOR FRANCISCO AMORIM LEAO",
+      "numero": "77",
+      "complemento": "",
+      "bairro": "PINHEIRO",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000234/2025",
+        "numero_termo": "33/2025",
+        "nome_evento": "Honda - Road Show Convem Honda 2025",
+        "datas_evento": [
+          "2025-06-28"
+        ],
+        "hora_inicio": "14h",
+        "hora_fim": "18h",
+        "valor_final": 2495.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao Auditório do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "33. Termo de Permissão de Uso - HONDA.docx",
+    "id_arquivo_drive": "1kGrm0HPZV3ujH7ojys7qaKNUR9sXyQm2"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "Arianna Nutt",
+      "documento": "13749491000110",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Tatiana Alves Hernandes da Silva",
+      "nome_razao_social_oficial": "A.C.GOMES CRIACAO E DESIGN",
+      "cep": "04017060",
+      "logradouro": "IRMA EFIGENIA",
+      "numero": "10",
+      "complemento": "",
+      "bairro": "VILA MARIANA",
+      "cidade": "SAO PAULO",
+      "uf": "SP"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000233/2025",
+        "numero_termo": "32/2025",
+        "nome_evento": "Show de comédia \"De Repente 40\"",
+        "datas_evento": [
+          "2025-07-17"
+        ],
+        "hora_inicio": "20h",
+        "hora_fim": "12h",
+        "valor_final": 2495.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao Auditório do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "32. Termo de Permissão de Uso - Show de Comédia \"De repente 40\".docx",
+    "id_arquivo_drive": "1VPPKEEbAnD9MURWOLLRwABAOlmsova4y"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "ESCOLA INTEGRAL O VERBO",
+      "documento": "21365174000128",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Josilaine Santos",
+      "nome_razao_social_oficial": "ANA LUCIA MARIA DA SILVA NEVES LTDA",
+      "cep": "57051695",
+      "logradouro": "MAJOR FRANCISCO DE BARROS REGO",
+      "numero": "213",
+      "complemento": "",
+      "bairro": "FAROL",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000227/2025",
+        "numero_termo": "31/2025",
+        "nome_evento": "evento de dança local",
+        "datas_evento": [
+          "2025-06-12"
+        ],
+        "hora_inicio": "18h",
+        "hora_fim": "22h",
+        "valor_final": 2495.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao Auditório do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "31. Termo de Permissão de Uso - Escola O VERBO.docx",
+    "id_arquivo_drive": "1PuWweEEdMwsvgu3mr6o1pYRNIVfehdQ1"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "COLÉGIO IEP LTDA",
+      "documento": "34116804000172",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Melyssa de Lima Oliveira Nascimento Tavares",
+      "nome_razao_social_oficial": "COLEGIO IEP LTDA",
+      "cep": "57030642",
+      "logradouro": "PROFESSOR SANTOS FERRAZ",
+      "numero": "532",
+      "complemento": "",
+      "bairro": "PONTA DA TERRA",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000226/2025",
+        "numero_termo": "30/2025",
+        "nome_evento": "evento de dança local",
+        "datas_evento": [
+          "2025-12-11"
+        ],
+        "hora_inicio": "17h",
+        "hora_fim": "22h",
+        "valor_final": 2495.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao Auditório do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "30. Termo de Permissão de Uso - Colégio IEP.docx",
+    "id_arquivo_drive": "1r7QwopwhK-gFndZ4rZ95tdwci7QGV7fw"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "MON PLIE ACADEMIA DE DANÇA",
+      "documento": "29497249000136",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Cintia dos Santos Davino",
+      "nome_razao_social_oficial": "CINTIA DOS SANTOS",
+      "cep": "57037532",
+      "logradouro": "COMENDADOR GUSTAVO PAIVA",
+      "numero": "02981",
+      "complemento": "",
+      "bairro": "MANGABEIRAS",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000215/2025",
+        "numero_termo": "29/2025",
+        "nome_evento": "evento de dança local",
+        "datas_evento": [
+          "2025-06-22"
+        ],
+        "hora_inicio": "19h",
+        "hora_fim": "00h",
+        "valor_final": 2495.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao Auditório do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "29. Termo de Permissão de Uso - Evento de Dança - Cintia.docx",
+    "id_arquivo_drive": "1Mxeovz2sMuQY-R_mOrdSsTNvOGTvJK_a"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "ACADEMIA DE BALLET CLÁSSICO SELMA PIMENTEL",
+      "documento": "30855210000122",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Selma Maria Arruda Pimentel Manolio",
+      "nome_razao_social_oficial": "30.855.210 SELMA MARIA ARRUDA PIMENTEL MANOLIO",
+      "cep": "57045365",
+      "logradouro": "JUCA SAMPAIO",
+      "numero": "1785",
+      "complemento": "SALA D",
+      "bairro": "BARRO DURO",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000204/2025",
+        "numero_termo": "28/2025",
+        "nome_evento": "XVI Mostra de Dança do Ballet Selma Pimentel",
+        "datas_evento": [
+          "2025-06-15"
+        ],
+        "hora_inicio": "14h",
+        "hora_fim": "22h",
+        "valor_final": 2495.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao Auditório do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "28. Termo de Permissão de Uso - Selma Pimentel.docx",
+    "id_arquivo_drive": "1E8kTEkjL3THkSFsCO9glgo4HFJaHH8Z4"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "A ESCOLA E CRECHE LUCENA KIDS LTDA",
+      "documento": "33191527000108",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Williams Patrik Araújo de Lima",
+      "nome_razao_social_oficial": "ESCOLA E CRECHE LUCENA KIDS LTDA",
+      "cep": "57035690",
+      "logradouro": "HAMILTON DE BARROS SOUTINHO",
+      "numero": "939",
+      "complemento": "",
+      "bairro": "JATIUCA",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000199/2025",
+        "numero_termo": "27/2025",
+        "nome_evento": "Espetáculos Juninos da Escola e Creche Lucena Kids",
+        "datas_evento": [
+          "2025-06-18"
+        ],
+        "hora_inicio": "08:00",
+        "hora_fim": "20:00",
+        "valor_final": 2495.0,
+        "espaco_utilizado": "AUDITÓRIO e ESPAÇO ABERTO EM FRENTE AO AUDITÓRIO do CENTRO DE INOVAÇÃO DO JARAGUÁ"
+      }
+    ],
+    "arquivo_origem": "27. Termo de Permissão de Uso - Lucena Kids.docx",
+    "id_arquivo_drive": "1Z6fa5koLZH4nyt_rx6iUCYW3ougK2EpF"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "CÉSAR LÔBO CALDAS",
+      "documento": "34140559000139",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": null,
+      "nome_razao_social_oficial": "CESAR LOBO CALDAS",
+      "cep": "57022185",
+      "logradouro": "JOAO CAMERINO",
+      "numero": "231 A",
+      "complemento": "",
+      "bairro": "JARAGUA",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000193/2025",
+        "numero_termo": "26/2025",
+        "nome_evento": "Stand Up Comedy",
+        "datas_evento": [
+          "2025-08-03"
+        ],
+        "hora_inicio": "18h",
+        "hora_fim": null,
+        "valor_final": 2495.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao Auditório do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "26. Termo de Permissão de Uso - Amuse Producoes.docx",
+    "id_arquivo_drive": "1KXHeV6ilCiz0PDfhOc0dH4cLQXydve3s"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "EMPRESA LIMA ARTES",
+      "documento": "22348631000139",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "JONATAS BATISTA DE LIMA",
+      "nome_razao_social_oficial": "LIMA ARTE LTDA",
+      "cep": "57040460",
+      "logradouro": "SIQUEIRA CAMPOS",
+      "numero": "57",
+      "complemento": "",
+      "bairro": "JACINTINHO",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000092/2025",
+        "numero_termo": "11/2025",
+        "nome_evento": "Peça Infantil",
+        "datas_evento": [
+          "2025-04-13",
+          "2025-05-25"
+        ],
+        "hora_inicio": "15:00",
+        "hora_fim": "18:00",
+        "valor_final": 2495.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao auditório do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "11. Termo de Permissão de Uso - Lima Artes Peça Infantil.docx",
+    "id_arquivo_drive": "1s7J-2KvBZ-e9db-AnX6w-ofBigcrpUOT"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "FEDERAÇÃO ALAGOANA DE FISICULTURISMO FITNESS E WELLNESS (F.A.F.F.W-WBPF)",
+      "documento": "47667564000146",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Josyvaldo Silva de Almeida",
+      "nome_razao_social_oficial": "FEDERACAO ALAGOANA DE FISICULTURISMO FITNESS E WELLNESS",
+      "cep": "57062641",
+      "logradouro": "11-B",
+      "numero": "75",
+      "complemento": "",
+      "bairro": "PETROPOLIS",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000175/2025",
+        "numero_termo": "23/2024",
+        "nome_evento": "10º CAMPEONATO ESTREANTE E ESTADUAL DE FISICULTURISMO WBPF – MACEIÓ/AL",
+        "datas_evento": [
+          "2025-07-05"
+        ],
+        "hora_inicio": "08h",
+        "hora_fim": "21h",
+        "valor_final": 0.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "23. Termo de Permissão de Uso - Fisiculturismo.docx",
+    "id_arquivo_drive": "1U0xHU8z1FmhBi2qTe7o44kAiKd2rxXC_"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "ESCOLA DE EDUCAÇÃO BÁSICA AGNUS DEI",
+      "documento": "41182015000103",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Betânia Feliciano Leite de Melo",
+      "nome_razao_social_oficial": "ESCOLA DE EDUCACAO BASICA AGNUS DEI LTDA",
+      "cep": "57100000",
+      "logradouro": "PRESIDENTE FERNANDO AFONSO COLLOR DE MELLO",
+      "numero": "96",
+      "complemento": "",
+      "bairro": "PREFEITO ANTONIO LINS DE SOUZA",
+      "cidade": "RIO LARGO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000182/2025",
+        "numero_termo": "25/2025",
+        "nome_evento": "Comemoração do Dia das Mães",
+        "datas_evento": [
+          "2025-05-07"
+        ],
+        "hora_inicio": "15h",
+        "hora_fim": "22h",
+        "valor_final": 2495.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "25. Termo de Permissão de Uso - Col. Agnus Dei.docx",
+    "id_arquivo_drive": "1JYky8jQ79KhYW535IOIoK4qw6T_2vCxu"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "ANDRÉ LUÍS BONFIM SOUSA",
+      "documento": "00300771339",
+      "tipo_pessoa": "PF",
+      "nome_responsavel": "ANDRÉ LUÍS BONFIM SOUSA"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000174/2025",
+        "numero_termo": "22/2024",
+        "nome_evento": "XXIII Nordeste Cantat",
+        "datas_evento": [
+          "2025-09-11",
+          "2025-09-12"
+        ],
+        "hora_inicio": "19h",
+        "hora_fim": "22h",
+        "valor_final": 4491.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente do imóvel denominado Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "22. Termo de Permissão de Uso - FAC.docx",
+    "id_arquivo_drive": "1SzbVjji_pnkuAozcmEAzx6o1BKyEeiO_"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "EMPRESA CONECT SERVIÇOS INDUSTRIAIS LTDA",
+      "documento": "46816463000127",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Ericsson Henrique",
+      "nome_razao_social_oficial": "CONECT SERVICOS INDUSTRIAIS LTDA",
+      "cep": "57052485",
+      "logradouro": "MAJOR VICENTE SABINO",
+      "numero": "283",
+      "complemento": "ANEXO INTERNO ANDAR PRIMEIRO ANDAR",
+      "bairro": "GRUTA DE LOURDES",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000181/2025",
+        "numero_termo": "24/2024",
+        "nome_evento": "Show gospel com o artista Cássio Petronilo",
+        "datas_evento": [
+          "2025-07-11"
+        ],
+        "hora_inicio": "19:00",
+        "hora_fim": "22:00",
+        "valor_final": 1746.5,
+        "espaco_utilizado": "AUDITÓRIO e ESPAÇO ABERTO EM FRENTE do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "24. Termo de Permissão de Uso - Show Cassio  Petronilo.docx",
+    "id_arquivo_drive": "1isYjm1wI4sJTKyko7F6R-004rmklKb7e"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "CRECHE LAÇOS DO SABER",
+      "documento": "35157090000103",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Anne Caroline Brito de Oliveira",
+      "nome_razao_social_oficial": "ANDERSON BARBOSA MAGALHAES LTDA",
+      "cep": "57037580",
+      "logradouro": "DOUTOR MARIO NUNES VIEIRA",
+      "numero": "726",
+      "complemento": "",
+      "bairro": "MANGABEIRAS",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000093/2025",
+        "numero_termo": "12/2025",
+        "nome_evento": "Espetáculos de Ballet",
+        "datas_evento": [
+          "2025-11-06",
+          "2025-11-07"
+        ],
+        "hora_inicio": "09:00",
+        "hora_fim": "22:00",
+        "valor_final": 7365.24,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao auditório do Centro de Inovação do Jaraguá"
+      },
+      {
+        "numero_processo": "E:30010.0000000093/2025",
+        "numero_termo": "12/2025",
+        "nome_evento": "Encerramento de Natal",
+        "datas_evento": [
+          "2025-12-05",
+          "2025-12-17"
+        ],
+        "hora_inicio": "09:00",
+        "hora_fim": "22:00",
+        "valor_final": 7365.24,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao auditório do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "12. Termo de Permissão de Uso - Laços do Saber.docx",
+    "id_arquivo_drive": "1AqgZLyhLFKch5m5XXBuURn0bAOfyGx1f"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "EMPRESA SALTARE LTDA",
+      "documento": "12416933000143",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Maria das Graças de Souza Duarte",
+      "nome_razao_social_oficial": "SALTARE LTDA",
+      "cep": "57046480",
+      "logradouro": "VALE DA SERRARIA",
+      "numero": "310",
+      "complemento": "",
+      "bairro": "SERRARIA",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000156/2025",
+        "numero_termo": "20/2024",
+        "nome_evento": "evento institucional de dança e música da SALTARE CORPORE",
+        "datas_evento": [
+          "2025-11-27",
+          "2025-11-28"
+        ],
+        "hora_inicio": "08:00",
+        "hora_fim": "22:00",
+        "valor_final": 4491.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "20. Termo de Permissão de Uso - SALTARE.docx",
+    "id_arquivo_drive": "1pq6ysSCaUJIfnf2WMlo4y7-c4UDN-pnA"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "COLÉGIO MANOEL CÂNDIDO",
+      "documento": "46455018000189",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Luzinete Duarte Calheiros",
+      "nome_razao_social_oficial": "CALHEIROS E DUARTE LTDA",
+      "cep": "57041300",
+      "logradouro": "ALFREDO MARSIGLIA",
+      "numero": "23",
+      "complemento": "",
+      "bairro": "JACINTINHO",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000168/2025",
+        "numero_termo": "21/2024",
+        "nome_evento": "Festival de Expressões Artísticas",
+        "datas_evento": [
+          "2025-12-07"
+        ],
+        "hora_inicio": "11:00",
+        "hora_fim": "19:00",
+        "valor_final": 2495.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "21. Termo de Permissão de Uso - Colégio Manoel Cândido.docx",
+    "id_arquivo_drive": "1LN5LtejZQmYDmNyGkcb5Bhhl3szbtRs1"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "ACADEMIA DE BALLET CLÁSSICO SELMA PIMENTEL",
+      "documento": "30855210000122",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Selma Maria Arruda Pimentel Manolio",
+      "nome_razao_social_oficial": "30.855.210 SELMA MARIA ARRUDA PIMENTEL MANOLIO",
+      "cep": "57045365",
+      "logradouro": "JUCA SAMPAIO",
+      "numero": "1785",
+      "complemento": "SALA D",
+      "bairro": "BARRO DURO",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000065/2025",
+        "numero_termo": "05/2025",
+        "nome_evento": "Poesias Secas",
+        "datas_evento": [
+          "2025-04-26"
+        ],
+        "hora_inicio": "16h",
+        "hora_fim": "00h",
+        "valor_final": 2495.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao Auditório"
+      }
+    ],
+    "arquivo_origem": "05. Termo de Permissão de Uso - Selma Pimentel.docx",
+    "id_arquivo_drive": "14WDZJ6sP-J6FplqylN29OOx-g5aJCx0u"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "MASTER FORMATURAS E EVENTOS LTDA",
+      "documento": "45115863000142",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "João Guedes da Silva Júnior",
+      "nome_razao_social_oficial": "MASTER FORMATURAS E EVENTOS LTDA",
+      "cep": "57051200",
+      "logradouro": "DOM VITAL",
+      "numero": "61",
+      "complemento": "",
+      "bairro": "FAROL",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000118/2025",
+        "numero_termo": "19/2024",
+        "nome_evento": "Colação de Grau da Turma Unificada - UMJ - 2024.02",
+        "datas_evento": [
+          "2025-03-20"
+        ],
+        "hora_inicio": "15h30",
+        "hora_fim": "17h",
+        "valor_final": 2495.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "19. Termo de Permissão de Uso - UMJ.docx",
+    "id_arquivo_drive": "18FanM1bohaWyenJAmjejN-e0qVzQnCCV"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "ASSEMBLEIA LEGISLATIVA ESTADUAL DE ALAGOAS",
+      "documento": "12343976000146",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "JOSÉ RONALDO MEDEIROS",
+      "nome_razao_social_oficial": "ESTADO DE ALAGOAS - ASSEMBLEIA LEGISLATIVA",
+      "cep": "57020908",
+      "logradouro": "D PEDRO II",
+      "numero": "SN",
+      "complemento": "",
+      "bairro": "CENTRO",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000117/2025",
+        "numero_termo": "18/2025",
+        "nome_evento": "Lançamento de Chapa para o Processo de Eleição Direta (PED) 2025 do Partido dos Trabalhadores de Alagoas",
+        "datas_evento": [
+          "2025-03-23"
+        ],
+        "hora_inicio": "09:00",
+        "hora_fim": "12:00",
+        "valor_final": 2495.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao Auditório do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "18. Termo de Permissão de Uso - Dep. Ronaldo Medeiros.docx",
+    "id_arquivo_drive": "1bpEy4Rx2cXYvEgYa8mQdRgUnSg90_asT"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "EMPRESA M ALBUQUERQUE & CIA LTDA",
+      "documento": "14149596000109",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Lilian Cristina da Silva Albuquerque",
+      "nome_razao_social_oficial": "M ALBUQUERQUE & CIA LTDA",
+      "cep": "57041005",
+      "logradouro": "CLETO CAMPELO",
+      "numero": "72",
+      "complemento": " 72A",
+      "bairro": "JACINTINHO",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000112/2025",
+        "numero_termo": "17/2025",
+        "nome_evento": "Feira Cultural do Colégio 29 de julho",
+        "datas_evento": [
+          "2025-04-11"
+        ],
+        "hora_inicio": "14:00",
+        "hora_fim": null,
+        "valor_final": 2495.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao Auditório do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "17. Termo de Permissão de Uso - Colégio 29 de julho.docx",
+    "id_arquivo_drive": "15dWie9o7Qc92DSiJOSLojMJlziqwucXy"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "CENTRO EDUCACIONAL NOVO ALVORECER LTDA",
+      "documento": "07800488000180",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Valéria Pedro da Silva Barreto",
+      "nome_razao_social_oficial": "CENTRO EDUCACIONAL NOVO ALVORECER LTDA",
+      "cep": "57100000",
+      "logradouro": "SANTA TEREZA",
+      "numero": "02",
+      "complemento": "",
+      "bairro": "TABULEIRO DO PINTO",
+      "cidade": "RIO LARGO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000100/2025",
+        "numero_termo": "16/2025",
+        "nome_evento": "Espetáculo de Ballet e Ginástica Rítmica",
+        "datas_evento": [
+          "2025-11-29"
+        ],
+        "hora_inicio": "14:00",
+        "hora_fim": null,
+        "valor_final": 2495.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao Auditório do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "16. Termo de Permissão de Uso - Colégio CENA.docx",
+    "id_arquivo_drive": "1UFaUBZvtDp-kH7mJPnzTA9I9SD0mfWZZ"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "CARINA PRISCILLA DE PAULA REIS",
+      "documento": "04489388632",
+      "tipo_pessoa": "PF",
+      "nome_responsavel": "CARINA PRISCILLA DE PAULA REIS"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000097/2025",
+        "numero_termo": "14/2025",
+        "nome_evento": "Apresentação de Dança do Ventre",
+        "datas_evento": [
+          "2025-07-27"
+        ],
+        "hora_inicio": "17:00",
+        "hora_fim": "2025-07-28T12:00",
+        "valor_final": 2495.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao Auditório do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "14. Termo de Permissão de Uso - Dança do Ventre.docx",
+    "id_arquivo_drive": "1kgnJuWYG8Cu0XQ-21e3DtOuCiXdVIkDS"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "César Lôbo Caldas",
+      "documento": "07693956433",
+      "tipo_pessoa": "PF",
+      "nome_responsavel": "César Lôbo Caldas"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000096/2025",
+        "numero_termo": "13/2025",
+        "nome_evento": "Peça Teatral - Diálogos da Luz",
+        "datas_evento": [
+          "2025-05-08"
+        ],
+        "hora_inicio": "19:30",
+        "hora_fim": null,
+        "valor_final": 2495.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao Auditório do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "13. Termo de Permissão de Uso - Amuse Producoes.docx",
+    "id_arquivo_drive": "18YaDpLBT_pSnrkbTMwtek0XUv5cjGlwm"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "COLÉGIO MONTE SINAI LTDA",
+      "documento": "03879039000119",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "RODRIGO VANDERLAN DO NASCIMENTO",
+      "nome_razao_social_oficial": "COLEGIO MONTE SINAI LTDA",
+      "cep": "57042130",
+      "logradouro": "SAO BENEDITO",
+      "numero": "13",
+      "complemento": "",
+      "bairro": "JACINTINHO",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000087/2025",
+        "numero_termo": "10/2025",
+        "nome_evento": "evento escolar em comemoração ao Natal e encerramento letivo",
+        "datas_evento": [
+          "2025-12-06"
+        ],
+        "hora_inicio": "14h",
+        "hora_fim": "22h",
+        "valor_final": 2495.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao auditório do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "10. Termo de Permissão de Uso - Colégio Monte Sinai.docx",
+    "id_arquivo_drive": "1_iBcttVDmnRS-I8eo7GQs5ifr2YCRmNC"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "OAK3 MARKETING E ENTRETENIMENTO LTDA",
+      "documento": "34574976000190",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "VICTOR GOMES CARVALHEIRA",
+      "nome_razao_social_oficial": "OAK3 MARKETING E ENTRETENIMENTO LTDA",
+      "cep": "51160240",
+      "logradouro": "MANOEL DIDIER",
+      "numero": "53",
+      "complemento": " SALA 00A1",
+      "bairro": "IMBIRIBEIRA",
+      "cidade": "RECIFE",
+      "uf": "PE"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000075/2025",
+        "numero_termo": "09/2025",
+        "nome_evento": "Show Joyce Alane",
+        "datas_evento": [
+          "2025-04-05"
+        ],
+        "hora_inicio": "19h",
+        "hora_fim": null,
+        "valor_final": 2495.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao auditório do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "09. Termo de Permissão de Uso - Show Joyce Alane.docx",
+    "id_arquivo_drive": "1W11VI0iUWDrw9h3HS7CQYCvo2gcefMkJ"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "EUPHORIA STUDIO DE DANÇA",
+      "documento": "07846734430",
+      "tipo_pessoa": "PF",
+      "nome_responsavel": "Ginayra Silva de Oliveira"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000050/2025",
+        "numero_termo": "03/2025",
+        "nome_evento": "Espetáculo de conclusão do 1º semestre da EUPHORIA STUDIO DE DANÇA",
+        "datas_evento": [
+          "2025-06-11",
+          "2025-06-13"
+        ],
+        "hora_inicio": "08:00",
+        "hora_fim": "22:00",
+        "valor_final": 1996.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao Auditório"
+      }
+    ],
+    "arquivo_origem": "03. Termo de Permissão de Uso - EUPHORIA.docx",
+    "id_arquivo_drive": "14li2vSqs5HgX_lBJLG6YsCc0b3pkHn6P"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "SYSTEM IDIOMAS",
+      "documento": "09338997000169",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Cléo Vaz",
+      "nome_razao_social_oficial": "SYSTEM 2000 CENTRO DE IDIOMAS LTDA",
+      "cep": "57035330",
+      "logradouro": "DEPUTADO JOSE LAGES",
+      "numero": "478",
+      "complemento": "",
+      "bairro": "PONTA VERDE",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000072/2025",
+        "numero_termo": "07/2025",
+        "nome_evento": "Cantata de Natal",
+        "datas_evento": [
+          "2025-11-21",
+          "2025-11-22"
+        ],
+        "hora_inicio": "08:00",
+        "hora_fim": null,
+        "valor_final": 4491.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao Auditório do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "07. Termo de Permissão de Uso - System Idioma.docx",
+    "id_arquivo_drive": "14GcuP_0Z8ePqlYSGvhkguMPQLm7FoDxX"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "CESAR LOBO CALDAS",
+      "documento": "34140559000139",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": null,
+      "nome_razao_social_oficial": "CESAR LOBO CALDAS",
+      "cep": "57022185",
+      "logradouro": "JOAO CAMERINO",
+      "numero": "231 A",
+      "complemento": "",
+      "bairro": "JARAGUA",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000071/2025",
+        "numero_termo": "06/2025",
+        "nome_evento": "Stand-up comedy com Fernando Pedrosa",
+        "datas_evento": [
+          "2025-05-31"
+        ],
+        "hora_inicio": "19h",
+        "hora_fim": "12h",
+        "valor_final": 2495.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao Auditório do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "06. Termo de Permissão de Uso - Amuse Producoes.docx",
+    "id_arquivo_drive": "1r7bTrgeE-hQ3drj50UOA5gn4aIaszNqj"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "CENTRO DE PESQUISA CÊNICA - CEPEC",
+      "documento": "17361388000159",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Claudemir dos Santos Silva",
+      "nome_razao_social_oficial": "17.361.388 CLAUDEMIR DOS SANTOS SILVA",
+      "cep": "57030050",
+      "logradouro": "BASILEU MENDES",
+      "numero": "165",
+      "complemento": "SALA A",
+      "bairro": "PAJUCARA",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000051/2025",
+        "numero_termo": "04/2025",
+        "nome_evento": "Evento de conclusão das turmas teen e infantil do Curso livre de Teatro do CEPEC/ano letivo 2025",
+        "datas_evento": [
+          "2025-08-02",
+          "2025-10-12",
+          "2025-12-14"
+        ],
+        "hora_inicio": "08h",
+        "hora_fim": "22h",
+        "valor_final": 6087.8,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao Auditório"
+      }
+    ],
+    "arquivo_origem": "04. Termo de Permissão de Uso - CEPEC.docx",
+    "id_arquivo_drive": "15L0jq7ww5rWt37JyVNbMSF-Lz2BnGD1l"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "XXX",
+      "documento": "null",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "null"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:XXXXX",
+        "numero_termo": "XX/2025",
+        "nome_evento": "Creator Lab",
+        "datas_evento": [
+          "2025-08-08"
+        ],
+        "hora_inicio": "08h",
+        "hora_fim": "22h",
+        "valor_final": 0.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto de Inovação em Frente ao Auditório"
+      }
+    ],
+    "arquivo_origem": "MODELO -  Termo de Permissão de Uso.docx",
+    "id_arquivo_drive": "1_ruTctkGD_O-4OTfteJeg26CosMnsAz1"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "Universidade Federal de Alagoas - UFAL",
+      "documento": "24464109000148",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Marcela Dos prazeres Barros Da Silva",
+      "nome_razao_social_oficial": "UNIVERSIDADE FEDERAL DE ALAGOAS",
+      "cep": "57072900",
+      "logradouro": "LOURIVAL MELO MOTA",
+      "numero": "SN",
+      "complemento": " CAMPUS A.C. SIMOES",
+      "bairro": "TABULEIRO DO MARTINS",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000285/2025",
+        "numero_termo": "68/2025",
+        "nome_evento": "workshop técnico mensal",
+        "datas_evento": [
+          "2025-09-24",
+          "2025-09-12",
+          "2025-11-21",
+          "2025-11-26"
+        ],
+        "hora_inicio": "08h",
+        "hora_fim": "00h",
+        "valor_final": 0.0,
+        "espaco_utilizado": "AUDITÓRIO E ESPAÇO ABERTO DE INOVAÇÃO EM FRENTE AUDITÓRIO, ANFITEATRO"
+      }
+    ],
+    "arquivo_origem": "68. Termo de Permissão de Uso - UFAL (EDGE).docx",
+    "id_arquivo_drive": "14zgWUyTAndIt-rzCJkekWeWHAj4w0p6q"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "SERVIÇO NACIONAL DE APRENDIZAGEM INDUSTRIAL - SENAI",
+      "documento": "03798361000113",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Carlos Alberto Pacheco Paes",
+      "nome_razao_social_oficial": "SERVICO NACIONAL DE APRENDIZAGEM INDUSTRIAL",
+      "cep": "57055000",
+      "logradouro": "FERNANDES LIMA",
+      "numero": "385",
+      "complemento": "1 E 2 ANDAR",
+      "bairro": "FAROL",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000404/2025",
+        "numero_termo": "67/2024",
+        "nome_evento": "Ética em Foco 2025- Segurança para Inovar",
+        "datas_evento": [
+          "2025-10-08"
+        ],
+        "hora_inicio": "10h",
+        "hora_fim": "18h",
+        "valor_final": 0.0,
+        "espaco_utilizado": "Anfiteatro e Espaço Aberto em frente ao Auditório do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "67. Termo de Permissão de Uso - SENAI/FIEA (anfiteatro).docx",
+    "id_arquivo_drive": "1_bFaRyCD10MkYBcz-Yo-k6A7m-9E_PtB"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "SERVIÇO DE APOIO ÀS MICRO E PEQUENAS EMPRESAS - SEBRAE",
+      "documento": "12517413000127",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Thêmis Mendonça",
+      "nome_razao_social_oficial": "SERVICO DE APOIO AS M E P EMPRESAS DE ALAGOAS-SEBRAE-AL",
+      "cep": "57020560",
+      "logradouro": "DR MARINHO DE GUSMAO",
+      "numero": "46",
+      "complemento": "",
+      "bairro": "CENTRO",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000400/2025",
+        "numero_termo": "66/2025",
+        "nome_evento": "Assembleia de Formalização da ACJogos AL",
+        "datas_evento": [
+          "2025-08-19"
+        ],
+        "hora_inicio": "18h",
+        "hora_fim": "22h",
+        "valor_final": 0.0,
+        "espaco_utilizado": "Anfiteatro do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "66. Termo de Permissão de Uso - SEBRAE.docx",
+    "id_arquivo_drive": "1TzOHDPRD_VuI3hNJu1AE4Pw-2p9IQldN"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "Conselho Regional de Administração de Alagoas (CRA-AL)",
+      "documento": "35259696000150",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Isis Silva de Araújo",
+      "nome_razao_social_oficial": "CONSELHO REGIONAL DE ADMINISTRACAO DA 19 REGIAO CRA",
+      "cep": "57051400",
+      "logradouro": "JOAO NOGUEIRA",
+      "numero": "51",
+      "complemento": "",
+      "bairro": "FAROL",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000398/2025",
+        "numero_termo": "65/2025",
+        "nome_evento": "solenidade de entrega das medalhas do Jubileu de Diamante da Administração",
+        "datas_evento": [
+          "2025-10-09"
+        ],
+        "hora_inicio": "18h",
+        "hora_fim": "22h",
+        "valor_final": 0.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto de Inovação em frente ao Auditório do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "65. Termo de Permissão de Uso - CRA/AL.docx",
+    "id_arquivo_drive": "1dCE-hkg6ZjWEvYKHUPxg1bjApFcwPAYK"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "FUNDAÇÃO DE APOIO AO ENSINO, EXTENSÃO E PESQUISA DE ALAGOAS - FEPESA",
+      "documento": "07925477000127",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Ricardo Antônio de Barros Wanderley",
+      "nome_razao_social_oficial": "FUNDACAO DE APOIO AO ENSINO, EXTENSAO E PESQUISA DE ALAGOAS",
+      "cep": "57010374",
+      "logradouro": "AMINADAB VALENTE",
+      "numero": "59",
+      "complemento": "",
+      "bairro": "TRAPICHE DA BARRA",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000391/2025",
+        "numero_termo": "63/2025",
+        "nome_evento": "Expo Games 2026",
+        "datas_evento": [
+          "2026-07-11",
+          "2026-07-12"
+        ],
+        "hora_inicio": "08:00",
+        "hora_fim": "22:00",
+        "valor_final": 0.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao Auditório do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "63. Termo de Permissão de Uso - FEPESA.docx",
+    "id_arquivo_drive": "16e813D4lT5smtgXjPP2fX0wGayESIo8W"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "CENTRO UNIVERSITÁRIO MÁRIO PONTES JUCÁ - UMJ",
+      "documento": "01073457000199",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Mário Cesar Jucá",
+      "nome_razao_social_oficial": "FAPEC - FUNDACAO ALAGOANA DE PESQUISA, EDUCACAO E CULTURA",
+      "cep": "57045000",
+      "logradouro": "MUNIZ FALCAO",
+      "numero": "1200",
+      "complemento": "",
+      "bairro": "BARRO DURO",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000392/2025",
+        "numero_termo": "64/2025",
+        "nome_evento": "Semana do Psicólogo",
+        "datas_evento": [
+          "2025-08-28"
+        ],
+        "hora_inicio": "18h",
+        "hora_fim": "22h",
+        "valor_final": 0.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao Auditório do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "64. Termo de Permissão de Uso - UMJ.docx",
+    "id_arquivo_drive": "1EwlbTJWuBWKnE8oKnYhf7wsCAwbDwyfZ"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "FUNDAÇÃO DE APOIO AO ENSINO, EXTENSÃO E PESQUISA DE ALAGOAS - FEPESA",
+      "documento": "07925477000127",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Melissa Mota Alcides",
+      "nome_razao_social_oficial": "FUNDACAO DE APOIO AO ENSINO, EXTENSAO E PESQUISA DE ALAGOAS",
+      "cep": "57010374",
+      "logradouro": "AMINADAB VALENTE",
+      "numero": "59",
+      "complemento": "",
+      "bairro": "TRAPICHE DA BARRA",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000390/2025",
+        "numero_termo": "62/2025",
+        "nome_evento": "treinamento da equipe do PlanUrbi",
+        "datas_evento": [
+          "2025-08-20"
+        ],
+        "hora_inicio": "14h",
+        "hora_fim": "17h",
+        "valor_final": 0.0,
+        "espaco_utilizado": "Laboratório Oxetech do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "62. Termo de Permissão de Uso - FEPESA.docx",
+    "id_arquivo_drive": "1rHg3hKpL4-O_eg0--AhealbpA1ODkMil"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "INSTITUTO FEDERAL DE ALAGOAS - IFAL",
+      "documento": "10825373000155",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "EUNICE PALMEIRAS DA SILVA",
+      "nome_razao_social_oficial": "INSTITUTO FEDERAL DE EDUCACAO, CIENCIA E TECNOLOGIA DE ALAGOAS - IF/AL",
+      "cep": "57035660",
+      "logradouro": "ODILON DE VASCONCELOS",
+      "numero": "103",
+      "complemento": "",
+      "bairro": "JATIUCA",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000373/2025",
+        "numero_termo": "60/2025",
+        "nome_evento": "aulas do Mestrado Interinstitucional em Administração (MInter)",
+        "datas_evento": [
+          "2025-08-15",
+          "2025-08-16",
+          "2025-08-29",
+          "2025-08-30",
+          "2025-09-12",
+          "2025-09-13",
+          "2025-09-19",
+          "2025-09-20",
+          "2025-09-26",
+          "2025-09-27",
+          "2025-10-10",
+          "2025-10-11",
+          "2025-10-17",
+          "2025-10-18",
+          "2025-10-24",
+          "2025-10-25",
+          "2025-10-31",
+          "2025-11-01",
+          "2025-11-07",
+          "2025-11-08",
+          "2025-11-21",
+          "2025-11-22",
+          "2025-12-12",
+          "2025-12-13"
+        ],
+        "hora_inicio": "14:00",
+        "hora_fim": "22:00",
+        "valor_final": 0.0,
+        "espaco_utilizado": "Coworking da 116 (Espaço de Fomento) do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "60. Termo de Permissão de Uso - IFAL.docx",
+    "id_arquivo_drive": "1hd7iWWdE22d0sXN5p0vycSZP0ymK4F2y"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "Universidade Federal de Alagoas - UFAL, por meio do Laboratório EDGE",
+      "documento": "24464109000148",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Rodrigo de Barros Paes",
+      "nome_razao_social_oficial": "UNIVERSIDADE FEDERAL DE ALAGOAS",
+      "cep": "57072900",
+      "logradouro": "LOURIVAL MELO MOTA",
+      "numero": "SN",
+      "complemento": " CAMPUS A.C. SIMOES",
+      "bairro": "TABULEIRO DO MARTINS",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000344/2025",
+        "numero_termo": "57/2025",
+        "nome_evento": "cerimônia de abertura do Edge Experience, o EdgeX",
+        "datas_evento": [
+          "2025-11-03"
+        ],
+        "hora_inicio": "17h",
+        "hora_fim": "22h",
+        "valor_final": 0.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto de Inovação em frente ao Auditório do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "57. Termo de Permissão de Uso - EDGE.docx",
+    "id_arquivo_drive": "1ahGQMoffIccyOY_oooFsHBV3eqhypcNl"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "Universidade Federal de Alagoas - UFAL",
+      "documento": "24464109000148",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Lucas Lisboa",
+      "nome_razao_social_oficial": "UNIVERSIDADE FEDERAL DE ALAGOAS",
+      "cep": "57072900",
+      "logradouro": "LOURIVAL MELO MOTA",
+      "numero": "SN",
+      "complemento": " CAMPUS A.C. SIMOES",
+      "bairro": "TABULEIRO DO MARTINS",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000342/2025",
+        "numero_termo": "56/2025",
+        "nome_evento": "evento voltado para micro e pequenas empresas alagoanas contempladas no edital Tecnova",
+        "datas_evento": [
+          "2025-08-20"
+        ],
+        "hora_inicio": "08h",
+        "hora_fim": "12h",
+        "valor_final": 0.0,
+        "espaco_utilizado": "Coworking da 116 (Espaço de Fomento) do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "56. Termo de Permissão de Uso - EDGE.docx",
+    "id_arquivo_drive": "1G7c2wGoVC7rBXlQYzo1FrpbozrwjdjE3"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "BF ESTRATÉGIA",
+      "documento": "35722687000153",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Bruna Freire Cardoso Dias",
+      "nome_razao_social_oficial": "35.722.687 BRUNA FREIRE CARDOSO DIAS",
+      "cep": "57035700",
+      "logradouro": "DOUTOR JULIO MARQUES LUZ",
+      "numero": "847",
+      "complemento": "",
+      "bairro": "JATIUCA",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000338/2025",
+        "numero_termo": "55/2025",
+        "nome_evento": "lançamento do livro infantil “O Chapéu de Alecrim”",
+        "datas_evento": [
+          "2025-08-17"
+        ],
+        "hora_inicio": "16h",
+        "hora_fim": "20h",
+        "valor_final": 0.0,
+        "espaco_utilizado": "Anfiteatro do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "55. Termo de Permissão de Uso - BF Estrategia.docx",
+    "id_arquivo_drive": "1PH9mJZEi75EhdSbAAK1o-QEXGRuPMzh3"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "MANDALA DANÇAS CIGANAS",
+      "documento": "29982054000181",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "IVANEIDE SANTOS",
+      "nome_razao_social_oficial": "IVANEIDE SANTOS 03487171481",
+      "cep": "57042610",
+      "logradouro": "JOEL VIEIRA DOS ANJOS",
+      "numero": "251",
+      "complemento": "",
+      "bairro": "FEITOSA",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000333/2025",
+        "numero_termo": "54/2025",
+        "nome_evento": "espetáculo de dança do Studio Mandala",
+        "datas_evento": [
+          "2025-11-30"
+        ],
+        "hora_inicio": "08h",
+        "hora_fim": "23h",
+        "valor_final": 0.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto de Inovação em frente ao Auditório do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "54. Termo de Permissão de Uso - Studio Mandala.docx",
+    "id_arquivo_drive": "1fJjsZA5UQhXzhUhGYCebvQ3-bF7-UeBB"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "ORGANIZAÇÃO ARNON DE MELLO",
+      "documento": "12199147000131",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Luís Amorim",
+      "nome_razao_social_oficial": "ORG ARNON DE MELLO ASSESSORIA E ADM EMPRESARIAL LTDA - EM RECUPERACAO JUDICIAL",
+      "cep": "57051090",
+      "logradouro": "ARISTEU DE ANDRADE",
+      "numero": "355",
+      "complemento": "",
+      "bairro": "FAROL",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000331/2025",
+        "numero_termo": "53/2025",
+        "nome_evento": "Gazeta Summit Mulher - Políticas públicas, proteção e igualdade para todas",
+        "datas_evento": [
+          "2025-08-13",
+          "2025-08-14"
+        ],
+        "hora_inicio": "08:30",
+        "hora_fim": "13:00",
+        "valor_final": 0.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto de Inovação em frente ao Auditório do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "53.  Termo de Permissão de Uso - Gazeta Summit.docx",
+    "id_arquivo_drive": "11P5l9wjLfuCXm2wj4gVq_l8tR0d9JXi0"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "UNIVERSIDADE FEDERAL DE ALAGOAS - UFAL",
+      "documento": "24464109000148",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Professor Krerley Oliveira",
+      "nome_razao_social_oficial": "UNIVERSIDADE FEDERAL DE ALAGOAS",
+      "cep": "57072900",
+      "logradouro": "LOURIVAL MELO MOTA",
+      "numero": "SN",
+      "complemento": " CAMPUS A.C. SIMOES",
+      "bairro": "TABULEIRO DO MARTINS",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000329/2025",
+        "numero_termo": "52/2025",
+        "nome_evento": "OPORTUNIDADES NAS EXATAS",
+        "datas_evento": [
+          "2025-10-19"
+        ],
+        "hora_inicio": "08:00",
+        "hora_fim": "18:00",
+        "valor_final": 0.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto de Inovação em frente ao Auditório do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "52.  Termo de Permissão de Uso - NES UFAL.docx",
+    "id_arquivo_drive": "1J2EMXMnEZEMXVBE-xrv5Ry8Jt4AE7qTK"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "GRUPO MULHERES DO BRASIL",
+      "documento": "22992005000180",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Alexandra Soraia de Vasconcelos Segantin",
+      "nome_razao_social_oficial": "GRUPO MULHERES DO BRASIL",
+      "cep": "04006002",
+      "logradouro": "DOUTOR TOMAS CARVALHAL",
+      "numero": "681",
+      "complemento": "",
+      "bairro": "PARAISO",
+      "cidade": "SAO PAULO",
+      "uf": "SP"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000314/2025",
+        "numero_termo": "51/2025",
+        "nome_evento": "2º Encontro do Grupo Mulheres do Brasil – Núcleo Maceió",
+        "datas_evento": [
+          "2025-07-30"
+        ],
+        "hora_inicio": "18h",
+        "hora_fim": "21h",
+        "valor_final": 0.0,
+        "espaco_utilizado": "Anfiteatro do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "51.  Termo de Permissão de Uso - GRUPO DE MULHERES DO BRASIL.docx",
+    "id_arquivo_drive": "1Yjtdn8m--tzvKNTSgQTrM2ACzONVUZEI"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "YELLOW KITE PROPAGANDA E PUBLICIDADE LTDA",
+      "documento": "13055903000111",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Marcos Paulo da Costa Correia",
+      "nome_razao_social_oficial": "YELLOW KITE PROPAGANDA E PUBLICIDADE LTDA",
+      "cep": "57160000",
+      "logradouro": "CARAVELAS",
+      "numero": "03",
+      "complemento": "SALA 18",
+      "bairro": "PRAIA DO FRANCES",
+      "cidade": "MARECHAL DEODORO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000311/2025",
+        "numero_termo": "50/2025",
+        "nome_evento": "evento sobre marketing, vendas e tendências",
+        "datas_evento": [
+          "2025-09-18"
+        ],
+        "hora_inicio": "12:00",
+        "hora_fim": "22:00",
+        "valor_final": 0.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto de Inovação em frente ao Auditório do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "50.  Termo de Permissão de Uso - Yellow Kite.docx",
+    "id_arquivo_drive": "1Jt7mNNsbwQszoPAC5Q6um3D6Sm82MmGf"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "BUSINESS IN PARADISE PRODUÇÕES E EVENTOS LTDA",
+      "documento": "47884008000121",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Vick Lisboa",
+      "nome_razao_social_oficial": "BUSINESS IN PARADISE PRODUCOES E EVENTOS LTDA",
+      "cep": "57036850",
+      "logradouro": "ÁLVARO OTACÍLIO",
+      "numero": "3731",
+      "complemento": "SALA 602",
+      "bairro": "JATIÚCA",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000290/2025",
+        "numero_termo": "49/2025",
+        "nome_evento": "Creator Lab",
+        "datas_evento": [
+          "2025-08-08",
+          "2025-08-08",
+          "2025-08-08"
+        ],
+        "hora_inicio": "08h",
+        "hora_fim": "22h",
+        "valor_final": 0.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto de Inovação em frente ao Auditório do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "49. Termo de Permissão de Uso - BIP.docx",
+    "id_arquivo_drive": "1MafLt2QU6s4SihbQhhAHy9JJ7K-X9fiQ"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "UNIVERSIDADE FEDERAL DE ALAGOAS - UFAL",
+      "documento": "24464109000148",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Ivvy Pedrosa Cavalcante Pessoa Quintella",
+      "nome_razao_social_oficial": "UNIVERSIDADE FEDERAL DE ALAGOAS",
+      "cep": "57072900",
+      "logradouro": "LOURIVAL MELO MOTA",
+      "numero": "SN",
+      "complemento": " CAMPUS A.C. SIMOES",
+      "bairro": "TABULEIRO DO MARTINS",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000285/2025",
+        "numero_termo": "48/2025",
+        "nome_evento": "workshop técnico mensal",
+        "datas_evento": [
+          "2025-07-30"
+        ],
+        "hora_inicio": "09h",
+        "hora_fim": "00h",
+        "valor_final": 0.0,
+        "espaco_utilizado": "AUDITÓRIO E ESPAÇO ABERTO DE INOVAÇÃO EM FRENTE AUDITÓRIO do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "48. Termo de Permissão de Uso - UFAL (EDGE).docx",
+    "id_arquivo_drive": "1Odqxl8iaknxbVSAlaY-T0BfCrHBPZfCu"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "UNIVERSIDADE FEDERAL DE ALAGOAS - UFAL",
+      "documento": "24464109000148",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Josealdo Tonholo",
+      "nome_razao_social_oficial": "UNIVERSIDADE FEDERAL DE ALAGOAS",
+      "cep": "57072900",
+      "logradouro": "LOURIVAL MELO MOTA",
+      "numero": "SN",
+      "complemento": " CAMPUS A.C. SIMOES",
+      "bairro": "TABULEIRO DO MARTINS",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000276/2025",
+        "numero_termo": "47/2025",
+        "nome_evento": "evento para startups alagoanas",
+        "datas_evento": [
+          "2025-07-15"
+        ],
+        "hora_inicio": "08h",
+        "hora_fim": "17h",
+        "valor_final": 0.0,
+        "espaco_utilizado": "Coworking do Espaço de Fomento, Sala de Reunião 116 e Anfiteatro do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "47. Termo de Permissão de Uso - UFAL (EDGE).docx",
+    "id_arquivo_drive": "11PjgPlG1FK6uBuaDY1AZsNaW7HCIry7G"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "SECRETARIA DE ESTADO DA SAÚDE",
+      "documento": "12200259000165",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Lenise Barbosa Abreu",
+      "nome_razao_social_oficial": "SECRETARIA DE ESTADO DA SAUDE",
+      "cep": "57036540",
+      "logradouro": "DUQUE DE CAXIAS",
+      "numero": "978",
+      "complemento": "",
+      "bairro": "CENTRO",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000258/2025",
+        "numero_termo": "46/2025",
+        "nome_evento": "reunião das Comissões Intergestores Regionais - CIR",
+        "datas_evento": [
+          "2025-06-03"
+        ],
+        "hora_inicio": "09:00",
+        "hora_fim": null,
+        "valor_final": 0.0,
+        "espaco_utilizado": "Auditório da Secretaria de Ciência, Tecnologia e Inovação"
+      }
+    ],
+    "arquivo_origem": "46. Termo de Permissão de Uso - SESAU na SECTI.docx",
+    "id_arquivo_drive": "1igjlVydaWFwHYKYjukfuxib2z8s4dMOq"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "AGÊNCIA TATU DE JORNALISMO DE DADOS LTDA",
+      "documento": "30919862000183",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Lucas Cavalcanti Maia",
+      "nome_razao_social_oficial": "AGENCIA TATU DE JORNALISMO DE DADOS LTDA",
+      "cep": "57081131",
+      "logradouro": "LUIZ AVELINO PEREIRA",
+      "numero": "01494",
+      "complemento": "",
+      "bairro": "TABULEIRO DOS MARTINS",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000252/2025",
+        "numero_termo": "45/2025",
+        "nome_evento": "Segunda Edição do Fórum de Inovação no Jornalismo Alagoano (FIJA 2025)",
+        "datas_evento": [
+          "2025-07-25",
+          "2025-07-26"
+        ],
+        "hora_inicio": "07h",
+        "hora_fim": "20h",
+        "valor_final": 0.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao Auditório e Anfiteatro"
+      }
+    ],
+    "arquivo_origem": "45. Termo de Permissão de Uso - FIJA 2025.docx",
+    "id_arquivo_drive": "1FztcD-PD3qVhLCyjzWNM7NWfMBNgdX0y"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "SUE CHAMUSCA ARTE E ASSESSORIA",
+      "documento": "05007389000110",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Suely Cerqueira Chamusca",
+      "nome_razao_social_oficial": "ESCRITORIO DE ARTE, PRODUCOES ARTISTICAS E ASSESSORIA LTDA",
+      "cep": "57025330",
+      "logradouro": "NOSSA SENHORA DO CARMO",
+      "numero": "69",
+      "complemento": "",
+      "bairro": "POCO",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000242/2025",
+        "numero_termo": "44/2025",
+        "nome_evento": "Show do Rubel",
+        "datas_evento": [
+          "2025-09-13"
+        ],
+        "hora_inicio": "21h",
+        "hora_fim": "23h",
+        "valor_final": 0.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao Auditório"
+      }
+    ],
+    "arquivo_origem": "44. Termo de Permissão de Uso - Show do Rubel - SUE CHAMUSCA .docx",
+    "id_arquivo_drive": "1EKcYA7eCYI7pq6RfLIrwnzXYWImjHViR"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "INSTITUTO CLASSE",
+      "documento": "45015017000150",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Karoline Pacheco Ribeiro Silva",
+      "nome_razao_social_oficial": "A M J DOS SANTOS INSTITUTO CLASSE A",
+      "cep": "57037285",
+      "logradouro": "COMENDADOR GUSTAVO PAIVA",
+      "numero": "3506",
+      "complemento": "EDIF PREMIUM OFFICE SALA 236",
+      "bairro": "MANGABEIRAS",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000239/2025",
+        "numero_termo": "43/2025",
+        "nome_evento": "Entrevistas e ações voltadas à empregabilidade de jovens e adultos",
+        "datas_evento": [
+          "2025-05-19",
+          "2025-06-02",
+          "2025-06-06",
+          "2025-06-16",
+          "2025-06-20",
+          "2025-06-30"
+        ],
+        "hora_inicio": "null",
+        "hora_fim": "null",
+        "valor_final": 0.0,
+        "espaco_utilizado": "Anfiteatro do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "43. Termo de Permissão de Uso - Karol.docx",
+    "id_arquivo_drive": "1ue5eBfVkeovEa7VZvGInsiqiZFAauOol"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "LITTLE TOWN ESCOLA DE ENSINO INFANTIL LTDA.",
+      "documento": "32088484000169",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Amanda Torres de Carvalho",
+      "nome_razao_social_oficial": "LITTLE TOWN ESCOLA DE ENSINO INFANTIL LTDA",
+      "cep": "57038160",
+      "logradouro": "RODOLFO ABREU",
+      "numero": "256",
+      "complemento": "",
+      "bairro": "CRUZ DAS ALMAS",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000214/2024",
+        "numero_termo": "42/2025",
+        "nome_evento": "Encerramento do Ano Letivo da Escola de Ensino Infantil Little Town",
+        "datas_evento": [
+          "2025-12-12"
+        ],
+        "hora_inicio": "09h",
+        "hora_fim": "20h",
+        "valor_final": 0.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao Auditório do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "42. Termo de Permissão de Uso - Little Town.docx",
+    "id_arquivo_drive": "1JOPo2OYjn4KCSv6mM9T_JH0QVaUqHdpg"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "FUNDAÇÃO DE APOIO AO ENSINO, EXTENSÃO E PESQUISA DE ALAGOAS - FEPESA",
+      "documento": "07925477000127",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Ricardo Antônio de Barros Wanderley",
+      "nome_razao_social_oficial": "FUNDACAO DE APOIO AO ENSINO, EXTENSAO E PESQUISA DE ALAGOAS",
+      "cep": "57010374",
+      "logradouro": "AMINADAB VALENTE",
+      "numero": "59",
+      "complemento": "",
+      "bairro": "TRAPICHE DA BARRA",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000235/2025",
+        "numero_termo": "41/2025",
+        "nome_evento": "Seminário do Projeto Sankofa",
+        "datas_evento": [
+          "2025-09-10"
+        ],
+        "hora_inicio": "08h",
+        "hora_fim": "17h",
+        "valor_final": 0.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao Auditório do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "41. Termo de Permissão de Uso - Seminário do Projeto Sankofa - FEPESA.docx",
+    "id_arquivo_drive": "1RCqMzy4_ea-6fzjwuLS53N_5imm6rxN9"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "FUNDAÇÃO DE APOIO AO ENSINO, EXTENSÃO E PESQUISA DE ALAGOAS - FEPESA",
+      "documento": "07925477000127",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Ricardo Antônio de Barros Wanderley",
+      "nome_razao_social_oficial": "FUNDACAO DE APOIO AO ENSINO, EXTENSAO E PESQUISA DE ALAGOAS",
+      "cep": "57010374",
+      "logradouro": "AMINADAB VALENTE",
+      "numero": "59",
+      "complemento": "",
+      "bairro": "TRAPICHE DA BARRA",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000229/2025",
+        "numero_termo": "40/2025",
+        "nome_evento": "Cultura Nerd (Encontro de Cosplayers de Alagoas e K-Tournament)",
+        "datas_evento": [
+          "2025-05-18",
+          "2025-07-19"
+        ],
+        "hora_inicio": "08h",
+        "hora_fim": "22h",
+        "valor_final": 0.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao Auditório do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "40. Termo de Permissão de Uso - FEPESA.docx",
+    "id_arquivo_drive": "1wxiJPHRWAiUbx2bPB_4mjiKMAI_l6dEo"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "UNIVERSIDADE FEDERAL DE ALAGOAS - UFAL",
+      "documento": "24464109000148",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Josealdo Tonholo",
+      "nome_razao_social_oficial": "UNIVERSIDADE FEDERAL DE ALAGOAS",
+      "cep": "57072900",
+      "logradouro": "LOURIVAL MELO MOTA",
+      "numero": "SN",
+      "complemento": " CAMPUS A.C. SIMOES",
+      "bairro": "TABULEIRO DO MARTINS",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000202/2025",
+        "numero_termo": "39/2025",
+        "nome_evento": "O mil é nosso",
+        "datas_evento": [
+          "2025-06-01"
+        ],
+        "hora_inicio": "08h",
+        "hora_fim": "17h",
+        "valor_final": 0.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao Auditório do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "39. Termo de Permissão de Uso - UFAL.docx",
+    "id_arquivo_drive": "1lmNymGSoePP7uRzTnU1nE9rVHSRL3_Yp"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "AGÊNCIA BALAIO COMPANY",
+      "documento": "15047122000100",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Philipe Piacery",
+      "nome_razao_social_oficial": "BALAIO DE GATO PROMOCOES E EVENTOS LTDA",
+      "cep": "57030570",
+      "logradouro": "QUINTINO BOCAIUVA",
+      "numero": "93",
+      "complemento": "",
+      "bairro": "PONTA DA TERRA",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000191/2025",
+        "numero_termo": "38/2025",
+        "nome_evento": "Balaio Meeting",
+        "datas_evento": [
+          "2025-11-01",
+          "2025-11-02"
+        ],
+        "hora_inicio": "09h",
+        "hora_fim": "22h",
+        "valor_final": 0.0,
+        "espaco_utilizado": "AUDITÓRIO E ESPAÇO ABERTO EM FRENTE AO AUDITÓRIO do imóvel denominado CENTRO DE INOVAÇÃO DO JARAGUÁ"
+      }
+    ],
+    "arquivo_origem": "38. Termo de Permissão de Uso - BALAIO MEETING.docx",
+    "id_arquivo_drive": "1fk9mRj8Z1RZgcXAz_M4sSfbE2wmaP7-G"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "ASSESPRO ALAGOAS",
+      "documento": "02830949000144",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Carlos Albuquerque Lima Junior",
+      "nome_razao_social_oficial": "ASSOCIACAO DAS EMPRESAS BRASILEIRAS DE SOFTWARE E SERVICOS DE INFORMATICA REGIONAL DE ALAGOAS - ASSESPRO-AL",
+      "cep": "57022180",
+      "logradouro": "SA E ALBUQUERQUE",
+      "numero": "467",
+      "complemento": "",
+      "bairro": "JARAGUA",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000172/2025",
+        "numero_termo": "35/2025",
+        "nome_evento": "Reunião do Conselho Administrativo da Confederação Assespro",
+        "datas_evento": [
+          "2025-09-19"
+        ],
+        "hora_inicio": "08h",
+        "hora_fim": "22h",
+        "valor_final": 0.0,
+        "espaco_utilizado": "Auditório, Espaço Aberto em frente ao auditório e anfiteatro do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "35. Termo de Permissão de Uso - ASSESPRO.docx",
+    "id_arquivo_drive": "1yKVGpYde2MoQzdFXpj0s39aALEvaMZqx"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "ASSESPRO ALAGOAS",
+      "documento": "02830949000144",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Carlos Albuquerque Lima Junior",
+      "nome_razao_social_oficial": "ASSOCIACAO DAS EMPRESAS BRASILEIRAS DE SOFTWARE E SERVICOS DE INFORMATICA REGIONAL DE ALAGOAS - ASSESPRO-AL",
+      "cep": "57022180",
+      "logradouro": "SA E ALBUQUERQUE",
+      "numero": "467",
+      "complemento": "",
+      "bairro": "JARAGUA",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000172/2025",
+        "numero_termo": "36/2025",
+        "nome_evento": "Reunião do Conselho Administrativo da Confederação Assespro",
+        "datas_evento": [
+          "2025-09-29"
+        ],
+        "hora_inicio": "08h",
+        "hora_fim": "22h",
+        "valor_final": 0.0,
+        "espaco_utilizado": "Auditório, Espaço Aberto em frente ao auditório e anfiteatro do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "36. Termo de Permissão de Uso - ASSESPRO.docx",
+    "id_arquivo_drive": "1tnXO2BNnNLP-Gl19Ng12aOG0JVyKln6y"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "JS ASSOCIAÇÃO ARTÍSTICA E ASSESSORIA",
+      "documento": "51066004000103",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Jamerson dos Santos Farias Soares",
+      "nome_razao_social_oficial": "51.066.004 JAMERSON DOS SANTOS FARIAS SOARES",
+      "cep": "57045860",
+      "logradouro": "MARANHAO",
+      "numero": "74",
+      "complemento": "",
+      "bairro": "OURO PRETO",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000189/2025",
+        "numero_termo": "37/2025",
+        "nome_evento": "Em busca da literatura da vida real",
+        "datas_evento": [
+          "2025-04-26"
+        ],
+        "hora_inicio": "09h",
+        "hora_fim": "16h",
+        "valor_final": 0.0,
+        "espaco_utilizado": "Anfiteatro do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "37. Termo de Permissão de Uso - PROJETO LITERÁRIO.docx",
+    "id_arquivo_drive": "1qaekczwOf1Wj5TwkxbS0hbGjcNGvbFTz"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "UNIVERSIDADE FEDERAL DE ALAGOAS - UFAL",
+      "documento": "24464109000148",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Prof. André Luiz Lins de Aquino",
+      "nome_razao_social_oficial": "UNIVERSIDADE FEDERAL DE ALAGOAS",
+      "cep": "57072900",
+      "logradouro": "LOURIVAL MELO MOTA",
+      "numero": "SN",
+      "complemento": " CAMPUS A.C. SIMOES",
+      "bairro": "TABULEIRO DO MARTINS",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000170/2025",
+        "numero_termo": "34/2025",
+        "nome_evento": "I Simpósio de Pesquisa em Ciberpsicologia e Interações Sociais",
+        "datas_evento": [
+          "2025-09-03",
+          "2025-09-04",
+          "2025-09-05"
+        ],
+        "hora_inicio": "08h",
+        "hora_fim": "22h",
+        "valor_final": 0.0,
+        "espaco_utilizado": "Auditório, Espaço Aberto em frente ao Auditório e Anfiteatro do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "34. Termo de Permissão de Uso - UFAL.docx",
+    "id_arquivo_drive": "1IEk_1Pwayg8So0DxzMY78L7DQKCC0hcO"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "AZIENDA GESTÃO CONTÁBIL LTDA",
+      "documento": "24087968000165",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Tanísia Marinho Rodrigues",
+      "nome_razao_social_oficial": "AZIENDA GESTAO CONTABIL LTDA",
+      "cep": "57046000",
+      "logradouro": "MENINO MARCELO",
+      "numero": "9350",
+      "complemento": "SALA 219 EDIF HUMBERTO LOBO",
+      "bairro": "SERRARIA",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000169/2025",
+        "numero_termo": "33/2025",
+        "nome_evento": "Conte Mais Summit 2ª Edição",
+        "datas_evento": [
+          "2025-10-17"
+        ],
+        "hora_inicio": "09h",
+        "hora_fim": "18h",
+        "valor_final": 0.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em Frente do Auditório do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "33. Termo de Permissão de Uso - Conte+ Summit 2ª Edição.docx",
+    "id_arquivo_drive": "16_UywFfelitMO4tmD7SmCBP2r6aGARYh"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "WORLD CREATIVITY ORGANIZATION.",
+      "documento": "47857229000100",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Micaele Silvestre Marques Silva",
+      "nome_razao_social_oficial": "WCO EXPERIENCIAS E CERTIFICACOES EDUCACIONAIS LTDA",
+      "cep": "05477903",
+      "logradouro": "DRA RUTH CARDOSO",
+      "numero": "4777",
+      "complemento": "ANDAR 18 - PARTE",
+      "bairro": "JARDIM UNIVERSIDADE PINHEIROS",
+      "cidade": "SAO PAULO",
+      "uf": "SP"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000167/2025",
+        "numero_termo": "32/2025",
+        "nome_evento": "Reunião com os voluntários do evento WCD 2025",
+        "datas_evento": [
+          "2025-03-29"
+        ],
+        "hora_inicio": "19h",
+        "hora_fim": "21h",
+        "valor_final": 0.0,
+        "espaco_utilizado": "Anfiteatro do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "32. Termo de Permissão de Uso - WCD.docx",
+    "id_arquivo_drive": "1_CMkZB_7JUYiHXJeIkXVJoKgXLd2Nl0W"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "FUNDAÇÃO UNIVERSITÁRIA DE DESENVOLVIMENTO DE EXTENSÃO E PESQUISA – FUNDEPES",
+      "documento": "12449880000167",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Prof. Fábio José Coutinho da Silva",
+      "nome_razao_social_oficial": "FUNDACAO UNIVERSITARIA DE DESENV DE EXTENSAO E PESQUISA",
+      "cep": "57082160",
+      "logradouro": "DR DURVAL DE GOIS MONTEIRO",
+      "numero": "4789",
+      "complemento": "QUADRA0333 LOTE 0793 SALA J",
+      "bairro": "SANTO AMARO",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000166/2025",
+        "numero_termo": "31/2025",
+        "nome_evento": "Lançamento do Aplicativo TATU",
+        "datas_evento": [
+          "2025-05-22",
+          "2025-05-23"
+        ],
+        "hora_inicio": "19h",
+        "hora_fim": "22h30",
+        "valor_final": 0.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao Auditório do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "31. Termo de Permissão de Uso - FUNDEPES.docx",
+    "id_arquivo_drive": "12TkM5a-lPP85rN9TRZ3Jb7-xV_PDoccL"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "UNIVERSIDADE FEDERAL DE ALAGOAS - UFAL",
+      "documento": "24464109000148",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Prof. Dr. José Henrique Araújo Lopes de Andrade",
+      "nome_razao_social_oficial": "UNIVERSIDADE FEDERAL DE ALAGOAS",
+      "cep": "57072900",
+      "logradouro": "LOURIVAL MELO MOTA",
+      "numero": "SN",
+      "complemento": " CAMPUS A.C. SIMOES",
+      "bairro": "TABULEIRO DO MARTINS",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000160/2025",
+        "numero_termo": "30/2025",
+        "nome_evento": "1º Workshop de Acústica e Aplicações",
+        "datas_evento": [
+          "2025-05-08",
+          "2025-05-09"
+        ],
+        "hora_inicio": "08h",
+        "hora_fim": "18h",
+        "valor_final": 0.0,
+        "espaco_utilizado": "Anfiteatro do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "30. Termo de Permissão de Uso - UFAL.docx",
+    "id_arquivo_drive": "1RMoot1JATbLwCEYE6N8d60Rp-B-GyO1N"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "ASSESPRO ALAGOAS",
+      "documento": "02830949000144",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Carlos Albuquerque Lima Junior",
+      "nome_razao_social_oficial": "ASSOCIACAO DAS EMPRESAS BRASILEIRAS DE SOFTWARE E SERVICOS DE INFORMATICA REGIONAL DE ALAGOAS - ASSESPRO-AL",
+      "cep": "57022180",
+      "logradouro": "SA E ALBUQUERQUE",
+      "numero": "467",
+      "complemento": "",
+      "bairro": "JARAGUA",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000157/2025",
+        "numero_termo": "29/2025",
+        "nome_evento": "Evento Voltado para Tecnologias Sociais",
+        "datas_evento": [
+          "2025-03-23"
+        ],
+        "hora_inicio": "08h",
+        "hora_fim": "12h",
+        "valor_final": 0.0,
+        "espaco_utilizado": "Anfiteatro do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "29. Termo de Permissão de Uso - ASSESPRO.docx",
+    "id_arquivo_drive": "1KItukuQnwdOHv3GYvytlZ-K4UrUlZ7dk"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "ARQUIDIOCESE DE MACEIÓ - PARÓQUIA DE SÃO PAULO APÓSTOLO",
+      "documento": "12155388004842",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Pe. Manoel José dos Santos",
+      "nome_razao_social_oficial": "ARQUIDIOCESE DE MACEIO",
+      "cep": "57081445",
+      "logradouro": "JOSE MARIA DE MELO",
+      "numero": "S/N",
+      "complemento": "QUADRA 11 L",
+      "bairro": "TABULEIRO NOVO",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000091/2025",
+        "numero_termo": "18/2025",
+        "nome_evento": "Vem pra Cristo",
+        "datas_evento": [
+          "2025-05-30"
+        ],
+        "hora_inicio": "18h",
+        "hora_fim": "22h",
+        "valor_final": 0.0,
+        "espaco_utilizado": "AUDITÓRIO e ESPAÇO ABERTO EM FRENTE AO AUDITÓRIO do CENTRO DE INOVAÇÃO DO JARAGUÁ"
+      }
+    ],
+    "arquivo_origem": "18. Termo de Permissão de Uso - Arquidiocese.docx",
+    "id_arquivo_drive": "1DiBm5byPOdlP8QlhpA9nJkB-6jAd5dwe"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "FUNDAÇÃO UNIVERSITÁRIA DE DESENVOLVIMENTO DE EXTENSÃO E PESQUISA - FUNDEPES",
+      "documento": "24464109000148",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Adriana Guimarães Duarte",
+      "nome_razao_social_oficial": "UNIVERSIDADE FEDERAL DE ALAGOAS",
+      "cep": "57072900",
+      "logradouro": "LOURIVAL MELO MOTA",
+      "numero": "SN",
+      "complemento": " CAMPUS A.C. SIMOES",
+      "bairro": "TABULEIRO DO MARTINS",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000148/2025",
+        "numero_termo": "28/2025",
+        "nome_evento": "Encontro para Salvaguarda do Inventário do Patrimônio Cultural Imaterial dos Bairros de Bebedouro, Bom Parto, Farol, Mutange e Pinheiro",
+        "datas_evento": [
+          "2025-04-05"
+        ],
+        "hora_inicio": "08h",
+        "hora_fim": "20h",
+        "valor_final": 0.0,
+        "espaco_utilizado": "Anfiteatro do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "28. Termo de Permissão de Uso - IPCI.docx",
+    "id_arquivo_drive": "1gVqmHz4AU3wv0NpEqrtFy_VL0GXC9Qvp"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "ALBERTO A COSTA EMPREENDIMENTOS",
+      "documento": "16740519000146",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Alberto Antunes Costa",
+      "nome_razao_social_oficial": "ALBERTO A COSTA EMPREENDIMENTOS",
+      "cep": "57051565",
+      "logradouro": "JOSE DE ALENCAR",
+      "numero": "291",
+      "complemento": "ANDAR 101",
+      "bairro": "FAROL",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000145/2025",
+        "numero_termo": "27/2025",
+        "nome_evento": "Encontro Brasileiro de Administração - EBA",
+        "datas_evento": [
+          "2025-09-26",
+          "2025-09-27"
+        ],
+        "hora_inicio": "08h",
+        "hora_fim": "22h",
+        "valor_final": 0.0,
+        "espaco_utilizado": "AUDITÓRIO, ESPAÇO ABERTO EM FRENTE AO AUDITÓRIO, ANFITEATRO do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "27. Termo de Permissão de Uso - EBA.docx",
+    "id_arquivo_drive": "1Kq4FQOk9eK0HRci55eTdvleixPYHdmg6"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "YELLOW KITE PROPAGANDA E PUBLICIDADE LTDA",
+      "documento": "13055903000111",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Marcos Paulo da Costa Correia",
+      "nome_razao_social_oficial": "YELLOW KITE PROPAGANDA E PUBLICIDADE LTDA",
+      "cep": "57160000",
+      "logradouro": "CARAVELAS",
+      "numero": "03",
+      "complemento": "SALA 18",
+      "bairro": "PRAIA DO FRANCES",
+      "cidade": "MARECHAL DEODORO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000144/2025",
+        "numero_termo": "26/2025",
+        "nome_evento": "Evento sobre IA e Tendências",
+        "datas_evento": [
+          "2025-04-16"
+        ],
+        "hora_inicio": "12h00min",
+        "hora_fim": "21h00min",
+        "valor_final": 0.0,
+        "espaco_utilizado": "Auditório e Térreo em frente ao Auditório do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "26. Termo de Permissão de Uso - Yellow Kite.docx",
+    "id_arquivo_drive": "1hw8wFJNEdla7A7mAkY9ggyKKr5uK8_ok"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "WORLD CREATIVITY ORGANIZATION",
+      "documento": "47857229000100",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Paula Vanessa Lins da Silva",
+      "nome_razao_social_oficial": "WCO EXPERIENCIAS E CERTIFICACOES EDUCACIONAIS LTDA",
+      "cep": "05477903",
+      "logradouro": "DRA RUTH CARDOSO",
+      "numero": "4777",
+      "complemento": "ANDAR 18 - PARTE",
+      "bairro": "JARDIM UNIVERSIDADE PINHEIROS",
+      "cidade": "SAO PAULO",
+      "uf": "SP"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000125/2025",
+        "numero_termo": "25/2024",
+        "nome_evento": "evento World Creativity Day",
+        "datas_evento": [
+          "2025-04-09",
+          "2025-04-21",
+          "2025-04-22",
+          "2025-04-23"
+        ],
+        "hora_inicio": "09:00",
+        "hora_fim": "22:00",
+        "valor_final": 0.0,
+        "espaco_utilizado": "AUDITÓRIO, ESPAÇO ABERTO, ANFITEATRO e CORREDOR do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "25. Termo de Permissão de Uso - WCD abril.docx",
+    "id_arquivo_drive": "1gdLOuPoYjpCoZbGgr3xo_R6GCdOuL4i9"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "INSTITUTO FEDERAL DE ALAGOAS - IFAL",
+      "documento": "10825373000155",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "EUNICE PALMEIRAS DA SILVA",
+      "nome_razao_social_oficial": "INSTITUTO FEDERAL DE EDUCACAO, CIENCIA E TECNOLOGIA DE ALAGOAS - IF/AL",
+      "cep": "57035660",
+      "logradouro": "ODILON DE VASCONCELOS",
+      "numero": "103",
+      "complemento": "",
+      "bairro": "JATIUCA",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000119/2025",
+        "numero_termo": "24/2025",
+        "nome_evento": "Cerimônia de Posse do Conselho Superior do IFAL",
+        "datas_evento": [
+          "2025-03-10"
+        ],
+        "hora_inicio": "07:00",
+        "hora_fim": "13:00",
+        "valor_final": 0.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao Auditório Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "24. Termo de Permissão de Uso - IFAL.docx",
+    "id_arquivo_drive": "1siXVVS7HFQk7bUel9gZt7xS-Fu4PEXwW"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "MASTER FORMATURAS E EVENTOS LTDA",
+      "documento": "45115863000142",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "João Guedes da Silva Júnior",
+      "nome_razao_social_oficial": "MASTER FORMATURAS E EVENTOS LTDA",
+      "cep": "57051200",
+      "logradouro": "DOM VITAL",
+      "numero": "61",
+      "complemento": "",
+      "bairro": "FAROL",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000118/2025",
+        "numero_termo": "23/2024",
+        "nome_evento": "Colação de Grau da Turma Unificada - UMJ - 2024.02",
+        "datas_evento": [
+          "2025-03-20"
+        ],
+        "hora_inicio": "15h30",
+        "hora_fim": "17h",
+        "valor_final": 0.0,
+        "espaco_utilizado": "AUDITÓRIO e ESPAÇO ABERTO EM FRENTE do imóvel denominado CENTRO DE INOVAÇÃO DO JARAGUÁ"
+      }
+    ],
+    "arquivo_origem": "23. Termo de Permissão de Uso - UMJ.docx",
+    "id_arquivo_drive": "1LsFPaDnzcm0QqLrNPBRd60Nu7O_qDPJb"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "UNIVERSIDADE FEDERAL DE ALAGOAS (UFAL)",
+      "documento": "24464109000148",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Prof. André Luiz Lins de Aquino",
+      "nome_razao_social_oficial": "UNIVERSIDADE FEDERAL DE ALAGOAS",
+      "cep": "57072900",
+      "logradouro": "LOURIVAL MELO MOTA",
+      "numero": "SN",
+      "complemento": " CAMPUS A.C. SIMOES",
+      "bairro": "TABULEIRO DO MARTINS",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000116/2025",
+        "numero_termo": "22/2024",
+        "nome_evento": "seminários, palestras internas e eventos com abertura ao público em geral",
+        "datas_evento": [
+          "2025-02-27",
+          "2025-03-27",
+          "2025-04-24",
+          "2025-05-29",
+          "2025-06-26",
+          "2025-07-31",
+          "2025-08-28",
+          "2025-09-25",
+          "2025-10-30",
+          "2025-11-27",
+          "2025-12-18"
+        ],
+        "hora_inicio": "15h30",
+        "hora_fim": "17h",
+        "valor_final": 0.0,
+        "espaco_utilizado": "Anfiteatro do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "22. Termo de Permissão de Uso - Orion.docx",
+    "id_arquivo_drive": "1eup_bHhzPDi-AIcBcdR_jeXemkmoooj0"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "SUE CHAMUSCA ARTE E ASSESSORIA",
+      "documento": "05007389000110",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Silvana Valença Lyra",
+      "nome_razao_social_oficial": "ESCRITORIO DE ARTE, PRODUCOES ARTISTICAS E ASSESSORIA LTDA",
+      "cep": "57025330",
+      "logradouro": "NOSSA SENHORA DO CARMO",
+      "numero": "69",
+      "complemento": "",
+      "bairro": "POCO",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000070/2025",
+        "numero_termo": "15/2025",
+        "nome_evento": "Seis & Meia",
+        "datas_evento": [
+          "2025-05-10",
+          "2025-06-14",
+          "2025-07-12",
+          "2025-08-09",
+          "2025-09-06",
+          "2025-10-11",
+          "2025-11-08",
+          "2025-12-13"
+        ],
+        "hora_inicio": "18h30",
+        "hora_fim": "21h30",
+        "valor_final": 0.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao Auditório"
+      }
+    ],
+    "arquivo_origem": "15. Termo de Permissão de Uso - SUE CHAMUSCA.docx",
+    "id_arquivo_drive": "1yUsrDKp_RtrxqTvZpH5HZWa9oXCQADB_"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "INSTITUTO FEDERAL DE ALAGOAS - IFAL",
+      "documento": "10825373000155",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "EUNICE PALMEIRAS DA SILVA",
+      "nome_razao_social_oficial": "INSTITUTO FEDERAL DE EDUCACAO, CIENCIA E TECNOLOGIA DE ALAGOAS - IF/AL",
+      "cep": "57035660",
+      "logradouro": "ODILON DE VASCONCELOS",
+      "numero": "103",
+      "complemento": "",
+      "bairro": "JATIUCA",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000110/2025",
+        "numero_termo": "20/2025",
+        "nome_evento": "aulas do Mestrado Interinstitucional em Administração (MInter)",
+        "datas_evento": [
+          "2025-03-07",
+          "2025-03-08",
+          "2025-03-14",
+          "2025-03-15",
+          "2025-03-21",
+          "2025-03-22",
+          "2025-03-28",
+          "2025-03-29",
+          "2025-04-04",
+          "2025-04-05",
+          "2025-04-11",
+          "2025-04-12",
+          "2025-04-25",
+          "2025-04-26",
+          "2025-05-02",
+          "2025-05-03",
+          "2025-05-09",
+          "2025-05-10",
+          "2025-05-30",
+          "2025-05-31",
+          "2025-06-06",
+          "2025-06-07",
+          "2025-06-20",
+          "2025-06-21"
+        ],
+        "hora_inicio": "14:00",
+        "hora_fim": "22:00",
+        "valor_final": 0.0,
+        "espaco_utilizado": "Coworking da 116 (Espaço de Fomento) do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "20. Termo de Permissão de Uso - IFAL.docx",
+    "id_arquivo_drive": "1WzvJU2qXOfiplhunJoTpObR9O7KwAdze"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "WORLD CREATIVITY ORGANIZATION",
+      "documento": "47857229000100",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Paula Vanessa Lins da Silva",
+      "nome_razao_social_oficial": "WCO EXPERIENCIAS E CERTIFICACOES EDUCACIONAIS LTDA",
+      "cep": "05477903",
+      "logradouro": "DRA RUTH CARDOSO",
+      "numero": "4777",
+      "complemento": "ANDAR 18 - PARTE",
+      "bairro": "JARDIM UNIVERSIDADE PINHEIROS",
+      "cidade": "SAO PAULO",
+      "uf": "SP"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000111/2025",
+        "numero_termo": "21/2024",
+        "nome_evento": "Lançamento do evento World Creativity Day",
+        "datas_evento": [
+          "2025-02-26"
+        ],
+        "hora_inicio": "18h",
+        "hora_fim": "22h",
+        "valor_final": 0.0,
+        "espaco_utilizado": "Anfiteatro do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "21. Termo de Permissão de Uso - WCD.docx",
+    "id_arquivo_drive": "1JlBDlz-C3rTv55iSQHKSPH9DoArGdtuA"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "ALBERTO A COSTA EMPREENDIMENTOS",
+      "documento": "16740519000146",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Alberto Antunes Costa",
+      "nome_razao_social_oficial": "ALBERTO A COSTA EMPREENDIMENTOS",
+      "cep": "57051565",
+      "logradouro": "JOSE DE ALENCAR",
+      "numero": "291",
+      "complemento": "ANDAR 101",
+      "bairro": "FAROL",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000108/2025",
+        "numero_termo": "19/2025",
+        "nome_evento": "Feirão do Estudante",
+        "datas_evento": [
+          "2025-08-29",
+          "2025-08-30",
+          "2025-08-31"
+        ],
+        "hora_inicio": "08h",
+        "hora_fim": "22h",
+        "valor_final": 0.0,
+        "espaco_utilizado": "Auditório, Espaço Aberto em frente ao Auditório e Anfiteatro do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "19. Termo de Permissão de Uso - Feirão do Estudante.docx",
+    "id_arquivo_drive": "1aGMpho4CGkE8KMQ_1MRy1BEJAYw9x07x"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "SUE CHAMUSCA ARTE E ASSESSORIA",
+      "documento": "05007389000110",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Suely Cerqueira Chamusca",
+      "nome_razao_social_oficial": "ESCRITORIO DE ARTE, PRODUCOES ARTISTICAS E ASSESSORIA LTDA",
+      "cep": "57025330",
+      "logradouro": "NOSSA SENHORA DO CARMO",
+      "numero": "69",
+      "complemento": "",
+      "bairro": "POCO",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000089/2025",
+        "numero_termo": "17/2025",
+        "nome_evento": "Show de Ayrton Montarroyos",
+        "datas_evento": [
+          "2025-04-03",
+          "2025-04-03",
+          "2025-04-03"
+        ],
+        "hora_inicio": "21h",
+        "hora_fim": "23h",
+        "valor_final": 0.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao Auditório"
+      }
+    ],
+    "arquivo_origem": "17. Termo de Permissão de Uso - Show Ayrton Montarroyos - SUE CHAMUSCA .docx",
+    "id_arquivo_drive": "1QuY0a1aZsc-CDL3KAFJyh137FkdcDyKO"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "SUE CHAMUSCA ARTE E ASSESSORIA",
+      "documento": "05007389000110",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Suely Cerqueira Chamusca",
+      "nome_razao_social_oficial": "ESCRITORIO DE ARTE, PRODUCOES ARTISTICAS E ASSESSORIA LTDA",
+      "cep": "57025330",
+      "logradouro": "NOSSA SENHORA DO CARMO",
+      "numero": "69",
+      "complemento": "",
+      "bairro": "POCO",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000088/2025",
+        "numero_termo": "16/2025",
+        "nome_evento": "Minha Casa - Mônica Salmaso",
+        "datas_evento": [
+          "2025-08-23"
+        ],
+        "hora_inicio": "21h",
+        "hora_fim": "23h",
+        "valor_final": 0.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao Auditório"
+      }
+    ],
+    "arquivo_origem": "16. Termo de Permissão de Uso - Show Mônica Salmaso - SUE CHAMUSCA .docx",
+    "id_arquivo_drive": "1vsa7GBP0duCSSg8EyDa5NxeQY1RyTmKB"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "MDE CONSULTORIA LTDA",
+      "documento": "12018651000198",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Clea Maria Carvalho Mascarenhas",
+      "nome_razao_social_oficial": "MDE CONSULTORIA LTDA",
+      "cep": "57601315",
+      "logradouro": "MANOEL RODRIGUES DE QUEIROZ",
+      "numero": "04",
+      "complemento": "",
+      "bairro": "SAO CRISTOVAO",
+      "cidade": "PALMEIRA DOS INDIOS",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000056/2025",
+        "numero_termo": "09/2025",
+        "nome_evento": "EduConecta – Educação, Gestão e Inovação",
+        "datas_evento": [
+          "2025-07-02",
+          "2025-07-03",
+          "2025-07-04"
+        ],
+        "hora_inicio": "08h",
+        "hora_fim": "18h",
+        "valor_final": 0.0,
+        "espaco_utilizado": "Área do auditório e espaço aberto em frente ao auditório do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "09. Termo de Permissão de Uso - EduConecta.docx",
+    "id_arquivo_drive": "1g3-c7-yBhoVxLXzBH--KI1HPgh3Qc4hX"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "FEDERAÇÃO DAS ASSOCIAÇÕES PESTALOZZI DE ALAGOAS - FEPESTALOZZI/AL",
+      "documento": "10474983000151",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "TEREZA MARIA BARRETO DO AMARAL",
+      "nome_razao_social_oficial": "FEDERACAO DAS ASSOCIACOES PESTALOZZI DE ALAGOAS",
+      "cep": "57025275",
+      "logradouro": "DEPUTADO HUMBERTO MENDES",
+      "numero": "796",
+      "complemento": "SALA 15 EDIF WALL STREET",
+      "bairro": "POCO",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000063/2025",
+        "numero_termo": "12/2025",
+        "nome_evento": "Projeto Girassol: quebrando barreiras",
+        "datas_evento": [
+          "2025-02-26"
+        ],
+        "hora_inicio": "7h30",
+        "hora_fim": "15h",
+        "valor_final": 0.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao Auditório"
+      }
+    ],
+    "arquivo_origem": "12. Termo de Permissão de Uso - Pestalozzi.docx",
+    "id_arquivo_drive": "1cm_MvWQObhjVAFtuLFwAdaEBZCrkt36q"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "COMITÊ NACIONAL DE CERIMONIAL E PROTOCOLO – CNCP BRASIL",
+      "documento": "00312312000130",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "FRANCISMAR PETINI",
+      "nome_razao_social_oficial": "COMITE NACIONAL DE CERIMONIAL E PROTOCOLO - CNCP/BRASIL",
+      "cep": "70307900",
+      "logradouro": "SCS QUADRA 1 BLOCO L LOTE 17",
+      "numero": "807",
+      "complemento": "SALA 807 E 808 EDIF MARCIA",
+      "bairro": "ASA SUL",
+      "cidade": "BRASILIA",
+      "uf": "DF"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000062/2025",
+        "numero_termo": "13/2025",
+        "nome_evento": "XXIX Congresso Nacional de Cerimonial e Protocolo – CONCEP 2025",
+        "datas_evento": [
+          "2025-10-29",
+          "2025-10-30",
+          "2025-10-31"
+        ],
+        "hora_inicio": null,
+        "hora_fim": null,
+        "valor_final": 0.0,
+        "espaco_utilizado": "AUDITÓRIO e ESPAÇO ABERTO EM FRENTE AO AUDITÓRIO do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "13. Termo de Permissão de Uso - CONCEP 2025.docx",
+    "id_arquivo_drive": "1MV6EhDlSYf1VfP2RSt2OM_a-V8lyAT4H"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "ORDEM DOS ADVOGADOS DO BRASIL (OAB) DA SECCIONAL DE ALAGOAS",
+      "documento": "12334827000110",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "VAGNER PAES CAVALCANTI FILHO",
+      "nome_razao_social_oficial": "ORDEM DOS ADVOGADOS DO BRASIL",
+      "cep": "57038635",
+      "logradouro": "COMENDADOR GUSTAVO PAIVA",
+      "numero": "7100",
+      "complemento": "",
+      "bairro": "JACARECICA",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000061/2025",
+        "numero_termo": "11/2025",
+        "nome_evento": "OAB LAW TREND",
+        "datas_evento": [
+          "2025-10-08",
+          "2025-10-09",
+          "2025-10-10"
+        ],
+        "hora_inicio": null,
+        "hora_fim": null,
+        "valor_final": 0.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao Auditório"
+      }
+    ],
+    "arquivo_origem": "11. Termo de Permissão de Uso - OAB LAW TREND.docx",
+    "id_arquivo_drive": "1ir4hC6sLFQPmqbuzanRqXma6_uE7ev3N"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "CLÁUDIO CLAUDEMIR ÂNGELO BULGARELLI",
+      "documento": "65223861787",
+      "tipo_pessoa": "PF",
+      "nome_responsavel": "CLÁUDIO CLAUDEMIR ÂNGELO BULGARELLI"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000060/2025",
+        "numero_termo": "10/2025",
+        "nome_evento": "5º Prêmio Alagoano de Turismo e Gastronomia",
+        "datas_evento": [
+          "2025-04-23"
+        ],
+        "hora_inicio": "07:00",
+        "hora_fim": "23:30",
+        "valor_final": 0.0,
+        "espaco_utilizado": "AUDITÓRIO e ESPAÇO ABERTO EM FRENTE AO AUDITÓRIO"
+      }
+    ],
+    "arquivo_origem": "10. Termo de Permissão de Uso - Prêmio Alagoano de Turismo e Gastronomia.docx",
+    "id_arquivo_drive": "1wNhBxOZULP3EDMvCsOmbAEjDTwFPN0G4"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "Assembleia Legislativa Estadual de Alagoas",
+      "documento": "12343976000146",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "José Ronaldo Medeiros",
+      "nome_razao_social_oficial": "ESTADO DE ALAGOAS - ASSEMBLEIA LEGISLATIVA",
+      "cep": "57020908",
+      "logradouro": "D PEDRO II",
+      "numero": "SN",
+      "complemento": "",
+      "bairro": "CENTRO",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000036/2025",
+        "numero_termo": "07/2025",
+        "nome_evento": "Parentalidade em movimento: uma reflexão sobre a história da infância na nossa sociedade, a parentalidade e uma análise sobre as projeções futuras",
+        "datas_evento": [
+          "2025-05-17"
+        ],
+        "hora_inicio": "09h",
+        "hora_fim": "19h",
+        "valor_final": 0.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao Auditório"
+      }
+    ],
+    "arquivo_origem": "07. Termo de Permissão de Uso - Dep. Ronaldo Medeiros.docx",
+    "id_arquivo_drive": "1J5JuogJNtrvkn23DIbX9uW38rOrtKbNB"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "SERVIÇO NACIONAL DE APRENDIZAGEM COMERCIAL - SENAC",
+      "documento": "03692424000152",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "FELIPE DIETSCHI FALCÃO",
+      "nome_razao_social_oficial": "SERVICO NACIONAL DE APRENDIZAGEM COMERCIAL - SENAC",
+      "cep": "57035190",
+      "logradouro": "DOUTOR ANTONIO CANSANCAO",
+      "numero": "465",
+      "complemento": "",
+      "bairro": "PONTA VERDE",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000030/2025",
+        "numero_termo": "06/2025",
+        "nome_evento": "III Fórum de Aprendizagem Senac",
+        "datas_evento": [
+          "2025-06-11"
+        ],
+        "hora_inicio": "07h",
+        "hora_fim": "13h",
+        "valor_final": 0.0,
+        "espaco_utilizado": "AUDITÓRIO e ESPAÇO ABERTO EM FRENTE AO AUDITÓRIO"
+      }
+    ],
+    "arquivo_origem": "06. Termo de Permissão de Uso - SENAC.docx",
+    "id_arquivo_drive": "1ztmF3NDl2O0ijBhL_4aKfNNmPPIP0-54"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "Dino José de Oliveira Alves",
+      "documento": "05061386400",
+      "tipo_pessoa": "PF",
+      "nome_responsavel": "Dino José de Oliveira Alves"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000029/2025",
+        "numero_termo": "05/2025",
+        "nome_evento": "Festival Transformar",
+        "datas_evento": [
+          "2025-02-08"
+        ],
+        "hora_inicio": "13h",
+        "hora_fim": "23h50min",
+        "valor_final": 0.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao Auditório"
+      }
+    ],
+    "arquivo_origem": "05. Termo de Permissão de Uso - Festival Transformar.docx",
+    "id_arquivo_drive": "1YY9AxwmafAnwoLYE9AmECwF_kuP1sSkU"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "SECRETARIA DO ESTADO DO ESPORTE, LAZER E JUVENTUDE",
+      "documento": "22255059000163",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Lydia Pollyana Gomes De Oliveira Castela",
+      "nome_razao_social_oficial": "SECRETARIA DE ESTADO DO ESPORTE, LAZER E JUVENTUDE",
+      "cep": "57010645",
+      "logradouro": "SIQUEIRA CAMPOS",
+      "numero": "SN",
+      "complemento": "",
+      "bairro": "TRAPICHE DA BARRA",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:36000.0000000027/2025",
+        "numero_termo": "04/2025",
+        "nome_evento": "cerimônia de premiação dos Melhores do Ano no Esporte Alagoano 2024",
+        "datas_evento": [
+          "2025-02-06"
+        ],
+        "hora_inicio": "15:00",
+        "hora_fim": "20:00",
+        "valor_final": 0.0,
+        "espaco_utilizado": "Auditório e Espaço Aberto em frente ao Auditório"
+      }
+    ],
+    "arquivo_origem": "04. Termo de Permissão de Uso - SELAJ.docx",
+    "id_arquivo_drive": "14IPYZ4UAXGSah32lPMKO05NSi2H17pmm"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "UDSON PINHEIRO ARAUJO",
+      "documento": "05641464473",
+      "tipo_pessoa": "PF",
+      "nome_responsavel": "UDSON PINHEIRO ARAUJO"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000016/2025",
+        "numero_termo": "02/2025",
+        "nome_evento": "Reunião presencial do Fórum Cultural de Maceió",
+        "datas_evento": [
+          "2025-01-08"
+        ],
+        "hora_inicio": "19h",
+        "hora_fim": "22h",
+        "valor_final": 0.0,
+        "espaco_utilizado": "Anfiteatro do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "02. Termo de Permissão de Uso - FMC.docx",
+    "id_arquivo_drive": "19j_WDAksq9RdKrUjpgImT5NMnVB34Nsz"
+  },
+  {
+    "cliente": {
+      "nome_razao_social": "MASTER EDUCAÇÃO",
+      "documento": "48055955000172",
+      "tipo_pessoa": "PJ",
+      "nome_responsavel": "Marcos Lucas da Silva Oliveira",
+      "nome_razao_social_oficial": "MASTER EDUCACAO LTDA",
+      "cep": "57025510",
+      "logradouro": "WALTER ANANIAS",
+      "numero": "594",
+      "complemento": "",
+      "bairro": "POÇO",
+      "cidade": "MACEIO",
+      "uf": "AL"
+    },
+    "eventos": [
+      {
+        "numero_processo": "E:30010.0000000012/2025",
+        "numero_termo": "01/2025",
+        "nome_evento": "reunião de professores da Master Educação",
+        "datas_evento": [
+          "2025-01-12"
+        ],
+        "hora_inicio": "10h",
+        "hora_fim": "14h",
+        "valor_final": 0.0,
+        "espaco_utilizado": "Anfiteatro do Centro de Inovação do Jaraguá"
+      }
+    ],
+    "arquivo_origem": "01. Termo de Permissão de Uso - Master Educação.docx",
+    "id_arquivo_drive": "1pWcXhDKFzSwr-rIRy_PcLALkqTPuugsO"
+  }
+]
