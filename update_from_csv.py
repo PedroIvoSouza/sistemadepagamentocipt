@@ -2,11 +2,12 @@ import sqlite3
 import json
 import sys
 
-def update_responsibles_from_json(db_path, json_path):
+def force_update_responsibles_from_json(db_path, json_path):
     """
     Atualiza o campo 'nome_responsavel' na tabela Clientes_Eventos
-    usando dados de um arquivo JSON. A atualização só ocorre se o campo
-    'nome_responsavel' no banco de dados estiver vazio.
+    usando dados de um arquivo JSON. 
+    Esta versão SOBRESCREVE o nome do responsável existente no banco de dados
+    com o nome do arquivo JSON, caso um documento correspondente seja encontrado.
 
     Args:
         db_path (str): Caminho para o banco de dados SQLite.
@@ -28,8 +29,9 @@ def update_responsibles_from_json(db_path, json_path):
         cursor = conn.cursor()
 
         updated_clients = []
+        not_found_in_db = []
         
-        print("Iniciando a busca por responsáveis no arquivo JSON...")
+        print("Iniciando a atualização (modo de sobrescrita)...")
 
         # Itera sobre cada entrada no arquivo JSON
         for entry in data:
@@ -42,30 +44,42 @@ def update_responsibles_from_json(db_path, json_path):
             if not doc_norm_json or not responsavel_json:
                 continue
 
-            # Tenta atualizar o banco de dados
-            # A query só atualiza se o nome_responsavel for nulo ou vazio
+            # Tenta atualizar o banco de dados, sobrescrevendo o valor existente.
             cursor.execute("""
                 UPDATE Clientes_Eventos
                 SET nome_responsavel = ?
-                WHERE documento_norm = ? AND (nome_responsavel IS NULL OR nome_responsavel = '')
+                WHERE documento_norm = ?
             """, (responsavel_json, doc_norm_json))
 
             # Se uma linha foi afetada, a atualização ocorreu
             if cursor.rowcount > 0:
-                updated_clients.append(f"- {razao_social_json} (Documento: {doc_norm_json})")
+                updated_clients.append(f"- {razao_social_json} (Responsável: {responsavel_json})")
+            else:
+                # Se rowcount for 0, ninguém com aquele documento foi encontrado no DB
+                not_found_in_db.append(f"- {razao_social_json} (Documento: {doc_norm_json})")
         
         # Salva (comita) as alterações no banco
         conn.commit()
         print("Processo concluído.")
 
         # --- Relatório Final ---
-        print("\n--- Relatório de Atualização de Responsáveis ---")
+        print("\n--- Relatório de Atualização (Modo de Sobrescrita) ---")
         if updated_clients:
-            print(f"Foram atualizados {len(updated_clients)} clientes com o nome do responsável:")
-            for client in updated_clients:
+            print(f"Foram atualizados/sobrescritos {len(updated_clients)} clientes com o nome do responsável:")
+            for client in updated_clients[:15]: # Mostra os 15 primeiros
                 print(client)
+            if len(updated_clients) > 15:
+                print(f"... e mais {len(updated_clients) - 15}.")
         else:
-            print("Nenhum cliente com nome de responsável em branco foi encontrado no arquivo JSON.")
+            print("Nenhum cliente do arquivo JSON foi encontrado no banco de dados para ser atualizado.")
+
+        if not_found_in_db:
+            print(f"\n{len(not_found_in_db)} clientes do JSON não foram encontrados no banco de dados:")
+            for client in not_found_in_db[:15]: # Mostra os 15 primeiros
+                print(client)
+            if len(not_found_in_db) > 15:
+                print(f"... e mais {len(not_found_in_db) - 15}.")
+
 
     except sqlite3.Error as e:
         print(f"ERRO de banco de dados: {e}")
@@ -79,7 +93,7 @@ def update_responsibles_from_json(db_path, json_path):
 
 # --- INSTRUÇÕES DE USO NA SUA VM ---
 # 1. Faça um backup do seu banco de dados por segurança:
-#    cp sistemacipt.db sistemacipt.db.bkp_before_json
+#    cp sistemacipt.db sistemacipt.db.bkp_before_overwrite
 #
 # 2. Suba este arquivo (update_from_json.py) e o arquivo 
 #    'dados_prontos_para_importar (1).json' para a mesma pasta
@@ -92,4 +106,5 @@ if __name__ == '__main__':
     DATABASE_FILE = 'sistemacipt.db'
     JSON_FILE = 'dados_prontos_para_importar (1).json'
     
-    update_responsibles_from_json(DATABASE_FILE, JSON_FILE)
+    force_update_responsibles_from_json(DATABASE_FILE, JSON_FILE)
+
