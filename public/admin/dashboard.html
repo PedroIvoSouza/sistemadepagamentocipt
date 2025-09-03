@@ -110,6 +110,7 @@
                                     </div>
                                 </div>
                                 <canvas id="resumoMensalChart" class="d-md-none w-100" height="200"></canvas>
+                                <p id="resumoMensalMsg" class="text-muted text-center d-none d-md-none">Sem dados suficientes para exibir.</p>
                             </div>
                         </div>
                     </div>
@@ -210,6 +211,7 @@ window.onload = async () => {
         const hasData = labels.length > 0 &&
           (emitidas.some(v => v > 0) || pagas.some(v => v > 0) || vencidas.some(v => v > 0));
         const chartCanvas = document.getElementById('resumoMensalChart');
+        const chartMsg = document.getElementById('resumoMensalMsg');
         if (hasData) {
           if (window.resumoChart) window.resumoChart.destroy();
           window.resumoChart = new Chart(chartCanvas, {
@@ -223,8 +225,15 @@ window.onload = async () => {
               ]
             }
           });
+          chartCanvas.classList.remove('d-none');
+          chartMsg.classList.add('d-none');
         } else {
-          chartCanvas.outerHTML = '<p class="text-muted text-center">Sem dados suficientes para exibir.</p>';
+          if (window.resumoChart) {
+            window.resumoChart.destroy();
+            window.resumoChart = null;
+          }
+          chartCanvas.classList.add('d-none');
+          chartMsg.classList.remove('d-none');
         }
       }
 
