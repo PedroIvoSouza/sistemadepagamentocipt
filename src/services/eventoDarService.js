@@ -92,7 +92,10 @@ async function criarEventoComDars(db, data, helpers) {
     }
   }
   const datasOrdenadas = Array.isArray(datasEvento) ? [...datasEvento].sort((a,b)=> new Date(a)-new Date(b)) : [];
-  const dataVigenciaFinal = datasOrdenadas.length ? datasOrdenadas[datasOrdenadas.length-1] : null;
+  const dataVigenciaFinal = datasOrdenadas.length ? new Date(datasOrdenadas.at(-1)) : null;
+  if (dataVigenciaFinal) {
+    dataVigenciaFinal.setDate(dataVigenciaFinal.getDate() + 1);
+  }
 
   await dbRun(db, 'BEGIN TRANSACTION');
   try {
@@ -115,7 +118,7 @@ async function criarEventoComDars(db, data, helpers) {
           areaM2 != null ? Number(areaM2) : null,
           datasEventoStr,
           datasEventoStr,
-          dataVigenciaFinal,
+          dataVigenciaFinal ? dataVigenciaFinal.toISOString().slice(0,10) : null,
           Number(totalDiarias || 0),
           Number(valorBruto || 0),
           String(tipoDescontoAuto || 'Geral'),
@@ -265,7 +268,10 @@ async function atualizarEventoComDars(db, id, data, helpers) {
     }
   }
   const datasOrdenadas = Array.isArray(datasEvento) ? [...datasEvento].sort((a,b)=> new Date(a)-new Date(b)) : [];
-  const dataVigenciaFinal = datasOrdenadas.length ? datasOrdenadas[datasOrdenadas.length-1] : null;
+  const dataVigenciaFinal = datasOrdenadas.length ? new Date(datasOrdenadas.at(-1)) : null;
+  if (dataVigenciaFinal) {
+    dataVigenciaFinal.setDate(dataVigenciaFinal.getDate() + 1);
+  }
 
   await dbRun(db, 'BEGIN TRANSACTION');
   try {
@@ -300,7 +306,7 @@ async function atualizarEventoComDars(db, id, data, helpers) {
         JSON.stringify(espacosUtilizados || []),
         areaM2 != null ? Number(areaM2) : null,
         JSON.stringify(datasEvento || []),
-        dataVigenciaFinal,
+        dataVigenciaFinal ? dataVigenciaFinal.toISOString().slice(0,10) : null,
         Number(totalDiarias || 0),
         Number(valorBruto || 0),
         String(tipoDescontoAuto || 'Geral'),
