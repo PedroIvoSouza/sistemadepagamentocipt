@@ -16,7 +16,7 @@ try:
 except ImportError:
     print("ERRO: A biblioteca 'openpyxl' é necessária para criar arquivos Excel.")
     print("Por favor, execute o seguinte comando para instalá-la:")
-    print("pip3 install openpyxl")
+    print("sudo apt install python3-openpyxl")
     sys.exit(1)
 
 
@@ -33,13 +33,12 @@ def export_missing_contacts_to_excel(db_path, output_excel_path):
     try:
         conn = sqlite3.connect(db_path)
 
-        # Query SQL para buscar os eventos de clientes com dados faltando.
-        # Ela junta as tabelas Eventos e Clientes_Eventos.
+        # Query SQL para buscar os eventos com os nomes de coluna originais.
         query = """
             SELECT
                 e.nome_evento,
-                c.documento AS 'CNPJ/CPF do Cliente',
-                c.nome_responsavel AS 'Nome do Responsável'
+                c.documento,
+                c.nome_responsavel
             FROM
                 Eventos e
             JOIN
@@ -60,11 +59,18 @@ def export_missing_contacts_to_excel(db_path, output_excel_path):
 
         print(f"{len(df)} registros encontrados. Preparando o arquivo Excel...")
 
+        # Renomeia as colunas para os nomes amigáveis que queremos no Excel
+        df.rename(columns={
+            'nome_evento': 'Nome do Evento',
+            'documento': 'CNPJ/CPF do Cliente',
+            'nome_responsavel': 'Nome do Responsável'
+        }, inplace=True)
+
         # Adiciona as colunas em branco para a equipe preencher
         df['Email (para preencher)'] = ''
         df['Telefone (para preencher)'] = ''
         
-        # Garante a ordem correta das colunas
+        # Garante a ordem correta das colunas (agora com os nomes corretos)
         df = df[[
             'Nome do Evento',
             'CNPJ/CPF do Cliente',
@@ -91,7 +97,7 @@ def export_missing_contacts_to_excel(db_path, output_excel_path):
 # --- INSTRUÇÕES DE USO NA SUA VM ---
 # 1. Suba este arquivo (export_for_team.py) para a sua VM.
 # 2. Certifique-se de que a biblioteca 'openpyxl' está instalada. Se não estiver, execute:
-#    pip3 install openpyxl
+#    sudo apt install python3-openpyxl
 # 3. Execute o script no terminal com o comando:
 #    python3 export_for_team.py
 
@@ -100,3 +106,4 @@ if __name__ == '__main__':
     OUTPUT_FILE = 'tarefa_equipe.xlsx'
     
     export_missing_contacts_to_excel(DATABASE_FILE, OUTPUT_FILE)
+
