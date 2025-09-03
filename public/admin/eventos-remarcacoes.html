@@ -51,6 +51,7 @@
       <main class="content">
         <div class="d-flex justify-content-between align-items-center mb-4">
           <h1 class="h2">Remarcações de Eventos</h1>
+          <button id="abrirRemarcarModal" class="btn btn-primary">Remarcar Evento</button>
         </div>
         <div class="card">
           <div class="card-body p-4">
@@ -91,6 +92,31 @@
     </div>
   </div>
 
+  <div class="modal fade" id="remarcarEventoModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <form id="remarcarEventoForm" class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Remarcar Evento</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label for="remarcarEventoSelect" class="form-label">Evento</label>
+            <select id="remarcarEventoSelect" class="form-select" required></select>
+          </div>
+          <div class="mb-3">
+            <label for="remarcarEventoData" class="form-label">Nova data</label>
+            <input type="date" id="remarcarEventoData" class="form-control" required />
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="submit" class="btn btn-primary">Salvar</button>
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <script src="/js/admin-sidebar.js"></script>
   <script src="/js/admin-guard.js"></script>
   <script defer src="/js/mobile-adapter.js"></script>
@@ -117,6 +143,11 @@
     const remarcacoesTableBody = document.getElementById('remarcacoes-table-body');
     const justificativaTexto = document.getElementById('justificativaTexto');
     const justificativaModal = new bootstrap.Modal(document.getElementById('justificativaModal'));
+    const btnAbrirRemarcar = document.getElementById('abrirRemarcarModal');
+    const remarcarModal = new bootstrap.Modal(document.getElementById('remarcarEventoModal'));
+    const remarcarEventoSelect = document.getElementById('remarcarEventoSelect');
+    const remarcarEventoData = document.getElementById('remarcarEventoData');
+    const remarcarEventoForm = document.getElementById('remarcarEventoForm');
 
     const formatDateBR = iso => {
       if (!iso) return '';
@@ -133,6 +164,24 @@
     };
 
     const evIdOf = ev => ev?.id || ev?.evento_id || ev?.id_evento || ev?.eventoId;
+
+    async function carregarEventosRemarcar(){
+      try {
+        remarcarEventoSelect.innerHTML = '<option value="">Carregando...</option>';
+        const r = await fetch('/api/admin/eventos?limit=1000', { headers: AUTH_HEADERS });
+        const data = await r.json();
+        remarcarEventoSelect.innerHTML = '<option value="">Selecione...</option>';
+        (data.eventos || data || []).forEach(ev => {
+          const option = document.createElement('option');
+          option.value = evIdOf(ev);
+          option.textContent = ev.nome_evento || ev.nome || `Evento ${evIdOf(ev)}`;
+          remarcarEventoSelect.appendChild(option);
+        });
+      } catch (err) {
+        console.error(err);
+        remarcarEventoSelect.innerHTML = '<option value="">Erro ao carregar eventos</option>';
+      }
+    }
 
     async function fetchRemarcacoes(){
       try {
@@ -177,6 +226,37 @@
     }
 
     async function carregarRemarcacoes(){ return fetchRemarcacoes(); }
+
+    btnAbrirRemarcar.addEventListener('click', async () => {
+      await carregarEventosRemarcar();
+      remarcarEventoSelect.value = '';
+      remarcarEventoData.value = '';
+      remarcarModal.show();
+    });
+
+    remarcarEventoForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const id = remarcarEventoSelect.value;
+      const nova = remarcarEventoData.value;
+      if (!id || !nova){
+        alert('Preencha todos os campos.');
+        return;
+      }
+      try{
+        const resp = await fetch(`/api/admin/eventos/${id}/remarcar`, {
+          method:'PUT',
+          headers:{'Content-Type':'application/json', ...AUTH_HEADERS},
+          body: JSON.stringify({ mode:'unilateral', nova_data: nova })
+        });
+        if (!resp.ok) throw new Error('Falha');
+        remarcarModal.hide();
+        alert('Evento remarcado com sucesso!');
+        carregarRemarcacoes();
+      }catch(err){
+        console.error(err);
+        alert('Não foi possível remarcar o evento.');
+      }
+    });
 
     remarcacoesTableBody.addEventListener('click', async (e)=>{
       const verJust = e.target.closest('.ver-justificativa');
