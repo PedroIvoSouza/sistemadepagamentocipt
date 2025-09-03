@@ -77,14 +77,14 @@ async function criarEventoComDars(db, data, helpers) {
          datas_evento_original, data_vigencia_final, total_diarias, valor_bruto,
          tipo_desconto, desconto_manual, valor_final, numero_oficio_sei,
          hora_inicio, hora_fim, hora_montagem, hora_desmontagem,
-         numero_processo, numero_termo, evento_gratuito, justificativa_gratuito, status
-       ) VALUES (
-         ?, ?, ?, ?, ?,
-         ?, ?, ?,
-         ?, ?, ?, ?,
-         ?, ?, ?, ?,
-         ?, ?, ?, ?, ?
-       )`,
+       numero_processo, numero_termo, evento_gratuito, justificativa_gratuito, status
+      ) VALUES (
+        ?, ?, ?, ?, ?,
+        ?, ?, ?, ?,
+        ?, ?, ?, ?,
+        ?, ?, ?, ?,
+        ?, ?, ?, ?, ?
+      )`,
       [
         idCliente,
         nomeEvento,
