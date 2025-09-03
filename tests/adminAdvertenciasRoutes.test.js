@@ -16,6 +16,7 @@ function prepDb(dbPath) {
 }
 
 test('POST cria advertencia grava clausulas e envia email', async () => {
+
   const dbPath = path.resolve(__dirname, 'test-advertencia-post.db');
   const { run, get } = prepDb(dbPath);
 
@@ -63,6 +64,15 @@ test('POST cria advertencia grava clausulas e envia email', async () => {
   const payload = {
     fatos: 'F',
     clausulas: clausulasPayload,
+
+  const texto51 = 'Texto da clausula 5.1';
+  const texto73 = 'Texto da clausula 7.3';
+  const payload = {
+    fatos: 'F',
+    clausulas: [
+      { numero: '5.1', texto: texto51 },
+      { numero: '7.3', texto: texto73 }
+    ],
     multa: 50,
     gera_multa: true,
     inapto: false,
@@ -82,6 +92,7 @@ test('POST cria advertencia grava clausulas e envia email', async () => {
   assert.ok(pdfArgs.clausulas.some(c => c.texto === clausulasPayload[1].texto));
   const pdfContent = fs.readFileSync(fakePath, 'utf8');
   assert.ok(pdfContent.includes(clausulasPayload[1].texto));
+
 
   assert.ok(logs.some(l => l.includes('gerar DAR')));
   assert.equal(mailSent, true);
