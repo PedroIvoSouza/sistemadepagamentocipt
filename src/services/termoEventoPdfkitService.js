@@ -52,6 +52,15 @@ const fmtDataExtenso = (iso) => {
   if (Number.isNaN(d.getTime())) return '';
   return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
 };
+// Data em YYYY-MM-DD para usar no nome do arquivo (sem problema de fuso)
+function isoForFilename(isoLike) {
+  const d = toLocalDateFromISO(isoLike);
+  if (!d) return '';
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
 const mkPeriodo = (datas) => {
   const arr = Array.isArray(datas)
     ? datas
@@ -399,8 +408,15 @@ const saldoISO = parcelas.length > 1
   // 4) Arquivo de saída
   const publicDir = path.join(process.cwd(), 'public', 'documentos');
   fs.mkdirSync(publicDir, { recursive: true });
+  
+  // Usa a data REAL do evento para o nome do arquivo; se não tiver, cai no 1º dia do array; por fim, hoje.
+  const dataParaArquivoStr =
+    isoForFilename(dataRealEventoISO) ||
+    (datasArr.length ? isoForFilename(datasArr[0]) : '') ||
+    isoForFilename(new Date().toISOString().slice(0, 10)) || 's-d';
+  
   const fileName = sanitizeForFilename(
-    `TermoPermissao_${String(ev.numero_termo || 's-n').replace(/[\/\\]/g, '-')}_${(ev.nome_razao_social || 'Cliente')}_${(primeiraDataISO || 's-d')}.pdf`
+    `TermoPermissao_${String(ev.numero_termo || 's-n').replace(/[\/\\]/g, '-')}_${(ev.nome_razao_social || 'Cliente')}_${dataParaArquivoStr}.pdf`
   );
   const filePath = path.join(publicDir, fileName);
 
