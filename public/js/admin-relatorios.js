@@ -1,8 +1,23 @@
 // public/js/admin-relatorios.js
+function toggleLoading(btn, on) {
+  if (on) {
+    if (!btn.dataset.originalHtml) btn.dataset.originalHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Gerando…';
+  } else {
+    if (btn.dataset.originalHtml) {
+      btn.innerHTML = btn.dataset.originalHtml;
+      delete btn.dataset.originalHtml;
+    }
+    btn.disabled = false;
+  }
+}
+
 window.addEventListener('DOMContentLoaded', () => {
   const btnDevedores = document.getElementById('btnRelatorioDevedores');
   if (btnDevedores) {
     btnDevedores.addEventListener('click', async () => {
+      toggleLoading(btnDevedores, true);
       try {
         const resp = await fetch('/api/admin/relatorios/devedores');
         if (!resp.ok) throw new Error('Falha ao gerar relatório');
@@ -13,6 +28,8 @@ window.addEventListener('DOMContentLoaded', () => {
       } catch (err) {
         console.error(err);
         alert('Erro ao gerar relatório de devedores.');
+      } finally {
+        toggleLoading(btnDevedores, false);
       }
     });
   }
@@ -20,6 +37,7 @@ window.addEventListener('DOMContentLoaded', () => {
   const btnDars = document.getElementById('btnRelatorioDars');
   if (btnDars) {
     btnDars.addEventListener('click', async () => {
+      toggleLoading(btnDars, true);
       try {
         const resp = await fetch('/api/admin/relatorios/dars');
         if (resp.status === 404 || resp.status === 204) {
@@ -34,6 +52,8 @@ window.addEventListener('DOMContentLoaded', () => {
       } catch (err) {
         console.error(err);
         alert('Erro ao gerar relatório de DARs.');
+      } finally {
+        toggleLoading(btnDars, false);
       }
     });
   }
@@ -47,6 +67,7 @@ window.addEventListener('DOMContentLoaded', () => {
         alert('Selecione o intervalo de datas.');
         return;
       }
+      toggleLoading(btnEventosDars, true);
       try {
         const resp = await fetch(`/api/admin/relatorios/eventos-dars?dataInicio=${dataInicio}&dataFim=${dataFim}`);
         if (resp.status === 404 || resp.status === 204) {
@@ -61,6 +82,8 @@ window.addEventListener('DOMContentLoaded', () => {
       } catch (err) {
         console.error(err);
         alert('Erro ao gerar relatório de DARs de eventos.');
+      } finally {
+        toggleLoading(btnEventosDars, false);
       }
     });
   }
@@ -89,10 +112,7 @@ window.addEventListener('DOMContentLoaded', () => {
       tbodyPagos.innerHTML = '';
       tbodyDevedores.innerHTML = '';
 
-      btnPagamentos.disabled = true;
-      const originalText = btnPagamentos.textContent;
-      btnPagamentos.textContent = 'Carregando...';
-
+      toggleLoading(btnPagamentos, true);
       try {
         const resp = await fetch(`/api/admin/relatorios/pagamentos?mes=${mes}&ano=${ano}`);
         if (!resp.ok) throw new Error('Falha ao buscar relatório');
@@ -115,8 +135,7 @@ window.addEventListener('DOMContentLoaded', () => {
         console.error(err);
         alert('Erro ao buscar relatório de pagamentos.');
       } finally {
-        btnPagamentos.disabled = false;
-        btnPagamentos.textContent = originalText;
+        toggleLoading(btnPagamentos, false);
       }
     });
   }
