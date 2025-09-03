@@ -943,6 +943,49 @@ async function carregarClientes(){
 
   async function carregarEventos(){ return fetchEventos(); }
 
+
+  async function fetchRemarcacoes(){
+    try {
+      const r = await fetch('/api/admin/eventos/remarcacoes', { headers: AUTH_HEADERS });
+      if (!r.ok) throw new Error('Falha ao buscar remarcações');
+      const data = await r.json();
+      const eventos = (data.eventos || data).filter(ev => Number(ev.remarcacao_solicitada) === 1);
+      renderRemarcacoes(eventos);
+    } catch (e) {
+      remarcacoesTableBody.innerHTML = `<tr><td colspan="6" class="text-center text-danger">${e.message}</td></tr>`;
+    }
+  }
+
+  function renderRemarcacoes(eventos){
+    const filtrados = Array.isArray(eventos) ? eventos.filter(ev => Number(ev.remarcacao_solicitada) === 1) : [];
+    if (filtrados.length === 0){
+      remarcacoesTableBody.innerHTML = '<tr><td colspan="6" class="text-center">Nenhuma solicitação.</td></tr>';
+      return;
+    }
+    remarcacoesTableBody.innerHTML = filtrados.map(ev => {
+      const id = evIdOf(ev);
+      const original = formatDateBR(parseFirstDate(ev.datas_evento_original));
+      const solicitada = formatDateBR(parseFirstDate(ev.datas_evento_solicitada));
+      return `
+        <tr>
+          <td>${id}</td>
+          <td class="text-capitalize">${ev.nome_evento || ''}</td>
+          <td class="text-capitalize">${ev.nome_cliente || ''}</td>
+          <td>${original}</td>
+          <td>${solicitada}</td>
+          <td class="text-center">
+            <div class="btn-group">
+              <button class="btn btn-sm btn-success btn-aprovar-rem" data-id="${id}">Aprovar</button>
+              <button class="btn btn-sm btn-outline-danger btn-rejeitar-rem" data-id="${id}">Rejeitar</button>
+              <button class="btn btn-sm btn-primary btn-remarcar-direto" data-id="${id}">Remarcar diretamente</button>
+            </div>
+          </td>
+        </tr>`;
+    }).join('');
+  }
+
+  async function carregarRemarcacoes(){ return fetchRemarcacoes(); }
+
   function atualizarStatusNaTabelaEventos(eventoId, status){
     const trs = eventosTableBody.querySelectorAll('tr');
     trs.forEach(tr=>{
