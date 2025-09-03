@@ -19,11 +19,30 @@ const fmtArea = (n) => {
   const num = Number(n || 0);
   return num ? `${num.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} m²` : '-';
 };
+function parseLocalDateFlexible(v) {
+  if (!v) return null;
+  if (v instanceof Date && !Number.isNaN(v.getTime())) {
+    return new Date(v.getFullYear(), v.getMonth(), v.getDate());
+  }
+  const s = String(v).trim();
+  if (!s) return null;
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) {
+    const y = Number(m[1]), mo = Number(m[2]), d = Number(m[3]);
+    if (y && mo && d) return new Date(y, mo - 1, d);
+  }
+  const br = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (br) {
+    const d = Number(br[1]), mo = Number(br[2]), y = Number(br[3]);
+    if (y && mo && d) return new Date(y, mo - 1, d);
+  }
+  return null;
+}
 const fmtDataExtenso = (iso) => {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
+  const d = parseLocalDateFlexible(iso);
+  return d
+    ? d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
+    : '';
 };
 const mkPeriodo = (datas_evento) => {
   if (!datas_evento) return '';
@@ -147,6 +166,8 @@ async function buildPayloadFromEvento(eventoId) {
   const sinal = parcelas[0]?.data_vencimento || null;
   const saldo = parcelas[1]?.data_vencimento || parcelas[0]?.data_vencimento || null;
 
+  const vigenciaFim = parseLocalDateFlexible(ev.data_vigencia_final);
+
   // Payload p/ o template
   const payload = {
     // Cabeçalho do órgão
@@ -201,8 +222,8 @@ async function buildPayloadFromEvento(eventoId) {
     valor_total: ev.valor_final || 0,
     valor_total_fmt: fmtMoeda(ev.valor_final || 0),
 
-    vigencia_fim_datahora: ev.data_vigencia_final
-      ? `${new Date(ev.data_vigencia_final + 'T12:00:00').toLocaleDateString('pt-BR')} às 12h`
+    vigencia_fim_datahora: vigenciaFim
+      ? `${vigenciaFim.toLocaleDateString('pt-BR')} às 12h`
       : '',
 
     pagto_sinal_data: fmtDataExtenso(sinal),
