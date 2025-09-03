@@ -82,7 +82,9 @@ router.get('/:id/certidao', authMiddleware, async (req, res) => {
       [id]
     );
     if ((pend?.count || 0) > 0) {
-      return res.status(400).json({ error: 'Existem pendências financeiras; não é possível emitir a certidão de quitação.' });
+      return res
+        .status(422)
+        .json({ error: 'Existem pendências financeiras; não é possível processar a certidão de quitação.' });
     }
 
     // Garante tabela de certidões (persistir histórico)
