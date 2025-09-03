@@ -40,6 +40,7 @@ function resetDb() {
       db.run('DROP TABLE IF EXISTS reservas_salas');
       db.run('DROP TABLE IF EXISTS salas_reuniao');
       db.run('DROP TABLE IF EXISTS reservas_audit');
+      db.run('DROP TABLE IF EXISTS Clientes_Eventos');
       db.run('CREATE TABLE salas_reuniao (id INTEGER PRIMARY KEY, numero TEXT, capacidade INTEGER, status TEXT)');
       db.run(
         'CREATE TABLE reservas_salas (id INTEGER PRIMARY KEY, sala_id INTEGER, permissionario_id INTEGER, data TEXT, hora_inicio TEXT, hora_fim TEXT, participantes INTEGER, status TEXT, checkin TEXT)',
@@ -47,7 +48,10 @@ function resetDb() {
           if (err) return reject(err);
           db.run('CREATE TABLE reservas_audit (id INTEGER PRIMARY KEY, reserva_id INTEGER, acao TEXT, detalhes TEXT)', err2 => {
             if (err2) return reject(err2);
-            db.run("INSERT INTO salas_reuniao (id, numero, capacidade, status) VALUES (1, 'Sala 1', 5, 'disponivel')", err3 => err3 ? reject(err3) : resolve());
+            db.run('CREATE TABLE Clientes_Eventos (id INTEGER PRIMARY KEY, inapto_ate TEXT, status_cliente TEXT)', err3 => {
+              if (err3) return reject(err3);
+              db.run("INSERT INTO salas_reuniao (id, numero, capacidade, status) VALUES (1, 'Sala 1', 5, 'disponivel')", err4 => err4 ? reject(err4) : resolve());
+            });
           });
         }
       );
@@ -107,6 +111,17 @@ test('Bloqueia reserva em dias consecutivos', async () => {
     .send({ sala_id:1, data:'2025-10-11', horario_inicio:'09:00', horario_fim:'10:00', qtd_pessoas:2 })
     .expect(400)
     .then(res => assert.equal(res.body.error, 'Não é permitido reservar sala em dias consecutivos.'));
+});
+
+test('Impede reserva para cliente inapto', async () => {
+  await runAsync("INSERT INTO Clientes_Eventos (id, inapto_ate, status_cliente) VALUES (1, '2099-01-01', 'inapto')");
+  const app = setupUserApp();
+  await supertest(app)
+    .post('/api/salas/reservas')
+    .set('Authorization', `Bearer ${userToken}`)
+    .send({ sala_id:1, data:'2025-10-12', horario_inicio:'09:00', horario_fim:'10:00', qtd_pessoas:2 })
+    .expect(400)
+    .then(res => assert.equal(res.body.error, 'Cliente inapto até 2099-01-01'));
 });
 
 test('Lista disponibilidade retorna reservas existentes', async () => {

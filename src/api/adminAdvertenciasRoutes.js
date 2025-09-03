@@ -32,6 +32,7 @@ async function ensureSchema() {
       multa REAL,
       gera_multa INTEGER,
       inapto INTEGER,
+      inapto_ate TEXT,
       prazo_recurso TEXT,
       status TEXT,
       token TEXT,
@@ -41,6 +42,10 @@ async function ensureSchema() {
       resolved_at TEXT,
       outcome TEXT
     )`);
+  const cols = await dbAll(`PRAGMA table_info('advertencias')`);
+  if (!cols.some(c => c.name === 'inapto_ate')) {
+    await dbRun(`ALTER TABLE advertencias ADD COLUMN inapto_ate TEXT`);
+  }
 }
 
 async function sendAdvertenciaEmail(to, link) {
@@ -80,7 +85,7 @@ router.post('/eventos/:id/advertencias', async (req, res) => {
   try {
     await ensureSchema();
     const { id } = req.params;
-    const { fatos, clausulas, multa, gera_multa, inapto, prazo_recurso } = req.body || {};
+    const { fatos, clausulas, multa, gera_multa, inapto, inapto_ate, prazo_recurso } = req.body || {};
     if (!fatos || !Array.isArray(clausulas) || clausulas.length === 0 || multa == null || typeof inapto !== 'boolean' || !prazo_recurso) {
       return res.status(400).json({ error: 'Dados inválidos.' });
     }
@@ -101,11 +106,21 @@ router.post('/eventos/:id/advertencias', async (req, res) => {
     const pdfUrl = filePath;
     const pdfPublicUrl = `/documentos/${path.basename(filePath)}`;
     const now = new Date().toISOString();
-    const stmt = await dbRun(`INSERT INTO advertencias (evento_id,fatos,clausulas,multa,gera_multa,inapto,prazo_recurso,status,token,pdf_url,pdf_public_url,created_at)
-                              VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
-      [evento.id, fatos, JSON.stringify(clausulas), Number(multa), gera_multa ? 1 : 0, inapto ? 1 : 0, prazo_recurso, 'emitida', token, pdfUrl, pdfPublicUrl, now]);
+    const stmt = await dbRun(
+      `INSERT INTO advertencias (evento_id,fatos,clausulas,multa,gera_multa,inapto,inapto_ate,prazo_recurso,status,token,pdf_url,pdf_public_url,created_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [evento.id, fatos, JSON.stringify(clausulas), Number(multa), gera_multa ? 1 : 0, inapto ? 1 : 0, inapto_ate || null, prazo_recurso, 'emitida', token, pdfUrl, pdfPublicUrl, now]
+    );
 
     const advertenciaId = stmt.lastID;
+
+    if (inapto && inapto_ate) {
+      try {
+        await dbRun(`UPDATE Clientes_Eventos SET inapto_ate = ?, status_cliente = 'inapto' WHERE id = ?`, [inapto_ate, evento.cliente_id]);
+      } catch (err) {
+        console.error('[ADVERTENCIA] erro ao atualizar cliente:', err.message);
+      }
+    }
 
     if (gera_multa) {
       try { await gerarDarAdvertencia(db, advertenciaId, multa); } catch (err) { console.error('[ADVERTENCIA] DAR erro:', err.message); }
@@ -158,8 +173,19 @@ router.put('/advertencias/:id/resolver', async (req, res) => {
 
     const status = resultado === 'aceito' ? 'recurso_aceito' : 'recurso_negado';
     const resolvedAt = new Date().toISOString();
-    await dbRun(`UPDATE advertencias SET status = ?, outcome = ?, resolved_at = ?, multa = CASE WHEN ?='aceito' THEN 0 ELSE multa END, inapto = CASE WHEN ?='aceito' THEN 0 ELSE inapto END WHERE id = ?`,
-      [status, resultado, resolvedAt, resultado, resultado, id]);
+    await dbRun(`UPDATE advertencias SET status = ?, outcome = ?, resolved_at = ?, multa = CASE WHEN ?='aceito' THEN 0 ELSE multa END, inapto = CASE WHEN ?='aceito' THEN 0 ELSE inapto END, inapto_ate = CASE WHEN ?='aceito' THEN NULL ELSE inapto_ate END WHERE id = ?`,
+      [status, resultado, resolvedAt, resultado, resultado, resultado, id]);
+
+    if (resultado === 'aceito') {
+      try {
+        const adv = await dbGet(`SELECT e.id_cliente FROM advertencias a JOIN Eventos e ON e.id = a.evento_id WHERE a.id = ?`, [id]);
+        if (adv && adv.id_cliente) {
+          await dbRun(`UPDATE Clientes_Eventos SET inapto_ate = NULL, status_cliente = NULL WHERE id = ?`, [adv.id_cliente]);
+        }
+      } catch (err) {
+        console.error('[ADVERTENCIA] erro ao limpar cliente:', err.message);
+      }
+    }
 
     res.json({ message: 'Advertência atualizada.' });
   } catch (err) {
