@@ -125,6 +125,7 @@ async function buildPayloadFromEvento(eventoId) {
 
   const datasArr = String(ev.datas_evento || '').split(',').map(s => s.trim()).filter(Boolean);
   const primeiraData = datasArr[0] || null;
+  const ultimaData = datasArr[datasArr.length - 1] || null;
 
   // Variáveis de ambiente (permitente / cabeçalho)
   const orgUF = (process.env.ORG_UF || 'ESTADO DE ALAGOAS').toUpperCase();
@@ -185,12 +186,12 @@ async function buildPayloadFromEvento(eventoId) {
     })(),
     imovel_nome: imovelNome,
 
-    data_evento: fmtDataExtenso(primeiraData),
+    data_evento: mkPeriodo(ev.datas_evento),
     data_evento_iso: primeiraData || null,
     hora_inicio: ev.hora_inicio || '-',
     hora_fim: ev.hora_fim || '-',
     data_montagem: fmtDataExtenso(primeiraData),
-    data_desmontagem: fmtDataExtenso(primeiraData),
+    data_desmontagem: fmtDataExtenso(ultimaData),
 
     area_m2: ev.area_m2 || null,
     area_m2_fmt: fmtArea(ev.area_m2),
@@ -309,4 +310,4 @@ async function gerarTermoEventoEIndexar(eventoId) {
   return { ...doc, pdf_public_url: doc.publicUrl, urlTermoPublic };
 }
 
-module.exports = { gerarTermoEventoEIndexar };
+module.exports = { gerarTermoEventoEIndexar, buildPayloadFromEvento };
