@@ -3,6 +3,14 @@ require('dotenv').config({ path: require('path').resolve(__dirname, '../../.env'
 const axios = require('axios');
 const https = require('https');
 
+const tlsInsecure = String(process.env.SEFAZ_TLS_INSECURE || '').toLowerCase() === 'true';
+
+const httpsAgent = new https.Agent({
+  rejectUnauthorized: !tlsInsecure,   // << chave para "pular" o certificado
+  ca: tlsInsecure ? undefined : extraCa,
+});
+
+
 // ==========================
 // ENV
 // ==========================
@@ -38,9 +46,6 @@ const BASE_URL = (SEFAZ_MODE || 'hom').toLowerCase() === 'prod'
   ? SEFAZ_API_URL_PROD
   : SEFAZ_API_URL_HOM;
 
-const httpsAgent = new https.Agent({
-  rejectUnauthorized: String(SEFAZ_TLS_INSECURE).toLowerCase() !== 'true',
-});
 
 // ==========================
 // AXIOS (instância oficial SEFAZ)
