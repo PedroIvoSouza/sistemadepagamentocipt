@@ -39,6 +39,33 @@ window.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  const btnEventosDars = document.getElementById('btnRelatorioEventosDars');
+  if (btnEventosDars) {
+    btnEventosDars.addEventListener('click', async () => {
+      const dataInicio = document.getElementById('dataInicio').value;
+      const dataFim = document.getElementById('dataFim').value;
+      if (!dataInicio || !dataFim) {
+        alert('Selecione o intervalo de datas.');
+        return;
+      }
+      try {
+        const resp = await fetch(`/api/admin/relatorios/eventos-dars?dataInicio=${dataInicio}&dataFim=${dataFim}`);
+        if (resp.status === 404 || resp.status === 204) {
+          alert('Nenhuma DAR encontrada.');
+          return;
+        }
+        if (!resp.ok) throw new Error('Falha ao gerar relatório');
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        window.open(url, '_blank');
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      } catch (err) {
+        console.error(err);
+        alert('Erro ao gerar relatório de DARs de eventos.');
+      }
+    });
+  }
+
   const btnPagamentos = document.getElementById('btnRelatorioPagamentos');
   if (btnPagamentos) {
     btnPagamentos.addEventListener('click', async () => {
