@@ -54,6 +54,20 @@ module.exports = new Promise((resolve, reject) => {
       }
       console.log('Tabela "certidoes_quitacao" verificada/criada com sucesso.');
     });
+
+    // Garantir colunas de inelegibilidade na tabela Clientes_Eventos
+    db.all(`PRAGMA table_info('Clientes_Eventos')`, (err, columns) => {
+      if (err) {
+        return console.error('Erro ao inspecionar a tabela "Clientes_Eventos":', err.message);
+      }
+      const colNames = columns.map((c) => c.name);
+      if (!colNames.includes('inapto_ate')) {
+        db.run(`ALTER TABLE Clientes_Eventos ADD COLUMN inapto_ate TEXT;`);
+      }
+      if (!colNames.includes('status_cliente')) {
+        db.run(`ALTER TABLE Clientes_Eventos ADD COLUMN status_cliente TEXT;`);
+      }
+    });
   });
 
   db.close((err) => {
