@@ -51,7 +51,7 @@ function fmtId(docStr) {
 /* ===========================================================
    GET /api/permissionarios/:id/certidao
    - Emite Certidão de Quitação padronizada
-   - Bloqueia se houver qualquer DAR com status <> 'Pago'
+   - Bloqueia se houver DARs vencidos e não pagos
    =========================================================== */
 router.get('/:id/certidao', authMiddleware, async (req, res) => {
   const id = parseInt(req.params.id, 10);
@@ -73,12 +73,13 @@ router.get('/:id/certidao', authMiddleware, async (req, res) => {
       return res.status(404).json({ error: 'Permissionário não encontrado.' });
     }
 
-    // Verifica pendências (qualquer status diferente de 'Pago')
+    // Verifica pendências (DARs vencidos e não pagos)
     const pend = await getAsync(
       `SELECT COUNT(*) AS count
          FROM dars
         WHERE permissionario_id = ?
-          AND status <> 'Pago'`,
+          AND status <> 'Pago'
+          AND DATE(data_vencimento) < DATE('now')`,
       [id]
     );
     if ((pend?.count || 0) > 0) {
