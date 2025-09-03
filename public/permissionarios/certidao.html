@@ -163,24 +163,29 @@
     }
 
     async function baixarCertidao(token, user){
-      const res = await fetch(`/api/permissionarios/${encodeURIComponent(user.id)}/certidao`, {
-        headers: {
-          'Authorization':'Bearer '+token,
-          'Accept':'application/pdf',
-          'X-Requested-With': 'XMLHttpRequest'
-        }
-      });
+        const res = await fetch(`/api/permissionarios/${encodeURIComponent(user.id)}/certidao`, {
+          headers: {
+            'Authorization':'Bearer '+token,
+            'Accept':'application/pdf',
+            'X-Requested-With': 'XMLHttpRequest'
+          }
+        });
 
-      if(!res.ok){
-        // tenta ler JSON de erro; se vier HTML, cai no catch
-        const text = await res.text();
-        try{
-          const data = JSON.parse(text);
-          throw new Error(data.error || `Erro ${res.status} ao gerar certidão.`);
-        }catch{
-          throw new Error('Falha ao gerar certidão. Possível sessão expirada ou erro no servidor.');
+        if(res.status === 422){
+          const data = await res.json().catch(()=>({}));
+          throw new Error(data.error || 'Existem pendências financeiras que impedem a emissão da certidão.');
         }
-      }
+
+        if(!res.ok){
+          // tenta ler JSON de erro; se vier HTML, cai no catch
+          const text = await res.text();
+          try{
+            const data = JSON.parse(text);
+            throw new Error(data.error || `Erro ${res.status} ao gerar certidão.`);
+          }catch{
+            throw new Error('Falha ao gerar certidão. Possível sessão expirada ou erro no servidor.');
+          }
+        }
 
       const ct = res.headers.get('content-type') || '';
       if(!ct.includes('application/pdf')){
