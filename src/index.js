@@ -43,6 +43,7 @@ const botRoutes             = require('./api/botRoutes');
 const adminSalasRoutes      = require('./api/adminSalasRoutes');
 const advertenciasRoutes    = require('./api/advertenciasRoutes');
 const adminAdvertenciasRoutes = require('./api/adminAdvertenciasRoutes');
+const portalAdvertenciasRoutes = require('./api/portalAdvertenciasRoutes');
 
 // Routers de assinatura do portal (exporta 2 routers)
 const portalAssin = require('./api/portalAssinaturaRoutes');
@@ -94,6 +95,7 @@ mount('/api/permissionarios', 'permissionariosRoutes', permissionariosRoutes, ap
 // Portal do cliente (assinaturas/termo)
 mount('/api/portal/eventos', 'portalEventosAssinaturaRouter',  portalEventosAssinaturaRouter,  app); // requer auth no router
 mount('/api',                'documentosAssinafyPublicRouter', documentosAssinafyPublicRouter, app); // público p/ status/artefatos
+mount('/api/portal/advertencias', 'portalAdvertenciasRoutes', portalAdvertenciasRoutes, app);
 
 // Administração
 mount('/api/admin/auth',        'adminAuthRoutes',       adminAuthRoutes,       app);
