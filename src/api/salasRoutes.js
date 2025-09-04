@@ -226,7 +226,7 @@ router.put('/reservas/:id', async (req, res) => {
   }
 });
 
-// Cancela reserva (≥24h antes)
+// Cancela reserva
 router.delete('/reservas/:id', async (req, res) => {
   const id = parseInt(req.params.id, 10);
   try {
@@ -234,11 +234,6 @@ router.delete('/reservas/:id', async (req, res) => {
     if (!reserva) return res.status(404).json({ error: 'Reserva não encontrada.' });
     if (reserva.permissionario_id !== req.user.id) {
       return res.status(403).json({ error: 'Reserva pertencente a outro permissionário' });
-    }
-    const inicio = new Date(`${reserva.data}T${reserva.hora_inicio}:00`);
-    const diff = inicio.getTime() - Date.now();
-    if (diff < 24 * 60 * 60 * 1000) {
-      return res.status(400).json({ error: 'Cancelamento permitido apenas com 24h de antecedência.' });
     }
     await runAsync(`DELETE FROM reservas_salas WHERE id = ?`, [id]);
     await reservaAuditService.logCancelamento(id, { permissionario_id: req.user.id });
