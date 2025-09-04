@@ -86,11 +86,9 @@ router.post('/solicitar-acesso', (req, res) => {
         }
       }
 
-        return res.status(200).json({
-          message: 'Se um CNPJ correspondente for encontrado, um e-mail será enviado.',
-          permissionarioId: user.id
-        });
-
+      return res.status(200).json({
+        message: 'Se um CNPJ correspondente for encontrado, um e-mail será enviado.',
+        permissionarioId: user.id
       });
     } catch (hashErr) {
       console.error('[solicitar-acesso] hash error:', hashErr);
