@@ -251,7 +251,7 @@
                                 <td class="text-center"><span class="badge ${statusColor}">${dar.status}</span></td>
                                 <td class="text-center">
                                 <div class="btn-group">
-                                    <button class="btn btn-primary btn-sm emitir-btn" data-id="${dar.id}" data-status="${dar.status}" data-mes="${dar.mes_referencia}" data-ano="${dar.ano_referencia}">
+                                    <button class="btn btn-primary btn-sm emitir-btn" data-id="${dar.id}" data-status="${dar.status}" data-mes="${dar.mes_referencia}" data-ano="${dar.ano_referencia}" data-vencimento="${dar.data_vencimento}">
                                     Emitir
                                     </button>
                                 </div>
@@ -281,7 +281,10 @@
                 button.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
 
                 try {
-                    if (darStatus === 'Vencido' || darStatus === 'Vencida') {
+                    const vencido =
+                        ['Vencido', 'Vencida'].includes(darStatus) ||
+                        (['Emitido', 'Reemitido'].includes(darStatus) && new Date(button.dataset.vencimento) < new Date());
+                    if (vencido) {
                         const response = await fetch(`/api/dars/${darId}/recalcular`, { headers });
                         if (!response.ok) throw new Error('Erro ao recalcular o DAR.');
                         const calculo = await response.json();
