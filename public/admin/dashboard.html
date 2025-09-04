@@ -302,6 +302,10 @@ window.onload = async () => {
           devedoresList.innerHTML = '<li class="list-group-item text-muted text-center">Nenhum devedor encontrado.</li>';
         }
       }
+
+      const isMobile = window.__isMobile && window.__isMobile();
+      document.getElementById('resumoMensalChart').style.display = isMobile ? 'block' : 'none';
+      document.getElementById('resumoMensalTable').style.display = isMobile ? 'none' : 'table';
     } catch (error) {
       console.error('--- ERRO DETALHADO AO CARREGAR DASHBOARD ---');
       console.error(error);
@@ -318,6 +322,7 @@ window.onload = async () => {
   if (!isSalasAdmin) {
     document.getElementById('dars-filter').addEventListener('change', (e) => fetchStats(e.target.value));
   }
+
 };
 </script>
 
