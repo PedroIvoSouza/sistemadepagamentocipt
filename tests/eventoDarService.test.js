@@ -31,7 +31,9 @@ async function setupSchema(db) {
     nome_razao_social TEXT,
     documento TEXT,
     endereco TEXT,
-    cep TEXT
+    cep TEXT,
+    tipo TEXT,
+    valor_aluguel REAL
   );`);
   await run(db, `CREATE TABLE Eventos (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -97,8 +99,8 @@ const failingHelpers = {
   imprimirTokenEmPdf: async (pdf, token) => `${pdf}-${token}`,
 };
 
-async function seedCliente(db) {
-  await run(db, `INSERT INTO Clientes_Eventos (nome_razao_social, documento, endereco, cep) VALUES ('Cliente', '12345678901', 'Rua A', '12345000');`);
+async function seedCliente(db, { tipo = 'Normal', valor = 100 } = {}) {
+  await run(db, `INSERT INTO Clientes_Eventos (nome_razao_social, documento, endereco, cep, tipo, valor_aluguel) VALUES ('Cliente', '12345678901', 'Rua A', '12345000', ?, ?);`, [tipo, valor]);
 }
 
 test('criarEventoComDars insere evento e dars', async () => {
@@ -181,6 +183,30 @@ test('atualizarEventoComDars substitui dars', async () => {
   await atualizarEventoComDars(db, id, updateData, helpers);
   const dars = await all(db, 'SELECT * FROM dars');
   assert.strictEqual(dars.length, 2);
+  await new Promise(res => db.close(res));
+});
+
+test('criarEventoComDars ignora cliente isento ou com valor_aluguel zero', async () => {
+  const db = createDb();
+  await setupSchema(db);
+  await seedCliente(db, { tipo: 'Isento', valor: 0 });
+  const data = {
+    idCliente: 1,
+    nomeEvento: 'Feira',
+    datasEvento: ['2025-10-10'],
+    totalDiarias: 1,
+    valorBruto: 0,
+    tipoDescontoAuto: 'Geral',
+    descontoManualPercent: 0,
+    valorFinal: 0,
+    parcelas: [],
+  };
+  const id = await criarEventoComDars(db, data, helpers);
+  assert.strictEqual(id, 1);
+  const dars = await all(db, 'SELECT * FROM dars');
+  assert.strictEqual(dars.length, 0);
+  const eventos = await all(db, 'SELECT evento_gratuito FROM Eventos');
+  assert.strictEqual(eventos[0].evento_gratuito, 1);
   await new Promise(res => db.close(res));
 });
 
