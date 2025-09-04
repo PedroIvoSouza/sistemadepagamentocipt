@@ -2,6 +2,13 @@
 // Carrega o sidebar comum e aplica comportamento compartilhado
 
 document.addEventListener('DOMContentLoaded', () => {
+    // obtém token do admin e decodifica role
+    const token = (typeof window.getAdminToken === 'function' && window.getAdminToken()) ||
+        localStorage.getItem('adminToken') ||
+        localStorage.getItem('adminAuthToken');
+
+    const role = decodeRoleFromToken(token);
+
     const container = document.getElementById('sidebar-container');
     if (container) {
         fetch('/admin/admin-sidebar.html')
@@ -12,12 +19,55 @@ document.addEventListener('DOMContentLoaded', () => {
             .then(html => {
                 container.outerHTML = html;
             })
-            .then(() => initSidebarBehaviour())
+            .then(() => {
+                applyRoleToSidebar(role);
+                initSidebarBehaviour();
+            })
             .catch(err => console.error('Erro ao injetar sidebar:', err));
     } else {
+        applyRoleToSidebar(role);
         initSidebarBehaviour(); // Sidebar já está no HTML
     }
 });
+
+function decodeRoleFromToken(token) {
+    if (!token) return null;
+    try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        return payload.role;
+    } catch (err) {
+        console.error('Erro ao decodificar token:', err);
+        return null;
+    }
+}
+
+function applyRoleToSidebar(role) {
+    if (!role) return;
+
+    // abordagem genérica: usa atributo data-roles se existir
+    document.querySelectorAll('[data-roles]').forEach(item => {
+        const roles = item.getAttribute('data-roles').split(',').map(r => r.trim());
+        if (!roles.includes(role)) {
+            item.remove();
+        }
+    });
+
+    // fallback específico para SALAS_ADMIN usando href/classes
+    if (role === 'SALAS_ADMIN') {
+        const allowedSelectors = [
+            '.nav-link[href*="permissionarios.html"]',
+            '.nav-link[href*="salas.html"]',
+            '#logoutButton'
+        ];
+
+        document.querySelectorAll('.sidebar-nav .nav-item').forEach(item => {
+            const link = item.querySelector('.nav-link');
+            if (!link) return;
+            const allowed = allowedSelectors.some(sel => link.matches(sel));
+            if (!allowed) item.remove();
+        });
+    }
+}
 
 function initSidebarBehaviour() {
     const currentPath = window.location.pathname;
