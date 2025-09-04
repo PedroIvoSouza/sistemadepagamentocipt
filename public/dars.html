@@ -261,7 +261,7 @@
                     tableBody.innerHTML = tableHTML;
                     
                     document.querySelectorAll('.emitir-btn').forEach(button => {
-                        button.addEventListener('click', handleEmitirClick);
+                        button.addEventListener('click', handleEmitirClick, { capture: false });
                     });
                 } catch (error) {
                     tableBody.innerHTML = `<tr><td colspan="5" class="text-center text-danger">${error.message}</td></tr>`;
@@ -269,7 +269,7 @@
             }
 
             async function handleEmitirClick(event) {
-                const button = event.target;
+                const button = event.currentTarget;
                 const darId = button.dataset.id;
                 const darStatus = button.dataset.status;
 
