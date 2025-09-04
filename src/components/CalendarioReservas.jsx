@@ -4,7 +4,7 @@ import { format, parse, startOfWeek, getDay } from 'date-fns';
 import ptBR from 'date-fns/locale/pt-BR/index.js';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import './CalendarioReservas.css';
-import { MdEditCalendar, MdCancel } from 'react-icons/md';
+import { MdEditCalendar, MdCancel, MdAdd } from 'react-icons/md';
 
 const locales = {
   'pt-BR': ptBR
@@ -22,7 +22,7 @@ const localizer = dateFnsLocalizer({
  * CalendarioReservas encapsula react-big-calendar com tema inspirado no Google Calendar.
  * Aceita eventos no formato { id, title, start, end } e callbacks para ações rápidas.
  */
-const CalendarioReservas = ({ events = [], onReschedule, onCancel }) => {
+const CalendarioReservas = ({ events = [], onReschedule, onCancel, onReserve }) => {
   const EventComponent = ({ event }) => (
     <span className="rbc-event-content">
       {event.title}
@@ -49,6 +49,21 @@ const CalendarioReservas = ({ events = [], onReschedule, onCancel }) => {
             aria-label="Cancelar"
           >
             <MdCancel />
+          </button>
+        </span>
+      )}
+      {event.status === 'livre' && (
+        <span className="event-actions">
+          <button
+            className="reserve"
+            onClick={e => {
+              e.preventDefault();
+              e.stopPropagation();
+              onReserve && onReserve(event);
+            }}
+            aria-label="Reservar"
+          >
+            <MdAdd />
           </button>
         </span>
       )}
