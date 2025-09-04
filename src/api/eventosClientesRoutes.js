@@ -12,6 +12,7 @@ const { Parser } = require('json2csv');
 const xlsx     = require('xlsx');
 
 const { enviarEmailDefinirSenha } = require('../services/emailService');
+const { fetchCnpjData }           = require('../services/cnpjLookupService');
 const adminAuthMiddleware         = require('../middleware/adminAuthMiddleware');
 const authMiddleware              = require('../middleware/authMiddleware');
 const authorizeRole               = require('../middleware/roleMiddleware');
@@ -412,7 +413,7 @@ adminRouter.post('/', async (req, res) => {
   } = req.body || {};
 
   const tp = normalizeTipoPessoa(tipo_pessoa);
-  if (!nome_razao_social || !tp || !documento || !email || !tipo_cliente) {
+  if (!tp || !documento || !email || !tipo_cliente) {
     return res.status(400).json({ error: 'Campos obrigatórios estão faltando.' });
   }
 
@@ -420,6 +421,30 @@ adminRouter.post('/', async (req, res) => {
   const docOk = (tp === 'PF' && isCpf(documento)) || (tp === 'PJ' && isCnpj(documento));
   if (!docOk) {
     return res.status(400).json({ error: 'Documento inválido (CPF/CNPJ).' });
+  }
+
+  let cnpjData = null;
+  if (tp === 'PJ') {
+    try {
+      cnpjData = await fetchCnpjData(documento);
+      if (!cnpjData) {
+        console.error(`[ADMIN EVENTOS CLIENTES][POST] CNPJ ${documento} não encontrado na API.`);
+      }
+    } catch (e) {
+      console.error('[ADMIN EVENTOS CLIENTES][POST] CNPJ lookup erro:', e?.message);
+    }
+    if (cnpjData) {
+      nome_razao_social = nome_razao_social || cnpjData.razao_social || cnpjData.nome_fantasia;
+      logradouro = logradouro || cnpjData.logradouro;
+      bairro = bairro || cnpjData.bairro;
+      cidade = cidade || cnpjData.cidade;
+      uf = uf || cnpjData.uf;
+      cep = cep || cnpjData.cep;
+    }
+  }
+
+  if (!nome_razao_social) {
+    return res.status(400).json({ error: 'Campos obrigatórios estão faltando.' });
   }
 
   const telDigits      = onlyDigits(telefone || '');
