@@ -28,13 +28,25 @@ module.exports = new Promise((resolve, reject) => {
             email_financeiro TEXT,
             responsavel_financeiro TEXT,
             website TEXT,
-            email_notificacao TEXT
+            email_notificacao TEXT,
+            tipo TEXT
         );
     `, (err) => {
       if (err) {
         return console.error('Erro ao criar a tabela "permissionarios":', err.message);
       }
       console.log('Tabela "permissionarios" verificada/criada com sucesso.');
+    });
+
+    // Garantir coluna 'tipo' na tabela Permissionários
+    db.all(`PRAGMA table_info('permissionarios')`, (err, columns) => {
+      if (err) {
+        return console.error('Erro ao inspecionar a tabela "permissionarios":', err.message);
+      }
+      const colNames = columns.map((c) => c.name);
+      if (!colNames.includes('tipo')) {
+        db.run(`ALTER TABLE permissionarios ADD COLUMN tipo TEXT;`);
+      }
     });
 
     // Tabela 2: Certidoes de Quitacao
