@@ -544,6 +544,17 @@ const saldoISO = parcelas.length > 1
   valor: ev.valor_final || 0,
 });
 
+  const equipamentos = [];
+  if (ev.emprestimo_tvs) equipamentos.push('TVs');
+  if (ev.emprestimo_caixas_som) equipamentos.push('caixas de som');
+  if (ev.emprestimo_microfones) equipamentos.push('microfones');
+  if (equipamentos.length) {
+    const lista = equipamentos.length === 1
+      ? equipamentos[0]
+      : equipamentos.slice(0, -1).join(', ') + ' e ' + equipamentos[equipamentos.length - 1];
+    paragrafo(doc, `1.2 - Serão disponibilizados em empréstimo: ${lista}.`);
+  }
+
   if (ev.remarcado) {
     let origArr = [];
     try {
