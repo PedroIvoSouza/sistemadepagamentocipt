@@ -98,7 +98,7 @@
                     </div>
                 </div>
 
-                <div class="card">
+                <div id="lastDarCard" class="card">
                     <div class="card-body p-4">
                         <h5 class="card-title">MEU ÚLTIMO DAR</h5>
                         <hr>
@@ -200,9 +200,14 @@
             try {
                 await Promise.all([
                     fetchUserData(),
-                    fetchDashboardStats(),
-                    renderLastDarChart()
+                    fetchDashboardStats()
                 ]);
+
+                if (window.__isMobile && window.__isMobile()) {
+                    await renderLastDarChart();
+                } else {
+                    document.getElementById('lastDarCard').style.display = 'none';
+                }
             } catch (error) {
                 console.error('Erro ao carregar dados do dashboard:', error);
                 localStorage.removeItem('authToken');

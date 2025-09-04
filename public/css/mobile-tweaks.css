@@ -178,3 +178,6 @@ input, select, textarea, button { font-size: 16px; }
   width: 100%;
   max-width: 100%;
 }
+
+#lastDarCard { display: none; }
+body.mobile #lastDarCard { display: block; }
