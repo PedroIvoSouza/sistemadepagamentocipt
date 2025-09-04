@@ -25,10 +25,10 @@ clientRouter.get('/dashboard-stats', (req, res) => {
   const id = req.user.id;
   const sql = `
     SELECT
-      SUM(CASE WHEN d.status = 'Pendente' THEN 1 ELSE 0 END) AS pendentes,
-      SUM(CASE WHEN d.status = 'Vencido'  THEN 1 ELSE 0 END) AS vencidos,
-      SUM(CASE WHEN d.status = 'Pago'     THEN 1 ELSE 0 END) AS pagos,
-      ROUND(SUM(CASE WHEN d.status IN ('Pendente','Vencido') THEN d.valor ELSE 0 END), 2) AS totalDevido
+      SUM(CASE WHEN d.status != 'Pago' AND DATE(d.data_vencimento) >= DATE('now','localtime') THEN 1 ELSE 0 END) AS pendentes,
+      SUM(CASE WHEN d.status != 'Pago' AND DATE(d.data_vencimento) <  DATE('now','localtime') THEN 1 ELSE 0 END) AS vencidos,
+      SUM(CASE WHEN d.status = 'Pago' THEN 1 ELSE 0 END) AS pagos,
+      ROUND(SUM(CASE WHEN d.status != 'Pago' THEN d.valor ELSE 0 END), 2) AS totalDevido
     FROM dars d
     JOIN DARs_Eventos de ON de.id_dar = d.id
     JOIN Eventos e       ON e.id = de.id_evento
