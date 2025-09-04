@@ -110,6 +110,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const reservasCards = document.getElementById('reservasCards');
     const reservasTableWrapper = document.getElementById('reservasTableWrapper');
     const usarCards = typeof __isMobile === 'function' && __isMobile();
+    let reservasCache = [];
 
     if (usarCards) {
         reservasTableWrapper.classList.add('d-none');
@@ -121,6 +122,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const resp = await fetch('/api/salas/minhas-reservas', { headers });
             if (!resp.ok) throw new Error('Falha ao carregar reservas');
             const reservas = await resp.json();
+            reservasCache = reservas;
             if (usarCards) {
                 reservasCards.innerHTML = '';
                 reservas.forEach(r => {
@@ -131,6 +133,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         <div class="reserva-data">${r.data}</div>
                         <div class="reserva-horas">${r.hora_inicio} - ${r.hora_fim}</div>
                         <div class="reserva-actions">
+                            <button class="btn btn-sm btn-secondary me-2" data-edit="${r.id}">Editar</button>
                             <button class="btn btn-sm btn-danger" data-id="${r.id}">Cancelar</button>
                         </div>`;
                     reservasCards.appendChild(card);
@@ -144,7 +147,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         <td>${r.data}</td>
                         <td>${r.hora_inicio}</td>
                         <td>${r.hora_fim}</td>
-                        <td><button class="btn btn-sm btn-danger" data-id="${r.id}">Cancelar</button></td>`;
+                        <td><button class="btn btn-sm btn-secondary me-2" data-edit="${r.id}">Editar</button><button class="btn btn-sm btn-danger" data-id="${r.id}">Cancelar</button></td>`;
                     reservasBody.appendChild(tr);
                 });
             }
@@ -170,8 +173,66 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
+    function editHandler(e) {
+        if (e.target.matches('button[data-edit]')) {
+            const id = e.target.getAttribute('data-edit');
+            const reserva = reservasCache.find(r => String(r.id) === String(id));
+            if (!reserva) return;
+            const formHtml = `
+                <form id="editReservaForm" class="p-3">
+                    <div class="mb-3">
+                        <label class="form-label">Início</label>
+                        <input type="datetime-local" class="form-control" id="editStart" value="${reserva.data}T${reserva.hora_inicio}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Fim</label>
+                        <input type="datetime-local" class="form-control" id="editEnd" value="${reserva.data}T${reserva.hora_fim}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Qtd. Pessoas</label>
+                        <input type="number" class="form-control" id="editQtd" min="1" step="1" value="${reserva.participantes || ''}">
+                    </div>
+                    <div class="text-end">
+                        <button type="submit" class="btn btn-primary">Salvar</button>
+                    </div>
+                </form>`;
+            AppUI.sheet.show(formHtml);
+            document.getElementById('editReservaForm').addEventListener('submit', async ev => {
+                ev.preventDefault();
+                const start = document.getElementById('editStart').value;
+                const end = document.getElementById('editEnd').value;
+                const qtd = document.getElementById('editQtd').value;
+                const payload = {};
+                if (start) {
+                    payload.data = start.split('T')[0];
+                    payload.horario_inicio = start.split('T')[1];
+                }
+                if (end) {
+                    payload.horario_fim = end.split('T')[1];
+                    if (!payload.data) payload.data = end.split('T')[0];
+                }
+                if (qtd) payload.qtd_pessoas = parseInt(qtd, 10);
+                try {
+                    const res = await fetch(`/api/salas/reservas/${id}`, {
+                        method: 'PUT',
+                        headers,
+                        body: JSON.stringify(payload)
+                    });
+                    if (!res.ok) throw new Error('Erro ao atualizar');
+                    calendar.refetchEvents();
+                    carregarReservas();
+                    AppUI.sheet.hide();
+                } catch (err) {
+                    alert(err.message);
+                }
+            });
+        }
+    }
+
     reservasBody.addEventListener('click', cancelHandler);
     reservasCards.addEventListener('click', cancelHandler);
+    reservasBody.addEventListener('click', editHandler);
+    reservasCards.addEventListener('click', editHandler);
 
     carregarReservas();
 });

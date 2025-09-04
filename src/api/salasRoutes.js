@@ -142,6 +142,90 @@ router.post('/reservas', async (req, res) => {
   }
 });
 
+// Atualiza reserva existente
+router.put('/reservas/:id', async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const { sala_id, data, horario_inicio, horario_fim, qtd_pessoas } = req.body || {};
+  if (
+    sala_id === undefined &&
+    data === undefined &&
+    horario_inicio === undefined &&
+    horario_fim === undefined &&
+    qtd_pessoas === undefined
+  ) {
+    return res.status(400).json({ error: 'Nenhum campo para atualizar.' });
+  }
+  try {
+    const reserva = await getAsync(`SELECT * FROM reservas_salas WHERE id = ?`, [id]);
+    if (!reserva) return res.status(404).json({ error: 'Reserva não encontrada.' });
+    if (reserva.permissionario_id !== req.user.id) {
+      return res
+        .status(403)
+        .json({ error: 'Reserva pertencente a outro permissionário' });
+    }
+
+    const novoSalaId = sala_id || reserva.sala_id;
+    const novaData = data || reserva.data;
+    const novoInicio = horario_inicio || reserva.hora_inicio;
+    const novoFim = horario_fim || reserva.hora_fim;
+    const participantes =
+      typeof qtd_pessoas === 'number' ? qtd_pessoas : reserva.participantes;
+
+    await reservaSalaService.validarSalaECapacidade(novoSalaId, participantes);
+    reservaSalaService.validarHorarios(novaData, novoInicio, novoFim);
+    await reservaSalaService.verificarConflito(
+      novoSalaId,
+      novaData,
+      novoInicio,
+      novoFim,
+      id
+    );
+
+    const campos = [];
+    const params = [];
+    const audit = { permissionario_id: req.user.id };
+    if (sala_id !== undefined) {
+      campos.push('sala_id = ?');
+      params.push(sala_id);
+      audit.sala_id = sala_id;
+    }
+    if (data !== undefined) {
+      campos.push('data = ?');
+      params.push(data);
+      audit.data = data;
+    }
+    if (horario_inicio !== undefined) {
+      campos.push('hora_inicio = ?');
+      params.push(horario_inicio);
+      audit.horario_inicio = horario_inicio;
+    }
+    if (horario_fim !== undefined) {
+      campos.push('hora_fim = ?');
+      params.push(horario_fim);
+      audit.horario_fim = horario_fim;
+    }
+    if (qtd_pessoas !== undefined) {
+      campos.push('participantes = ?');
+      params.push(qtd_pessoas);
+      audit.participantes = qtd_pessoas;
+    }
+
+    if (!campos.length) return res.status(200).json({ message: 'Nada a atualizar' });
+
+    await runAsync(
+      `UPDATE reservas_salas SET ${campos.join(', ')} WHERE id = ?`,
+      [...params, id]
+    );
+    await reservaAuditService.logAtualizacao(id, audit);
+    res.json({ message: 'Reserva atualizada' });
+  } catch (e) {
+    console.error(e);
+    res
+      .status(e.status || 500)
+      .json({ error: e.status ? e.message : 'Erro ao atualizar reserva.' });
+  }
+});
+
 // Cancela reserva (≥24h antes)
 router.delete('/reservas/:id', async (req, res) => {
   const id = parseInt(req.params.id, 10);
