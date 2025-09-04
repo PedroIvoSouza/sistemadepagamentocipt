@@ -40,7 +40,7 @@ router.post('/solicitar-acesso', (req, res) => {
       });
     }
 
-    let user = users[0];
+    let selectedUser = users[0];
     if (users.length > 1) {
       if (!email && !nome_empresa) {
         return res.status(400).json({
@@ -48,47 +48,47 @@ router.post('/solicitar-acesso', (req, res) => {
         });
       }
       if (email) {
-        user = users.find((u) => String(u.email).toLowerCase() === String(email).toLowerCase());
+        selectedUser = users.find(
+          (u) => String(u.email).toLowerCase() === String(email).toLowerCase()
+        );
       } else if (nome_empresa) {
-        user = users.find(
-          (u) => String(u.nome_empresa).toLowerCase() === String(nome_empresa).toLowerCase()
+        selectedUser = users.find(
+          (u) =>
+            String(u.nome_empresa).toLowerCase() === String(nome_empresa).toLowerCase()
         );
       }
-      if (!user) {
+      if (!selectedUser) {
         return res.status(400).json({
           error: 'Permissionário não encontrado com os dados fornecidos.'
         });
       }
     }
 
-    const codigo = Math.floor(100000 + Math.random() * 900000).toString(); // 6 dígitos
     const expires = Date.now() + 10 * 60 * 1000; // 10 minutos
 
     try {
-      for (const user of users) {
-        const codigo = Math.floor(100000 + Math.random() * 900000).toString();
-        const hashedCodigo = await bcrypt.hash(codigo, 10);
-        const updateSql = `
-          UPDATE permissionarios
-          SET senha_reset_token = ?, senha_reset_expires = ?
-          WHERE id = ?
-        `;
-        await new Promise((resolve, reject) =>
-          db.run(updateSql, [hashedCodigo, expires, user.id], (uErr) =>
-            uErr ? reject(uErr) : resolve()
-          )
-        );
+      const codigo = Math.floor(100000 + Math.random() * 900000).toString();
+      const hashedCodigo = await bcrypt.hash(codigo, 10);
+      const updateSql = `
+        UPDATE permissionarios
+        SET senha_reset_token = ?, senha_reset_expires = ?
+        WHERE id = ?
+      `;
+      await new Promise((resolve, reject) =>
+        db.run(updateSql, [hashedCodigo, expires, selectedUser.id], (uErr) =>
+          uErr ? reject(uErr) : resolve()
+        )
+      );
 
-        try {
-          await enviarEmailRedefinicao(user.email, codigo);
-        } catch (mailErr) {
-          console.error('[solicitar-acesso] email error:', mailErr);
-        }
+      try {
+        await enviarEmailRedefinicao(selectedUser.email, codigo);
+      } catch (mailErr) {
+        console.error('[solicitar-acesso] email error:', mailErr);
       }
 
       return res.status(200).json({
         message: 'Se um CNPJ correspondente for encontrado, um e-mail será enviado.',
-        permissionarioId: user.id
+        permissionarioId: selectedUser.id
       });
     } catch (hashErr) {
       console.error('[solicitar-acesso] hash error:', hashErr);
