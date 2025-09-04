@@ -40,6 +40,10 @@
         .card-title { color: #6c757d; font-size: 0.9rem; font-weight: 700; text-transform: uppercase; }
         .stat-number { font-size: clamp(1.4rem, 4vw, 2.2rem); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 700; color: var(--cor-primaria); }
         .stat-icon { font-size: 3rem; color: var(--cor-primaria); opacity: 0.2; }
+        .chart-container { position: relative; width: 100%; height: 300px; }
+        @media (max-width: 576px) {
+            .chart-container { height: 240px; }
+        }
     </style>
 </head>
 <body>
@@ -74,11 +78,8 @@
                                     </select>
                                 </div>
                                 <hr>
-                                <div class="table-responsive">
-                                    <table class="table table-sm">
-                                        <thead><tr><th>Competência</th><th>Emitidas</th><th>Pagas</th><th>Vencidas</th></tr></thead>
-                                        <tbody id="resumo-mensal-body"></tbody>
-                                    </table>
+                                <div class="chart-container">
+                                    <canvas id="resumoMensalChart" class="w-100 h-100"></canvas>
                                 </div>
                             </div>
                         </div>
@@ -100,6 +101,7 @@
 <script defer src="/js/mobile-adapter.js"></script>
 <script defer src="/js/ui-kit.js"></script>
 <script defer src="/js/mobile-tweaks.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <script>
 window.onload = async () => {
@@ -158,21 +160,32 @@ window.onload = async () => {
         });
 
       const meses = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
-      const resumoBody = document.getElementById('resumo-mensal-body');
       const resumoMensal = (stats.resumoMensal || []).slice().reverse();
 
-      if (resumoMensal.length > 0) {
-        resumoBody.innerHTML = resumoMensal.map(item => `
-          <tr>
-            <td><strong>${meses[(item.mes||1)-1]}/${item.ano}</strong></td>
-            <td>${Number(item.emitidas ?? 0).toLocaleString('pt-BR')}</td>
-            <td>${Number(item.pagas ?? 0).toLocaleString('pt-BR')}</td>
-            <td><span class="text-danger fw-bold">${Number(item.vencidas ?? 0).toLocaleString('pt-BR')}</span></td>
-          </tr>
-        `).join('');
-      } else {
-        resumoBody.innerHTML = '<tr><td colspan="5" class="text-muted text-center">Nenhum dado mensal para exibir.</td></tr>';
-      }
+      const labels = resumoMensal.map(item => `${meses[(item.mes||1)-1]}/${item.ano}`);
+      const emitidas = resumoMensal.map(item => Number(item.emitidas ?? 0));
+      const pagas = resumoMensal.map(item => Number(item.pagas ?? 0));
+      const vencidas = resumoMensal.map(item => Number(item.vencidas ?? 0));
+
+      if (window.resumoChart) window.resumoChart.destroy();
+      const ctx = document.getElementById('resumoMensalChart').getContext('2d');
+      window.resumoChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            { label: 'Emitidas', data: emitidas, backgroundColor: '#0d6efd' },
+            { label: 'Pagas', data: pagas, backgroundColor: '#198754' },
+            { label: 'Vencidas', data: vencidas, backgroundColor: '#dc3545' }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: { y: { beginAtZero: true } },
+          plugins: { legend: { position: 'bottom' } }
+        }
+      });
 
       const devedoresList = document.getElementById('maiores-devedores-list');
       if (stats.maioresDevedores && stats.maioresDevedores.length > 0) {
