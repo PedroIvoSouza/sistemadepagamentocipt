@@ -33,11 +33,11 @@ ensureColumn('permissionarios', 'telefone_cobranca', 'TEXT').catch(()=>{});
 // Rota GET /me (agora busca também o email_notificacao)
 router.get('/me', authMiddleware, (req, res) => {
     const userId = req.user.id;
-    const sql = `SELECT id, nome_empresa, cnpj, email, telefone, telefone_cobranca, email_financeiro, responsavel_financeiro, website, email_notificacao, numero_sala, valor_aluguel FROM permissionarios WHERE id = ?`;
+    const sql = `SELECT id, nome_empresa, cnpj, email, telefone, telefone_cobranca, email_financeiro, responsavel_financeiro, website, email_notificacao, numero_sala, valor_aluguel, tipo FROM permissionarios WHERE id = ?`;
     db.get(sql, [userId], (err, user) => {
         if (err) { return res.status(500).json({ error: 'Erro de banco de dados.' }); }
         if (!user) { return res.status(404).json({ error: 'Usuário não encontrado.' }); }
-        res.status(200).json(user);
+        res.status(200).json({ ...user, tipo: user.tipo });
     });
 });
 
