@@ -49,7 +49,8 @@ clientRouter.get('/dashboard-stats', (req, res) => {
 clientRouter.get('/eventos', (req, res) => {
   const id = req.user.id;
   const sql = `
-    SELECT e.id, e.nome_evento, e.status, e.total_diarias, e.valor_final, e.datas_evento, e.data_vigencia_final
+    SELECT e.id, e.nome_evento, e.status, e.total_diarias, e.valor_final, e.datas_evento, e.data_vigencia_final,
+           e.emprestimo_tvs, e.emprestimo_caixas_som, e.emprestimo_microfones
     FROM Eventos e
     WHERE e.id_cliente = ?
     ORDER BY e.id DESC
