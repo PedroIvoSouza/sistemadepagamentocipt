@@ -71,7 +71,11 @@ async function verificarDiasConsecutivos(permissionarioId, salaId, data) {
   next.setDate(baseDate.getDate() + 1);
   const prevStr = prev.toISOString().slice(0, 10);
   const nextStr = next.toISOString().slice(0, 10);
-  const sql = `SELECT id FROM reservas_salas WHERE permissionario_id = ? AND sala_id = ? AND data IN (?, ?)`;
+  const sql = `SELECT id FROM reservas_salas
+                WHERE permissionario_id = ?
+                  AND sala_id = ?
+                  AND data IN (?, ?)
+                  AND status <> 'cancelada'`;
   const conflito = await getAsync(sql, [permissionarioId, salaId, prevStr, nextStr]);
   if (conflito) {
     throw validationError('Não é permitido reservar sala em dias consecutivos.');

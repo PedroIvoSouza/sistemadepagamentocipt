@@ -47,7 +47,8 @@ router.get('/:id/disponibilidade', async (req, res) => {
   }
   try {
     const reservas = await allAsync(
-      `SELECT hora_inicio, hora_fim FROM reservas_salas WHERE sala_id = ? AND data = ?`,
+      `SELECT hora_inicio, hora_fim FROM reservas_salas
+         WHERE sala_id = ? AND data = ? AND status <> 'cancelada'`,
       [salaId, data]
     );
     const intervalos = reservas.map(r => ({ inicio: r.hora_inicio, fim: r.hora_fim }));
@@ -65,6 +66,7 @@ router.get('/minhas-reservas', async (req, res) => {
          FROM reservas_salas r
          JOIN salas_reuniao s ON r.sala_id = s.id
         WHERE r.permissionario_id = ?
+          AND r.status <> 'cancelada'
           AND datetime(r.data || 'T' || r.hora_fim) >= datetime('now')
         ORDER BY r.data, r.hora_inicio`,
       [req.user.id]
@@ -89,6 +91,7 @@ router.get('/:id/reservas', async (req, res) => {
       `SELECT id, data, hora_inicio, hora_fim, status
          FROM reservas_salas
         WHERE sala_id = ? AND data BETWEEN ? AND ?
+          AND status <> 'cancelada'
         ORDER BY data, hora_inicio`,
       [salaId, inicio, fim]
     );
