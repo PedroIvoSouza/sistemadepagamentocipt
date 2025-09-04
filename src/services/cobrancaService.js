@@ -38,10 +38,12 @@ async function calcularEncargosAtraso(dar) {
     }
 
     const dataVencimentoOriginal = new Date(dar.data_vencimento);
-    
-    const diffTempo = Math.abs(novaDataVencimento - dataVencimentoOriginal);
+
+    // Calcula a diferença de tempo preservando o sinal para identificar atrasos reais
+    const diffTempo = novaDataVencimento - dataVencimentoOriginal;
     const diasAtraso = Math.ceil(diffTempo / (1000 * 60 * 60 * 24));
 
+    // Se a nova data de vencimento for anterior ou igual à original, não há encargos
     if (diasAtraso <= 0) {
         return {
             valorOriginal: dar.valor, multa: 0, juros: 0, diasAtraso: 0,
