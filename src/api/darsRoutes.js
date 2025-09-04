@@ -286,11 +286,11 @@ router.post('/:id/emitir', authMiddleware, async (req, res) => {
 
     if (['Vencido', 'Vencida'].includes(dar.status)) {
       const calculo = await calcularEncargosAtraso(dar);
+      if (!forcar) {
+        return res.status(200).json({ darVencido: true, calculo });
+      }
       guiaSource.valor = calculo.valorAtualizado;
-      // se houver nova data de vencimento, utiliza-a
       guiaSource.data_vencimento = calculo.novaDataVencimento || guiaSource.data_vencimento;
-      // anteriormente retornava { darVencido: true }, impedindo a emissão;
-      // agora prossegue normalmente com os valores atualizados.
     }
 
     const payload = buildSefazPayloadPermissionario({ perm, darLike: guiaSource });

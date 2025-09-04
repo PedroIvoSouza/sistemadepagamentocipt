@@ -10,7 +10,9 @@ const supertest = require('supertest');
 const setupDb = async (dbPath) => {
   try { fs.unlinkSync(dbPath); } catch {}
   process.env.SQLITE_STORAGE = dbPath;
-  const db = require('../src/database/db');
+  const dbModulePath = path.resolve(__dirname, '../src/database/db.js');
+  delete require.cache[dbModulePath];
+  const db = require(dbModulePath);
   const run = (sql, params = []) => new Promise((res, rej) => db.run(sql, params, err => err ? rej(err) : res()));
   const get = (sql, params = []) => new Promise((res, rej) => db.get(sql, params, (err, row) => err ? rej(err) : res(row)));
   await run(`CREATE TABLE permissionarios (id INTEGER PRIMARY KEY, nome_empresa TEXT, cnpj TEXT, numero_documento TEXT, telefone_cobranca TEXT, tipo TEXT)`);
@@ -70,4 +72,40 @@ test('emite guia com valor recalculado para DAR vencido', async () => {
   assert.equal(row.data_vencimento, '2024-01-10');
   assert.equal(row.numero_documento, '123');
   assert.equal(row.pdf_url, 'PDFDATA');
+});
+
+test('retorna aviso para DAR vencido sem force', async () => {
+  const dbPath = path.resolve(__dirname, 'test-dars-vencido-noforce.db');
+  await setupDb(dbPath);
+
+  process.env.COD_IBGE_MUNICIPIO = '2704302';
+  process.env.RECEITA_CODIGO_PERMISSIONARIO = '12345';
+
+  const sefazPath = path.resolve(__dirname, '../src/services/sefazService.js');
+  require.cache[sefazPath] = { exports: { emitirGuiaSefaz: async () => { throw new Error('should not call'); } } };
+
+  const tokenPath = path.resolve(__dirname, '../src/utils/token.js');
+  require.cache[tokenPath] = { exports: { gerarTokenDocumento: async () => 'TKN', imprimirTokenEmPdf: async pdf => pdf } };
+
+  const authPath = path.resolve(__dirname, '../src/middleware/authMiddleware.js');
+  require.cache[authPath] = { exports: (req, _res, next) => { req.user = { id: 1 }; next(); } };
+
+  const cobrancaPath = path.resolve(__dirname, '../src/services/cobrancaService.js');
+  require.cache[cobrancaPath] = {
+    exports: {
+      calcularEncargosAtraso: async dar => ({ valorAtualizado: dar.valor + 15, novaDataVencimento: '2024-01-12' })
+    }
+  };
+
+  const darsRoutesPath = path.resolve(__dirname, '../src/api/darsRoutes.js');
+  delete require.cache[darsRoutesPath];
+  const darsRoutes = require(darsRoutesPath);
+
+  const app = express();
+  app.use(express.json());
+  app.use('/', darsRoutes);
+
+  const res = await supertest(app).post('/20/emitir').expect(200);
+  assert.equal(res.body.darVencido, true);
+  assert.equal(res.body.calculo.valorAtualizado, 115);
 });
