@@ -55,17 +55,17 @@
         font-size: 0.9rem; /* Tamanho da fonte */
     }
 
-    /* Larguras específicas para cada coluna */
-    .table-light th:nth-child(1) { width: 4%; }  /* ID */
-    .table-light th:nth-child(2) { width: 22%; } /* Nome do Evento */
-    .table-light th:nth-child(3) { width: 20%; } /* Cliente */
-    .table-light th:nth-child(4) { width: 14%; } /* Nº Processo */
-    .table-light th:nth-child(5) { width: 14%; } /* Valor Final */
-    .table-light th:nth-child(6) { width: 8%; }  /* Data Final */
-    .table-light th:nth-child(10){ width: 8%; }  /* Status */
-    .table-light th:nth-child(11){ width: 5%; }  /* DAR */
-    .table-light th:nth-child(12){ width: 5%; }  /* Termo */
-    .table-light th:nth-child(13){ width: 6%; }  /* Ações */
+      /* Larguras específicas para cada coluna (10 colunas do THEAD) */
+      .table-light th:nth-child(1)  { width: 4%; }   /* ID */
+      .table-light th:nth-child(2)  { width: 22%; }  /* Nome do Evento */
+      .table-light th:nth-child(3)  { width: 20%; }  /* Cliente */
+      .table-light th:nth-child(4)  { width: 14%; }  /* Nº Processo */
+      .table-light th:nth-child(5)  { width: 12%; }  /* Valor Final */
+      .table-light th:nth-child(6)  { width: 8%; }   /* Data Final */
+      .table-light th:nth-child(7)  { width: 8%; }   /* Status */
+      .table-light th:nth-child(8)  { width: 5%; }   /* DAR */
+      .table-light th:nth-child(9)  { width: 5%; }   /* Termo */
+      .table-light th:nth-child(10) { width: 6%; }   /* Ações */
 
     /* Garante que os grupos de botões não quebrem a linha e fiquem centralizados */
     #eventos-table-body .btn-group {
@@ -893,13 +893,13 @@ async function carregarClientes(){
     await renderTable(data.eventos);
     renderPagination(data.totalPages, data.currentPage);
   }catch(e){
-    eventosTableBody.innerHTML = `<tr><td colspan="13" class="text-center text-danger">${e.message}</td></tr>`;
+    eventosTableBody.innerHTML = `<tr><td colspan="10" class="text-center text-danger">${e.message}</td></tr>`;
   }
 }
 
  async function renderTable(eventos){
     if (!Array.isArray(eventos) || eventos.length === 0){
-      eventosTableBody.innerHTML = '<tr><td colspan="13" class="text-center">Nenhum evento encontrado.</td></tr>';
+      eventosTableBody.innerHTML = '<tr><td colspan="10" class="text-center">Nenhum evento encontrado.</td></tr>';
       return;
     }
 
@@ -932,49 +932,56 @@ async function carregarClientes(){
       }
       
       return `
-        <tr class="${rowClass}">
-          <td>${id}</td>
-          <td><strong class="text-capitalize">${evNormalizado.nome_evento || ''}</strong></td>
-          <td><strong class="text-capitalize">${ev.nome_cliente || ''}</strong></td>
-          <td>${formatNumeroProcesso(evNormalizado.numero_processo)}</td>
-          <td class="text-end">
-            ${evNormalizado.evento_gratuito
-              ? `<span class="badge bg-info">Gratuito</span>`
-              : fmtBRL(evNormalizado.valor_final)
-            }
-          </td>
-          <td>${formatDateBR(evNormalizado.data_vigencia_final)}</td>
-          <td class="text-center">${evNormalizado.emprestimo_tvs ? '<i class="bi bi-tv text-primary"></i>' : ''}</td>
-          <td class="text-center">${evNormalizado.emprestimo_caixas_som ? '<i class="bi bi-speaker text-primary"></i>' : ''}</td>
-          <td class="text-center">${evNormalizado.emprestimo_microfones ? '<i class="bi bi-mic text-primary"></i>' : ''}</td>
-          <td class="text-center"><span class="badge ${badge}">${status}</span></td>
-          <td class="text-center">
-            <button class="btn btn-sm btn-outline-primary btn-dars" title="Ver DARs" data-evento-id="${id}" data-evento-nome="${evNormalizado.nome_evento || ''}">
-              <i class="bi bi-file-earmark-arrow-down"></i>
-            </button>
-          </td>
-          <td class="text-center">
-            <div class="btn-group">
-              <button class="btn btn-sm btn-outline-secondary btn-termo" title="Baixar Termo Original" data-evento-id="${id}">
-                <i class="bi bi-file-earmark-text"></i>
-              </button>
-              ${mostraBtnEnviar 
-                ? `<button class="btn btn-sm btn-primary btn-enviar-assinafy" title="Enviar para Assinatura" data-evento-id="${id}" data-cliente-id="${ev.id_cliente}"><i class="bi bi-pen"></i></button>` 
-                : `<a class="btn btn-sm btn-success" href="/api/documentos/assinafy/${assinafyIdDoMeta}/download-signed" target="_blank" rel="noopener" title="Baixar Termo Assinado"><i class="bi bi-download"></i></a>`
-              }
-            </div>
-          </td>
-          <td class="text-center">
-            <div class="btn-group">
-              <button class="btn btn-sm btn-outline-secondary btn-editar" title="Editar" data-evento-id="${id}">
-                <i class="bi bi-pencil"></i>
-              </button>
-              <button class="btn btn-sm btn-outline-danger btn-apagar" title="Apagar" data-evento-id="${id}" data-evento-nome="${evNormalizado.nome_evento || ''}">
-                <i class="bi bi-trash"></i>
-              </button>
-            </div>
-          </td>
-        </tr>`;
+         <tr class="${rowClass}">
+    <td>${id}</td>
+    <td><strong class="text-capitalize">${evNormalizado.nome_evento || ''}</strong></td>
+    <td><strong class="text-capitalize">${ev.nome_cliente || ''}</strong></td>
+    <td>${formatNumeroProcesso(evNormalizado.numero_processo)}</td>
+    <td class="text-end">
+      ${evNormalizado.evento_gratuito
+        ? `<span class="badge bg-info">Gratuito</span>`
+        : fmtBRL(evNormalizado.valor_final)
+      }
+    </td>
+    <td>${formatDateBR(evNormalizado.data_vigencia_final)}</td>
+    <td class="text-center">
+      ${evNormalizado.emprestimo_tvs ? '<i class="bi bi-tv me-1"></i>' : ''}
+      ${evNormalizado.emprestimo_caixas_som ? '<i class="bi bi-speaker me-1"></i>' : ''}
+      ${evNormalizado.emprestimo_microfones ? '<i class="bi bi-mic me-1"></i>' : ''}
+      <span class="badge ${badge} ms-1">${status}</span>
+    </td>
+    <td class="text-center">
+      <button class="btn btn-sm btn-outline-primary btn-dars" title="Ver DARs"
+              data-evento-id="${id}" data-evento-nome="${evNormalizado.nome_evento || ''}">
+        <i class="bi bi-file-earmark-arrow-down"></i>
+      </button>
+    </td>
+    <td class="text-center">
+      <div class="btn-group">
+        <button class="btn btn-sm btn-outline-secondary btn-termo" title="Baixar Termo Original" data-evento-id="${id}">
+          <i class="bi bi-file-earmark-text"></i>
+        </button>
+        ${mostraBtnEnviar 
+          ? `<button class="btn btn-sm btn-primary btn-enviar-assinafy" title="Enviar para Assinatura" data-evento-id="${id}" data-cliente-id="${ev.id_cliente}">
+               <i class="bi bi-pen"></i>
+             </button>`
+          : `<a class="btn btn-sm btn-success" href="/api/documentos/assinafy/${assinafyIdDoMeta}/download-signed" target="_blank" rel="noopener" title="Baixar Termo Assinado">
+               <i class="bi bi-download"></i>
+             </a>`
+        }
+      </div>
+    </td>
+    <td class="text-center">
+      <div class="btn-group">
+        <button class="btn btn-sm btn-outline-secondary btn-editar" title="Editar" data-evento-id="${id}">
+          <i class="bi bi-pencil"></i>
+        </button>
+        <button class="btn btn-sm btn-outline-danger btn-apagar" title="Apagar" data-evento-id="${id}" data-evento-nome="${evNormalizado.nome_evento || ''}">
+          <i class="bi bi-trash"></i>
+        </button>
+      </div>
+    </td>
+  </tr>`;
     }).join('');
     
     eventosTableBody.innerHTML = tableRowsHtml;
@@ -1036,21 +1043,24 @@ async function carregarClientes(){
     }).join('');
   }
 
-  async function carregarRemarcacoes(){ return fetchRemarcacoes(); }
-
-  function atualizarStatusNaTabelaEventos(eventoId, status){
-    const trs = eventosTableBody.querySelectorAll('tr');
-    trs.forEach(tr=>{
-      const id = tr.children?.[0]?.textContent?.trim();
-      if (String(id)===String(eventoId)){
-        const badge = tr.querySelector('td:nth-child(10) .badge');
-        if (badge){
-          badge.textContent = status;
-          badge.className = 'badge ' + (status==='Pago' ? 'bg-success' : ['Emitido','Reemitido'].includes(status) ? 'bg-primary' : 'bg-warning text-dark');
-        }
+function atualizarStatusNaTabelaEventos(eventoId, status){
+  const trs = eventosTableBody.querySelectorAll('tr');
+  trs.forEach(tr=>{
+    const id = tr.children?.[0]?.textContent?.trim();
+    if (String(id)===String(eventoId)){
+      const badgeCell = tr.querySelector('td:nth-child(7)'); // coluna Status
+      const badge = badgeCell ? badgeCell.querySelector('.badge') : null;
+      if (badge){
+        badge.textContent = status;
+        badge.className = 'badge ' + (
+          status==='Pago'
+            ? 'bg-success'
+            : (['Emitido','Reemitido'].includes(status) ? 'bg-primary' : 'bg-warning text-dark')
+        );
       }
-    });
-  }
+    }
+  });
+}
 
   const assinafyPollers = {};
   function startAssinafyPolling(assinafyId, eventoId){
