@@ -30,4 +30,15 @@ export default class ReservaService {
 
     return true;
   }
+
+  static async getDisponibilidadeSala(id) {
+    const response = await fetch(`${this.baseUrl}/salas/${id}/disponibilidade`);
+
+    if (!response.ok) {
+      const message = await response.text();
+      throw new Error(message || 'Erro ao buscar disponibilidade');
+    }
+
+    return response.json();
+  }
 }
