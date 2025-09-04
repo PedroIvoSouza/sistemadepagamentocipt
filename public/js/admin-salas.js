@@ -13,6 +13,12 @@ document.addEventListener('DOMContentLoaded', () => {
       locale: 'pt-br',
       editable: true,
       themeSystem: 'bootstrap5',
+      displayEventEnd: true,
+      eventTimeFormat: {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      },
       eventSources: [fetchReservas],
       eventClick: onEventClick,
       eventDrop: onEventChange,
@@ -49,6 +55,13 @@ document.addEventListener('DOMContentLoaded', () => {
   carregarSalas();
 });
 
+function formatRange(inicio, fim) {
+  const opcoes = { hour: '2-digit', minute: '2-digit', hour12: false };
+  const ini = new Date(inicio).toLocaleTimeString('pt-BR', opcoes);
+  const f = new Date(fim).toLocaleTimeString('pt-BR', opcoes);
+  return `${ini} - ${f}`;
+}
+
 async function fetchReservas(fetchInfo, successCallback, failureCallback) {
   try {
     const params = new URLSearchParams({
@@ -63,7 +76,7 @@ async function fetchReservas(fetchInfo, successCallback, failureCallback) {
       .filter(r => r.status !== 'cancelada')
       .map(r => ({
         id: r.id,
-        title: r.sala_nome,
+        title: `${r.sala_nome}: ${formatRange(r.inicio, r.fim)}`,
         start: r.inicio,
         end: r.fim
       }));

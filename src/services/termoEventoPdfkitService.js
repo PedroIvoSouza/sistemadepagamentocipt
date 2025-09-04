@@ -553,6 +553,7 @@ const saldoISO = parcelas.length > 1
       ? equipamentos[0]
       : equipamentos.slice(0, -1).join(', ') + ' e ' + equipamentos[equipamentos.length - 1];
     paragrafo(doc, `1.2 - Serão disponibilizados em empréstimo: ${lista}.`);
+  }
   if (ev.emprestimo_tvs || ev.emprestimo_caixas_som || ev.emprestimo_microfones) {
     paragrafo(doc,
       '1.2 - Havendo empréstimo de televisores, caixas de som ou microfones, o(a) PERMISSIONÁRIO(A) deverá devolvê-los nas mesmas condições, responsabilizando-se por eventuais danos ou furtos.'
