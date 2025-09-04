@@ -17,6 +17,7 @@ const db = new sqlite3.Database(DB_PATH);
 
 // Helpers DB
 const dbGet = (sql, p=[]) => new Promise((res, rej)=> db.get(sql, p, (e, r)=> e?rej(e):res(r)));
+const dbAll = (sql, p=[]) => new Promise((res, rej)=> db.all(sql, p, (e, r)=> e?rej(e):res(r)));
 const dbRun = (sql, p=[]) => new Promise((res, rej)=> db.run(sql, p, function(e){ e?rej(e):res(this); }));
 
 const portalEventosAssinaturaRouter = express.Router();
@@ -205,27 +206,27 @@ portalEventosAssinaturaRouter.post('/consultar-email', async (req, res) => {
     // 1. Procura na tabela de Permissionários, limpando o campo do banco de dados para uma comparação segura.
     // A função REPLACE aninhada remove '.', '/' e '-' e o TRIM remove espaços no início/fim.
     let sql = `
-      SELECT email FROM permissionarios 
+      SELECT email FROM permissionarios
       WHERE REPLACE(REPLACE(REPLACE(TRIM(cnpj), '.', ''), '/', ''), '-', '') = ?
     `;
-    let row = await dbGet(sql, [docLimpo]);
+    let rows = await dbAll(sql, [docLimpo]);
+    let emails = rows.map(r => r.email).filter(Boolean);
 
     // 2. Se não encontrou um e-mail válido, procura na tabela de Clientes de Eventos da mesma forma robusta.
-    if (!row || !row.email) {
+    if (!emails.length) {
       const sqlEventos = `
-        SELECT email FROM Clientes_Eventos 
+        SELECT email FROM Clientes_Eventos
         WHERE REPLACE(REPLACE(REPLACE(TRIM(documento), '.', ''), '/', ''), '-', '') = ?
       `;
-      const rowEventos = await dbGet(sqlEventos, [docLimpo]);
-      
-      if (rowEventos && rowEventos.email) {
-        row = rowEventos;
-      }
+      const rowsEventos = await dbAll(sqlEventos, [docLimpo]);
+      emails = rowsEventos.map(r => r.email).filter(Boolean);
     }
 
     // 3. Verifica o resultado final e retorna.
-    if (row && row.email) {
-      res.json({ ok: true, email: row.email });
+    if (emails.length === 1) {
+      res.json({ ok: true, email: emails[0] });
+    } else if (emails.length > 1) {
+      res.json({ ok: true, emails });
     } else {
       res.status(404).json({ ok: false, error: 'Nenhum cadastro encontrado para o documento informado.' });
     }
