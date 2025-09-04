@@ -128,6 +128,13 @@ router.get('/:id/certidao', authMiddleware, async (req, res) => {
     // Documento PDF: padrão timbrado + ABNT + 0,5cm
     const doc = new PDFDocument({ size: 'A4', margins: abntMargins(0.5, 0.5, 2) });
 
+    doc.on('pageAdded', async () => {
+      // Só anota o token e reposiciona o cursor (sem escrever blocos longos aqui!)
+      await printToken(doc, tokenDoc);
+      doc.x = doc.page.margins.left;
+      doc.y = doc.page.margins.top;
+    });
+
     // Coleta em buffer para salvar em disco e enviar ao cliente
     const chunks = [];
     doc.on('data', (c) => chunks.push(c));
@@ -170,12 +177,6 @@ router.get('/:id/certidao', authMiddleware, async (req, res) => {
     doc.x = doc.page.margins.left;
     doc.y = doc.page.margins.top;
     await printToken(doc, tokenDoc);
-    doc.on('pageAdded', async () => {
-      // Só anota o token e reposiciona o cursor (sem escrever blocos longos aqui!)
-      await printToken(doc, tokenDoc);
-      doc.x = doc.page.margins.left;
-      doc.y = doc.page.margins.top;
-    });
 
     const larguraUtil = doc.page.width - doc.page.margins.left - doc.page.margins.right;
     const hoje = new Date();
