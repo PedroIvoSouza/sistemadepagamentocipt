@@ -51,11 +51,52 @@ document.addEventListener('DOMContentLoaded', async () => {
         alert('Erro ao carregar salas');
     }
 
+    function gerarSlotsLivres(intervalos, data) {
+        const inicioDia = '08:00';
+        const fimDia = '18:00';
+        const toMin = t => parseInt(t.slice(0,2),10)*60 + parseInt(t.slice(3,5),10);
+        const toStr = m => String(Math.floor(m/60)).padStart(2,'0') + ':' + String(m%60).padStart(2,'0');
+        const ocup = (intervalos || []).map(i => ({ ini: toMin(i.inicio), fim: toMin(i.fim) })).sort((a,b) => a.ini-b.ini);
+        const livres = [];
+        let cursor = toMin(inicioDia);
+        const fimTotal = toMin(fimDia);
+        ocup.forEach(i => {
+            if (cursor < i.ini) {
+                let start = cursor;
+                while (start + 60 <= i.ini) {
+                    livres.push({
+                        inicio: `${data}T${toStr(start)}`,
+                        fim: `${data}T${toStr(start + 60)}`
+                    });
+                    start += 60;
+                }
+            }
+            if (cursor < i.fim) cursor = i.fim;
+        });
+        while (cursor + 60 <= fimTotal) {
+            livres.push({
+                inicio: `${data}T${toStr(cursor)}`,
+                fim: `${data}T${toStr(cursor + 60)}`
+            });
+            cursor += 60;
+        }
+        return livres;
+    }
+
     const calendarEl = document.getElementById('calendar');
     const calendar = new FullCalendar.Calendar(calendarEl, {
         initialView: 'dayGridMonth',
         locale: 'pt-br',
         themeSystem: 'bootstrap5',
+        dateClick: info => {
+            calendar.changeView('timeGridDay', info.dateStr);
+        },
+        eventClick: info => {
+            if (info.event.extendedProps && info.event.extendedProps.livre) {
+                document.getElementById('start').value = info.event.start.toISOString().slice(0,16);
+                document.getElementById('end').value = info.event.end.toISOString().slice(0,16);
+            }
+        },
         events: async (info, successCallback, failureCallback) => {
             const salaId = salaSelect.value;
             if (!salaId) { successCallback([]); return; }
@@ -73,6 +114,23 @@ document.addEventListener('DOMContentLoaded', async () => {
                     backgroundColor: '#dc3545',
                     borderColor: '#dc3545'
                 }));
+                if (calendar.view.type === 'timeGridDay') {
+                    try {
+                        const respDisp = await fetch(`/api/salas/${salaId}/disponibilidade?data=${inicio}`, { headers });
+                        if (respDisp.ok) {
+                            const ocupados = await respDisp.json();
+                            const livres = gerarSlotsLivres(ocupados, inicio);
+                            livres.forEach(s => eventos.push({
+                                title: 'Disponível',
+                                start: s.inicio,
+                                end: s.fim,
+                                backgroundColor: '#198754',
+                                borderColor: '#198754',
+                                extendedProps: { livre: true }
+                            }));
+                        }
+                    } catch {}
+                }
                 successCallback(eventos);
             } catch (err) {
                 failureCallback(err);
