@@ -16,6 +16,7 @@
     "axios": "^1.11.0",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
+    "csv-parse": "^5.6.0",
     "csv-parser": "^3.2.0",
     "dotenv": "^17.2.1",
     "express": "^5.1.0",
@@ -30,12 +31,12 @@
     "pdfkit": "^0.17.1",
     "puppeteer": "^24.17.0",
     "sequelize": "^6.37.7",
-    "sequelize-cli": "^6.6.3",
     "sqlite": "^5.1.1",
     "sqlite3": "^5.1.7",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "sequelize-cli": "^6.6.3",
     "supertest": "^6.3.4"
   }
 }
