@@ -34,8 +34,8 @@ const AdminReservasPage = () => {
     try {
       const { ocupados = [], livres = [] } = await ReservaService.getDisponibilidadeSala(1);
       const mapped = [
-        ...ocupados.map((p, idx) => ({
-          id: `o-${idx}`,
+        ...ocupados.map(p => ({
+          id: p.id,
           title: 'Reservado',
           start: new Date(p.start),
           end: new Date(p.end),
