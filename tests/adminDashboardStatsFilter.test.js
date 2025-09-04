@@ -11,7 +11,7 @@ test('dashboard-stats respects tipo filter', async () => {
   const db = new sqlite3.Database(':memory:');
   const run = (sql, params=[]) => new Promise((res, rej) => db.run(sql, params, err => err ? rej(err) : res()));
 
-  await run(`CREATE TABLE permissionarios (id INTEGER PRIMARY KEY, nome_empresa TEXT);`);
+  await run(`CREATE TABLE permissionarios (id INTEGER PRIMARY KEY, nome_empresa TEXT, tipo TEXT);`);
   await run(`CREATE TABLE dars (id INTEGER PRIMARY KEY, permissionario_id INTEGER, tipo_permissionario TEXT, valor REAL, data_vencimento TEXT, status TEXT, mes_referencia INTEGER, ano_referencia INTEGER);`);
 
   await run(`INSERT INTO permissionarios (id, nome_empresa) VALUES (1, 'Perm A');`);

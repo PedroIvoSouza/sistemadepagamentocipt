@@ -66,7 +66,7 @@ router.get('/:id/certidao', authMiddleware, async (req, res) => {
   try {
     // ✅ TIRA o cpf do SELECT (sua tabela não tem essa coluna)
     const perm = await getAsync(
-      `SELECT id, nome_empresa, cnpj, email FROM permissionarios WHERE id = ?`,
+      `SELECT id, nome_empresa, cnpj, email, tipo FROM permissionarios WHERE id = ?`,
       [id]
     );
     if (!perm) {
@@ -185,6 +185,7 @@ router.get('/:id/certidao', authMiddleware, async (req, res) => {
     doc.text(`Razão/Nome: ${perm.nome_empresa || '-'}`, doc.page.margins.left, doc.y, { width: larguraUtil });
     if (idFiscal) doc.text(`Documento: ${idFiscal}`, doc.page.margins.left, doc.y, { width: larguraUtil });
     if (perm.email) doc.text(`E-mail: ${perm.email}`, doc.page.margins.left, doc.y, { width: larguraUtil });
+    if (perm.tipo) doc.text(`Tipo: ${perm.tipo}`, doc.page.margins.left, doc.y, { width: larguraUtil });
     doc.moveDown(1.5);
 
     // Corpo (justificado)

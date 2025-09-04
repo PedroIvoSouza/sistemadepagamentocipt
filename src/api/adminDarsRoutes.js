@@ -125,17 +125,18 @@ router.get(
       const status = String(req.query.status || 'todos').trim();
       const mes = String(req.query.mes || 'todos').trim();
       const ano = String(req.query.ano || 'todos').trim();
+      const tipo = String(req.query.tipo || '').trim();
 
       const page = Math.max(1, parseInt(req.query.page || '1', 10));
       const limit = Math.max(1, parseInt(req.query.limit || '10', 10));
       const offset = (page - 1) * limit;
 
       let baseSql = `
-        SELECT 
+        SELECT
           d.id, d.mes_referencia, d.ano_referencia, d.valor,
           d.data_vencimento, d.data_pagamento, d.status,
           d.numero_documento, d.pdf_url,
-          p.nome_empresa, p.cnpj
+          p.nome_empresa, p.cnpj, p.tipo
         FROM dars d
         JOIN permissionarios p ON d.permissionario_id = p.id
         WHERE 1=1
@@ -162,6 +163,10 @@ router.get(
       if (ano && ano !== 'todos') {
         baseSql += ` AND d.ano_referencia = ?`;
         params.push(ano);
+      }
+      if (tipo) {
+        baseSql += ` AND p.tipo = ?`;
+        params.push(tipo);
       }
 
       const countSql = `SELECT COUNT(*) as total FROM (${baseSql}) AS src`;

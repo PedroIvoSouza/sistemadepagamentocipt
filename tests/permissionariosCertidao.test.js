@@ -17,7 +17,7 @@ async function setup(dataVencimento) {
   const run = (sql, params = []) =>
     new Promise((resolve, reject) => db.run(sql, params, err => err ? reject(err) : resolve()));
 
-  await run(`CREATE TABLE permissionarios (id INTEGER PRIMARY KEY, nome_empresa TEXT, cnpj TEXT, email TEXT);`);
+  await run(`CREATE TABLE permissionarios (id INTEGER PRIMARY KEY, nome_empresa TEXT, cnpj TEXT, email TEXT, tipo TEXT);`);
   await run(`CREATE TABLE dars (id INTEGER PRIMARY KEY, permissionario_id INTEGER, data_vencimento TEXT, status TEXT);`);
   await run(`CREATE TABLE documentos (id INTEGER PRIMARY KEY, tipo TEXT, caminho TEXT, token TEXT UNIQUE);`);
 
