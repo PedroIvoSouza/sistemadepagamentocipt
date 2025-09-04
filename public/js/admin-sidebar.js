@@ -33,7 +33,9 @@ document.addEventListener('DOMContentLoaded', () => {
 function decodeRoleFromToken(token) {
     if (!token) return null;
     try {
-        const payload = JSON.parse(atob(token.split('.')[1]));
+        const base64Url = token.split('.')[1] || '';
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(base64Url.length / 4) * 4, '=');
+        const payload = JSON.parse(atob(base64));
         return payload.role;
     } catch (err) {
         console.error('Erro ao decodificar token:', err);
