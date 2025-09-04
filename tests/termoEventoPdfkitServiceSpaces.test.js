@@ -93,3 +93,34 @@ test('gera PDF com espaco_utilizado em CSV', async () => {
   await fs.promises.unlink(filePath);
 });
 
+test('adiciona cláusula 1.2 quando há empréstimo de equipamentos', async () => {
+  const events = {
+    3: {
+      id: 3,
+      numero_processo: '3',
+      numero_termo: 'T3',
+      nome_razao_social: 'Empresa',
+      documento: '123',
+      endereco: 'Rua Z',
+      nome_responsavel: 'Carlos',
+      documento_responsavel: '987',
+      datas_evento: '["2025-03-03"]',
+      hora_inicio: '08h',
+      hora_fim: '12h',
+      area_m2: 50,
+      total_diarias: 1,
+      valor_final: 300,
+      espaco_utilizado: '["Auditório"]',
+      nome_evento: 'Evento3',
+      emprestimo_tvs: 1
+    }
+  };
+  const { gerarTermoEventoPdfkitEIndexar } = setup(events);
+  const { filePath } = await gerarTermoEventoPdfkitEIndexar(3);
+  const pdfParse = require('pdf-parse');
+  const buffer = await fs.promises.readFile(filePath);
+  const parsed = await pdfParse(buffer);
+  assert.match(parsed.text, /1\.2 - Havendo empréstimo de televisores, caixas de som ou microfones/);
+  await fs.promises.unlink(filePath);
+});
+
