@@ -235,9 +235,9 @@ router.delete('/reservas/:id', async (req, res) => {
     if (reserva.permissionario_id !== req.user.id) {
       return res.status(403).json({ error: 'Reserva pertencente a outro permissionário' });
     }
-    await runAsync(`DELETE FROM reservas_salas WHERE id = ?`, [id]);
+    await runAsync(`UPDATE reservas_salas SET status = 'cancelada' WHERE id = ?`, [id]);
     await reservaAuditService.logCancelamento(id, { permissionario_id: req.user.id });
-    res.status(204).send();
+    res.status(200).json({ message: 'Reserva cancelada' });
   } catch (e) {
     res.status(500).json({ error: 'Erro ao cancelar reserva.' });
   }
