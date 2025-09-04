@@ -30,6 +30,9 @@ router.get('/', (req, res) => {
             e.hora_fim,
             e.hora_montagem,
             e.hora_desmontagem,
+            e.emprestimo_tvs,
+            e.emprestimo_caixas_som,
+            e.emprestimo_microfones,
             c.nome_razao_social AS nome_cliente
         FROM Eventos e
         JOIN Clientes_Eventos c ON e.id_cliente = c.id
@@ -71,7 +74,10 @@ router.post('/', async (req, res) => {
         horaDesmontagem,
 
         numeroProcesso,
-        numeroTermo
+        numeroTermo,
+        emprestimoTvs,
+        emprestimoCaixasSom,
+        emprestimoMicrofones
     } = req.body;
 
     // --- Validações Iniciais ---
@@ -107,7 +113,7 @@ router.post('/', async (req, res) => {
         try {
             // 1. Insere o evento principal na tabela Eventos
 
-            const eventoSql = `INSERT INTO Eventos (id_cliente, nome_evento, espaco_utilizado, area_m2, datas_evento, data_vigencia_final, total_diarias, valor_bruto, tipo_desconto, desconto_manual, valor_final, numero_oficio_sei, hora_inicio, hora_fim, hora_montagem, hora_desmontagem, numero_processo, numero_termo, remarcacao_solicitada, datas_evento_solicitada, data_aprovacao_remarcacao) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+            const eventoSql = `INSERT INTO Eventos (id_cliente, nome_evento, espaco_utilizado, area_m2, datas_evento, data_vigencia_final, total_diarias, valor_bruto, tipo_desconto, desconto_manual, valor_final, numero_oficio_sei, hora_inicio, hora_fim, hora_montagem, hora_desmontagem, numero_processo, numero_termo, emprestimo_tvs, emprestimo_caixas_som, emprestimo_microfones, remarcacao_solicitada, datas_evento_solicitada, data_aprovacao_remarcacao) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
             const eventoParams = [
                 idCliente,
                 nomeEvento,
@@ -127,6 +133,9 @@ router.post('/', async (req, res) => {
                 horaDesmontagem || null,
                 numeroProcesso || null,
                 numeroTermo || null,
+                emprestimoTvs ? 1 : 0,
+                emprestimoCaixasSom ? 1 : 0,
+                emprestimoMicrofones ? 1 : 0,
                 0,
                 null,
                 null
