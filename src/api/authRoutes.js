@@ -86,11 +86,9 @@ router.post('/solicitar-acesso', (req, res) => {
         }
       }
 
-        return res.status(200).json({
-          message: 'Se um CNPJ correspondente for encontrado, um e-mail será enviado.',
-          permissionarioId: user.id
-        });
-
+      return res.status(200).json({
+        message: 'Se um CNPJ correspondente for encontrado, um e-mail será enviado.',
+        permissionarioId: user.id
       });
     } catch (hashErr) {
       console.error('[solicitar-acesso] hash error:', hashErr);
@@ -124,31 +122,27 @@ router.post('/verificar-codigo', (req, res) => {
 
     const user = users.find((u) => u.id === Number(permissionarioId));
     if (!user) {
-
       return res.status(400).json({
         error: 'Código inválido, expirado ou dados incorretos. Tente novamente.'
       });
     }
 
     try {
+      // Compara o código fornecido com o token armazenado para o permissionário
       const match = await bcrypt.compare(codigo, user.senha_reset_token || '');
       if (!match) {
         return res.status(400).json({
           error: 'Código inválido, expirado ou dados incorretos. Tente novamente.'
         });
-      for (const user of users) {
-        const match = await bcrypt.compare(codigo, user.senha_reset_token || '');
-        if (match) {
-          const payload = { id: user.id, reset: true };
-          const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '15m' });
-          return res.status(200).json({
-            message: 'Código verificado com sucesso!',
-            token
-          });
-        }
       }
-      return res.status(400).json({
-        error: 'Código inválido, expirado ou CNPJ incorreto. Tente novamente.'
+
+      // Código válido: gera token temporário para redefinição de senha
+      const payload = { id: user.id, reset: true };
+      const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '15m' });
+
+      return res.status(200).json({
+        message: 'Código verificado com sucesso!',
+        token
       });
     } catch (cmpErr) {
       console.error('[verificar-codigo] compare error:', cmpErr);

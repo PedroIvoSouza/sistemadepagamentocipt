@@ -82,6 +82,8 @@ router.get(
       } else if (tipo === 'eventos') {
         whereTipo = "AND d.tipo_permissionario = 'Evento'";
       }
+      const ignoreIsentos =
+        "AND (d.permissionario_id IS NULL OR ((p.tipo IS NULL OR p.tipo != 'Isento') AND COALESCE(p.valor_aluguel,0) > 0))";
 
       // Total de permissionários
       const totalPermissionarios = (await dbGet(
@@ -90,9 +92,10 @@ router.get(
 
       // Cards do topo: DARs pendentes e Receita pendente (tudo em aberto)
       const pendRow = await dbGet(
-        `SELECT COUNT(*) AS qnt, COALESCE(SUM(valor),0) AS valor
+        `SELECT COUNT(*) AS qnt, COALESCE(SUM(d.valor),0) AS valor
            FROM dars d
-          WHERE d.status IN ${OPEN_STATUSES} ${whereTipo}`
+           LEFT JOIN permissionarios p ON p.id = d.permissionario_id
+          WHERE d.status IN ${OPEN_STATUSES} ${whereTipo} ${ignoreIsentos}`
       );
       const darsPendentes   = pendRow?.qnt ?? 0;
       const receitaPendente = Number(pendRow?.valor ?? 0);
@@ -101,9 +104,10 @@ router.get(
       const vencRow = await dbGet(
         `SELECT COUNT(*) AS qnt
            FROM dars d
+           LEFT JOIN permissionarios p ON p.id = d.permissionario_id
           WHERE d.status IN ${OPEN_STATUSES}
             AND DATE(d.data_vencimento) < DATE('now','localtime')
-            ${whereTipo}`
+            ${whereTipo} ${ignoreIsentos}`
       );
       const darsVencidos = vencRow?.qnt ?? 0;
 
@@ -123,7 +127,8 @@ router.get(
                     AND DATE(d.data_vencimento) >= DATE('now','localtime')
                  THEN 1 ELSE 0 END) AS a_vencer
            FROM dars d
-           WHERE 1=1 ${whereTipo}
+           LEFT JOIN permissionarios p ON p.id = d.permissionario_id
+           WHERE 1=1 ${whereTipo} ${ignoreIsentos}
            GROUP BY ano, mes
            ORDER BY ano DESC, mes DESC
            LIMIT 6
@@ -152,6 +157,7 @@ router.get(
          WHERE d.status IN ${OPEN_STATUSES}
            AND d.permissionario_id IS NOT NULL
            ${whereTipo}
+           AND (p.tipo IS NULL OR p.tipo != 'Isento') AND COALESCE(p.valor_aluguel,0) > 0
          GROUP BY p.id, p.nome_empresa
          HAVING COUNT(*) > 0
          ORDER BY qtd_debitos DESC, total_vencido DESC
@@ -475,6 +481,10 @@ router.get(
             AND d.status = 'Pago'${tipoWhere}
           GROUP BY d.permissionario_id, p.nome_empresa, p.cnpj, p.tipo`,
         paramsPagos
+            AND d.status = 'Pago'
+            AND (p.tipo IS NULL OR p.tipo != 'Isento') AND COALESCE(p.valor_aluguel,0) > 0
+          GROUP BY d.permissionario_id, p.nome_empresa, p.cnpj`,
+        [mes, ano]
       );
 
       const paramsDev = [mes, ano];
@@ -488,6 +498,10 @@ router.get(
             AND d.status IN ${OPEN_STATUSES}${tipoWhere}
           GROUP BY d.permissionario_id, p.nome_empresa, p.cnpj, p.tipo`,
         paramsDev
+            AND d.status IN ${OPEN_STATUSES}
+            AND (p.tipo IS NULL OR p.tipo != 'Isento') AND COALESCE(p.valor_aluguel,0) > 0
+          GROUP BY d.permissionario_id, p.nome_empresa, p.cnpj`,
+        [mes, ano]
       );
 
       res.status(200).json({ pagos, devedores });
@@ -527,6 +541,8 @@ router.get(
            AND DATE(d.data_vencimento) < DATE('now')
            ${tipoWhere}
          GROUP BY p.id, p.nome_empresa, p.cnpj, p.tipo
+           AND (p.tipo IS NULL OR p.tipo != 'Isento') AND COALESCE(p.valor_aluguel,0) > 0
+         GROUP BY p.id, p.nome_empresa, p.cnpj
          HAVING total_devido > 0
          ORDER BY total_devido DESC`,
         params
@@ -626,6 +642,9 @@ router.get(
          WHERE d.status = 'Emitido'${whereTipo}
          ORDER BY ${orderBy} DESC`,
         params
+         WHERE d.status = 'Emitido'
+           AND (d.permissionario_id IS NULL OR ((p.tipo IS NULL OR p.tipo != 'Isento') AND COALESCE(p.valor_aluguel,0) > 0))
+         ORDER BY ${orderBy} DESC`
       );
 
       if (!dars.length) {

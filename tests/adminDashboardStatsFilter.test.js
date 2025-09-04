@@ -14,7 +14,7 @@ test('dashboard-stats respects tipo filter', async () => {
   await run(`CREATE TABLE permissionarios (id INTEGER PRIMARY KEY, nome_empresa TEXT, tipo TEXT);`);
   await run(`CREATE TABLE dars (id INTEGER PRIMARY KEY, permissionario_id INTEGER, tipo_permissionario TEXT, valor REAL, data_vencimento TEXT, status TEXT, mes_referencia INTEGER, ano_referencia INTEGER);`);
 
-  await run(`INSERT INTO permissionarios (id, nome_empresa) VALUES (1, 'Perm A');`);
+  await run(`INSERT INTO permissionarios (id, nome_empresa, tipo, valor_aluguel) VALUES (1, 'Perm A', 'Normal', 100);`);
   await run(`INSERT INTO dars (id, permissionario_id, tipo_permissionario, valor, data_vencimento, status, mes_referencia, ano_referencia) VALUES (1, 1, 'Permissionario', 100, '2030-01-01', 'Pendente', 1, 2030);`);
   await run(`INSERT INTO dars (id, permissionario_id, tipo_permissionario, valor, data_vencimento, status, mes_referencia, ano_referencia) VALUES (2, NULL, 'Evento', 200, '2030-02-01', 'Pendente', 2, 2030);`);
 
