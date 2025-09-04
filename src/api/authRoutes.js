@@ -19,22 +19,45 @@ const SQL_MATCH_CNPJ = `
 // -----------------------------------------------------------------------------
 router.post('/solicitar-acesso', (req, res) => {
   const cnpjNum = normalizeCnpj(req.body?.cnpj);
+  const { email, nome_empresa } = req.body || {};
   if (!cnpjNum) {
     return res.status(400).json({ error: 'O CNPJ é obrigatório.' });
   }
 
   const sql = `SELECT * FROM permissionarios WHERE ${SQL_MATCH_CNPJ}`;
-  db.get(sql, [cnpjNum], async (err, user) => {
+  db.all(sql, [cnpjNum], async (err, users = []) => {
     if (err) {
       console.error('[solicitar-acesso] DB error:', err);
       return res.status(500).json({ error: 'Erro interno do servidor.' });
     }
 
     // Resposta idempotente para não vazar existência do CNPJ
-    if (!user) {
+    if (!users.length) {
       return res.status(200).json({
-        message: 'Se um CNPJ correspondente for encontrado, um e-mail será enviado.'
+        message: 'Se um CNPJ correspondente for encontrado, um e-mail será enviado.',
+        permissionarioId: null
       });
+    }
+
+    let user = users[0];
+    if (users.length > 1) {
+      if (!email && !nome_empresa) {
+        return res.status(400).json({
+          error: 'Email ou nome da empresa são obrigatórios para este CNPJ.'
+        });
+      }
+      if (email) {
+        user = users.find((u) => String(u.email).toLowerCase() === String(email).toLowerCase());
+      } else if (nome_empresa) {
+        user = users.find(
+          (u) => String(u.nome_empresa).toLowerCase() === String(nome_empresa).toLowerCase()
+        );
+      }
+      if (!user) {
+        return res.status(400).json({
+          error: 'Permissionário não encontrado com os dados fornecidos.'
+        });
+      }
     }
 
     const codigo = Math.floor(100000 + Math.random() * 900000).toString(); // 6 dígitos
@@ -61,7 +84,8 @@ router.post('/solicitar-acesso', (req, res) => {
         }
 
         return res.status(200).json({
-          message: 'Se um CNPJ correspondente for encontrado, um e-mail será enviado.'
+          message: 'Se um CNPJ correspondente for encontrado, um e-mail será enviado.',
+          permissionarioId: user.id
         });
       });
     } catch (hashErr) {
@@ -76,24 +100,28 @@ router.post('/solicitar-acesso', (req, res) => {
 // -----------------------------------------------------------------------------
 router.post('/verificar-codigo', (req, res) => {
   const cnpjNum = normalizeCnpj(req.body?.cnpj);
-  const { codigo } = req.body || {};
+  const { codigo, permissionarioId } = req.body || {};
 
-  if (!cnpjNum || !codigo) {
-    return res.status(400).json({ error: 'CNPJ e código são obrigatórios.' });
+  if (!cnpjNum || !codigo || !permissionarioId) {
+    return res
+      .status(400)
+      .json({ error: 'CNPJ, código e permissionarioId são obrigatórios.' });
   }
 
   const sql = `
     SELECT * FROM permissionarios
     WHERE ${SQL_MATCH_CNPJ} AND senha_reset_expires > ?
   `;
-  db.get(sql, [cnpjNum, Date.now()], async (err, user) => {
+  db.all(sql, [cnpjNum, Date.now()], async (err, users = []) => {
     if (err) {
       console.error('[verificar-codigo] DB error:', err);
       return res.status(500).json({ error: 'Erro de banco de dados.' });
     }
+
+    const user = users.find((u) => u.id === Number(permissionarioId));
     if (!user) {
       return res.status(400).json({
-        error: 'Código inválido, expirado ou CNPJ incorreto. Tente novamente.'
+        error: 'Código inválido, expirado ou dados incorretos. Tente novamente.'
       });
     }
 
@@ -101,7 +129,7 @@ router.post('/verificar-codigo', (req, res) => {
       const match = await bcrypt.compare(codigo, user.senha_reset_token || '');
       if (!match) {
         return res.status(400).json({
-          error: 'Código inválido, expirado ou CNPJ incorreto. Tente novamente.'
+          error: 'Código inválido, expirado ou dados incorretos. Tente novamente.'
         });
       }
 
@@ -173,7 +201,7 @@ router.post('/definir-senha', (req, res) => {
 // -----------------------------------------------------------------------------
 router.post('/login', async (req, res) => {
   try {
-    const { cnpj, login, senha } = req.body || {};
+    const { cnpj, login, senha, email, nome_empresa } = req.body || {};
     const cnpjNum = normalizeCnpj(cnpj || login);
 
     if (!cnpjNum || !senha) {
@@ -185,14 +213,34 @@ router.post('/login', async (req, res) => {
       WHERE ${SQL_MATCH_CNPJ}
     `;
 
-    db.get(sql, [cnpjNum], async (err, user) => {
+    db.all(sql, [cnpjNum], async (err, users = []) => {
       if (err) {
         console.error('[login] DB error:', err);
         return res.status(500).json({ error: 'Erro de banco de dados.' });
       }
-      if (!user) {
+      if (!users.length) {
         return res.status(401).json({ error: 'Credenciais inválidas.' });
       }
+
+      let user = users[0];
+      if (users.length > 1) {
+        if (!email && !nome_empresa) {
+          return res.status(400).json({
+            error: 'Email ou nome da empresa são obrigatórios para este CNPJ.'
+          });
+        }
+        if (email) {
+          user = users.find((u) => String(u.email).toLowerCase() === String(email).toLowerCase());
+        } else if (nome_empresa) {
+          user = users.find(
+            (u) => String(u.nome_empresa).toLowerCase() === String(nome_empresa).toLowerCase()
+          );
+        }
+        if (!user) {
+          return res.status(401).json({ error: 'Credenciais inválidas.' });
+        }
+      }
+
       if (!user.senha) {
         return res.status(401).json({
           error: 'Usuário não possui senha cadastrada. Por favor, use o "Primeiro Acesso".'
