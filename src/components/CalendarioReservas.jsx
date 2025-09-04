@@ -25,30 +25,40 @@ const CalendarioReservas = ({ events = [], onReschedule, onCancel }) => {
   const EventComponent = ({ event }) => (
     <span className="rbc-event-content">
       {event.title}
-      <span className="event-actions">
-        <button
-          className="reschedule"
-          onClick={e => {
-            e.preventDefault();
-            e.stopPropagation();
-            onReschedule && onReschedule(event);
-          }}
-        >
-          🔁
-        </button>
-        <button
-          className="cancel"
-          onClick={e => {
-            e.preventDefault();
-            e.stopPropagation();
-            onCancel && onCancel(event);
-          }}
-        >
-          ✖️
-        </button>
-      </span>
+      {event.status === 'ocupado' && (
+        <span className="event-actions">
+          <button
+            className="reschedule"
+            onClick={e => {
+              e.preventDefault();
+              e.stopPropagation();
+              onReschedule && onReschedule(event);
+            }}
+          >
+            🔁
+          </button>
+          <button
+            className="cancel"
+            onClick={e => {
+              e.preventDefault();
+              e.stopPropagation();
+              onCancel && onCancel(event);
+            }}
+          >
+            ✖️
+          </button>
+        </span>
+      )}
     </span>
   );
+
+  const eventPropGetter = (event) => {
+    const style = {
+      backgroundColor: event.status === 'livre' ? '#2ecc71' : '#e74c3c',
+      color: 'white'
+    };
+    return { style };
+  };
 
   return (
     <div className="calendario-reservas">
@@ -56,6 +66,7 @@ const CalendarioReservas = ({ events = [], onReschedule, onCancel }) => {
         localizer={localizer}
         events={events}
         components={{ event: EventComponent }}
+        eventPropGetter={eventPropGetter}
         views={["day", "week", "month"]}
         defaultView="week"
         style={{ height: "100%" }}

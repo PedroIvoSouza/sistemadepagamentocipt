@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import CalendarioReservas from '../components/CalendarioReservas.jsx';
 import ReservaService from '../services/ReservaService.js';
 
@@ -22,20 +22,42 @@ const boxStyle = {
 };
 
 const PermissionarioReservasPage = () => {
-  const [events, setEvents] = useState([
-    {
-      id: 1,
-      title: 'Evento do permissionário',
-      start: new Date(),
-      end: new Date(new Date().getTime() + 2 * 60 * 60 * 1000)
-    }
-  ]);
+  const [events, setEvents] = useState([]);
 
   const [selected, setSelected] = useState(null);
   const [showReschedule, setShowReschedule] = useState(false);
   const [showCancel, setShowCancel] = useState(false);
   const [newStart, setNewStart] = useState('');
   const [newEnd, setNewEnd] = useState('');
+
+  const loadDisponibilidade = async () => {
+    try {
+      const { ocupados = [], livres = [] } = await ReservaService.getDisponibilidadeSala(1);
+      const mapped = [
+        ...ocupados.map((p, idx) => ({
+          id: `o-${idx}`,
+          title: 'Reservado',
+          start: new Date(p.start),
+          end: new Date(p.end),
+          status: 'ocupado'
+        })),
+        ...livres.map((p, idx) => ({
+          id: `l-${idx}`,
+          title: 'Disponível',
+          start: new Date(p.start),
+          end: new Date(p.end),
+          status: 'livre'
+        }))
+      ];
+      setEvents(mapped);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  useEffect(() => {
+    loadDisponibilidade();
+  }, []);
 
   const handleReschedule = (event) => {
     setSelected(event);
@@ -52,7 +74,7 @@ const PermissionarioReservasPage = () => {
   const confirmReschedule = async () => {
     try {
       await ReservaService.updateReserva(selected.id, { start: newStart, end: newEnd });
-      setEvents(prev => prev.map(ev => ev.id === selected.id ? { ...ev, start: new Date(newStart), end: new Date(newEnd) } : ev));
+      await loadDisponibilidade();
     } catch (err) {
       console.error(err);
     }
@@ -63,7 +85,7 @@ const PermissionarioReservasPage = () => {
   const confirmCancel = async () => {
     try {
       await ReservaService.deleteReserva(selected.id);
-      setEvents(prev => prev.filter(ev => ev.id !== selected.id));
+      await loadDisponibilidade();
     } catch (err) {
       console.error(err);
     }
