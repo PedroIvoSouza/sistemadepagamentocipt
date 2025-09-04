@@ -6,6 +6,7 @@ const path = require('path');
 
 const { applyLetterhead, abntMargins } = require('../utils/pdfLetterhead');
 const { gerarTokenDocumento } = require('../utils/token');
+const generateTokenQr = require('../utils/qrcodeToken');
 
 const authMiddleware = require('../middleware/authMiddleware');
 const authorizeRole = require('../middleware/roleMiddleware');
@@ -252,13 +253,20 @@ function tabelaDiscriminacao(doc, payload) {
 }
 
 /* ========= Token no rodapé (sem mexer no cursor) ========= */
-function printToken(doc, token) {
+async function printToken(doc, token) {
   if (!token) return;
   const prevX = doc.x, prevY = doc.y;
   const x = doc.page.margins.left;
   const y = doc.page.height - doc.page.margins.bottom - 10;
   doc.save();
-  doc.font('Times-Roman').fontSize(8).fillColor('#222').text(`Token: ${token}`, x, y, { lineBreak: false });
+  const text = `Token: ${token}`;
+  doc.font('Times-Roman').fontSize(8).fillColor('#222').text(text, x, y, { lineBreak: false });
+  const qrBuffer = await generateTokenQr(token);
+  const qrSize = 40;
+  const textWidth = doc.widthOfString(text);
+  doc.image(qrBuffer, x + textWidth + 10, y - (qrSize - 8), {
+    fit: [qrSize, qrSize],
+  });
   doc.restore();
   doc.x = prevX; doc.y = prevY;
 }
@@ -336,11 +344,11 @@ router.get(
       // Primeira página: cursor na área útil + token
       doc.x = doc.page.margins.left;
       doc.y = doc.page.margins.top;
-      printToken(doc, tokenDoc);
+      await printToken(doc, tokenDoc);
 
       // Repetir token nas próximas
-      doc.on('pageAdded', () => {
-        printToken(doc, tokenDoc);
+      doc.on('pageAdded', async () => {
+        await printToken(doc, tokenDoc);
       });
 
       // === Conteúdo ===

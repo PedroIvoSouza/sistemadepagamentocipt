@@ -3,6 +3,7 @@ const express = require('express');
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
+const generateTokenQr = require('../utils/qrcodeToken');
 
 const { applyLetterhead, abntMargins } = require('../utils/pdfLetterhead');
 const authMiddleware = require('../middleware/authMiddleware');
@@ -195,13 +196,20 @@ function desenharTabela(doc, payload) {
 }
 
 /* ========= Cabeçalho/rodapé simples (token + paginação) ========= */
-function printToken(doc, token) {
+async function printToken(doc, token) {
   if (!token) return;
   const prevX = doc.x, prevY = doc.y;
   doc.save();
   const x = doc.page.margins.left;
   const y = doc.page.height - doc.page.margins.bottom - 10;
-  doc.fontSize(8).fillColor('#222').text(`Token: ${token}`, x, y, { lineBreak:false });
+  const text = `Token: ${token}`;
+  doc.fontSize(8).fillColor('#222').text(text, x, y, { lineBreak:false });
+  const qrBuffer = await generateTokenQr(token);
+  const qrSize = 40;
+  const textWidth = doc.widthOfString(text);
+  doc.image(qrBuffer, x + textWidth + 10, y - (qrSize - 8), {
+    fit: [qrSize, qrSize],
+  });
   doc.restore();
   doc.x = prevX; doc.y = prevY;
 }
@@ -322,12 +330,12 @@ router.get(
       const tokenDoc = gerarToken();
       doc.x = doc.page.margins.left;
       doc.y = doc.page.margins.top;
-      printToken(doc, tokenDoc);
-      doc.on('pageAdded', () => {
+      await printToken(doc, tokenDoc);
+      doc.on('pageAdded', async () => {
         // applyLetterhead já foi plugado pelo helper
         doc.x = doc.page.margins.left;
         doc.y = doc.page.margins.top;
-        printToken(doc, tokenDoc);
+        await printToken(doc, tokenDoc);
       });
 
       const larguraUtil = doc.page.width - doc.page.margins.left - doc.page.margins.right;

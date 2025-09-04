@@ -1,5 +1,6 @@
 const { randomUUID } = require('crypto');
 const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
+const generateTokenQr = require('./qrcodeToken');
 
 function runAsync(db, sql, params = []) {
   return new Promise((resolve, reject) => {
@@ -73,6 +74,8 @@ async function imprimirTokenEmPdf(pdfBase64, token) {
   const pdfBytes = Buffer.from(pdfBase64, 'base64');
   const pdfDoc = await PDFDocument.load(pdfBytes);
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const qrBuffer = await generateTokenQr(token);
+  const qrImage = await pdfDoc.embedPng(qrBuffer);
   const pages = pdfDoc.getPages();
   pages.forEach(page => {
     page.drawText(`Token: ${token}`, {
@@ -81,6 +84,13 @@ async function imprimirTokenEmPdf(pdfBase64, token) {
       size: 8,
       font,
       color: rgb(0, 0, 0),
+    });
+    const qrSize = 40;
+    page.drawImage(qrImage, {
+      x: page.getWidth() - qrSize - 50,
+      y: 10,
+      width: qrSize,
+      height: qrSize,
     });
   });
   const modified = await pdfDoc.save();

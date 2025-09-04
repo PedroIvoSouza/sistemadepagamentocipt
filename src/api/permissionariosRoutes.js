@@ -7,6 +7,7 @@ const path = require('path');
 const authMiddleware = require('../middleware/authMiddleware');
 const { applyLetterhead, abntMargins } = require('../utils/pdfLetterhead');
 const { gerarTokenDocumento } = require('../utils/token');
+const generateTokenQr = require('../utils/qrcodeToken');
 
 const db = require('../database/db');
 const router = express.Router();
@@ -30,13 +31,20 @@ const getAsync = (sql, params = []) =>
 /* =========================
    Helpers PDF
    ========================= */
-function printToken(doc, token) {
+async function printToken(doc, token) {
   if (!token) return;
   const prevX = doc.x, prevY = doc.y;
   doc.save();
   const x = doc.page.margins.left;
   const y = doc.page.height - doc.page.margins.bottom - 10; // dentro da área útil
-  doc.fontSize(8).fillColor('#222').text(`Token: ${token}`, x, y, { lineBreak: false });
+  const text = `Token: ${token}`;
+  doc.fontSize(8).fillColor('#222').text(text, x, y, { lineBreak: false });
+  const qrBuffer = await generateTokenQr(token);
+  const qrSize = 40;
+  const textWidth = doc.widthOfString(text);
+  doc.image(qrBuffer, x + textWidth + 10, y - (qrSize - 8), {
+    fit: [qrSize, qrSize],
+  });
   doc.restore();
   doc.x = prevX; doc.y = prevY;
 }
@@ -152,10 +160,10 @@ router.get('/:id/certidao', authMiddleware, async (req, res) => {
     // Cursor inicial na área útil + token por página
     doc.x = doc.page.margins.left;
     doc.y = doc.page.margins.top;
-    printToken(doc, tokenDoc);
-    doc.on('pageAdded', () => {
+    await printToken(doc, tokenDoc);
+    doc.on('pageAdded', async () => {
       // Só anota o token e reposiciona o cursor (sem escrever blocos longos aqui!)
-      printToken(doc, tokenDoc);
+      await printToken(doc, tokenDoc);
       doc.x = doc.page.margins.left;
       doc.y = doc.page.margins.top;
     });
