@@ -553,6 +553,10 @@ const saldoISO = parcelas.length > 1
       ? equipamentos[0]
       : equipamentos.slice(0, -1).join(', ') + ' e ' + equipamentos[equipamentos.length - 1];
     paragrafo(doc, `1.2 - Serão disponibilizados em empréstimo: ${lista}.`);
+  if (ev.emprestimo_tvs || ev.emprestimo_caixas_som || ev.emprestimo_microfones) {
+    paragrafo(doc,
+      '1.2 - Havendo empréstimo de televisores, caixas de som ou microfones, o(a) PERMISSIONÁRIO(A) deverá devolvê-los nas mesmas condições, responsabilizando-se por eventuais danos ou furtos.'
+    );
   }
 
   if (ev.remarcado) {
@@ -628,10 +632,11 @@ const saldoISO = parcelas.length > 1
     '5.18 - É proibido o consumo de comidas/bebidas dentro do auditório ou do anfiteatro, de modo que havendo violação deverá ser aplicada multa de 10% do valor de locação, bem como deverá arcar com o valor de danos, caso tenha ocorrido.',
     '5.19 - É proibido som e/ou apresentação musical fora do auditório, sob pena de multa.',
     '5.20 - Não é permitido colocar qualquer estrutura no carpete, tanto do auditório quanto do anfiteatro.',
-    '5.21 - Não é permitido desligar as tomadas das baias.',
-    '5.22 - Deverão constar as logomarcas da SECTI e do CIPT nos materiais de divulgação do evento.',
-    '5.23 - Somente serão considerados válidos os procedimentos, condições ou benefícios expressamente previstos neste Termo. Qualquer exceção às disposições aqui estabelecidas deverá ser formalmente requerida junto à esta Secretaria responsável, por meio de solicitação oficial e devidamente fundamentada, ficando sua concessão condicionada à análise e autorização expressa da referida Secretaria, a seu exclusivo critério.',
-    '5.24 - O Permissionário deve enviar o termo de permissão de uso devidamente assinado no prazo de até 5 (cinco) dias contados da data do envio do documento, sob pena de CANCELAMENTO da reserva da data, sem devolução de qualquer valor pago.'
+    '5.21 - Caso haja danos ou furtos aos equipamentos emprestados, o(a) PERMISSIONÁRIO(A) deverá ressarcir os prejuízos correspondentes.',
+    '5.22 - Não é permitido desligar as tomadas das baias.',
+    '5.23 - Deverão constar as logomarcas da SECTI e do CIPT nos materiais de divulgação do evento.',
+    '5.24 - Somente serão considerados válidos os procedimentos, condições ou benefícios expressamente previstos neste Termo. Qualquer exceção às disposições aqui estabelecidas deverá ser formalmente requerida junto à esta Secretaria responsável, por meio de solicitação oficial e devidamente fundamentada, ficando sua concessão condicionada à análise e autorização expressa da referida Secretaria, a seu exclusivo critério.',
+    '5.25 - O Permissionário deve enviar o termo de permissão de uso devidamente assinado no prazo de até 5 (cinco) dias contados da data do envio do documento, sob pena de CANCELAMENTO da reserva da data, sem devolução de qualquer valor pago.'
   ].forEach(p => paragrafo(doc, p));
 
   // CLÁUSULA 6 – Penalidades
