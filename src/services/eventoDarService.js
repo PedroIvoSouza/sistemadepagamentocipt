@@ -87,12 +87,13 @@ async function criarEventoComDars(db, data, helpers) {
 
   const cliente = await dbGet(
     db,
-    `SELECT nome_razao_social, documento, endereco, cep, tipo, valor_aluguel FROM Clientes_Eventos WHERE id = ?`,
+    `SELECT nome_razao_social, documento, endereco, cep, tipo_cliente, valor_aluguel FROM Clientes_Eventos WHERE id = ?`,
     [idCliente]
   );
   if (!cliente) throw new Error(`Cliente com ID ${idCliente} não foi encontrado no banco.`);
 
-  const clienteIsento = cliente.tipo === 'Isento' || Number(cliente.valor_aluguel) === 0;
+  const clienteIsento =
+    cliente.tipo_cliente === 'Isento' || Number(cliente.valor_aluguel) === 0;
   let eventoGratuitoFlag = eventoGratuito || clienteIsento;
   let justificativa = justificativaGratuito;
   if (clienteIsento && !justificativa) justificativa = 'Isento';
@@ -272,14 +273,15 @@ async function atualizarEventoComDars(db, id, data, helpers) {
 
   const cliente = await dbGet(
     db,
-    `SELECT nome_razao_social, documento, endereco, cep, tipo, valor_aluguel FROM Clientes_Eventos WHERE id = ?`,
+    `SELECT nome_razao_social, documento, endereco, cep, tipo_cliente, valor_aluguel FROM Clientes_Eventos WHERE id = ?`,
     [idCliente]
   );
   if (!cliente) {
     throw new Error(`Cliente com ID ${idCliente} não encontrado.`);
   }
 
-  const clienteIsento = cliente.tipo === 'Isento' || Number(cliente.valor_aluguel) === 0;
+  const clienteIsento =
+    cliente.tipo_cliente === 'Isento' || Number(cliente.valor_aluguel) === 0;
   let eventoGratuitoFlag = eventoGratuito || clienteIsento;
   let justificativa = justificativaGratuito;
   if (clienteIsento && !justificativa) justificativa = 'Isento';
