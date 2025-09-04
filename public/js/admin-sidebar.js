@@ -55,6 +55,7 @@ function applyRoleToSidebar(role) {
     // fallback específico para SALAS_ADMIN usando href/classes
     if (role === 'SALAS_ADMIN') {
         const allowedSelectors = [
+            '.nav-link[href*="dashboard.html"]',
             '.nav-link[href*="permissionarios.html"]',
             '.nav-link[href*="salas.html"]',
             '#logoutButton'
