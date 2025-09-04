@@ -229,6 +229,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                         } catch {}
                         throw new Error(msg);
                     }
+                    let sucesso = 'Reserva cancelada';
+                    try {
+                        const data = await res.json();
+                        sucesso = data.message || sucesso;
+                    } catch {}
+                    alert(sucesso);
                     calendar.refetchEvents();
                     carregarReservas();
                 } catch (err) {

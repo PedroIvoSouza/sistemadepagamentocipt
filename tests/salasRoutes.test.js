@@ -146,7 +146,10 @@ test('Cancelamento próximo ao horário é permitido', async () => {
   await supertest(app)
     .delete(`/api/salas/reservas/${reservaId}`)
     .set('Authorization', `Bearer ${userToken}`)
-    .expect(204);
+    .expect(200)
+    .then(res => assert.equal(res.body.message, 'Reserva cancelada'));
+  const row = await allAsync('SELECT status FROM reservas_salas WHERE id = ?', [reservaId]);
+  assert.equal(row[0].status, 'cancelada');
 });
 
 test('Cancelamento cria auditoria', async () => {
@@ -155,9 +158,12 @@ test('Cancelamento cria auditoria', async () => {
   await supertest(app)
     .delete(`/api/salas/reservas/${reservaId}`)
     .set('Authorization', `Bearer ${userToken}`)
-    .expect(204);
+    .expect(200)
+    .then(res => assert.equal(res.body.message, 'Reserva cancelada'));
   const audit = await allAsync('SELECT * FROM reservas_audit WHERE reserva_id = ?', [reservaId]);
   assert.equal(audit[0].acao, 'CANCELAMENTO');
+  const row = await allAsync('SELECT status FROM reservas_salas WHERE id = ?', [reservaId]);
+  assert.equal(row[0].status, 'cancelada');
 });
 
 test('Admin altera status', async () => {
