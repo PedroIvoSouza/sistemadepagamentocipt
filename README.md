@@ -99,3 +99,17 @@ Para registrar uma advertência:
    - Indique o número de **dias para recurso**.
 
 Após o envio, as sanções previstas para as cláusulas selecionadas serão aplicadas, incluindo a cobrança da multa e a inaptidão a partir da data informada.
+
+## Backfill de endereços de clientes
+
+Preenche automaticamente os campos de endereço nas tabelas `Clientes_Eventos` e `Clientes` a partir do CEP.
+
+```bash
+# execução direta
+node scripts/backfillClienteEnderecos.js
+
+# via npm
+npm run backfill-clientes-enderecos
+```
+
+O script consulta a API de CEP e atualiza apenas registros sem logradouro preenchido. Ele pode ser reexecutado com segurança e, se desejado, agendado periodicamente via `cron` ou ferramenta similar.
