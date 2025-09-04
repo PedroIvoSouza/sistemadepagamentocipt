@@ -1008,13 +1008,20 @@ function printToken(doc, token, qrBuffer) {
   const avisoWidth = qrX - x - 10;
   doc.fontSize(7).fillColor('#222');
   const avisoHeight = doc.heightOfString(aviso, { width: avisoWidth });
-  const avisoY = baseY + 2;
-  const tokenY = avisoY + avisoHeight + 2;
-  doc.text(aviso, x, avisoY, { width: avisoWidth });
 
+  // calcula alturas para manter todo o bloco dentro da área útil
   const text = `Token: ${token}`;
-  doc.fontSize(8).text(text, x, tokenY, { lineBreak: false });
-  doc.image(qrBuffer, qrX, tokenY - (qrSize - 8), {
+  doc.fontSize(8);
+  const tokenHeight = doc.heightOfString(text);
+  const totalHeight = avisoHeight + 2 + tokenHeight;
+
+  const avisoY = baseY - totalHeight;
+  const tokenY = baseY - tokenHeight;
+  const qrY = tokenY - (qrSize - tokenHeight);
+
+  doc.text(aviso, x, avisoY, { width: avisoWidth });
+  doc.text(text, x, tokenY, { lineBreak: false });
+  doc.image(qrBuffer, qrX, qrY, {
     fit: [qrSize, qrSize],
   });
   doc.restore();
