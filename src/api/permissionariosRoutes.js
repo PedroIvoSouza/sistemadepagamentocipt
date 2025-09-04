@@ -31,7 +31,7 @@ const getAsync = (sql, params = []) =>
 /* =========================
    Helpers PDF
    ========================= */
-async function printToken(doc, token) {
+function printToken(doc, token, qrBuffer) {
   if (!token) return;
   const prevX = doc.x, prevY = doc.y;
   doc.save();
@@ -50,7 +50,6 @@ async function printToken(doc, token) {
 
   const text = `Token: ${token}`;
   doc.fontSize(8).text(text, x, tokenY, { lineBreak: false });
-  const qrBuffer = await generateTokenQr(token);
   doc.image(qrBuffer, qrX, tokenY - (qrSize - 8), {
     fit: [qrSize, qrSize],
   });
@@ -117,6 +116,7 @@ router.get('/:id/certidao', authMiddleware, async (req, res) => {
 
     // Token padronizado do sistema (também usado em /api/documentos/validar)
     const tokenDoc = await gerarTokenDocumento('CERTIDAO_QUITACAO', id, db);
+    const qrBuffer = await generateTokenQr(tokenDoc);
 
     // Caminho público onde o PDF ficará disponível
     const dir = path.join(__dirname, '..', '..', 'public', 'permissionarios', 'certidoes');
@@ -128,9 +128,9 @@ router.get('/:id/certidao', authMiddleware, async (req, res) => {
     // Documento PDF: padrão timbrado + ABNT + 0,5cm
     const doc = new PDFDocument({ size: 'A4', margins: abntMargins(0.5, 0.5, 2) });
 
-    doc.on('pageAdded', async () => {
+    doc.on('pageAdded', () => {
       // Só anota o token e reposiciona o cursor (sem escrever blocos longos aqui!)
-      await printToken(doc, tokenDoc);
+      printToken(doc, tokenDoc, qrBuffer);
       doc.x = doc.page.margins.left;
       doc.y = doc.page.margins.top;
     });
@@ -176,7 +176,7 @@ router.get('/:id/certidao', authMiddleware, async (req, res) => {
     // Cursor inicial na área útil + token por página
     doc.x = doc.page.margins.left;
     doc.y = doc.page.margins.top;
-    await printToken(doc, tokenDoc);
+    printToken(doc, tokenDoc, qrBuffer);
 
     const larguraUtil = doc.page.width - doc.page.margins.left - doc.page.margins.right;
     const hoje = new Date();

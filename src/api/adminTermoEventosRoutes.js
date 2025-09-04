@@ -196,7 +196,7 @@ function desenharTabela(doc, payload) {
 }
 
 /* ========= Cabeçalho/rodapé simples (token + paginação) ========= */
-async function printToken(doc, token) {
+function printToken(doc, token, qrBuffer) {
   if (!token) return;
   const prevX = doc.x, prevY = doc.y;
   doc.save();
@@ -215,7 +215,6 @@ async function printToken(doc, token) {
 
   const text = `Token: ${token}`;
   doc.fontSize(8).text(text, x, tokenY, { lineBreak:false });
-  const qrBuffer = await generateTokenQr(token);
   doc.image(qrBuffer, qrX, tokenY - (qrSize - 8), {
     fit: [qrSize, qrSize],
   });
@@ -326,14 +325,15 @@ router.get(
 
       // ========== Gera PDF em memória ==========
       const tokenDoc = gerarToken();
+      const qrBuffer = await generateTokenQr(tokenDoc);
       const letterheadPath = resolveLetterheadPath();
       const margins = abntMargins(0.5, 0.5, 2); // inclui espaço para bloco de autenticação
       const doc = new PDFDocument({ size: 'A4', margins });
-      doc.on('pageAdded', async () => {
+      doc.on('pageAdded', () => {
         // applyLetterhead já foi plugado pelo helper
         doc.x = doc.page.margins.left;
         doc.y = doc.page.margins.top;
-        await printToken(doc, tokenDoc);
+        printToken(doc, tokenDoc, qrBuffer);
       });
 
       const chunks = [];
@@ -345,7 +345,7 @@ router.get(
       // Cursor inicial e token a cada página
       doc.x = doc.page.margins.left;
       doc.y = doc.page.margins.top;
-      await printToken(doc, tokenDoc);
+      printToken(doc, tokenDoc, qrBuffer);
 
       const larguraUtil = doc.page.width - doc.page.margins.left - doc.page.margins.right;
 

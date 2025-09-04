@@ -416,9 +416,10 @@ router.get(
       // PDF
       if (format === 'pdf') {
         const tokenDoc = await gerarTokenDocumento('RELATORIO_PERMISSIONARIOS', null, db);
+        const qrBuffer = await generateTokenQr(tokenDoc);
 
         const doc = new PDFDocument({ size: 'A4', margins: abntMargins(0.5, 0.5, 2) });
-        doc.on('pageAdded', async () => await printToken(doc, tokenDoc));
+        doc.on('pageAdded', () => printToken(doc, tokenDoc, qrBuffer));
 
         res.header('Content-Type', 'application/pdf');
         res.attachment('permissionarios.pdf');
@@ -433,7 +434,7 @@ router.get(
         doc.y = doc.page.margins.top;
 
         // Token por página (sem mover o cursor do conteúdo)
-        await printToken(doc, tokenDoc);
+        printToken(doc, tokenDoc, qrBuffer);
 
         // Conteúdo
         doc.fillColor('#333').fontSize(16).text('Relatório de Permissionários', { align: 'center' });
@@ -550,9 +551,10 @@ router.get(
       }
 
       const tokenDoc = await gerarTokenDocumento('RELATORIO_DEVEDORES', null, db);
+      const qrBuffer = await generateTokenQr(tokenDoc);
 
       const doc = new PDFDocument({ size: 'A4', margins: abntMargins(0.5, 0.5, 2) });
-      doc.on('pageAdded', async () => await printToken(doc, tokenDoc));
+      doc.on('pageAdded', () => printToken(doc, tokenDoc, qrBuffer));
 
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'secti-'));
       const filePath = path.join(tmpDir, `relatorio_devedores_${Date.now()}.pdf`);
@@ -567,7 +569,7 @@ router.get(
       doc.y = doc.page.margins.top;
 
       // Token por página (sem mover o cursor do conteúdo)
-      await printToken(doc, tokenDoc);
+      printToken(doc, tokenDoc, qrBuffer);
 
       // Conteúdo
       doc.fillColor('#333').fontSize(16).text('Relatório de Devedores', { align: 'center' });
@@ -648,9 +650,10 @@ router.get(
       }
 
       const tokenDoc = await gerarTokenDocumento('RELATORIO_DARS', null, db);
+      const qrBuffer = await generateTokenQr(tokenDoc);
 
       const doc = new PDFDocument({ size: 'A4', margins: abntMargins(0.5, 0.5, 2) });
-      doc.on('pageAdded', async () => await printToken(doc, tokenDoc));
+      doc.on('pageAdded', () => printToken(doc, tokenDoc, qrBuffer));
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'secti-'));
       const filePath = path.join(tmpDir, `relatorio_dars_${Date.now()}.pdf`);
       const stream = fs.createWriteStream(filePath);
@@ -661,7 +664,7 @@ router.get(
       doc.x = doc.page.margins.left;
       doc.y = doc.page.margins.top;
 
-      await printToken(doc, tokenDoc);
+      printToken(doc, tokenDoc, qrBuffer);
 
       doc.fillColor('#333').fontSize(16).text('Relatório de DARs', { align: 'center' });
       doc.moveDown(2);
@@ -726,9 +729,10 @@ router.get(
       }
 
       const tokenDoc = await gerarTokenDocumento('RELATORIO_EVENTOS_DARS', null, db);
+      const qrBuffer = await generateTokenQr(tokenDoc);
 
       const doc = new PDFDocument({ size: 'A4', margins: abntMargins(0.5, 0.5, 2) });
-      doc.on('pageAdded', async () => await printToken(doc, tokenDoc));
+      doc.on('pageAdded', () => printToken(doc, tokenDoc, qrBuffer));
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'secti-'));
       const filePath = path.join(tmpDir, `relatorio_eventos_dars_${Date.now()}.pdf`);
       const stream = fs.createWriteStream(filePath);
@@ -738,7 +742,7 @@ router.get(
 
       doc.x = doc.page.margins.left;
       doc.y = doc.page.margins.top;
-      await printToken(doc, tokenDoc);
+      printToken(doc, tokenDoc, qrBuffer);
 
       doc.fillColor('#333').fontSize(16).text('Relatório DARs de Eventos', { align: 'center' });
       doc.moveDown(2);
@@ -987,7 +991,7 @@ function generateDarsTable(doc, dados) {
   }
 }
 
-async function printToken(doc, token) {
+function printToken(doc, token, qrBuffer) {
   if (!token) return;
 
   // preserve o cursor do conteúdo
@@ -1010,7 +1014,6 @@ async function printToken(doc, token) {
 
   const text = `Token: ${token}`;
   doc.fontSize(8).text(text, x, tokenY, { lineBreak: false });
-  const qrBuffer = await generateTokenQr(token);
   doc.image(qrBuffer, qrX, tokenY - (qrSize - 8), {
     fit: [qrSize, qrSize],
   });

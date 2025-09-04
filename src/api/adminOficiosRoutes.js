@@ -24,7 +24,7 @@ const dbRun = (sql, params = []) =>
   new Promise((resolve, reject) => db.run(sql, params, function (err) { if (err) reject(err); else resolve(this); }));
 
 /* ========= Util: imprime token sem mexer no cursor do conteúdo ========= */
-async function printToken(doc, token) {
+function printToken(doc, token, qrBuffer) {
   if (!token) return;
   const prevX = doc.x, prevY = doc.y; // preserva cursor do conteúdo
   doc.save();
@@ -43,7 +43,6 @@ async function printToken(doc, token) {
 
   const text = `Token: ${token}`;
   doc.fontSize(8).text(text, x, tokenY, { lineBreak: false });
-  const qrBuffer = await generateTokenQr(token);
   doc.image(qrBuffer, qrX, tokenY - (qrSize - 8), {
     fit: [qrSize, qrSize],
   });
@@ -84,12 +83,13 @@ router.get(
       const totalStr = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalDevido);
 
       const tokenDoc = await gerarTokenDocumento('OFICIO', permissionarioId, db);
+      const qrBuffer = await generateTokenQr(tokenDoc);
 
       // 3) Cria PDF com margens ABNT (+0,5cm topo/rodapé)
       const doc = new PDFDocument({ size: 'A4', margins: abntMargins(0.5, 0.5, 2) });
-      doc.on('pageAdded', async () => {
+      doc.on('pageAdded', () => {
         // applyLetterhead já está plugado no helper
-        await printToken(doc, tokenDoc); // só o token aqui; nada de header/footer com text()
+        printToken(doc, tokenDoc, qrBuffer); // só o token aqui; nada de header/footer com text()
       });
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `attachment; filename="oficio_${permissionarioId}.pdf"`);
@@ -102,7 +102,7 @@ router.get(
       // 5) Cursor inicial na área útil + token por página
       doc.x = doc.page.margins.left;
       doc.y = doc.page.margins.top;
-      await printToken(doc, tokenDoc);
+      printToken(doc, tokenDoc, qrBuffer);
 
       // 6) Conteúdo do ofício
       const larguraUtil = doc.page.width - doc.page.margins.left - doc.page.margins.right;

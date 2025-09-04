@@ -253,7 +253,7 @@ function tabelaDiscriminacao(doc, payload) {
 }
 
 /* ========= Token no rodapé (sem mexer no cursor) ========= */
-async function printToken(doc, token) {
+function printToken(doc, token, qrBuffer) {
   if (!token) return;
   const prevX = doc.x, prevY = doc.y;
   doc.save();
@@ -272,7 +272,6 @@ async function printToken(doc, token) {
 
   const text = `Token: ${token}`;
   doc.font('Times-Roman').fontSize(8).text(text, x, tokenY, { lineBreak: false });
-  const qrBuffer = await generateTokenQr(token);
   doc.image(qrBuffer, qrX, tokenY - (qrSize - 8), {
     fit: [qrSize, qrSize],
   });
@@ -332,6 +331,7 @@ router.get(
 
       // Token do documento
       const tokenDoc = await gerarTokenDocumento('TERMO_EVENTO', Number(eventoId), db);
+      const qrBuffer = await generateTokenQr(tokenDoc);
 
       // Arquivo de saída
       const outDir = path.join(process.cwd(), 'public', 'documentos');
@@ -339,8 +339,8 @@ router.get(
 
       // Criado já com bufferPages para paginar ao final
       const doc = new PDFDocument({ size: 'A4', margins: abntMargins(0.5, 0.5, 2), bufferPages: true });
-      doc.on('pageAdded', async () => {
-        await printToken(doc, tokenDoc);
+      doc.on('pageAdded', () => {
+        printToken(doc, tokenDoc, qrBuffer);
       });
 
       // Caminho final só após saber o ID (vamos gerar um temporário primeiro)
@@ -356,7 +356,7 @@ router.get(
       // Primeira página: cursor na área útil + token
       doc.x = doc.page.margins.left;
       doc.y = doc.page.margins.top;
-      await printToken(doc, tokenDoc);
+      printToken(doc, tokenDoc, qrBuffer);
 
       // === Conteúdo ===
       const left = doc.page.margins.left;
