@@ -59,12 +59,14 @@ async function fetchReservas(fetchInfo, successCallback, failureCallback) {
     const resp = await fetch(`/api/admin/salas/reservas?${params.toString()}`);
     if (!resp.ok) throw new Error('Falha ao carregar reservas');
     const dados = await resp.json();
-    const eventos = dados.map(r => ({
-      id: r.id,
-      title: r.sala_nome,
-      start: r.inicio,
-      end: r.fim
-    }));
+    const eventos = dados
+      .filter(r => r.status !== 'cancelada')
+      .map(r => ({
+        id: r.id,
+        title: r.sala_nome,
+        start: r.inicio,
+        end: r.fim
+      }));
     successCallback(eventos);
   } catch (err) {
     console.error(err);
@@ -83,6 +85,7 @@ async function cancelarReserva() {
     const resp = await fetch(`/api/admin/salas/reservas/${eventoSelecionado.id}`, { method: 'DELETE' });
     if (!resp.ok) throw new Error('Falha ao cancelar reserva');
     eventoSelecionado.remove();
+    window._salasCalendar.refetchEvents();
     mostrarMensagem('Reserva cancelada com sucesso', 'success');
   } catch (err) {
     console.error(err);
