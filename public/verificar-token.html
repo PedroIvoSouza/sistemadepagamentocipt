@@ -103,9 +103,14 @@
                 }
                 const data = await response.json();
 
-                let html = data.authentic
-                    ? '<div class="alert alert-success">Documento autêntico</div>'
-                    : '<div class="alert alert-danger">Documento inválido</div>';
+                let html;
+                if (data.authentic) {
+                    html = '<div class="alert alert-success">Documento autêntico</div>';
+                } else if (data.message) {
+                    html = `<div class="alert alert-warning">${data.message}</div>`;
+                } else {
+                    html = '<div class="alert alert-danger">Documento inválido</div>';
+                }
 
                 if (data.created_at) {
                     html += `<p>Data de emissão: ${new Date(data.created_at).toLocaleDateString('pt-BR')}</p>`;

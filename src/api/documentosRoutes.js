@@ -90,8 +90,10 @@ router.get('/verify/:token', async (req, res) => {
     const relativePath = pdf_public_url ? pdf_public_url.replace(/^\//, '') : '';
     const abs = path.join(PUBLIC_DIR, relativePath);
     const authentic = pdf_public_url ? fs.existsSync(abs) : false;
+    let message;
     if (!authentic) {
       logger.warn(`[documentos] Arquivo ausente para token ${req.params.token}: ${pdf_public_url}`);
+      message = 'Documento encontrado, porém o arquivo PDF não está disponível';
     }
     return res.json({
       valid: true,
@@ -101,6 +103,7 @@ router.get('/verify/:token', async (req, res) => {
       status,
       pdf_public_url,
       authentic,
+      ...(message ? { message } : {}),
     });
   } catch (e) {
     console.error('[documentos]/verify erro:', e.message);
