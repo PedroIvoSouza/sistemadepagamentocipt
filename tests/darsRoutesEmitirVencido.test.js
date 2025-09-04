@@ -20,13 +20,23 @@ const setupDb = async (dbPath) => {
   return { db, run, get };
 };
 
-test('retorna darVencido sem emitir guia', async () => {
+test('emite guia com valor recalculado para DAR vencido', async () => {
   const dbPath = path.resolve(__dirname, 'test-dars-vencido.db');
   const { get } = await setupDb(dbPath);
 
-  // Stubs
+  process.env.COD_IBGE_MUNICIPIO = '2704302';
+  process.env.RECEITA_CODIGO_PERMISSIONARIO = '12345';
+
+  let sefazPayload = null;
   const sefazPath = path.resolve(__dirname, '../src/services/sefazService.js');
-  require.cache[sefazPath] = { exports: { emitirGuiaSefaz: async () => { throw new Error('should not emit'); } } };
+  require.cache[sefazPath] = {
+    exports: {
+      emitirGuiaSefaz: async payload => {
+        sefazPayload = payload;
+        return { numeroGuia: '123', pdfBase64: 'PDFDATA' };
+      }
+    }
+  };
 
   const tokenPath = path.resolve(__dirname, '../src/utils/token.js');
   require.cache[tokenPath] = { exports: { gerarTokenDocumento: async () => 'TKN', imprimirTokenEmPdf: async pdf => pdf } };
@@ -35,7 +45,11 @@ test('retorna darVencido sem emitir guia', async () => {
   require.cache[authPath] = { exports: (req, _res, next) => { req.user = { id: 1 }; next(); } };
 
   const cobrancaPath = path.resolve(__dirname, '../src/services/cobrancaService.js');
-  require.cache[cobrancaPath] = { exports: { calcularEncargosAtraso: async dar => ({ valorAtualizado: dar.valor + 10, novaDataVencimento: '2024-01-10' }) } };
+  require.cache[cobrancaPath] = {
+    exports: {
+      calcularEncargosAtraso: async dar => ({ valorAtualizado: dar.valor + 10, novaDataVencimento: '2024-01-10' })
+    }
+  };
 
   const darsRoutesPath = path.resolve(__dirname, '../src/api/darsRoutes.js');
   delete require.cache[darsRoutesPath];
@@ -45,11 +59,15 @@ test('retorna darVencido sem emitir guia', async () => {
   app.use(express.json());
   app.use('/', darsRoutes);
 
-  const res = await supertest(app).post('/20/emitir').expect(200);
-  assert.equal(res.body.darVencido, true);
-  assert.equal(res.body.calculo.valorAtualizado, 110);
+  const res = await supertest(app).post('/20/emitir?force=1').expect(200);
+  assert.equal(res.body.numeroGuia, '123');
 
-  const row = await get(`SELECT numero_documento, pdf_url FROM dars WHERE id = 20`);
-  assert.equal(row.numero_documento, null);
-  assert.equal(row.pdf_url, null);
+  assert.equal(sefazPayload.receitas[0].valorPrincipal, 110);
+  assert.equal(sefazPayload.receitas[0].dataVencimento, '2024-01-10');
+
+  const row = await get(`SELECT valor, data_vencimento, numero_documento, pdf_url FROM dars WHERE id = 20`);
+  assert.equal(row.valor, 110);
+  assert.equal(row.data_vencimento, '2024-01-10');
+  assert.equal(row.numero_documento, '123');
+  assert.equal(row.pdf_url, 'PDFDATA');
 });

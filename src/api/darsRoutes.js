@@ -261,6 +261,13 @@ router.post('/:id/emitir', authMiddleware, async (req, res) => {
   const userId = req.user.id;
   const darId = req.params.id;
   const debug = String(req.query.debug || '').trim() === '1';
+  // opcional: confirmação explícita do usuário via ?force=1 ou { forcar: true }
+  const confirmacao = String(
+    req.query.force || req.query.forcar || (req.body && (req.body.force || req.body.forcar)) || ''
+  )
+    .toLowerCase()
+    .trim();
+  const forcar = confirmacao === '1' || confirmacao === 'true';
 
   try {
     const dar = await dbGetAsync(
@@ -280,7 +287,10 @@ router.post('/:id/emitir', authMiddleware, async (req, res) => {
     if (['Vencido', 'Vencida'].includes(dar.status)) {
       const calculo = await calcularEncargosAtraso(dar);
       guiaSource.valor = calculo.valorAtualizado;
-      return res.status(200).json({ darVencido: true, calculo });
+      // se houver nova data de vencimento, utiliza-a
+      guiaSource.data_vencimento = calculo.novaDataVencimento || guiaSource.data_vencimento;
+      // anteriormente retornava { darVencido: true }, impedindo a emissão;
+      // agora prossegue normalmente com os valores atualizados.
     }
 
     const payload = buildSefazPayloadPermissionario({ perm, darLike: guiaSource });
@@ -334,7 +344,8 @@ router.post('/:id/emitir', authMiddleware, async (req, res) => {
     );
 
     const payloadDebug = debug ? { _payloadDebug: payload } : {};
-    return res.status(200).json({ ...sefazResponse, token: tokenDoc, ...payloadDebug });
+    const forceFlag = forcar ? { forcar: true } : {};
+    return res.status(200).json({ ...sefazResponse, token: tokenDoc, ...payloadDebug, ...forceFlag });
 
   } catch (error) {
     console.error('Erro na rota /emitir:', error);

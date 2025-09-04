@@ -327,7 +327,7 @@
                 confirmarEmissaoBtn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Gerando...`;
                 
                 try {
-                    const response = await fetch(`/api/dars/${darIdParaEmitir}/emitir`, {
+                    const response = await fetch(`/api/dars/${darIdParaEmitir}/emitir?force=1`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', ...headers }
                     });
