@@ -198,6 +198,21 @@
               </div>
             </div>
             <small id="capacidade-espaco" class="form-text text-muted"></small>
+            <label class="form-label mt-3">Equipamentos</label>
+            <div class="d-flex flex-column">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="equip-tvs">
+                <label class="form-check-label" for="equip-tvs">TVs</label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="equip-caixas">
+                <label class="form-check-label" for="equip-caixas">Caixas de Som</label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="equip-mics">
+                <label class="form-check-label" for="equip-mics">Microfones</label>
+              </div>
+            </div>
           </div>
           <div class="mb-3">
             <label for="area-m2" class="form-label">Área (m²)</label>
@@ -498,6 +513,9 @@ window.onload = () => {
   const salaReunioesNumerosWrapper = document.getElementById('sala-reunioes-numeros-wrapper');
   const salaReunioesNumerosInput = document.getElementById('sala-reunioes-numeros');
   const capacidadeEspacoDisplay = document.getElementById('capacidade-espaco');
+  const equipTvsCheckbox = document.getElementById('equip-tvs');
+  const equipCaixasCheckbox = document.getElementById('equip-caixas');
+  const equipMicsCheckbox = document.getElementById('equip-mics');
   const areaM2Input = document.getElementById('area-m2');
   const eventoGratuitoInput = document.getElementById('evento-gratuito');
   const justificativaGratuitoTextarea = document.getElementById('justificativa-gratuito');
@@ -1110,6 +1128,9 @@ function normalizarEvento(payload){
     const numero_oficio_sei = ev.numero_oficio_sei ?? ev.numeroOficioSei ?? '';
     const valor_final = ev.valor_final ?? 0;
     const evento_gratuito = ev.evento_gratuito ?? ev.eventoGratuito ?? false;
+    const emprestimo_tvs = !!(ev.emprestimo_tvs ?? ev.emprestimoTVs);
+    const emprestimo_caixas_som = !!(ev.emprestimo_caixas_som ?? ev.emprestimoCaixasSom);
+    const emprestimo_microfones = !!(ev.emprestimo_microfones ?? ev.emprestimoMicrofones);
 
     return {
       ...ev, // Retorna todos os campos originais
@@ -1124,6 +1145,9 @@ function normalizarEvento(payload){
       numero_oficio_sei,
       valor_final,
       evento_gratuito,
+      emprestimo_tvs,
+      emprestimo_caixas_som,
+      emprestimo_microfones,
       parcelas: payload.parcelas || ev.parcelas || []
     };
   }
@@ -1152,7 +1176,10 @@ function normalizarEvento(payload){
       numeroOficioSeiMask.value = ev.numero_oficio_sei || '';
       numeroProcessoMask.value = ev.numero_processo || '';
       numeroTermoMask.value = ev.numero_termo || '';
-      
+      equipTvsCheckbox.checked = !!ev.emprestimo_tvs;
+      equipCaixasCheckbox.checked = !!ev.emprestimo_caixas_som;
+      equipMicsCheckbox.checked = !!ev.emprestimo_microfones;
+
       espacosCheckboxes.forEach(cb => {
         if (cb.value === 'Sala de Reuniões') {
           const nums = (ev.espacos_utilizados || [])
@@ -1551,6 +1578,9 @@ function normalizarEvento(payload){
       valorBruto: vb,
       valorFinal: vf,
       espacosUtilizados,
+      emprestimoTVs: equipTvsCheckbox.checked,
+      emprestimoCaixasSom: equipCaixasCheckbox.checked,
+      emprestimoMicrofones: equipMicsCheckbox.checked,
       areaM2: parseFloat(areaM2Input.value) || null,
       horaInicio: horaInicioInput.value || null,
       horaFim: horaFimInput.value || null,
@@ -1612,6 +1642,9 @@ function normalizarEvento(payload){
   horaDesmontagemPicker.clear();
   capacidadeEspacoDisplay.textContent = '';
   espacosCheckboxes.forEach(cb => cb.checked = false);
+  equipTvsCheckbox.checked = false;
+  equipCaixasCheckbox.checked = false;
+  equipMicsCheckbox.checked = false;
   salaReunioesNumerosInput.value = '';
   salaReunioesNumerosWrapper.classList.add('d-none');
   atualizarEspacos();
