@@ -230,6 +230,17 @@ router.post(
       const { codigoTipoInscricao, numeroInscricao, nome, codigoIbgeMunicipio, dar } =
         await getContribuinteEmitenteForDar(darId);
 
+      // Se o DAR estiver vencido, recalcula multa/juros e ajusta vencimento/valor
+      const hoje = isoHojeLocal();
+      const vencOriginal = toISO(dar.data_vencimento);
+      if (vencOriginal && vencOriginal < hoje) {
+        const enc = await calcularEncargosAtraso(dar).catch(() => null);
+        if (enc) {
+          if (enc.valorAtualizado != null) dar.valor = enc.valorAtualizado;
+          if (enc.novaDataVencimento) dar.data_vencimento = enc.novaDataVencimento;
+        }
+      }
+
       // Doc & tipo saneados
       const doc  = String(numeroInscricao || '').replace(/\D/g, '');
       const tipo = Number(codigoTipoInscricao) || (doc.length === 11 ? 3 : 4);
@@ -338,7 +349,8 @@ router.post(
       const { codigoTipoInscricao, numeroInscricao, nome, codigoIbgeMunicipio, dar } =
         await getContribuinteEmitenteForDar(darId);
 
-      const enc = await calcularEncargosAtraso(darId).catch(() => null);
+      // Recalcula encargos para DARs atrasadas
+      const enc = await calcularEncargosAtraso(dar).catch(() => null);
       if (enc) {
         if (enc.valorAtualizado != null) dar.valor = enc.valorAtualizado;
         if (enc.novaDataVencimento) dar.data_vencimento = enc.novaDataVencimento;
