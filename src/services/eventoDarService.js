@@ -79,6 +79,9 @@ async function criarEventoComDars(db, data, helpers) {
     numeroTermo,
     eventoGratuito = false,
     justificativaGratuito,
+    emprestimoTvs = false,
+    emprestimoCaixasSom = false,
+    emprestimoMicrofones = false,
   } = data;
 
   if (!idCliente || !nomeEvento) {
@@ -123,7 +126,8 @@ async function criarEventoComDars(db, data, helpers) {
       'tipo_desconto', 'desconto_manual', 'valor_final', 'numero_oficio_sei',
       'hora_inicio', 'hora_fim', 'hora_montagem', 'hora_desmontagem',
       'numero_processo', 'numero_termo', 'remarcacao_solicitada', 'datas_evento_solicitada', 'data_aprovacao_remarcacao',
-      'evento_gratuito', 'justificativa_gratuito', 'status'
+      'evento_gratuito', 'justificativa_gratuito', 'status',
+      'emprestimo_tvs', 'emprestimo_caixas_som', 'emprestimo_microfones'
     ];
     const eventoStmt = await dbRun(
       db,
@@ -153,7 +157,10 @@ async function criarEventoComDars(db, data, helpers) {
         null,
         eventoGratuitoFlag ? 1 : 0,
         justificativa || null,
-        'Pendente'
+        'Pendente',
+        emprestimoTvs ? 1 : 0,
+        emprestimoCaixasSom ? 1 : 0,
+        emprestimoMicrofones ? 1 : 0
       ]
     );
 
@@ -266,6 +273,9 @@ async function atualizarEventoComDars(db, id, data, helpers) {
     numeroTermo,
     eventoGratuito = false,
     justificativaGratuito,
+    emprestimoTvs = false,
+    emprestimoCaixasSom = false,
+    emprestimoMicrofones = false,
   } = data || {};
   if (!idCliente || !nomeEvento) {
     throw new Error('Campos obrigatórios estão faltando.');
@@ -324,6 +334,9 @@ async function atualizarEventoComDars(db, id, data, helpers) {
               hora_desmontagem = ?,
               numero_processo = ?,
               numero_termo = ?,
+              emprestimo_tvs = ?,
+              emprestimo_caixas_som = ?,
+              emprestimo_microfones = ?,
               evento_gratuito = ?,
               justificativa_gratuito = ?,
               status = ?
@@ -347,6 +360,9 @@ async function atualizarEventoComDars(db, id, data, helpers) {
         horaDesmontagem || null,
         numeroProcesso || null,
         numeroTermo || null,
+        emprestimoTvs ? 1 : 0,
+        emprestimoCaixasSom ? 1 : 0,
+        emprestimoMicrofones ? 1 : 0,
         eventoGratuitoFlag ? 1 : 0,
         justificativa || null,
         'Pendente',

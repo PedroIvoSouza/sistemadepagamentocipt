@@ -1,4 +1,5 @@
-window.TERMO_CLAUSULAS = {
+// Cláusulas do termo de permissão de uso
+window.TERMO_CLAUSULAS = Object.freeze({
   '5.1': 'Utilizar o espaço destinado no imóvel em questão para o fim específico do evento descrito na cláusula primeira.',
   '5.2': 'Conservar o imóvel como se lhe pertencesse, fazendo com que seu uso e gozo sejam pacíficos e harmônicos.',
   '5.3': 'A montagem e desmontagem de materiais e equipamentos do(a) PERMISSIONÁRIO(A) ou de terceiros, dentro do período de vigência, conforme reserva.',
@@ -35,5 +36,5 @@ window.TERMO_CLAUSULAS = {
   '7.4': 'A remarcação do evento será permitida uma única vez. O não cumprimento do prazo para indicação da nova data acarretará a perda do direito à remarcação, sem qualquer restituição dos valores pagos.',
   '7.5': 'Ocorrerá a rescisão do presente termo de permissão, independente de qualquer comunicação prévia ou indenização por parte da PERMITENTE, havendo qualquer sinistro, incêndio ou algo que venha impossibilitar a posse do espaço, independente de dolo ou culpa do PERMITENTE.',
   '8.1': 'Os casos omissos serão decididos pela PERMITENTE segundo as disposições contidas na Lei nº 14.133/2021, e nas demais normas de licitações e contratos administrativos, além de, subsidiariamente, as disposições contidas na Lei nº 8.078/90 – Código de Defesa do Consumidor, e normas e princípios gerais dos contratos.',
-  '9.1': 'As questões decorrentes da execução deste Instrumento que não possam ser dirimidas administrativamente serão processadas e julgadas no Foro da Cidade de Maceió – AL, que prevalecerá sobre qualquer outro, por mais privilegiado que seja, para dirimir quaisquer dúvidas oriundas do presente Termo.'
-};
+'9.1': 'As questões decorrentes da execução deste Instrumento que não possam ser dirimidas administrativamente serão processadas e julgadas no Foro da Cidade de Maceió – AL, que prevalecerá sobre qualquer outro, por mais privilegiado que seja, para dirimir quaisquer dúvidas oriundas do presente Termo.'
+});

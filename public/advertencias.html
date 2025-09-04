@@ -154,6 +154,10 @@
       '9.1': 'As questões decorrentes da execução deste Instrumento que não possam ser dirimidas administrativamente serão processadas e julgadas no Foro da Cidade de Maceió – AL, que prevalecerá sobre qualquer outro, por mais privilegiado que seja, para dirimir quaisquer dúvidas oriundas do presente Termo.'
     };
 
+
+    <script src="/js/termo-clausulas.js"></script>
+    <script>
+    const clausulas = window.TERMO_CLAUSULAS;
     const container = document.getElementById('clausulas-container');
     Object.entries(clausulas).forEach(([num, texto]) => {
       const div = document.createElement('div');
