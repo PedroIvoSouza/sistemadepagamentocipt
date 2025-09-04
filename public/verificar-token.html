@@ -84,6 +84,14 @@
     <script defer src="/js/ui-kit.js"></script>
     <script defer src="/js/mobile-tweaks.js"></script>
     <script>
+        const LABELS = {
+            token: "Token",
+            tipo: "Tipo",
+            evento_id: "Evento",
+            created_at: "Criado em",
+            status: "Status"
+        };
+
         document.getElementById('verifyTokenForm').addEventListener('submit', async (event) => {
             event.preventDefault();
             const token = document.getElementById('token').value.trim();
@@ -92,27 +100,35 @@
             resultDiv.className = 'mt-4';
 
             if (!token) {
-                resultDiv.className = 'alert alert-danger mt-4';
-                resultDiv.textContent = 'Informe um token.';
+                resultDiv.innerHTML = '<div class="alert alert-danger">Informe um token.</div>';
                 return;
             }
 
             try {
                 const response = await fetch(`/api/documentos/verify/${encodeURIComponent(token)}`);
                 if (!response.ok) {
-                    throw new Error('Documento inválido ou não encontrado.');
+                    throw new Error('Token não corresponde a documento emitido pelo sistema');
                 }
                 const data = await response.json();
-                let html = '<h4 class="mb-3">Documento válido</h4><ul class="list-group">';
-                for (const [key, value] of Object.entries(data)) {
-                    html += `<li class="list-group-item d-flex justify-content-between"><strong>${key}</strong><span>${value}</span></li>`;
+
+                let html = '<div class="alert alert-success">Documento gerado pelo Sistema CIPT</div>';
+                html += '<dl class="row mt-3">';
+                for (const [field, label] of Object.entries(LABELS)) {
+                    if (data[field] !== undefined && data[field] !== null) {
+                        html += `<dt class="col-sm-4">${label}</dt><dd class="col-sm-8">${data[field]}</dd>`;
+                    }
                 }
-                html += '</ul>';
-                resultDiv.className = 'mt-4';
+                html += '</dl>';
+
+                if (data.signed_pdf_public_url) {
+                    html += `<a href="${data.signed_pdf_public_url}" target="_blank" class="btn btn-primary mt-3">Abrir PDF assinado</a>`;
+                } else if (data.pdf_public_url) {
+                    html += `<a href="${data.pdf_public_url}" target="_blank" class="btn btn-primary mt-3">Abrir PDF</a>`;
+                }
+
                 resultDiv.innerHTML = html;
             } catch (err) {
-                resultDiv.className = 'alert alert-danger mt-4';
-                resultDiv.textContent = err.message;
+                resultDiv.innerHTML = `<div class="alert alert-danger">${err.message || 'Token não corresponde a documento emitido pelo sistema'}</div>`;
             }
         });
     </script>
