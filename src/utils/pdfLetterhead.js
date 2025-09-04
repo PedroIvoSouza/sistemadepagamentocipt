@@ -42,9 +42,9 @@ function applyLetterhead(doc, opts = {}) {
   };
 
   // primeira página
-  render();
+  setImmediate(render);
   // novas páginas
-  doc.on('pageAdded', render);
+  doc.on('pageAdded', () => setImmediate(render));
 }
 
 module.exports = { applyLetterhead, abntMargins, cm };
