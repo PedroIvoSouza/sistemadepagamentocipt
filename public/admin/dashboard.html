@@ -116,23 +116,45 @@ window.onload = async () => {
   localStorage.setItem('adminToken', token);
   localStorage.removeItem('adminAuthToken'); // limpa a antiga, se existir
 
-  // 2) Mostrar nome do admin a partir do JWT de forma segura (base64url)
+  // 2) Mostrar nome do admin e capturar o role a partir do JWT (base64url)
+  let role = '';
   try {
     const base64url = token.split('.')[1] || '';
     const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(base64url.length / 4) * 4, '=');
     const payload = JSON.parse(atob(base64));
     document.getElementById('adminName').innerText = payload?.nome || 'Administrador';
+    role = payload?.role || '';
   } catch (e) {
     console.error("Erro ao decodificar token:", e);
   }
 
+  const isSalasAdmin = role === 'SALAS_ADMIN';
+
+  if (isSalasAdmin) {
+    document.getElementById('dars-filter').style.display = 'none';
+    document.getElementById('stat-permissionarios').previousElementSibling.innerText = 'Salas';
+    document.getElementById('stat-pendentes').previousElementSibling.innerText = 'Reservas no mês';
+    document.getElementById('stat-vencidos').previousElementSibling.innerText = 'Salas Indisponíveis';
+    document.getElementById('stat-receita').previousElementSibling.innerText = 'Próximas Reservas';
+    document.getElementById('maiores-devedores-list').closest('.card-body').querySelector('.card-title').innerText = 'Próximas Reservas';
+    document.getElementById('resumoMensalChart').closest('.card-body').querySelector('.card-title').innerText = 'Resumo Mensal de Reservas';
+  }
+
+  const meses = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+
   const fetchStats = async (tipo = '') => {
     try {
       console.log("Iniciando busca de dados do dashboard com o token:", token);
-      const params = new URLSearchParams();
-      if (tipo) params.set('tipo', tipo);
-      params.set('t', Date.now());
-      const url = `/api/admin/dashboard-stats?${params.toString()}`;
+      let url;
+      if (isSalasAdmin) {
+        url = `/api/admin/salas/dashboard-stats?t=${Date.now()}`;
+      } else {
+        const params = new URLSearchParams();
+        if (tipo) params.set('tipo', tipo);
+        params.set('t', Date.now());
+        url = `/api/admin/dashboard-stats?${params.toString()}`;
+      }
+
       const response = await fetch(url, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -151,75 +173,134 @@ window.onload = async () => {
 
       const stats = await response.json();
 
-      document.getElementById('stat-permissionarios').innerText = Number(stats.totalPermissionarios || 0).toLocaleString('pt-BR');
-      document.getElementById('stat-pendentes').innerText      = Number(stats.darsPendentes || 0).toLocaleString('pt-BR');
-      document.getElementById('stat-vencidos').innerText       = Number(stats.darsVencidos || 0).toLocaleString('pt-BR');
-      document.getElementById('stat-receita').innerText =
-        (stats.receitaPendente || 0).toLocaleString('pt-BR', {
-          style: 'currency',
-          currency: 'BRL'
+      if (isSalasAdmin) {
+        document.getElementById('stat-permissionarios').innerText = Number(stats.totalSalas || 0).toLocaleString('pt-BR');
+        document.getElementById('stat-pendentes').innerText      = Number(stats.reservasMes || 0).toLocaleString('pt-BR');
+        document.getElementById('stat-vencidos').innerText       = Number(stats.salasIndisponiveis || 0).toLocaleString('pt-BR');
+        document.getElementById('stat-receita').innerText        = Number((stats.proximasReservas || []).length).toLocaleString('pt-BR');
+
+        const resumoMensal = (stats.resumoMensal || []).slice().reverse();
+        const labels = resumoMensal.map(item => `${meses[(item.mes||1)-1]}/${item.ano}`);
+        const total = resumoMensal.map(item => Number(item.total || 0));
+        const usadas = resumoMensal.map(item => Number(item.usadas || 0));
+        const canceladas = resumoMensal.map(item => Number(item.canceladas || 0));
+
+        if (window.resumoChart) window.resumoChart.destroy();
+        const ctx = document.getElementById('resumoMensalChart').getContext('2d');
+        window.resumoChart = new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels,
+            datasets: [
+              { label: 'Total', data: total, backgroundColor: '#0d6efd' },
+              { label: 'Usadas', data: usadas, backgroundColor: '#198754' },
+              { label: 'Canceladas', data: canceladas, backgroundColor: '#dc3545' }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: { y: { beginAtZero: true } },
+            plugins: { legend: { position: 'bottom' } }
+          }
         });
 
-      const meses = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
-      const resumoMensal = (stats.resumoMensal || []).slice().reverse();
+        const resumoTable = document.getElementById('resumoMensalTable');
+        resumoTable.innerHTML = `
+          <thead>
+            <tr><th>Mês</th><th>Total</th><th>Usadas</th><th>Canceladas</th></tr>
+          </thead>
+          <tbody>
+            ${resumoMensal.map((item, idx) => `
+              <tr>
+                <td>${labels[idx]}</td>
+                <td>${total[idx].toLocaleString('pt-BR')}</td>
+                <td>${usadas[idx].toLocaleString('pt-BR')}</td>
+                <td>${canceladas[idx].toLocaleString('pt-BR')}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        `;
 
-      const labels = resumoMensal.map(item => `${meses[(item.mes||1)-1]}/${item.ano}`);
-      const emitidas = resumoMensal.map(item => Number(item.emitidas ?? 0));
-      const pagas = resumoMensal.map(item => Number(item.pagas ?? 0));
-      const vencidas = resumoMensal.map(item => Number(item.vencidas ?? 0));
-
-      if (window.resumoChart) window.resumoChart.destroy();
-      const ctx = document.getElementById('resumoMensalChart').getContext('2d');
-      window.resumoChart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-          labels,
-          datasets: [
-            { label: 'Emitidas', data: emitidas, backgroundColor: '#0d6efd' },
-            { label: 'Pagas', data: pagas, backgroundColor: '#198754' },
-            { label: 'Vencidas', data: vencidas, backgroundColor: '#dc3545' }
-          ]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          scales: { y: { beginAtZero: true } },
-          plugins: { legend: { position: 'bottom' } }
-        }
-      });
-
-      const resumoTable = document.getElementById('resumoMensalTable');
-      resumoTable.innerHTML = `
-        <thead>
-          <tr><th>Mês</th><th>Emitidas</th><th>Pagas</th><th>Vencidas</th></tr>
-        </thead>
-        <tbody>
-          ${resumoMensal.map((item, idx) => `
-            <tr>
-              <td>${labels[idx]}</td>
-              <td>${emitidas[idx].toLocaleString('pt-BR')}</td>
-              <td>${pagas[idx].toLocaleString('pt-BR')}</td>
-              <td>${vencidas[idx].toLocaleString('pt-BR')}</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      `;
-
-      const devedoresList = document.getElementById('maiores-devedores-list');
-      if (stats.maioresDevedores && stats.maioresDevedores.length > 0) {
-        const lista = (stats.maioresDevedores || []).filter(item => Number(item.total_vencido ?? item.total_devido ?? 0) > 0);
-
-        devedoresList.innerHTML = (lista.length ? lista : stats.maioresDevedores).map(item => {
-          const vencido = Number(item.total_vencido ?? item.total_devido ?? 0);
-          return `
+        const proxList = document.getElementById('maiores-devedores-list');
+        if (stats.proximasReservas && stats.proximasReservas.length > 0) {
+          proxList.innerHTML = stats.proximasReservas.map(r => `
             <li class="list-group-item d-flex justify-content-between align-items-center">
-              <small>${item.nome_empresa}</small>
-              <span class="badge bg-danger rounded-pill">${vencido.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+              <small>Sala ${r.sala_nome} - ${r.data} ${r.hora_inicio} às ${r.hora_fim}</small>
             </li>
-          `;
-        }).join('');
+          `).join('');
+        } else {
+          proxList.innerHTML = '<li class="list-group-item text-muted text-center">Nenhuma reserva encontrada.</li>';
+        }
       } else {
-        devedoresList.innerHTML = '<li class="list-group-item text-muted text-center">Nenhum devedor encontrado.</li>';
+        document.getElementById('stat-permissionarios').innerText = Number(stats.totalPermissionarios || 0).toLocaleString('pt-BR');
+        document.getElementById('stat-pendentes').innerText      = Number(stats.darsPendentes || 0).toLocaleString('pt-BR');
+        document.getElementById('stat-vencidos').innerText       = Number(stats.darsVencidos || 0).toLocaleString('pt-BR');
+        document.getElementById('stat-receita').innerText =
+          (stats.receitaPendente || 0).toLocaleString('pt-BR', {
+            style: 'currency',
+            currency: 'BRL'
+          });
+
+        const resumoMensal = (stats.resumoMensal || []).slice().reverse();
+        const labels = resumoMensal.map(item => `${meses[(item.mes||1)-1]}/${item.ano}`);
+        const emitidas = resumoMensal.map(item => Number(item.emitidas ?? 0));
+        const pagas = resumoMensal.map(item => Number(item.pagas ?? 0));
+        const vencidas = resumoMensal.map(item => Number(item.vencidas ?? 0));
+
+        if (window.resumoChart) window.resumoChart.destroy();
+        const ctx = document.getElementById('resumoMensalChart').getContext('2d');
+        window.resumoChart = new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels,
+            datasets: [
+              { label: 'Emitidas', data: emitidas, backgroundColor: '#0d6efd' },
+              { label: 'Pagas', data: pagas, backgroundColor: '#198754' },
+              { label: 'Vencidas', data: vencidas, backgroundColor: '#dc3545' }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: { y: { beginAtZero: true } },
+            plugins: { legend: { position: 'bottom' } }
+          }
+        });
+
+        const resumoTable = document.getElementById('resumoMensalTable');
+        resumoTable.innerHTML = `
+          <thead>
+            <tr><th>Mês</th><th>Emitidas</th><th>Pagas</th><th>Vencidas</th></tr>
+          </thead>
+          <tbody>
+            ${resumoMensal.map((item, idx) => `
+              <tr>
+                <td>${labels[idx]}</td>
+                <td>${emitidas[idx].toLocaleString('pt-BR')}</td>
+                <td>${pagas[idx].toLocaleString('pt-BR')}</td>
+                <td>${vencidas[idx].toLocaleString('pt-BR')}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        `;
+
+        const devedoresList = document.getElementById('maiores-devedores-list');
+        if (stats.maioresDevedores && stats.maioresDevedores.length > 0) {
+          const lista = (stats.maioresDevedores || []).filter(item => Number(item.total_vencido ?? item.total_devido ?? 0) > 0);
+
+          devedoresList.innerHTML = (lista.length ? lista : stats.maioresDevedores).map(item => {
+            const vencido = Number(item.total_vencido ?? item.total_devido ?? 0);
+            return `
+              <li class="list-group-item d-flex justify-content-between align-items-center">
+                <small>${item.nome_empresa}</small>
+                <span class="badge bg-danger rounded-pill">${vencido.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+              </li>
+            `;
+          }).join('');
+        } else {
+          devedoresList.innerHTML = '<li class="list-group-item text-muted text-center">Nenhum devedor encontrado.</li>';
+        }
       }
 
       const isMobile = window.__isMobile && window.__isMobile();
@@ -233,7 +314,15 @@ window.onload = async () => {
   };
 
   await fetchStats();
-  document.getElementById('dars-filter').addEventListener('change', (e) => fetchStats(e.target.value));
+
+  const isMobile = window.__isMobile && window.__isMobile();
+  document.getElementById('resumoMensalChart').style.display = isMobile ? 'block' : 'none';
+  document.getElementById('resumoMensalTable').style.display = isMobile ? 'none' : 'table';
+
+  if (!isSalasAdmin) {
+    document.getElementById('dars-filter').addEventListener('change', (e) => fetchStats(e.target.value));
+  }
+
 };
 </script>
 
