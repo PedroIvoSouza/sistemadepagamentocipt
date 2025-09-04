@@ -136,6 +136,22 @@ test('Lista disponibilidade retorna reservas existentes', async () => {
     });
 });
 
+test('Disponibilidade ignora reservas canceladas', async () => {
+  const reservaId = await insertReserva('2025-10-10','09:00','10:30');
+  const app = setupUserApp();
+  await supertest(app)
+    .delete(`/api/salas/reservas/${reservaId}`)
+    .set('Authorization', `Bearer ${userToken}`)
+    .expect(200);
+  await supertest(app)
+    .get('/api/salas/1/disponibilidade?data=2025-10-10')
+    .set('Authorization', `Bearer ${userToken}`)
+    .expect(200)
+    .then(res => {
+      assert.deepEqual(res.body, []);
+    });
+});
+
 test('Cancelamento próximo ao horário é permitido', async () => {
   const agora = new Date();
   const data = agora.toISOString().slice(0,10);
@@ -164,6 +180,22 @@ test('Cancelamento cria auditoria', async () => {
   assert.equal(audit[0].acao, 'CANCELAMENTO');
   const row = await allAsync('SELECT status FROM reservas_salas WHERE id = ?', [reservaId]);
   assert.equal(row[0].status, 'cancelada');
+});
+
+test('Minhas reservas ignora canceladas', async () => {
+  const reservaId = await insertReserva('2030-10-10','09:00','10:00');
+  const app = setupUserApp();
+  await supertest(app)
+    .delete(`/api/salas/reservas/${reservaId}`)
+    .set('Authorization', `Bearer ${userToken}`)
+    .expect(200);
+  await supertest(app)
+    .get('/api/salas/minhas-reservas')
+    .set('Authorization', `Bearer ${userToken}`)
+    .expect(200)
+    .then(res => {
+      assert.equal(res.body.length, 0);
+    });
 });
 
 test('Admin altera status', async () => {
