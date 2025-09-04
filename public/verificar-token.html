@@ -99,12 +99,13 @@
 
             try {
                 const response = await fetch(`/api/documentos/verify/${encodeURIComponent(token)}`);
-                if (!response.ok) {
-                    throw new Error('Documento inválido ou não encontrado.');
-                }
                 const data = await response.json();
+                if (!response.ok || !data.valid) {
+                    throw new Error(data.message || 'Documento inválido ou não encontrado.');
+                }
+                const { valid, message, ...info } = data;
                 let html = '<h4 class="mb-3">Documento válido</h4><ul class="list-group">';
-                for (const [key, value] of Object.entries(data)) {
+                for (const [key, value] of Object.entries(info)) {
                     html += `<li class="list-group-item d-flex justify-content-between"><strong>${key}</strong><span>${value}</span></li>`;
                 }
                 html += '</ul>';

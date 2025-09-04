@@ -12,6 +12,12 @@ const { uploadPdf, getDocumentStatus, downloadSignedPdf } = require('../services
 
 const router = express.Router();
 
+const TIPO_TITULO = {
+  CERTIDAO_QUITACAO: 'Certidão de Quitação',
+  advertencia: 'Advertência',
+  termo_evento: 'Termo do Evento',
+};
+
 // ===== DB setup =====
 const DB_PATH = path.resolve(process.cwd(), process.env.SQLITE_STORAGE || './sistemacipt.db');
 const db = new sqlite3.Database(DB_PATH);
@@ -77,8 +83,17 @@ router.get('/', async (_req, res) => {
 router.get('/verify/:token', async (req, res) => {
   try {
     const row = await dbGet(`SELECT * FROM documentos WHERE token=?`, [req.params.token]);
-    if (!row) return res.status(404).json({ error: 'Documento não encontrado.' });
-    res.json(row);
+    if (!row) return res.status(404).json({ valid: false, message: 'Documento não encontrado.' });
+
+    const { tipo, created_at, status, pdf_public_url } = row;
+    return res.json({
+      valid: true,
+      tipo,
+      tipo_titulo: TIPO_TITULO[tipo] || tipo,
+      created_at,
+      status,
+      pdf_public_url,
+    });
   } catch (e) {
     console.error('[documentos]/verify erro:', e.message);
     res.status(500).json({ error: 'Erro ao buscar documento.' });
