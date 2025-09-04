@@ -37,7 +37,7 @@ router.get(
         SELECT r.*, s.numero AS sala_nome
           FROM reservas_salas r
           JOIN salas_reuniao s ON s.id = r.sala_id
-         WHERE 1=1`;
+         WHERE 1=1 AND r.status != 'cancelada'`;
       const params = [];
 
       if (salaId) {
