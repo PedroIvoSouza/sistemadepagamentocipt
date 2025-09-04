@@ -552,6 +552,8 @@ const saldoISO = parcelas.length > 1
     paragrafo(
       doc,
       '1.2. Além do objeto referido no tópico anterior, o presente instrumento também tem como objeto o uso pelo(a) PERMISSIONÁRIO(A) dos equipamentos a seguir: 02 televisões em suporte; 02 caixas de som em suporte; 02 mesinhas de apoio pretas; Bolsa preta contendo todos os cabos, extensões e equipamentos de som e vídeo; Maleta preta com os 02 microfones sem fio, pilhas e respectivos cabos.'
+
+
     );
   }
 
