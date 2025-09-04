@@ -241,15 +241,12 @@ router.get('/:id/preview', authMiddleware, async (req, res) => {
     );
     if (!perm) return res.status(404).json({ error: 'Permissionário não encontrado.' });
 
-    // corrige vencimento no passado
     let guiaSource = { ...dar };
+
     if (['Vencido', 'Vencida'].includes(dar.status)) {
       const calculo = await calcularEncargosAtraso(dar);
       guiaSource.valor = calculo.valorAtualizado;
-      guiaSource.data_vencimento = calculo.novaDataVencimento || isoHojeLocal();
-    }
-    if (toISO(guiaSource.data_vencimento) < isoHojeLocal()) {
-      guiaSource.data_vencimento = isoHojeLocal();
+      return res.status(200).json({ darVencido: true, calculo });
     }
 
     const payload = buildSefazPayloadPermissionario({ perm, darLike: guiaSource });
@@ -278,21 +275,16 @@ router.post('/:id/emitir', authMiddleware, async (req, res) => {
     );
     if (!perm) return res.status(404).json({ error: 'Permissionário não encontrado.' });
 
-    // corrige vencimento no passado
     let guiaSource = { ...dar };
+
     if (['Vencido', 'Vencida'].includes(dar.status)) {
       const calculo = await calcularEncargosAtraso(dar);
       guiaSource.valor = calculo.valorAtualizado;
-      guiaSource.data_vencimento = calculo.novaDataVencimento || isoHojeLocal();
-    }
-    if (toISO(guiaSource.data_vencimento) < isoHojeLocal()) {
-      guiaSource.data_vencimento = isoHojeLocal();
+      return res.status(200).json({ darVencido: true, calculo });
     }
 
-    // Payload final para a SEFAZ
     const payload = buildSefazPayloadPermissionario({ perm, darLike: guiaSource });
 
-    // Chamada à SEFAZ
     const sefazResponse = await emitirGuiaSefaz(payload);
     // Esperado: { numeroGuia, pdfBase64, (opcional) linhaDigitavel }
     if (!sefazResponse || !sefazResponse.numeroGuia || !sefazResponse.pdfBase64) {
