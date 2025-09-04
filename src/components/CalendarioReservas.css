@@ -1,0 +1,41 @@
+.calendario-reservas {
+  font-family: 'Arial', sans-serif;
+  height: 600px;
+}
+
+/* Toolbar similar to Google Calendar */
+.rbc-toolbar {
+  background: #fff;
+  border-bottom: 1px solid #dadce0;
+  padding: 8px;
+}
+
+.rbc-toolbar button {
+  color: #1a73e8;
+  border: none;
+  background: transparent;
+  margin-right: 4px;
+}
+
+.rbc-event {
+  background-color: #1a73e8;
+  border: none;
+  font-size: 0.85rem;
+  padding: 2px 4px;
+}
+
+.event-actions {
+  float: right;
+}
+
+.event-actions button {
+  background: transparent;
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  margin-left: 4px;
+}
+
+.event-actions button.cancel {
+  color: #d93025;
+}
