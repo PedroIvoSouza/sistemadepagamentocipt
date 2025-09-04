@@ -113,6 +113,7 @@
                 <div class="modal-body">
                     <p>Este DAR está vencido há <strong id="modalDiasAtraso">...</strong> dias. Os valores foram recalculados para pagamento hoje:</p>
                     <ul class="list-group">
+                        <li class="list-group-item">Competência: <span id="modalCompetencia"></span></li>
                         <li class="list-group-item d-flex justify-content-between">Valor Original: <span id="modalValorOriginal">R$ 0,00</span></li>
                         <li class="list-group-item d-flex justify-content-between">Multa (2%): <span id="modalMulta">R$ 0,00</span></li>
                         <li class="list-group-item d-flex justify-content-between">Juros (SELIC): <span id="modalJuros">R$ 0,00</span></li>
@@ -250,7 +251,7 @@
                                 <td class="text-center"><span class="badge ${statusColor}">${dar.status}</span></td>
                                 <td class="text-center">
                                 <div class="btn-group">
-                                    <button class="btn btn-primary btn-sm emitir-btn" data-id="${dar.id}" data-status="${dar.status}">
+                                    <button class="btn btn-primary btn-sm emitir-btn" data-id="${dar.id}" data-status="${dar.status}" data-mes="${dar.mes_referencia}" data-ano="${dar.ano_referencia}">
                                     Emitir
                                     </button>
                                 </div>
@@ -272,6 +273,8 @@
                 const button = event.currentTarget;
                 const darId = button.dataset.id;
                 const darStatus = button.dataset.status;
+                const mesReferencia = button.dataset.mes;
+                const anoReferencia = button.dataset.ano;
 
                 const originalText = button.innerHTML;
                 button.disabled = true;
@@ -288,6 +291,7 @@
                         document.getElementById('modalMulta').innerText = `R$ ${calculo.multa.toFixed(2).replace('.', ',')}`;
                         document.getElementById('modalJuros').innerText = `R$ ${calculo.juros.toFixed(2).replace('.', ',')}`;
                         document.getElementById('modalValorAtualizado').innerText = `R$ ${calculo.valorAtualizado.toFixed(2).replace('.', ',')}`;
+                        document.getElementById('modalCompetencia').innerText = `${String(mesReferencia).padStart(2, '0')}/${anoReferencia}`;
                         
                         darIdParaEmitir = darId;
                         recalculateModal.show();
