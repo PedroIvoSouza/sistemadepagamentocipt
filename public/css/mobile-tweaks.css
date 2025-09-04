@@ -3,6 +3,7 @@ html, body {
   overscroll-behavior-y: contain;           /* evita pull-to-refresh em browsers compatíveis */
   -webkit-text-size-adjust: 100%;           /* evita zoom involuntário ao focar inputs */
   background: #f5f7f9;
+  overflow-x:hidden;
 }
 :root {
   --cipt-primary: #0056a0;
