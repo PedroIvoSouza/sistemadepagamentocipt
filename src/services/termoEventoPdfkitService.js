@@ -683,6 +683,12 @@ const saldoISO = parcelas.length > 1
   await finishPromise;
   console.log('[TERMO][SERVICE] PDF gravado em', filePath);
 
+  // Garantia de que o arquivo foi realmente gravado
+  if (!fs.existsSync(filePath)) {
+    console.error('[TERMO][SERVICE] Falha ao gravar PDF em', filePath);
+    throw new Error('Falha ao gerar PDF do termo do evento');
+  }
+
   // 6) Indexa (UPSERT por evento+tipo)
   const createdAt = new Date().toISOString();
   const publicUrl = `/documentos/${fileName}`;

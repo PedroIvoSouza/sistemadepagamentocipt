@@ -75,15 +75,6 @@ async function gerarAdvertenciaPdfEIndexar({ advertenciaId = null, evento = {}, 
   console.log('[ADVERTENCIA][SERVICE] gerarAdvertenciaPdfEIndexar');
   await ensureDocumentosSchema();
 
-  // Gera token caso não tenha sido fornecido
-  if (!token) {
-    try {
-      token = await gerarTokenDocumento('ADVERTENCIA', cliente.id || null, db);
-    } catch (e) {
-      console.error('[ADVERTENCIA][SERVICE] erro ao gerar token:', e.message);
-    }
-  }
-
   const publicDir = path.join(process.cwd(), 'public', 'documentos');
   fs.mkdirSync(publicDir, { recursive: true });
   const fileName = sanitizeForFilename(`Advertencia_${evento.id || 's-e'}_${cliente.nome_razao_social || 'cliente'}.pdf`);
@@ -128,6 +119,16 @@ async function gerarAdvertenciaPdfEIndexar({ advertenciaId = null, evento = {}, 
   });
   doc.end();
   await finishPromise;
+
+  if (!fs.existsSync(filePath)) {
+    console.error('[ADVERTENCIA][SERVICE] Falha ao gravar PDF em', filePath);
+    throw new Error('Falha ao gerar PDF da advertência');
+  }
+
+  // Gera token (se necessário) somente após garantir que o arquivo existe
+  if (!token) {
+    token = await gerarTokenDocumento('ADVERTENCIA', cliente.id || null, db);
+  }
 
   // Estampa o token
   if (token) {
