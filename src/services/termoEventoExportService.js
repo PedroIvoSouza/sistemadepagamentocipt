@@ -268,14 +268,19 @@ async function salvarDocumentoRegistro(buffer, tipo, permissionarioId, eventoId,
     [eventoId || null, tipo]
   );
 
-  // Gera (ou reaproveita) token
-  const token = existing?.token || (Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2));
   const createdAt = new Date().toISOString();
 
   // Monta nome & salva PDF
   const fileName = nomeArquivo(evRow, existing?.id || 'novo');
   const filePath = path.join(dir, fileName);
   fs.writeFileSync(filePath, buffer);
+
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`Falha ao gravar PDF em ${filePath}`);
+  }
+
+  // Gera (ou reaproveita) token somente após garantir o arquivo
+  const token = existing?.token || (Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2));
 
   const publicUrl = `/documentos/${fileName}`;
 
