@@ -216,8 +216,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     function cancelHandler(e) {
-        if (e.target.matches('button[data-id]')) {
-            const id = e.target.getAttribute('data-id');
+        const btn = e.target.closest('button[data-id]');
+        if (btn) {
+            const id = btn.getAttribute('data-id');
             (async () => {
                 try {
                     const res = await fetch(`/api/salas/reservas/${id}`, { method: 'DELETE', headers });
