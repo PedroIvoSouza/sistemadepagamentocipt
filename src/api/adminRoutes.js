@@ -9,6 +9,7 @@ const os = require('os');
 
 const { gerarTokenDocumento } = require('../utils/token');
 const { applyLetterhead, abntMargins } = require('../utils/pdfLetterhead');
+const generateTokenQr = require('../utils/qrcodeToken');
 
 // Middlewares
 const authMiddleware = require('../middleware/authMiddleware');
@@ -430,8 +431,8 @@ router.get(
         doc.y = doc.page.margins.top;
 
         // Token por página (sem mover o cursor do conteúdo)
-        printToken(doc, tokenDoc);
-        doc.on('pageAdded', () => printToken(doc, tokenDoc));
+        await printToken(doc, tokenDoc);
+        doc.on('pageAdded', async () => await printToken(doc, tokenDoc));
 
         // Conteúdo
         doc.fillColor('#333').fontSize(16).text('Relatório de Permissionários', { align: 'center' });
@@ -564,8 +565,8 @@ router.get(
       doc.y = doc.page.margins.top;
 
       // Token por página (sem mover o cursor do conteúdo)
-      printToken(doc, tokenDoc);
-      doc.on('pageAdded', () => printToken(doc, tokenDoc));
+      await printToken(doc, tokenDoc);
+      doc.on('pageAdded', async () => await printToken(doc, tokenDoc));
 
       // Conteúdo
       doc.fillColor('#333').fontSize(16).text('Relatório de Devedores', { align: 'center' });
@@ -658,8 +659,8 @@ router.get(
       doc.x = doc.page.margins.left;
       doc.y = doc.page.margins.top;
 
-      printToken(doc, tokenDoc);
-      doc.on('pageAdded', () => printToken(doc, tokenDoc));
+      await printToken(doc, tokenDoc);
+      doc.on('pageAdded', async () => await printToken(doc, tokenDoc));
 
       doc.fillColor('#333').fontSize(16).text('Relatório de DARs', { align: 'center' });
       doc.moveDown(2);
@@ -735,8 +736,8 @@ router.get(
 
       doc.x = doc.page.margins.left;
       doc.y = doc.page.margins.top;
-      printToken(doc, tokenDoc);
-      doc.on('pageAdded', () => printToken(doc, tokenDoc));
+      await printToken(doc, tokenDoc);
+      doc.on('pageAdded', async () => await printToken(doc, tokenDoc));
 
       doc.fillColor('#333').fontSize(16).text('Relatório DARs de Eventos', { align: 'center' });
       doc.moveDown(2);
@@ -985,7 +986,7 @@ function generateDarsTable(doc, dados) {
   }
 }
 
-function printToken(doc, token) {
+async function printToken(doc, token) {
   if (!token) return;
 
   // preserve o cursor do conteúdo
@@ -995,7 +996,14 @@ function printToken(doc, token) {
   doc.save();
   const x = doc.page.margins.left;
   const y = doc.page.height - doc.page.margins.bottom - 10; // dentro da área útil
-  doc.fontSize(8).fillColor('#222').text(`Token: ${token}`, x, y, { lineBreak: false });
+  const text = `Token: ${token}`;
+  doc.fontSize(8).fillColor('#222').text(text, x, y, { lineBreak: false });
+  const qrBuffer = await generateTokenQr(token);
+  const qrSize = 40;
+  const textWidth = doc.widthOfString(text);
+  doc.image(qrBuffer, x + textWidth + 10, y - (qrSize - 8), {
+    fit: [qrSize, qrSize],
+  });
   doc.restore();
 
   // restaura o cursor do conteúdo

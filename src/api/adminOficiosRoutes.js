@@ -7,6 +7,7 @@ const os = require('os');
 
 const { applyLetterhead, abntMargins } = require('../utils/pdfLetterhead');
 const { gerarTokenDocumento } = require('../utils/token');
+const generateTokenQr = require('../utils/qrcodeToken');
 
 const authMiddleware = require('../middleware/authMiddleware');
 const authorizeRole = require('../middleware/roleMiddleware');
@@ -23,13 +24,20 @@ const dbRun = (sql, params = []) =>
   new Promise((resolve, reject) => db.run(sql, params, function (err) { if (err) reject(err); else resolve(this); }));
 
 /* ========= Util: imprime token sem mexer no cursor do conteúdo ========= */
-function printToken(doc, token) {
+async function printToken(doc, token) {
   if (!token) return;
   const prevX = doc.x, prevY = doc.y;   // preserva cursor do conteúdo
   doc.save();
   const x = doc.page.margins.left;
   const y = doc.page.height - doc.page.margins.bottom - 10; // dentro da área útil
-  doc.fontSize(8).fillColor('#222').text(`Token: ${token}`, x, y, { lineBreak: false });
+  const text = `Token: ${token}`;
+  doc.fontSize(8).fillColor('#222').text(text, x, y, { lineBreak: false });
+  const qrBuffer = await generateTokenQr(token);
+  const qrSize = 40;
+  const textWidth = doc.widthOfString(text);
+  doc.image(qrBuffer, x + textWidth + 10, y - (qrSize - 8), {
+    fit: [qrSize, qrSize],
+  });
   doc.restore();
   doc.x = prevX; doc.y = prevY;         // restaura cursor do conteúdo
 }
@@ -80,10 +88,10 @@ router.get(
       // 5) Cursor inicial na área útil + token por página
       doc.x = doc.page.margins.left;
       doc.y = doc.page.margins.top;
-      printToken(doc, tokenDoc);
-      doc.on('pageAdded', () => {
+      await printToken(doc, tokenDoc);
+      doc.on('pageAdded', async () => {
         // applyLetterhead já está plugado no helper
-        printToken(doc, tokenDoc); // só o token aqui; nada de header/footer com text()
+        await printToken(doc, tokenDoc); // só o token aqui; nada de header/footer com text()
       });
 
       // 6) Conteúdo do ofício
