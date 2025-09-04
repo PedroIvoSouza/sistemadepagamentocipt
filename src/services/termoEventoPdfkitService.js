@@ -490,7 +490,7 @@ const saldoISO = parcelas.length > 1
   const filePath = path.join(publicDir, fileName);
 
   // 5) PDF: sem bufferPages (sem paginação pós-processamento)
-  const doc = new PDFDocument({ size: 'A4', margins: abntMargins(0.5, 0.5) });
+  const doc = new PDFDocument({ size: 'A4', margins: abntMargins(0.5, 0.5, 2) });
   const ws = fs.createWriteStream(filePath);
   doc.pipe(ws);
 

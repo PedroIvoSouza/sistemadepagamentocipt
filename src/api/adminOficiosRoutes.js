@@ -86,7 +86,7 @@ router.get(
       const tokenDoc = await gerarTokenDocumento('OFICIO', permissionarioId, db);
 
       // 3) Cria PDF com margens ABNT (+0,5cm topo/rodapé)
-      const doc = new PDFDocument({ size: 'A4', margins: abntMargins(0.5, 0.5) });
+      const doc = new PDFDocument({ size: 'A4', margins: abntMargins(0.5, 0.5, 2) });
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `attachment; filename="oficio_${permissionarioId}.pdf"`);
       res.setHeader('X-Document-Token', tokenDoc);

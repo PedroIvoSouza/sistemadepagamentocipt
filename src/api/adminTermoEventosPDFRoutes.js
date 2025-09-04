@@ -338,7 +338,7 @@ router.get(
       fs.mkdirSync(outDir, { recursive: true });
 
       // Criado já com bufferPages para paginar ao final
-      const doc = new PDFDocument({ size: 'A4', margins: abntMargins(0.5, 0.5), bufferPages: true });
+      const doc = new PDFDocument({ size: 'A4', margins: abntMargins(0.5, 0.5, 2), bufferPages: true });
 
       // Caminho final só após saber o ID (vamos gerar um temporário primeiro)
       // Estratégia: salvar como arquivo, depois stream pro response.
