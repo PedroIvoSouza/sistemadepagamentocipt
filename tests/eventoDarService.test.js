@@ -32,7 +32,7 @@ async function setupSchema(db) {
     documento TEXT,
     endereco TEXT,
     cep TEXT,
-    tipo TEXT,
+    tipo_cliente TEXT,
     valor_aluguel REAL
   );`);
   await run(db, `CREATE TABLE Eventos (
@@ -100,7 +100,11 @@ const failingHelpers = {
 };
 
 async function seedCliente(db, { tipo = 'Normal', valor = 100 } = {}) {
-  await run(db, `INSERT INTO Clientes_Eventos (nome_razao_social, documento, endereco, cep, tipo, valor_aluguel) VALUES ('Cliente', '12345678901', 'Rua A', '12345000', ?, ?);`, [tipo, valor]);
+  await run(
+    db,
+    `INSERT INTO Clientes_Eventos (nome_razao_social, documento, endereco, cep, tipo_cliente, valor_aluguel) VALUES ('Cliente', '12345678901', 'Rua A', '12345000', ?, ?);`,
+    [tipo, valor]
+  );
 }
 
 test('criarEventoComDars insere evento e dars', async () => {
