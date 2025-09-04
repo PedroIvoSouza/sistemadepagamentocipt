@@ -1,3 +1,4 @@
+// Cláusulas do termo de permissão de uso
 const termoClausulas = {
   '5.1': 'Utilizar o espaço destinado no imóvel em questão para o fim específico do evento descrito na cláusula primeira.',
   '5.2': 'Conservar o imóvel como se lhe pertencesse, fazendo com que seu uso e gozo sejam pacíficos e harmônicos.',
@@ -37,4 +38,4 @@ const termoClausulas = {
   '9.1': 'As questões decorrentes da execução deste Instrumento que não possam ser dirimidas administrativamente serão processadas e julgadas no Foro da Cidade de Maceió – AL, que prevalecerá sobre qualquer outro, por mais privilegiado que seja, para dirimir quaisquer dúvidas oriundas do presente Termo.'
 };
 
-module.exports = termoClausulas;
+module.exports = Object.freeze(termoClausulas);
