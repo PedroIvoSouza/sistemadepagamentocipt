@@ -88,7 +88,7 @@ async function imprimirTokenEmPdf(pdfBase64, token) {
   pages.forEach(page => {
     const pageWidth = page.getWidth();
     const qrX = pageWidth - qrSize - marginX;
-    const tokenY = 20;
+    const tokenY = 10;
     const avisoWidth = qrX - marginX - 10;
 
     const lines = wrapText(aviso, font, avisoFontSize, avisoWidth);
@@ -112,7 +112,7 @@ async function imprimirTokenEmPdf(pdfBase64, token) {
 
     page.drawImage(qrImage, {
       x: qrX,
-      y: 10,
+      y: 0,
       width: qrSize,
       height: qrSize,
     });

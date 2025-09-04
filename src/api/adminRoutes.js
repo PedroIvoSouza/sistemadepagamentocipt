@@ -997,13 +997,14 @@ async function printToken(doc, token) {
   const x = doc.page.margins.left;
   const qrSize = 40;
   const qrX = doc.page.width - doc.page.margins.right - qrSize;
-  const tokenY = doc.page.height - doc.page.margins.bottom - 20;
+  const baseY = doc.page.height - doc.page.margins.bottom;
   const aviso =
     'Para checar a autenticidade do documento insira o token abaixo no Portal do Permissionário que pode ser acessado através do qr code ao lado.';
   const avisoWidth = qrX - x - 10;
   doc.fontSize(7).fillColor('#222');
   const avisoHeight = doc.heightOfString(aviso, { width: avisoWidth });
-  const avisoY = tokenY - avisoHeight - 2;
+  const avisoY = baseY + 2;
+  const tokenY = avisoY + avisoHeight + 2;
   doc.text(aviso, x, avisoY, { width: avisoWidth });
 
   const text = `Token: ${token}`;
