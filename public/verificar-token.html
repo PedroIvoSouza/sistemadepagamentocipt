@@ -84,14 +84,6 @@
     <script defer src="/js/ui-kit.js"></script>
     <script defer src="/js/mobile-tweaks.js"></script>
     <script>
-        const LABELS = {
-            token: "Token",
-            tipo: "Tipo",
-            evento_id: "Evento",
-            created_at: "Criado em",
-            status: "Status"
-        };
-
         document.getElementById('verifyTokenForm').addEventListener('submit', async (event) => {
             event.preventDefault();
             const token = document.getElementById('token').value.trim();
@@ -112,15 +104,12 @@
                 const data = await response.json();
 
                 let html = data.authentic
-                    ? '<div class="alert alert-success">Documento gerado e disponível no sistema</div>'
-                    : '<div class="alert alert-warning">Registro encontrado, mas arquivo indisponível</div>';
-                html += '<dl class="row mt-3">';
-                for (const [field, label] of Object.entries(LABELS)) {
-                    if (data[field] !== undefined && data[field] !== null) {
-                        html += `<dt class="col-sm-4">${label}</dt><dd class="col-sm-8">${data[field]}</dd>`;
-                    }
+                    ? '<div class="alert alert-success">Documento autêntico</div>'
+                    : '<div class="alert alert-danger">Documento inválido</div>';
+
+                if (data.created_at) {
+                    html += `<p>Data de emissão: ${new Date(data.created_at).toLocaleDateString('pt-BR')}</p>`;
                 }
-                html += '</dl>';
 
                 if (data.authentic) {
                     if (data.signed_pdf_public_url) {
