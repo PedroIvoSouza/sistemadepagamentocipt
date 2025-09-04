@@ -251,7 +251,18 @@ router.post('/login', async (req, res) => {
         });
       }
 
-      return res.status(401).json({ error: 'Credenciais inválidas.' });
+      const senhaValida = await bcrypt.compare(senha, user.senha);
+      if (!senhaValida) {
+        return res.status(401).json({ error: 'Credenciais inválidas.' });
+      }
+
+      const payload = { id: user.id };
+      const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '8h' });
+
+      return res.status(200).json({
+        message: 'Login bem-sucedido!',
+        token
+      });
     });
   } catch (e) {
     console.error('[login] unexpected:', e);
