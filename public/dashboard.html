@@ -102,18 +102,7 @@
                     <div class="card-body p-4">
                         <h5 class="card-title">MEU ÚLTIMO DAR</h5>
                         <hr>
-                        <div class="table-responsive">
-                            <table class="table table-hover align-middle">
-                                <thead>
-                                    <tr>
-                                        <th>Competência</th><th>Vencimento</th><th class="text-end">Valor (R$)</th><th class="text-center">Status</th><th class="text-center">Ações</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="last-dar-table-body">
-                                    <tr><td colspan="5" class="text-center text-muted">Carregando...</td></tr>
-                                </tbody>
-                            </table>
-                        </div>
+                        <canvas id="lastDarChart" height="200"></canvas>
                         <div class="text-end mt-3">
                             <a href="/dars.html" class="btn btn-outline-primary">Ver Histórico Completo</a>
                         </div>
@@ -127,6 +116,7 @@
     <script defer src="/js/mobile-adapter.js"></script>
     <script defer src="/js/ui-kit.js"></script>
     <script defer src="/js/mobile-tweaks.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
         function formatarCNPJ(cnpj) {
             if (!cnpj) return '';
@@ -175,37 +165,43 @@
                 document.getElementById('stat-devido').innerText = `R$ ${stats.valorTotalDevido.replace('.', ',')}`;
             }
 
-            async function fetchLastDar() {
+            async function renderLastDarChart() {
                 const response = await fetch('/api/dars?ano=todos&status=todos', { headers });
                 if (!response.ok) throw new Error('Falha ao buscar os DARs.');
                 const dars = await response.json();
-                
-                const tableBody = document.getElementById('last-dar-table-body');
-                if (dars.length === 0) {
-                    tableBody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Nenhum DAR encontrado.</td></tr>';
-                    return;
-                }
-                
-                const ultimoDar = dars[0];
-                const statusColors = { 'Pendente': 'bg-warning text-dark', 'Pago': 'bg-success text-white', 'Vencido': 'bg-danger text-white', 'Vencida': 'bg-danger text-white' };
-                const statusColor = statusColors[ultimoDar.status] || 'bg-secondary';
-                
-                tableBody.innerHTML = `
-                    <tr>
-                        <td>${String(ultimoDar.mes_referencia).padStart(2, '0')}/${ultimoDar.ano_referencia}</td>
-                        <td>${new Date(ultimoDar.data_vencimento).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</td>
-                        <td class="text-end">${ultimoDar.valor.toFixed(2).replace('.', ',')}</td>
-                        <td class="text-center"><span class="badge ${statusColor}">${ultimoDar.status}</span></td>
-                        <td class="text-center"><a href="/dars.html" class="btn btn-primary btn-sm">Ver Detalhes</a></td>
-                    </tr>
-                `;
+
+                if (dars.length === 0) return;
+
+                const recentes = dars.slice(0, 6).reverse();
+                const labels = recentes.map(d => `${String(d.mes_referencia).padStart(2, '0')}/${d.ano_referencia}`);
+                const valores = recentes.map(d => d.valor);
+
+                const ctx = document.getElementById('lastDarChart').getContext('2d');
+                new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels,
+                        datasets: [{
+                            label: 'Valor (R$)',
+                            data: valores,
+                            backgroundColor: 'rgba(0,86,160,0.5)',
+                            borderColor: 'rgba(0,86,160,1)',
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: { legend: { display: false } },
+                        scales: { y: { beginAtZero: true } }
+                    }
+                });
             }
 
             try {
                 await Promise.all([
                     fetchUserData(),
                     fetchDashboardStats(),
-                    fetchLastDar()
+                    renderLastDarChart()
                 ]);
             } catch (error) {
                 console.error('Erro ao carregar dados do dashboard:', error);

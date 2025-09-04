@@ -154,3 +154,8 @@ input, select, textarea, button { font-size: 16px; }
     padding: 4px 0;
   }
 }
+
+#lastDarChart {
+  width: 100%;
+  max-width: 100%;
+}
