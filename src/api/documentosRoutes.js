@@ -6,6 +6,7 @@ const path     = require('path');
 const fs       = require('fs');
 const crypto   = require('crypto');
 const sqlite3  = require('sqlite3').verbose();
+const logger   = require('../utils/logger');
 
 const { gerarTermoEventoPdfkitEIndexar } = require('../services/termoEventoPdfkitService');
 const { uploadPdf, getDocumentStatus, downloadSignedPdf } = require('../services/assinafyClient');
@@ -86,6 +87,12 @@ router.get('/verify/:token', async (req, res) => {
     if (!row) return res.status(404).json({ valid: false, message: 'Documento não encontrado.' });
 
     const { tipo, created_at, status, pdf_public_url } = row;
+    const relativePath = pdf_public_url ? pdf_public_url.replace(/^\//, '') : '';
+    const abs = path.join(PUBLIC_DIR, relativePath);
+    const authentic = pdf_public_url ? fs.existsSync(abs) : false;
+    if (!authentic) {
+      logger.warn(`[documentos] Arquivo ausente para token ${req.params.token}: ${pdf_public_url}`);
+    }
     return res.json({
       valid: true,
       tipo,
@@ -93,6 +100,7 @@ router.get('/verify/:token', async (req, res) => {
       created_at,
       status,
       pdf_public_url,
+      authentic,
     });
   } catch (e) {
     console.error('[documentos]/verify erro:', e.message);
