@@ -8,6 +8,8 @@ const reservasPorSala = {
   ]
 };
 
+let nextId = 3;
+
 function calcularLivres(reservas) {
   const startDay = new Date('2024-10-02T08:00:00Z');
   const endDay = new Date('2024-10-02T18:00:00Z');
@@ -41,6 +43,31 @@ function findReserva(id) {
 
 const server = http.createServer((req, res) => {
   const { pathname } = url.parse(req.url, true);
+
+  if (req.method === 'POST' && pathname === '/reservas') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      try {
+        const dados = JSON.parse(body || '{}');
+        const { salaId, start, end } = dados || {};
+        if (!salaId || !start || !end) {
+          res.statusCode = 400;
+          res.end('Dados incompletos');
+          return;
+        }
+        const reserva = { id: nextId++, start, end };
+        if (!reservasPorSala[salaId]) reservasPorSala[salaId] = [];
+        reservasPorSala[salaId].push(reserva);
+        res.writeHead(201, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ id: reserva.id }));
+      } catch (e) {
+        res.statusCode = 400;
+        res.end('JSON inválido');
+      }
+    });
+    return;
+  }
 
   const disponibilidadeMatch = pathname.match(/^\/salas\/(\d+)\/disponibilidade$/);
   if (req.method === 'GET' && disponibilidadeMatch) {

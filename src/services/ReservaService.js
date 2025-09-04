@@ -1,6 +1,23 @@
 export default class ReservaService {
   static baseUrl = process.env.RESERVAS_API_URL || '';
 
+  static async createReserva(dados) {
+    const response = await fetch(`${this.baseUrl}/reservas`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(dados)
+    });
+
+    if (!response.ok) {
+      const message = await response.text();
+      throw new Error(message || 'Erro ao criar reserva');
+    }
+
+    return response.json();
+  }
+
   static async updateReserva(id, dados) {
     const response = await fetch(`${this.baseUrl}/reservas/${id}`, {
       method: 'PUT',

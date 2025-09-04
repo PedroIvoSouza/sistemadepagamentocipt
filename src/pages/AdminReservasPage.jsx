@@ -71,6 +71,19 @@ const AdminReservasPage = () => {
     setShowCancel(true);
   };
 
+  const handleReserve = async (event) => {
+    try {
+      await ReservaService.createReserva({
+        salaId: 1,
+        start: event.start.toISOString(),
+        end: event.end.toISOString()
+      });
+      await loadDisponibilidade();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const confirmReschedule = async () => {
     try {
       await ReservaService.updateReserva(selected.id, { start: newStart, end: newEnd });
@@ -95,7 +108,12 @@ const AdminReservasPage = () => {
 
   return (
     <div style={{ height: '80vh', padding: '1rem' }}>
-      <CalendarioReservas events={events} onReschedule={handleReschedule} onCancel={handleCancel} />
+      <CalendarioReservas
+        events={events}
+        onReschedule={handleReschedule}
+        onCancel={handleCancel}
+        onReserve={handleReserve}
+      />
 
       {showReschedule && (
         <div style={modalStyle}>
