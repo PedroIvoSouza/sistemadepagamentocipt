@@ -536,9 +536,8 @@ router.get(
          WHERE d.status <> 'Pago'
            AND DATE(d.data_vencimento) < DATE('now')
            ${tipoWhere}
-         GROUP BY p.id, p.nome_empresa, p.cnpj, p.tipo
            AND (p.tipo IS NULL OR p.tipo != 'Isento') AND COALESCE(p.valor_aluguel,0) > 0
-         GROUP BY p.id, p.nome_empresa, p.cnpj
+         GROUP BY p.id, p.nome_empresa, p.cnpj, p.tipo
          HAVING total_devido > 0
          ORDER BY total_devido DESC`,
         params
