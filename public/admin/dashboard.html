@@ -221,6 +221,10 @@ window.onload = async () => {
       } else {
         devedoresList.innerHTML = '<li class="list-group-item text-muted text-center">Nenhum devedor encontrado.</li>';
       }
+
+      const isMobile = window.__isMobile && window.__isMobile();
+      document.getElementById('resumoMensalChart').style.display = isMobile ? 'block' : 'none';
+      document.getElementById('resumoMensalTable').style.display = isMobile ? 'none' : 'table';
     } catch (error) {
       console.error('--- ERRO DETALHADO AO CARREGAR DASHBOARD ---');
       console.error(error);
@@ -229,11 +233,6 @@ window.onload = async () => {
   };
 
   await fetchStats();
-
-  const isMobile = window.__isMobile && window.__isMobile();
-  document.getElementById('resumoMensalChart').style.display = isMobile ? 'block' : 'none';
-  document.getElementById('resumoMensalTable').style.display = isMobile ? 'none' : 'table';
-
   document.getElementById('dars-filter').addEventListener('change', (e) => fetchStats(e.target.value));
 };
 </script>
