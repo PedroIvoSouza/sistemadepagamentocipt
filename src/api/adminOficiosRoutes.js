@@ -46,7 +46,7 @@ router.get(
       const { permissionarioId } = req.params;
 
       // 1) Dados do permissionário
-      const perm = await dbGet(`SELECT id, nome_empresa, cnpj, email FROM permissionarios WHERE id = ?`, [permissionarioId]);
+      const perm = await dbGet(`SELECT id, nome_empresa, cnpj, email, tipo FROM permissionarios WHERE id = ?`, [permissionarioId]);
       if (!perm) {
         return res.status(404).json({ error: 'Permissionário não encontrado.' });
       }
@@ -102,6 +102,7 @@ router.get(
       doc.font('Helvetica-Bold').text(perm.nome_empresa, { width: larguraUtil });
       doc.font('Helvetica').text(`CNPJ: ${perm.cnpj}`, { width: larguraUtil });
       if (perm.email) doc.text(`E-mail: ${perm.email}`, { width: larguraUtil });
+      if (perm.tipo) doc.text(`Tipo: ${perm.tipo}`, { width: larguraUtil });
       doc.moveDown(2);
 
       // Corpo (exemplo; ajuste ao seu texto oficial)

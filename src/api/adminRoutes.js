@@ -207,7 +207,7 @@ router.get(
       const totalPermissionarios = totalResult.count;
 
       const dataSql = `
-        SELECT id, nome_empresa, cnpj, email, telefone, telefone_cobranca, numero_sala
+        SELECT id, nome_empresa, cnpj, email, telefone, telefone_cobranca, numero_sala, tipo
         FROM permissionarios
         ${whereClause}
         ORDER BY nome_empresa ASC
@@ -264,12 +264,13 @@ router.put(
       telefone_cobranca,
       numero_sala,
       valor_aluguel,
+      tipo,
     } = req.body;
 
     try {
       const sql = `
         UPDATE permissionarios SET
-          nome_empresa = ?, cnpj = ?, email = ?, telefone = ?, telefone_cobranca = ?, numero_sala = ?, valor_aluguel = ?
+          nome_empresa = ?, cnpj = ?, email = ?, telefone = ?, telefone_cobranca = ?, numero_sala = ?, valor_aluguel = ?, tipo = ?
         WHERE id = ?
       `;
       const params = [
@@ -280,6 +281,7 @@ router.put(
         telefone_cobranca,
         numero_sala,
         valor_aluguel,
+        tipo,
         id,
       ];
 
@@ -313,13 +315,14 @@ router.post(
       telefone_cobranca,
       numero_sala,
       valor_aluguel,
+      tipo,
     } = req.body;
 
     try {
       const sql = `
         INSERT INTO permissionarios
-          (nome_empresa, cnpj, email, telefone, telefone_cobranca, numero_sala, valor_aluguel)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+          (nome_empresa, cnpj, email, telefone, telefone_cobranca, numero_sala, valor_aluguel, tipo)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `;
       const params = [
         nome_empresa,
@@ -329,6 +332,7 @@ router.post(
         telefone_cobranca,
         numero_sala,
         valor_aluguel,
+        tipo,
       ];
 
       const result = await new Promise((resolve, reject) => {
@@ -377,7 +381,7 @@ router.get(
 
       const permissionarios = await dbAll(
         `
-        SELECT nome_empresa, cnpj, email, telefone, telefone_cobranca, numero_sala
+        SELECT nome_empresa, cnpj, email, telefone, telefone_cobranca, numero_sala, tipo
         FROM permissionarios
         ${whereClause}
         ORDER BY nome_empresa ASC
@@ -456,29 +460,44 @@ router.get(
     try {
       const mes = parseInt(req.query.mes, 10);
       const ano = parseInt(req.query.ano, 10);
+      const { tipo } = req.query || {};
 
       if (!mes || mes < 1 || mes > 12 || !ano) {
         return res.status(400).json({ error: 'Parâmetros mes e ano são obrigatórios e devem ser válidos.' });
       }
 
+      let tipoWhere = '';
+      const paramsPagos = [mes, ano];
+      if (tipo) {
+        tipoWhere = ' AND p.tipo = ?';
+        paramsPagos.push(tipo);
+      }
       const pagos = await dbAll(
-        `SELECT d.permissionario_id, p.nome_empresa, p.cnpj, SUM(d.valor) AS valor
+        `SELECT d.permissionario_id, p.nome_empresa, p.cnpj, p.tipo, SUM(d.valor) AS valor
            FROM dars d
            JOIN permissionarios p ON p.id = d.permissionario_id
           WHERE d.mes_referencia = ?
             AND d.ano_referencia = ?
+            AND d.status = 'Pago'${tipoWhere}
+          GROUP BY d.permissionario_id, p.nome_empresa, p.cnpj, p.tipo`,
+        paramsPagos
             AND d.status = 'Pago'
             AND (p.tipo IS NULL OR p.tipo != 'Isento') AND COALESCE(p.valor_aluguel,0) > 0
           GROUP BY d.permissionario_id, p.nome_empresa, p.cnpj`,
         [mes, ano]
       );
 
+      const paramsDev = [mes, ano];
+      if (tipo) paramsDev.push(tipo);
       const devedores = await dbAll(
-        `SELECT d.permissionario_id, p.nome_empresa, p.cnpj, SUM(d.valor) AS valor
+        `SELECT d.permissionario_id, p.nome_empresa, p.cnpj, p.tipo, SUM(d.valor) AS valor
            FROM dars d
            JOIN permissionarios p ON p.id = d.permissionario_id
           WHERE d.mes_referencia = ?
             AND d.ano_referencia = ?
+            AND d.status IN ${OPEN_STATUSES}${tipoWhere}
+          GROUP BY d.permissionario_id, p.nome_empresa, p.cnpj, p.tipo`,
+        paramsDev
             AND d.status IN ${OPEN_STATUSES}
             AND (p.tipo IS NULL OR p.tipo != 'Isento') AND COALESCE(p.valor_aluguel,0) > 0
           GROUP BY d.permissionario_id, p.nome_empresa, p.cnpj`,
@@ -501,20 +520,32 @@ router.get(
   [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN'])],
   async (req, res) => {
     try {
+      const { tipo } = req.query || {};
+      const params = [];
+      let tipoWhere = '';
+      if (tipo) {
+        tipoWhere = ' AND p.tipo = ?';
+        params.push(tipo);
+      }
+
       const devedores = await dbAll(
         `SELECT
             p.nome_empresa,
             p.cnpj,
+            p.tipo,
             COUNT(d.id)  AS quantidade_dars,
             SUM(d.valor) AS total_devido
          FROM dars d
          JOIN permissionarios p ON p.id = d.permissionario_id
          WHERE d.status <> 'Pago'
            AND DATE(d.data_vencimento) < DATE('now')
+           ${tipoWhere}
+         GROUP BY p.id, p.nome_empresa, p.cnpj, p.tipo
            AND (p.tipo IS NULL OR p.tipo != 'Isento') AND COALESCE(p.valor_aluguel,0) > 0
          GROUP BY p.id, p.nome_empresa, p.cnpj
          HAVING total_devido > 0
-         ORDER BY total_devido DESC`
+         ORDER BY total_devido DESC`,
+        params
       );
 
       if (!devedores.length) {
@@ -588,10 +619,19 @@ router.get(
       const emissaoSelect = hasDataEmissao ? 'd.data_emissao' : 'NULL';
       const orderBy = hasDataEmissao ? 'd.data_emissao' : 'd.id';
 
+      const { tipo } = req.query || {};
+      let whereTipo = '';
+      const params = [];
+      if (tipo) {
+        whereTipo = ' AND COALESCE(p.tipo, "") = ?';
+        params.push(tipo);
+      }
+
       const dars = await dbAll(
         `SELECT
             COALESCE(p.nome_empresa, '') AS nome_empresa,
             COALESCE(p.cnpj, '') AS cnpj,
+            COALESCE(p.tipo, '') AS tipo,
             d.numero_documento,
             d.valor,
             ${emissaoSelect} AS data_emissao,
@@ -599,6 +639,9 @@ router.get(
             d.ano_referencia
          FROM dars d
          LEFT JOIN permissionarios p ON p.id = d.permissionario_id
+         WHERE d.status = 'Emitido'${whereTipo}
+         ORDER BY ${orderBy} DESC`,
+        params
          WHERE d.status = 'Emitido'
            AND (d.permissionario_id IS NULL OR ((p.tipo IS NULL OR p.tipo != 'Isento') AND COALESCE(p.valor_aluguel,0) > 0))
          ORDER BY ${orderBy} DESC`
@@ -794,12 +837,13 @@ function generateDebtorsTable(doc, data) {
   const rowHeight = 30;
   const availableWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
   const colWidths = {
-    nome: availableWidth * 0.45,
+    nome: availableWidth * 0.35,
+    tipo: availableWidth * 0.15,
     cnpj: availableWidth * 0.2,
     quantidade: availableWidth * 0.15,
-    total: availableWidth * 0.2,
+    total: availableWidth * 0.15,
   };
-  const headers = ['Razão Social', 'CNPJ', 'Qtde DARs', 'Total Devido (R$)'];
+  const headers = ['Razão Social', 'Tipo', 'CNPJ', 'Qtde DARs', 'Total Devido (R$)'];
 
   const drawRow = (row, currentY, isHeader = false) => {
     let x = doc.page.margins.left;
@@ -828,6 +872,7 @@ function generateDebtorsTable(doc, data) {
     }
     const row = [
       item.nome_empresa,
+      item.tipo || '',
       item.cnpj,
       item.quantidade_dars,
       Number(item.total_devido).toFixed(2),
@@ -896,13 +941,14 @@ function generateDarsTable(doc, dados) {
   const availableWidth =
     doc.page.width - doc.page.margins.left - doc.page.margins.right;
   const colWidths = {
-    empresa: availableWidth * 0.30,
-    cnpj: availableWidth * 0.17,
-    emissao: availableWidth * 0.17,
-    dar: availableWidth * 0.22,
-    valor: availableWidth * 0.14,
+    empresa: availableWidth * 0.25,
+    tipo: availableWidth * 0.15,
+    cnpj: availableWidth * 0.15,
+    emissao: availableWidth * 0.15,
+    dar: availableWidth * 0.15,
+    valor: availableWidth * 0.15,
   };
-  const headers = ['Empresa', 'CNPJ', 'Emissão', 'DAR/Comp.', 'Valor (R$)'];
+  const headers = ['Empresa', 'Tipo', 'CNPJ', 'Emissão', 'DAR/Comp.', 'Valor (R$)'];
 
   const drawRow = (row, currentY, isHeader = false) => {
     let x = doc.page.margins.left;
@@ -934,6 +980,7 @@ function generateDarsTable(doc, dados) {
       `${String(item.mes_referencia).padStart(2, '0')}/${item.ano_referencia}`;
     const row = [
       item.nome_empresa,
+      item.tipo,
       item.cnpj,
       item.data_emissao ? new Date(item.data_emissao).toLocaleDateString('pt-BR') : '',
       numeroComp,

@@ -45,6 +45,7 @@ const dbRunAsync = (sql, params = []) =>
     if (!colsDars.includes('linha_digitavel')) missing.push('dars.linha_digitavel');
     if (!colsPerm.includes('numero_documento')) missing.push('permissionarios.numero_documento');
     if (!colsPerm.includes('telefone_cobranca')) missing.push('permissionarios.telefone_cobranca');
+    if (!colsPerm.includes('tipo')) missing.push('permissionarios.tipo');
 
     if (missing.length) {
       console.warn('⚠️  Colunas ausentes no DB atual:', missing.join(' | '));
@@ -84,6 +85,7 @@ async function ensureSchema() {
   await ensureColumn('dars', 'emitido_por_id', 'INTEGER');
   await ensureColumn('permissionarios', 'numero_documento', 'TEXT');
   await ensureColumn('permissionarios', 'telefone_cobranca', 'TEXT');
+  await ensureColumn('permissionarios', 'tipo', 'TEXT');
 }
 // dispara sem bloquear
 ensureSchema().catch(err => console.error('[MIGRATE] Falha garantindo schema:', err));
@@ -234,7 +236,7 @@ router.get('/:id/preview', authMiddleware, async (req, res) => {
     if (!dar) return res.status(404).json({ error: 'DAR não encontrado.' });
 
     const perm = await dbGetAsync(
-      `SELECT id, nome_empresa, cnpj FROM permissionarios WHERE id = ?`,
+      `SELECT id, nome_empresa, cnpj, tipo FROM permissionarios WHERE id = ?`,
       [userId]
     );
     if (!perm) return res.status(404).json({ error: 'Permissionário não encontrado.' });
@@ -271,7 +273,7 @@ router.post('/:id/emitir', authMiddleware, async (req, res) => {
     if (!dar) return res.status(404).json({ error: 'DAR não encontrado.' });
 
     const perm = await dbGetAsync(
-      `SELECT id, nome_empresa, cnpj FROM permissionarios WHERE id = ?`,
+      `SELECT id, nome_empresa, cnpj, tipo FROM permissionarios WHERE id = ?`,
       [userId]
     );
     if (!perm) return res.status(404).json({ error: 'Permissionário não encontrado.' });
