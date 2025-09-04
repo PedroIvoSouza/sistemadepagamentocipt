@@ -94,6 +94,22 @@ html, body {
 }
 .dar-card + .dar-card { margin-top: 10px; }
 
+/* ========= CARDS DE RESERVA ========= */
+.reserva-card {
+  background: var(--cipt-card);
+  border-radius: var(--cipt-radius);
+  box-shadow: var(--cipt-shadow);
+  padding: 14px 16px;
+  margin: 12px 8px;
+  font-size: 15px;
+}
+.reserva-card + .reserva-card { margin-top: 10px; }
+.reserva-card .reserva-sala { font-weight: 600; }
+.reserva-card .reserva-data,
+.reserva-card .reserva-horas { color: var(--cipt-muted); font-size: 14px; }
+.reserva-actions { display: flex; gap: 8px; margin-top: 12px; }
+.reserva-actions .btn { flex: 1; height: max(40px, var(--tap-target)); border-radius: 12px; }
+
 .dar-meta {
   display: grid; grid-template-columns: 1fr auto; gap: 6px 10px;
   align-items: center;
@@ -125,7 +141,9 @@ html, body {
 
 /* ========= LISTAS MAIS FLUÍDAS ========= */
 .list-fluid { padding: 8px; }
-.list-fluid > .card, .list-fluid > .dar-card { margin-bottom: 12px; }
+.list-fluid > .card,
+.list-fluid > .dar-card,
+.list-fluid > .reserva-card { margin-bottom: 12px; }
 
 /* ========= BOTÕES & LINKS ========= */
 .btn-primary { background: var(--cipt-primary); border-color: var(--cipt-primary); }
