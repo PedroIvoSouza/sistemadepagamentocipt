@@ -57,15 +57,18 @@
 
     /* Larguras específicas para cada coluna */
     .table-light th:nth-child(1) { width: 4%; }  /* ID */
-    .table-light th:nth-child(2) { width: 22%; } /* Nome do Evento */
+    .table-light th:nth-child(2) { width: 20%; } /* Nome do Evento */
     .table-light th:nth-child(3) { width: 20%; } /* Cliente */
     .table-light th:nth-child(4) { width: 12%; } /* Nº Processo */
     .table-light th:nth-child(5) { width: 10%; } /* Valor Final */
     .table-light th:nth-child(6) { width: 8%; }  /* Data Final */
-    .table-light th:nth-child(7) { width: 8%; }  /* Status */
-    .table-light th:nth-child(8) { width: 5%; }  /* DAR */
-    .table-light th:nth-child(9) { width: 5%; }  /* Termo */
-    .table-light th:nth-child(10){ width: 6%; }  /* Ações */
+    .table-light th:nth-child(7) { width: 4%; }  /* TVs */
+    .table-light th:nth-child(8) { width: 4%; }  /* Caixas de Som */
+    .table-light th:nth-child(9) { width: 4%; }  /* Microfones */
+    .table-light th:nth-child(10){ width: 8%; }  /* Status */
+    .table-light th:nth-child(11){ width: 5%; }  /* DAR */
+    .table-light th:nth-child(12){ width: 5%; }  /* Termo */
+    .table-light th:nth-child(13){ width: 6%; }  /* Ações */
 
     /* Garante que os grupos de botões não quebrem a linha e fiquem centralizados */
     #eventos-table-body .btn-group {
@@ -117,12 +120,16 @@
                   <col style="width:5%">
                   <col style="width:20%">
                   <col style="width:20%">
+                  <col style="width:12%">
                   <col style="width:10%">
-                  <col style="width:10%">
-                  <col style="width:10%">
+                  <col style="width:8%">
+                  <col style="width:4%">
+                  <col style="width:4%">
+                  <col style="width:4%">
+                  <col style="width:8%">
                   <col style="width:5%">
                   <col style="width:5%">
-                  <col style="width:15%">
+                  <col style="width:6%">
                 </colgroup>
                 <thead class="table-light">
                   <tr>
@@ -132,6 +139,9 @@
                     <th>Nº Processo</th>
                     <th class="text-end">Valor Final</th>
                     <th data-sort="data_vigencia_final" class="sortable">Data Final <i class="bi bi-arrow-down-up small"></i></th>
+                    <th class="text-center"><i class="bi bi-tv"></i></th>
+                    <th class="text-center"><i class="bi bi-speaker"></i></th>
+                    <th class="text-center"><i class="bi bi-mic"></i></th>
                     <th class="text-center">Status</th>
                     <th class="text-center">DAR</th>
                     <th class="text-center">Termo</th>
@@ -875,7 +885,7 @@ async function carregarClientes(){
 }
 
   async function fetchEventos(){
-  eventosTableBody.innerHTML = '<tr><td colspan="10" class="text-center">Carregando...</td></tr>'; // colspan agora é 10
+  eventosTableBody.innerHTML = '<tr><td colspan="13" class="text-center">Carregando...</td></tr>'; // colspan agora é 13
   try{
     const params = new URLSearchParams({
       search: currentSearch,
@@ -892,13 +902,13 @@ async function carregarClientes(){
     await renderTable(data.eventos);
     renderPagination(data.totalPages, data.currentPage);
   }catch(e){
-    eventosTableBody.innerHTML = `<tr><td colspan="10" class="text-center text-danger">${e.message}</td></tr>`;
+    eventosTableBody.innerHTML = `<tr><td colspan="13" class="text-center text-danger">${e.message}</td></tr>`;
   }
 }
 
  async function renderTable(eventos){
     if (!Array.isArray(eventos) || eventos.length === 0){
-      eventosTableBody.innerHTML = '<tr><td colspan="10" class="text-center">Nenhum evento encontrado.</td></tr>';
+      eventosTableBody.innerHTML = '<tr><td colspan="13" class="text-center">Nenhum evento encontrado.</td></tr>';
       return;
     }
 
@@ -943,6 +953,9 @@ async function carregarClientes(){
             }
           </td>
           <td>${formatDateBR(evNormalizado.data_vigencia_final)}</td>
+          <td class="text-center">${evNormalizado.emprestimo_tvs ? '<i class="bi bi-tv text-primary"></i>' : ''}</td>
+          <td class="text-center">${evNormalizado.emprestimo_caixas_som ? '<i class="bi bi-speaker text-primary"></i>' : ''}</td>
+          <td class="text-center">${evNormalizado.emprestimo_microfones ? '<i class="bi bi-mic text-primary"></i>' : ''}</td>
           <td class="text-center"><span class="badge ${badge}">${status}</span></td>
           <td class="text-center">
             <button class="btn btn-sm btn-outline-primary btn-dars" title="Ver DARs" data-evento-id="${id}" data-evento-nome="${evNormalizado.nome_evento || ''}">
@@ -1039,7 +1052,7 @@ async function carregarClientes(){
     trs.forEach(tr=>{
       const id = tr.children?.[0]?.textContent?.trim();
       if (String(id)===String(eventoId)){
-        const badge = tr.querySelector('td:nth-child(6) .badge');
+        const badge = tr.querySelector('td:nth-child(10) .badge');
         if (badge){
           badge.textContent = status;
           badge.className = 'badge ' + (status==='Pago' ? 'bg-success' : ['Emitido','Reemitido'].includes(status) ? 'bg-primary' : 'bg-warning text-dark');

@@ -427,7 +427,13 @@ router.get('/', async (req, res) => {
     const totalPages = Math.ceil(total / limitNum);
 
     const dataSql = `
-      SELECT e.*, c.nome_razao_social AS nome_cliente, c.tipo_cliente
+      SELECT
+        e.*, 
+        e.emprestimo_tvs AS emprestimo_tvs,
+        e.emprestimo_caixas_som AS emprestimo_caixas_som,
+        e.emprestimo_microfones AS emprestimo_microfones,
+        c.nome_razao_social AS nome_cliente,
+        c.tipo_cliente
         FROM Eventos e
         JOIN Clientes_Eventos c ON e.id_cliente = c.id
         ${whereClause}
