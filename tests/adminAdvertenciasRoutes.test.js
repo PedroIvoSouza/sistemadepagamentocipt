@@ -166,6 +166,7 @@ test('GET /api/documentos/verify/:token retorna metadados', async () => {
   assert.equal(res.body.pdf_public_url, '/documentos/adv.pdf');
   assert.equal(res.body.status, 'gerado');
   assert.ok(res.body.created_at);
+  assert.equal(res.body.authentic, false);
   assert.ok(!('token' in res.body));
 });
 
