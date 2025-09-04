@@ -478,13 +478,11 @@ router.get(
            JOIN permissionarios p ON p.id = d.permissionario_id
           WHERE d.mes_referencia = ?
             AND d.ano_referencia = ?
-            AND d.status = 'Pago'${tipoWhere}
+            AND d.status = 'Pago'
+            AND (p.tipo IS NULL OR p.tipo != 'Isento')
+            AND COALESCE(p.valor_aluguel,0) > 0${tipoWhere}
           GROUP BY d.permissionario_id, p.nome_empresa, p.cnpj, p.tipo`,
         paramsPagos
-            AND d.status = 'Pago'
-            AND (p.tipo IS NULL OR p.tipo != 'Isento') AND COALESCE(p.valor_aluguel,0) > 0
-          GROUP BY d.permissionario_id, p.nome_empresa, p.cnpj`,
-        [mes, ano]
       );
 
       const paramsDev = [mes, ano];
@@ -495,13 +493,11 @@ router.get(
            JOIN permissionarios p ON p.id = d.permissionario_id
           WHERE d.mes_referencia = ?
             AND d.ano_referencia = ?
-            AND d.status IN ${OPEN_STATUSES}${tipoWhere}
+            AND d.status IN ${OPEN_STATUSES}
+            AND (p.tipo IS NULL OR p.tipo != 'Isento')
+            AND COALESCE(p.valor_aluguel,0) > 0${tipoWhere}
           GROUP BY d.permissionario_id, p.nome_empresa, p.cnpj, p.tipo`,
         paramsDev
-            AND d.status IN ${OPEN_STATUSES}
-            AND (p.tipo IS NULL OR p.tipo != 'Isento') AND COALESCE(p.valor_aluguel,0) > 0
-          GROUP BY d.permissionario_id, p.nome_empresa, p.cnpj`,
-        [mes, ano]
       );
 
       res.status(200).json({ pagos, devedores });
@@ -640,11 +636,10 @@ router.get(
          FROM dars d
          LEFT JOIN permissionarios p ON p.id = d.permissionario_id
          WHERE d.status = 'Emitido'${whereTipo}
+           AND (d.permissionario_id IS NULL OR ((p.tipo IS NULL OR p.tipo != 'Isento')
+                AND COALESCE(p.valor_aluguel,0) > 0))
          ORDER BY ${orderBy} DESC`,
         params
-         WHERE d.status = 'Emitido'
-           AND (d.permissionario_id IS NULL OR ((p.tipo IS NULL OR p.tipo != 'Isento') AND COALESCE(p.valor_aluguel,0) > 0))
-         ORDER BY ${orderBy} DESC`
       );
 
       if (!dars.length) {
