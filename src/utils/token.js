@@ -77,24 +77,67 @@ async function imprimirTokenEmPdf(pdfBase64, token) {
   const qrBuffer = await generateTokenQr(token);
   const qrImage = await pdfDoc.embedPng(qrBuffer);
   const pages = pdfDoc.getPages();
+
+  const aviso =
+    'Para checar a autenticidade do documento insira o token abaixo no Portal do Permissionário que pode ser acessado através do qr code ao lado.';
+  const tokenFontSize = 8;
+  const avisoFontSize = 7;
+  const marginX = 50;
+  const qrSize = 40;
+
   pages.forEach(page => {
+    const pageWidth = page.getWidth();
+    const qrX = pageWidth - qrSize - marginX;
+    const tokenY = 20;
+    const avisoWidth = qrX - marginX - 10;
+
+    const lines = wrapText(aviso, font, avisoFontSize, avisoWidth);
+    lines.forEach((line, idx) => {
+      page.drawText(line, {
+        x: marginX,
+        y: tokenY + tokenFontSize + 2 + idx * (avisoFontSize + 2),
+        size: avisoFontSize,
+        font,
+        color: rgb(0, 0, 0),
+      });
+    });
+
     page.drawText(`Token: ${token}`, {
-      x: 50,
-      y: 20,
-      size: 8,
+      x: marginX,
+      y: tokenY,
+      size: tokenFontSize,
       font,
       color: rgb(0, 0, 0),
     });
-    const qrSize = 40;
+
     page.drawImage(qrImage, {
-      x: page.getWidth() - qrSize - 50,
+      x: qrX,
       y: 10,
       width: qrSize,
       height: qrSize,
     });
   });
+
   const modified = await pdfDoc.save();
   return Buffer.from(modified).toString('base64');
+}
+
+function wrapText(text, font, size, maxWidth) {
+  const words = text.split(' ');
+  let lines = [];
+  let current = '';
+  for (const word of words) {
+    const testLine = current ? `${current} ${word}` : word;
+    const width = font.widthOfTextAtSize(testLine, size);
+    if (width <= maxWidth) {
+      current = testLine;
+    } else {
+      if (current) lines.push(current);
+      current = word;
+    }
+  }
+  if (current) lines.push(current);
+  return lines;
 }
 
 module.exports = { gerarTokenDocumento, imprimirTokenEmPdf };
