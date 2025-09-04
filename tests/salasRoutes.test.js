@@ -136,7 +136,7 @@ test('Lista disponibilidade retorna reservas existentes', async () => {
     });
 });
 
-test('Cancelamento com menos de 24h', async () => {
+test('Cancelamento próximo ao horário é permitido', async () => {
   const agora = new Date();
   const data = agora.toISOString().slice(0,10);
   const inicio = new Date(agora.getTime()+60*60*1000).toTimeString().slice(0,5);
@@ -146,7 +146,7 @@ test('Cancelamento com menos de 24h', async () => {
   await supertest(app)
     .delete(`/api/salas/reservas/${reservaId}`)
     .set('Authorization', `Bearer ${userToken}`)
-    .expect(400);
+    .expect(204);
 });
 
 test('Cancelamento cria auditoria', async () => {
