@@ -13,6 +13,7 @@ const xlsx     = require('xlsx');
 
 const { enviarEmailDefinirSenha } = require('../services/emailService');
 const { fetchCnpjData }           = require('../services/cnpjLookupService');
+const { fetchCepAddress }         = require('../services/cepLookupService');
 const adminAuthMiddleware         = require('../middleware/adminAuthMiddleware');
 const authMiddleware              = require('../middleware/authMiddleware');
 const authorizeRole               = require('../middleware/roleMiddleware');
@@ -443,6 +444,20 @@ adminRouter.post('/', async (req, res) => {
     }
   }
 
+  if (cep !== undefined && cep !== null && String(cep).trim() !== '') {
+    try {
+      const cepDigits = onlyDigits(cep);
+      const addr = await fetchCepAddress(cepDigits);
+      cep = cepDigits;
+      logradouro = addr.logradouro;
+      bairro = addr.bairro;
+      cidade = addr.localidade;
+      uf = addr.uf;
+    } catch (e) {
+      return res.status(400).json({ error: e.message || 'CEP inválido' });
+    }
+  }
+
   if (!nome_razao_social) {
     return res.status(400).json({ error: 'Campos obrigatórios estão faltando.' });
   }
@@ -454,7 +469,7 @@ adminRouter.post('/', async (req, res) => {
   const enderecoCompleto = (
     `${logradouro || ''}, ${numero || ''}` +
     `${complemento ? ' ' + complemento : ''} - ` +
-    `${bairro || ''}, ${cidade || ''} - ${(uf || '').toUpperCase()}, ${onlyDigits(cep || '')}`
+    `${bairro || ''}, ${cidade || ''} - ${(uf || '').toUpperCase()}, ${cep || ''}`
   ).replace(/\s+/g, ' ').trim();
 
   try {
@@ -469,7 +484,7 @@ adminRouter.post('/', async (req, res) => {
     const params = [
       String(nome_razao_social).trim(), tp, documento, String(email).trim(),
       telDigits || null, nomeResp, String(tipo_cliente).trim(), token, docRespDigits,
-      onlyDigits(cep || ''), logradouro || null, (numero ?? '').toString(), complemento || null,
+      cep || '', logradouro || null, (numero ?? '').toString(), complemento || null,
       bairro || null, cidade || null, (uf || '').toUpperCase(), enderecoCompleto || null
     ];
 
@@ -502,6 +517,7 @@ adminRouter.put('/:id', async (req, res) => {
   const body = req.body || {};
 
   const tp = normalizeTipoPessoa(body.tipo_pessoa);
+  const rawCep = body.cep;
   const safe = {
     nome_razao_social    : (body.nome_razao_social ?? body.nome ?? '').trim(),
     tipo_pessoa          : tp,
@@ -511,7 +527,7 @@ adminRouter.put('/:id', async (req, res) => {
     nome_responsavel     : tp === 'PJ' ? (body.nome_responsavel ?? '').trim() : null,
     tipo_cliente         : (body.tipo_cliente ?? 'Geral').trim(),
     documento_responsavel: tp === 'PJ' ? onlyDigits(body.documento_responsavel ?? '') : null,
-    cep                  : onlyDigits(body.cep ?? ''),
+    cep                  : onlyDigits(rawCep ?? ''),
     logradouro           : (body.logradouro ?? '').trim(),
     numero               : (body.numero ?? '').toString().trim(),
     complemento          : (body.complemento ?? '').trim(),
@@ -527,6 +543,18 @@ adminRouter.put('/:id', async (req, res) => {
   const docOk = (safe.tipo_pessoa === 'PF' && isCpf(safe.documento)) ||
                 (safe.tipo_pessoa === 'PJ' && isCnpj(safe.documento));
   if (!docOk) return res.status(400).json({ error: 'Documento inválido (CPF/CNPJ).' });
+
+  if (rawCep !== undefined && String(rawCep).trim() !== '') {
+    try {
+      const addr = await fetchCepAddress(safe.cep);
+      safe.logradouro = addr.logradouro;
+      safe.bairro = addr.bairro;
+      safe.cidade = addr.localidade;
+      safe.uf = addr.uf;
+    } catch (e) {
+      return res.status(400).json({ error: e.message || 'CEP inválido' });
+    }
+  }
 
   const enderecoCompleto = (
     `${safe.logradouro || ''}, ${safe.numero || ''}` +
