@@ -83,11 +83,26 @@ document.addEventListener('DOMContentLoaded', async () => {
         return livres;
     }
 
+    function formatarHora(dataHora) {
+        return new Date(dataHora).toLocaleTimeString('pt-BR', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+        });
+    }
+
+    function formatarDataBR(dataStr) {
+        const partes = dataStr.split('-');
+        return partes.length === 3 ? `${partes[2]}/${partes[1]}/${partes[0]}` : dataStr;
+    }
+
     const calendarEl = document.getElementById('calendar');
     const calendar = new FullCalendar.Calendar(calendarEl, {
         initialView: 'dayGridMonth',
         locale: 'pt-br',
         themeSystem: 'bootstrap5',
+        displayEventEnd: true,
+        eventTimeFormat: { hour: '2-digit', minute: '2-digit', hour12: false },
         dateClick: info => {
             calendar.changeView('timeGridDay', info.dateStr);
         },
@@ -108,7 +123,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (!resp.ok) throw new Error('Falha ao carregar reservas');
                 const reservas = await resp.json();
                 const eventos = reservas.map(r => ({
-                    title: 'Reservado',
+                    title: `${formatarHora(r.inicio)} - ${formatarHora(r.fim)}`,
                     start: r.inicio,
                     end: r.fim,
                     backgroundColor: '#dc3545',
@@ -188,7 +203,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     card.className = 'reserva-card';
                     card.innerHTML = `
                         <div class="reserva-sala">${r.sala}</div>
-                        <div class="reserva-data">${r.data}</div>
+                        <div class="reserva-data">${formatarDataBR(r.data)}</div>
                         <div class="reserva-horas">${r.hora_inicio} - ${r.hora_fim}</div>
                         <div class="reserva-actions">
                             <button class="btn btn-sm btn-secondary me-2" data-edit="${r.id}">Editar</button>
@@ -202,7 +217,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     const tr = document.createElement('tr');
                     tr.innerHTML = `
                         <td>${r.sala}</td>
-                        <td>${r.data}</td>
+                        <td>${formatarDataBR(r.data)}</td>
                         <td>${r.hora_inicio}</td>
                         <td>${r.hora_fim}</td>
                         <td><button class="btn btn-sm btn-secondary me-2" data-edit="${r.id}">Editar</button><button class="btn btn-sm btn-danger" data-id="${r.id}">Cancelar</button></td>`;
