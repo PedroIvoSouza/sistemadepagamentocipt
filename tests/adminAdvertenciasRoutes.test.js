@@ -167,6 +167,7 @@ test('GET /api/documentos/verify/:token retorna metadados', async () => {
   assert.equal(res.body.status, 'gerado');
   assert.ok(res.body.created_at);
   assert.equal(res.body.authentic, false);
+  assert.equal(res.body.message, 'Documento encontrado, porém o arquivo PDF não está disponível');
   assert.ok(!('token' in res.body));
 });
 
