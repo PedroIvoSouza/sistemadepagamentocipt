@@ -417,7 +417,7 @@ router.get(
       if (format === 'pdf') {
         const tokenDoc = await gerarTokenDocumento('RELATORIO_PERMISSIONARIOS', null, db);
 
-        const doc = new PDFDocument({ size: 'A4', margins: abntMargins(0.5, 0.5) });
+        const doc = new PDFDocument({ size: 'A4', margins: abntMargins(0.5, 0.5, 2) });
         res.header('Content-Type', 'application/pdf');
         res.attachment('permissionarios.pdf');
         res.setHeader('X-Document-Token', tokenDoc);
@@ -548,7 +548,7 @@ router.get(
         return res.status(404).json({ error: 'Nenhum devedor encontrado.' });
       }
 
-      const doc = new PDFDocument({ size: 'A4', margins: abntMargins(0.5, 0.5) });
+      const doc = new PDFDocument({ size: 'A4', margins: abntMargins(0.5, 0.5, 2) });
 
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'secti-'));
       const filePath = path.join(tmpDir, `relatorio_devedores_${Date.now()}.pdf`);
@@ -646,7 +646,7 @@ router.get(
         return res.status(204).send();
       }
 
-      const doc = new PDFDocument({ size: 'A4', margins: abntMargins(0.5, 0.5) });
+      const doc = new PDFDocument({ size: 'A4', margins: abntMargins(0.5, 0.5, 2) });
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'secti-'));
       const filePath = path.join(tmpDir, `relatorio_dars_${Date.now()}.pdf`);
       const stream = fs.createWriteStream(filePath);
@@ -724,7 +724,7 @@ router.get(
         return res.status(204).send();
       }
 
-      const doc = new PDFDocument({ size: 'A4', margins: abntMargins(0.5, 0.5) });
+      const doc = new PDFDocument({ size: 'A4', margins: abntMargins(0.5, 0.5, 2) });
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'secti-'));
       const filePath = path.join(tmpDir, `relatorio_eventos_dars_${Date.now()}.pdf`);
       const stream = fs.createWriteStream(filePath);

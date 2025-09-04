@@ -126,7 +126,7 @@ router.get('/:id/certidao', authMiddleware, async (req, res) => {
     const publicRelativePath = path.join('permissionarios', 'certidoes', filename); // para servir via /public
 
     // Documento PDF: padrão timbrado + ABNT + 0,5cm
-    const doc = new PDFDocument({ size: 'A4', margins: abntMargins(0.5, 0.5) });
+    const doc = new PDFDocument({ size: 'A4', margins: abntMargins(0.5, 0.5, 2) });
 
     // Coleta em buffer para salvar em disco e enviar ao cliente
     const chunks = [];

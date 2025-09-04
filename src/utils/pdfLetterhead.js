@@ -7,10 +7,11 @@ const cm = (n) => Math.round(n * CM);
 
 // ABNT: topo/esq = 3 cm; dir/baixo = 2 cm.
 // Pedido: +0,5 cm em topo/baixo → topo=3.5; baixo=2.5
-function abntMargins(extraTopCm = 0.5, extraBottomCm = 0.5) {
+// authBlockHeightCm: altura adicional reservada para bloco de autenticação (token/QR)
+function abntMargins(extraTopCm = 0.5, extraBottomCm = 0.5, authBlockHeightCm = 0) {
   return {
     top: cm(3 + extraTopCm),     // 3,5 cm ~ 99 pt
-    bottom: cm(2 + extraBottomCm), // 2,5 cm ~ 71 pt
+    bottom: cm(2 + extraBottomCm + authBlockHeightCm), // inclui espaço para bloco de autenticação
     left: cm(3),                 // 3 cm ~ 85 pt
     right: cm(2),                // 2 cm ~ 57 pt
   };

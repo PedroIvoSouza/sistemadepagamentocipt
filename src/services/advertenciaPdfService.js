@@ -80,7 +80,7 @@ async function gerarAdvertenciaPdfEIndexar({ advertenciaId = null, evento = {}, 
   const fileName = sanitizeForFilename(`Advertencia_${evento.id || 's-e'}_${cliente.nome_razao_social || 'cliente'}.pdf`);
   const filePath = path.join(publicDir, fileName);
 
-  const doc = new PDFDocument({ size: 'A4', margins: abntMargins() });
+  const doc = new PDFDocument({ size: 'A4', margins: abntMargins(0.5, 0.5, 2) });
   const ws = fs.createWriteStream(filePath);
   doc.pipe(ws);
 

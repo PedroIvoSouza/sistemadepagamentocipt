@@ -326,7 +326,7 @@ router.get(
 
       // ========== Gera PDF em memória ==========
       const letterheadPath = resolveLetterheadPath();
-      const margins = abntMargins(0.5, 0.5); // mesmo do ofício (+0,5cm topo/rodapé)
+      const margins = abntMargins(0.5, 0.5, 2); // inclui espaço para bloco de autenticação
       const doc = new PDFDocument({ size: 'A4', margins });
 
       const chunks = [];
