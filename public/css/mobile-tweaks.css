@@ -181,3 +181,6 @@ input, select, textarea, button { font-size: 16px; }
 
 #lastDarCard { display: none; }
 body.mobile #lastDarCard { display: block; }
+
+body.mobile #resumoMensalTable { display: none; }
+body:not(.mobile) #resumoMensalChart { display: none; }

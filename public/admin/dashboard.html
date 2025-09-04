@@ -80,6 +80,7 @@
                                 <hr>
                                 <div class="chart-container">
                                     <canvas id="resumoMensalChart" class="w-100 h-100"></canvas>
+                                    <table id="resumoMensalTable" class="table table-striped table-sm"></table>
                                 </div>
                             </div>
                         </div>
@@ -187,6 +188,23 @@ window.onload = async () => {
         }
       });
 
+      const resumoTable = document.getElementById('resumoMensalTable');
+      resumoTable.innerHTML = `
+        <thead>
+          <tr><th>Mês</th><th>Emitidas</th><th>Pagas</th><th>Vencidas</th></tr>
+        </thead>
+        <tbody>
+          ${resumoMensal.map((item, idx) => `
+            <tr>
+              <td>${labels[idx]}</td>
+              <td>${emitidas[idx].toLocaleString('pt-BR')}</td>
+              <td>${pagas[idx].toLocaleString('pt-BR')}</td>
+              <td>${vencidas[idx].toLocaleString('pt-BR')}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      `;
+
       const devedoresList = document.getElementById('maiores-devedores-list');
       if (stats.maioresDevedores && stats.maioresDevedores.length > 0) {
         const lista = (stats.maioresDevedores || []).filter(item => Number(item.total_vencido ?? item.total_devido ?? 0) > 0);
@@ -211,6 +229,10 @@ window.onload = async () => {
   };
 
   await fetchStats();
+
+  const isMobile = window.__isMobile && window.__isMobile();
+  document.getElementById('resumoMensalChart').style.display = isMobile ? 'block' : 'none';
+  document.getElementById('resumoMensalTable').style.display = isMobile ? 'none' : 'table';
 
   document.getElementById('dars-filter').addEventListener('change', (e) => fetchStats(e.target.value));
 };
