@@ -25,6 +25,69 @@ const allAsync = (sql, params = []) =>
     db.all(sql, params, (err, rows) => (err ? reject(err) : resolve(rows || [])));
   });
 
+// ========== Dashboard ==========
+// GET /api/admin/salas/dashboard-stats - métricas consolidadas das salas
+router.get(
+  '/dashboard-stats',
+  [authMiddleware, authorizeRole(['SUPER_ADMIN', 'SALAS_ADMIN'])],
+  async (_req, res) => {
+    try {
+      const totalSalas = (
+        await getAsync(`SELECT COUNT(*) AS count FROM salas_reuniao`)
+      )?.count || 0;
+
+      const salasIndisponiveis = (
+        await getAsync(
+          `SELECT COUNT(*) AS count FROM salas_reuniao WHERE status != 'disponivel'`
+        )
+      )?.count || 0;
+
+      const reservasMes = (
+        await getAsync(
+          `SELECT COUNT(*) AS count
+             FROM reservas_salas
+            WHERE status != 'cancelada'
+              AND strftime('%Y-%m', data) = strftime('%Y-%m', 'now','localtime')`
+        )
+      )?.count || 0;
+
+      const resumoMensal = await allAsync(`
+        SELECT
+          CAST(strftime('%Y', data) AS INTEGER) AS ano,
+          CAST(strftime('%m', data) AS INTEGER) AS mes,
+          COUNT(*) AS total,
+          SUM(CASE WHEN status = 'cancelada' THEN 1 ELSE 0 END) AS canceladas,
+          SUM(CASE WHEN checkin IS NOT NULL THEN 1 ELSE 0 END) AS usadas
+        FROM reservas_salas
+        GROUP BY ano, mes
+        ORDER BY ano DESC, mes DESC
+        LIMIT 6
+      `);
+
+      const proximasReservas = await allAsync(`
+        SELECT r.id, r.data, r.hora_inicio, r.hora_fim, r.sala_id, s.numero AS sala_nome
+          FROM reservas_salas r
+          JOIN salas_reuniao s ON s.id = r.sala_id
+         WHERE r.status != 'cancelada'
+           AND datetime(r.data || 'T' || r.hora_inicio) >= datetime('now','localtime')
+         ORDER BY r.data, r.hora_inicio
+         LIMIT 5
+      `);
+
+      res.json({
+        totalSalas: Number(totalSalas),
+        salasIndisponiveis: Number(salasIndisponiveis),
+        reservasMes: Number(reservasMes),
+        resumoMensal,
+        proximasReservas,
+      });
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ error: 'Erro ao buscar estatísticas das salas.' });
+    }
+  }
+);
+
 // ========== Reservas ==========
 // GET /api/admin/salas/reservas - lista calendário com filtros
 router.get(
