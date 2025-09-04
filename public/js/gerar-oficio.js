@@ -45,10 +45,9 @@
         const text = await res.text();
         try {
           const data = JSON.parse(text);
-          throw new Error(data.error || `Erro ${res.status} ao gerar ofício`);
+          throw new Error(data.error || `Erro ${res.status} ao gerar ofício.`);
         } catch {
-          // provavelmente HTML (ex.: login); evita "Unexpected token <"
-          throw new Error('Falha ao gerar ofício (possível sessão expirada ou erro no servidor).');
+          throw new Error(text || `Erro ${res.status} ao gerar ofício.`);
         }
       }
 
@@ -60,7 +59,7 @@
           const data = JSON.parse(text);
           throw new Error(data.error || 'Resposta inesperada (não-PDF).');
         } catch {
-          throw new Error('Resposta não é PDF (possível redirecionamento para login).');
+          throw new Error(text || 'Resposta inesperada (não-PDF).');
         }
       }
 
