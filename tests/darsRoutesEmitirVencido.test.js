@@ -7,7 +7,7 @@ const express = require('express');
 const supertest = require('supertest');
 
 // Helper to setup DB and run queries
-const setupDb = async (dbPath) => {
+const setupDb = async (dbPath, status = 'Vencido') => {
   try { fs.unlinkSync(dbPath); } catch {}
   process.env.SQLITE_STORAGE = dbPath;
   const dbModulePath = path.resolve(__dirname, '../src/database/db.js');
@@ -18,7 +18,10 @@ const setupDb = async (dbPath) => {
   await run(`CREATE TABLE permissionarios (id INTEGER PRIMARY KEY, nome_empresa TEXT, cnpj TEXT, numero_documento TEXT, telefone_cobranca TEXT, tipo TEXT)`);
   await run(`CREATE TABLE dars (id INTEGER PRIMARY KEY, permissionario_id INTEGER, data_vencimento TEXT, mes_referencia INTEGER, ano_referencia INTEGER, valor REAL, status TEXT, numero_documento TEXT, pdf_url TEXT, linha_digitavel TEXT, codigo_barras TEXT, link_pdf TEXT, data_emissao TEXT DEFAULT CURRENT_TIMESTAMP)`);
   await run(`INSERT INTO permissionarios (id, nome_empresa, cnpj) VALUES (1, 'Perm', '12345678000199')`);
-  await run(`INSERT INTO dars (id, permissionario_id, data_vencimento, mes_referencia, ano_referencia, valor, status) VALUES (20, 1, '2024-01-01', 1, 2024, 100, 'Vencido')`);
+  await run(
+    `INSERT INTO dars (id, permissionario_id, data_vencimento, mes_referencia, ano_referencia, valor, status) VALUES (20, 1, '2024-01-01', 1, 2024, 100, ?)`,
+    [status]
+  );
   return { db, run, get };
 };
 
@@ -108,4 +111,74 @@ test('retorna aviso para DAR vencido sem force', async () => {
   const res = await supertest(app).post('/20/emitir').expect(200);
   assert.equal(res.body.darVencido, true);
   assert.equal(res.body.calculo.valorAtualizado, 115);
+});
+
+test('retorna aviso para DAR reemitido vencido sem force', async () => {
+  const dbPath = path.resolve(__dirname, 'test-dars-reemitido-vencido.db');
+  await setupDb(dbPath, 'Reemitido');
+
+  process.env.COD_IBGE_MUNICIPIO = '2704302';
+  process.env.RECEITA_CODIGO_PERMISSIONARIO = '12345';
+
+  const sefazPath = path.resolve(__dirname, '../src/services/sefazService.js');
+  require.cache[sefazPath] = { exports: { emitirGuiaSefaz: async () => { throw new Error('should not call'); } } };
+
+  const tokenPath = path.resolve(__dirname, '../src/utils/token.js');
+  require.cache[tokenPath] = { exports: { gerarTokenDocumento: async () => 'TKN', imprimirTokenEmPdf: async pdf => pdf } };
+
+  const authPath = path.resolve(__dirname, '../src/middleware/authMiddleware.js');
+  require.cache[authPath] = { exports: (req, _res, next) => { req.user = { id: 1 }; next(); } };
+
+  const cobrancaPath = path.resolve(__dirname, '../src/services/cobrancaService.js');
+  require.cache[cobrancaPath] = {
+    exports: {
+      calcularEncargosAtraso: async dar => ({ valorAtualizado: dar.valor + 20, novaDataVencimento: '2024-01-15' })
+    }
+  };
+
+  const darsRoutesPath = path.resolve(__dirname, '../src/api/darsRoutes.js');
+  delete require.cache[darsRoutesPath];
+  const darsRoutes = require(darsRoutesPath);
+
+  const app = express();
+  app.use(express.json());
+  app.use('/', darsRoutes);
+
+  const res = await supertest(app).post('/20/emitir').expect(200);
+  assert.equal(res.body.darVencido, true);
+});
+
+test('retorna aviso para DAR emitido vencido sem force', async () => {
+  const dbPath = path.resolve(__dirname, 'test-dars-emitido-vencido.db');
+  await setupDb(dbPath, 'Emitido');
+
+  process.env.COD_IBGE_MUNICIPIO = '2704302';
+  process.env.RECEITA_CODIGO_PERMISSIONARIO = '12345';
+
+  const sefazPath = path.resolve(__dirname, '../src/services/sefazService.js');
+  require.cache[sefazPath] = { exports: { emitirGuiaSefaz: async () => { throw new Error('should not call'); } } };
+
+  const tokenPath = path.resolve(__dirname, '../src/utils/token.js');
+  require.cache[tokenPath] = { exports: { gerarTokenDocumento: async () => 'TKN', imprimirTokenEmPdf: async pdf => pdf } };
+
+  const authPath = path.resolve(__dirname, '../src/middleware/authMiddleware.js');
+  require.cache[authPath] = { exports: (req, _res, next) => { req.user = { id: 1 }; next(); } };
+
+  const cobrancaPath = path.resolve(__dirname, '../src/services/cobrancaService.js');
+  require.cache[cobrancaPath] = {
+    exports: {
+      calcularEncargosAtraso: async dar => ({ valorAtualizado: dar.valor + 25, novaDataVencimento: '2024-01-20' })
+    }
+  };
+
+  const darsRoutesPath = path.resolve(__dirname, '../src/api/darsRoutes.js');
+  delete require.cache[darsRoutesPath];
+  const darsRoutes = require(darsRoutesPath);
+
+  const app = express();
+  app.use(express.json());
+  app.use('/', darsRoutes);
+
+  const res = await supertest(app).post('/20/emitir').expect(200);
+  assert.equal(res.body.darVencido, true);
 });
