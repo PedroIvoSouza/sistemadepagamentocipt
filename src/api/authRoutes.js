@@ -24,45 +24,44 @@ router.post('/solicitar-acesso', (req, res) => {
   }
 
   const sql = `SELECT * FROM permissionarios WHERE ${SQL_MATCH_CNPJ}`;
-  db.get(sql, [cnpjNum], async (err, user) => {
+  db.all(sql, [cnpjNum], async (err, users) => {
     if (err) {
       console.error('[solicitar-acesso] DB error:', err);
       return res.status(500).json({ error: 'Erro interno do servidor.' });
     }
 
-    // Resposta idempotente para não vazar existência do CNPJ
-    if (!user) {
+    if (!users || users.length === 0) {
       return res.status(200).json({
         message: 'Se um CNPJ correspondente for encontrado, um e-mail será enviado.'
       });
     }
 
-    const codigo = Math.floor(100000 + Math.random() * 900000).toString(); // 6 dígitos
     const expires = Date.now() + 10 * 60 * 1000; // 10 minutos
 
     try {
-      const hashedCodigo = await bcrypt.hash(codigo, 10);
-      const updateSql = `
-        UPDATE permissionarios
-        SET senha_reset_token = ?, senha_reset_expires = ?
-        WHERE id = ?
-      `;
-      db.run(updateSql, [hashedCodigo, expires, user.id], async (uErr) => {
-        if (uErr) {
-          console.error('[solicitar-acesso] update error:', uErr);
-          return res.status(500).json({ error: 'Erro ao salvar o token de redefinição.' });
-        }
+      for (const user of users) {
+        const codigo = Math.floor(100000 + Math.random() * 900000).toString();
+        const hashedCodigo = await bcrypt.hash(codigo, 10);
+        const updateSql = `
+          UPDATE permissionarios
+          SET senha_reset_token = ?, senha_reset_expires = ?
+          WHERE id = ?
+        `;
+        await new Promise((resolve, reject) =>
+          db.run(updateSql, [hashedCodigo, expires, user.id], (uErr) =>
+            uErr ? reject(uErr) : resolve()
+          )
+        );
 
         try {
           await enviarEmailRedefinicao(user.email, codigo);
         } catch (mailErr) {
           console.error('[solicitar-acesso] email error:', mailErr);
-          // Ainda retornamos 200 para não vazar detalhes, mas logamos o erro.
         }
+      }
 
-        return res.status(200).json({
-          message: 'Se um CNPJ correspondente for encontrado, um e-mail será enviado.'
-        });
+      return res.status(200).json({
+        message: 'Se um CNPJ correspondente for encontrado, um e-mail será enviado.'
       });
     } catch (hashErr) {
       console.error('[solicitar-acesso] hash error:', hashErr);
@@ -86,31 +85,31 @@ router.post('/verificar-codigo', (req, res) => {
     SELECT * FROM permissionarios
     WHERE ${SQL_MATCH_CNPJ} AND senha_reset_expires > ?
   `;
-  db.get(sql, [cnpjNum, Date.now()], async (err, user) => {
+  db.all(sql, [cnpjNum, Date.now()], async (err, users) => {
     if (err) {
       console.error('[verificar-codigo] DB error:', err);
       return res.status(500).json({ error: 'Erro de banco de dados.' });
     }
-    if (!user) {
+    if (!users || users.length === 0) {
       return res.status(400).json({
         error: 'Código inválido, expirado ou CNPJ incorreto. Tente novamente.'
       });
     }
 
     try {
-      const match = await bcrypt.compare(codigo, user.senha_reset_token || '');
-      if (!match) {
-        return res.status(400).json({
-          error: 'Código inválido, expirado ou CNPJ incorreto. Tente novamente.'
-        });
+      for (const user of users) {
+        const match = await bcrypt.compare(codigo, user.senha_reset_token || '');
+        if (match) {
+          const payload = { id: user.id, reset: true };
+          const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '15m' });
+          return res.status(200).json({
+            message: 'Código verificado com sucesso!',
+            token
+          });
+        }
       }
-
-      const payload = { id: user.id, reset: true };
-      const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '15m' });
-
-      return res.status(200).json({
-        message: 'Código verificado com sucesso!',
-        token
+      return res.status(400).json({
+        error: 'Código inválido, expirado ou CNPJ incorreto. Tente novamente.'
       });
     } catch (cmpErr) {
       console.error('[verificar-codigo] compare error:', cmpErr);
@@ -185,32 +184,39 @@ router.post('/login', async (req, res) => {
       WHERE ${SQL_MATCH_CNPJ}
     `;
 
-    db.get(sql, [cnpjNum], async (err, user) => {
+    db.all(sql, [cnpjNum], async (err, users) => {
       if (err) {
         console.error('[login] DB error:', err);
         return res.status(500).json({ error: 'Erro de banco de dados.' });
       }
-      if (!user) {
+      if (!users || users.length === 0) {
         return res.status(401).json({ error: 'Credenciais inválidas.' });
       }
-      if (!user.senha) {
+
+      let hasPassword = false;
+      for (const user of users) {
+        if (!user.senha) {
+          continue;
+        }
+        hasPassword = true;
+        const ok = await bcrypt.compare(senha, user.senha);
+        if (ok) {
+          const payload = { id: user.id, nome: user.nome_empresa };
+          const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '8h' });
+          return res.status(200).json({
+            message: 'Login bem-sucedido!',
+            token
+          });
+        }
+      }
+
+      if (!hasPassword) {
         return res.status(401).json({
           error: 'Usuário não possui senha cadastrada. Por favor, use o "Primeiro Acesso".'
         });
       }
 
-      const ok = await bcrypt.compare(senha, user.senha);
-      if (!ok) {
-        return res.status(401).json({ error: 'Credenciais inválidas.' });
-      }
-
-      const payload = { id: user.id, nome: user.nome_empresa };
-      const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '8h' });
-
-      return res.status(200).json({
-        message: 'Login bem-sucedido!',
-        token
-      });
+      return res.status(401).json({ error: 'Credenciais inválidas.' });
     });
   } catch (e) {
     console.error('[login] unexpected:', e);
