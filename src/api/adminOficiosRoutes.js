@@ -26,20 +26,29 @@ const dbRun = (sql, params = []) =>
 /* ========= Util: imprime token sem mexer no cursor do conteúdo ========= */
 async function printToken(doc, token) {
   if (!token) return;
-  const prevX = doc.x, prevY = doc.y;   // preserva cursor do conteúdo
+  const prevX = doc.x, prevY = doc.y; // preserva cursor do conteúdo
   doc.save();
   const x = doc.page.margins.left;
-  const y = doc.page.height - doc.page.margins.bottom - 10; // dentro da área útil
-  const text = `Token: ${token}`;
-  doc.fontSize(8).fillColor('#222').text(text, x, y, { lineBreak: false });
-  const qrBuffer = await generateTokenQr(token);
   const qrSize = 40;
-  const textWidth = doc.widthOfString(text);
-  doc.image(qrBuffer, x + textWidth + 10, y - (qrSize - 8), {
+  const qrX = doc.page.width - doc.page.margins.right - qrSize;
+  const tokenY = doc.page.height - doc.page.margins.bottom - 20; // dentro da área útil
+  const aviso =
+    'Para checar a autenticidade do documento insira o token abaixo no Portal do Permissionário que pode ser acessado através do qr code ao lado.';
+  const avisoWidth = qrX - x - 10;
+  doc.fontSize(7).fillColor('#222');
+  const avisoHeight = doc.heightOfString(aviso, { width: avisoWidth });
+  const avisoY = tokenY - avisoHeight - 2;
+  doc.text(aviso, x, avisoY, { width: avisoWidth });
+
+  const text = `Token: ${token}`;
+  doc.fontSize(8).text(text, x, tokenY, { lineBreak: false });
+  const qrBuffer = await generateTokenQr(token);
+  doc.image(qrBuffer, qrX, tokenY - (qrSize - 8), {
     fit: [qrSize, qrSize],
   });
   doc.restore();
-  doc.x = prevX; doc.y = prevY;         // restaura cursor do conteúdo
+  doc.x = prevX;
+  doc.y = prevY; // restaura cursor do conteúdo
 }
 
 /* ===========================================================
