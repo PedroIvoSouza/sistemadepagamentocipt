@@ -57,41 +57,32 @@ test('POST cria advertencia grava clausulas e envia email', async () => {
   app.use(express.json());
   app.use('/api/admin', routes);
 
-  const clausulasPayload = [
-    { numero: '5.1', texto: 'Cláusula 5.1 texto' },
-    { numero: '7.3', texto: 'Cláusula 7.3 texto' }
-  ];
-  const payload = {
-    fatos: 'F',
-    clausulas: clausulasPayload,
+    const clausulasPayload = [
+      { numero: '5.22', texto: 'Cláusula 5.22 texto' },
+      { numero: '7.3', texto: 'Cláusula 7.3 texto' }
+    ];
+    const payload = {
+      fatos: 'F',
+      clausulas: clausulasPayload,
+      multa: 50,
+      gera_multa: true,
+      inapto: false,
+      prazo_recurso: '2030-01-01'
+    };
+    const res = await supertest(app).post('/api/admin/eventos/10/advertencias').send(payload).expect(201);
+    assert.ok(res.body.id);
+    assert.equal(res.body.token, 'TOK1');
 
-  const texto51 = 'Texto da clausula 5.1';
-  const texto73 = 'Texto da clausula 7.3';
-  const payload = {
-    fatos: 'F',
-    clausulas: [
-      { numero: '5.1', texto: texto51 },
-      { numero: '7.3', texto: texto73 }
-    ],
-    multa: 50,
-    gera_multa: true,
-    inapto: false,
-    prazo_recurso: '2030-01-01'
-  };
-  const res = await supertest(app).post('/api/admin/eventos/10/advertencias').send(payload).expect(201);
-  assert.ok(res.body.id);
-  assert.equal(res.body.token, 'TOK1');
+    const row = await get('SELECT multa, gera_multa, inapto, clausulas FROM advertencias WHERE id=?', [res.body.id]);
+    assert.equal(row.multa, 50);
+    assert.equal(row.gera_multa, 1);
+    assert.equal(row.inapto, 0);
+    const saved = JSON.parse(row.clausulas);
+    assert.deepEqual(saved, clausulasPayload);
 
-  const row = await get('SELECT multa, gera_multa, inapto, clausulas FROM advertencias WHERE id=?', [res.body.id]);
-  assert.equal(row.multa, 50);
-  assert.equal(row.gera_multa, 1);
-  assert.equal(row.inapto, 0);
-  const saved = JSON.parse(row.clausulas);
-  assert.deepEqual(saved, clausulasPayload);
-
-  assert.ok(pdfArgs.clausulas.some(c => c.texto === clausulasPayload[1].texto));
-  const pdfContent = fs.readFileSync(fakePath, 'utf8');
-  assert.ok(pdfContent.includes(clausulasPayload[1].texto));
+    assert.ok(pdfArgs.clausulas.some(c => c.texto === clausulasPayload[1].texto));
+    const pdfContent = fs.readFileSync(fakePath, 'utf8');
+    assert.ok(pdfContent.includes(clausulasPayload[1].texto));
 
 
   assert.ok(logs.some(l => l.includes('gerar DAR')));
