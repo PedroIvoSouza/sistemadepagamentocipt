@@ -502,8 +502,8 @@ router.get(
 
       res.status(200).json({ pagos, devedores });
     } catch (error) {
-      console.error('Erro ao gerar relatório de pagamentos:', error);
-      res.status(500).json({ error: 'Erro ao gerar relatório de pagamentos.' });
+      console.error('Erro ao gerar relatório de pagamentos:', error.stack);
+      res.status(500).json({ error: error.message || 'Erro ao gerar relatório.' });
     }
   }
 );
@@ -596,8 +596,8 @@ router.get(
         });
       });
     } catch (error) {
-      console.error('Erro ao gerar relatório devedores:', error);
-      res.status(500).json({ error: 'Erro ao gerar o relatório de devedores.' });
+      console.error('Erro ao gerar relatório devedores:', error.stack);
+      res.status(500).json({ error: error.message || 'Erro ao gerar relatório.' });
     }
   }
 );
@@ -689,8 +689,8 @@ router.get(
         });
       });
     } catch (error) {
-      console.error('Erro ao gerar relatório de DARs:', error);
-      res.status(500).json({ error: 'Erro ao gerar o relatório de DARs.' });
+      console.error('Erro ao gerar relatório de DARs:', error.stack);
+      res.status(500).json({ error: error.message || 'Erro ao gerar relatório.' });
     }
   }
 );
@@ -766,8 +766,8 @@ router.get(
         });
       });
     } catch (error) {
-      console.error('Erro ao gerar relatório de DARs de eventos:', error);
-      res.status(500).json({ error: 'Erro ao gerar o relatório de DARs de eventos.' });
+      console.error('Erro ao gerar relatório de DARs de eventos:', error.stack);
+      res.status(500).json({ error: error.message || 'Erro ao gerar relatório.' });
     }
   }
 );

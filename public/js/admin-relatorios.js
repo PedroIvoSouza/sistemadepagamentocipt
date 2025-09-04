@@ -20,14 +20,17 @@ window.addEventListener('DOMContentLoaded', () => {
       toggleLoading(btnDevedores, true);
       try {
         const resp = await fetch('/api/admin/relatorios/devedores');
-        if (!resp.ok) throw new Error('Falha ao gerar relatório');
+        if (!resp.ok) {
+          const errData = await resp.json().catch(() => ({}));
+          throw new Error(errData.error || 'Erro ao gerar relatório de devedores.');
+        }
         const blob = await resp.blob();
         const url = URL.createObjectURL(blob);
         window.open(url, '_blank');
         setTimeout(() => URL.revokeObjectURL(url), 1000);
       } catch (err) {
         console.error(err);
-        alert('Erro ao gerar relatório de devedores.');
+        alert(err.message);
       } finally {
         toggleLoading(btnDevedores, false);
       }
@@ -44,14 +47,17 @@ window.addEventListener('DOMContentLoaded', () => {
           alert('Nenhuma DAR encontrada.');
           return;
         }
-        if (!resp.ok) throw new Error('Falha ao gerar relatório');
+        if (!resp.ok) {
+          const errData = await resp.json().catch(() => ({}));
+          throw new Error(errData.error || 'Erro ao gerar relatório de DARs.');
+        }
         const blob = await resp.blob();
         const url = URL.createObjectURL(blob);
         window.open(url, '_blank');
         setTimeout(() => URL.revokeObjectURL(url), 1000);
       } catch (err) {
         console.error(err);
-        alert('Erro ao gerar relatório de DARs.');
+        alert(err.message);
       } finally {
         toggleLoading(btnDars, false);
       }
@@ -74,14 +80,17 @@ window.addEventListener('DOMContentLoaded', () => {
           alert('Nenhuma DAR encontrada.');
           return;
         }
-        if (!resp.ok) throw new Error('Falha ao gerar relatório');
+        if (!resp.ok) {
+          const errData = await resp.json().catch(() => ({}));
+          throw new Error(errData.error || 'Erro ao gerar relatório de DARs de eventos.');
+        }
         const blob = await resp.blob();
         const url = URL.createObjectURL(blob);
         window.open(url, '_blank');
         setTimeout(() => URL.revokeObjectURL(url), 1000);
       } catch (err) {
         console.error(err);
-        alert('Erro ao gerar relatório de DARs de eventos.');
+        alert(err.message);
       } finally {
         toggleLoading(btnEventosDars, false);
       }
@@ -115,8 +124,8 @@ window.addEventListener('DOMContentLoaded', () => {
       toggleLoading(btnPagamentos, true);
       try {
         const resp = await fetch(`/api/admin/relatorios/pagamentos?mes=${mes}&ano=${ano}`);
-        if (!resp.ok) throw new Error('Falha ao buscar relatório');
         const dados = await resp.json();
+        if (!resp.ok) throw new Error(dados.error || 'Erro ao buscar relatório de pagamentos.');
 
         dados.pagos.forEach((item) => {
           const tr = document.createElement('tr');
@@ -133,7 +142,7 @@ window.addEventListener('DOMContentLoaded', () => {
         if (dados.devedores.length) secaoDevedores.style.display = 'block';
       } catch (err) {
         console.error(err);
-        alert('Erro ao buscar relatório de pagamentos.');
+        alert(err.message);
       } finally {
         toggleLoading(btnPagamentos, false);
       }
