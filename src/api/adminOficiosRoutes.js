@@ -245,8 +245,8 @@ router.get(
         ['OFICIO', '', tokenDoc]
       );
     } catch (err) {
-      console.error('[adminOficios] erro:', err);
-      res.status(500).json({ error: 'Erro ao gerar ofício.' });
+      console.error('[adminOficios] erro:', err.stack || err);
+      res.status(500).json({ error: err.message || 'Erro ao gerar ofício.' });
     }
   }
 );

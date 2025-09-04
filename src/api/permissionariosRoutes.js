@@ -245,12 +245,12 @@ router.get('/:id/certidao', authMiddleware, async (req, res) => {
       );
     }
 
-    // Finaliza
-    doc.end();
-  } catch (err) {
-    console.error('[permissionarios/certidao] erro:', err);
-    res.status(500).json({ error: 'Erro ao gerar certidão.' });
-  }
+  // Finaliza
+  doc.end();
+} catch (err) {
+    console.error('[permissionarios/certidao] erro:', err.stack || err);
+    res.status(500).json({ error: err.message || 'Erro ao gerar certidão.' });
+}
 });
 
 module.exports = router;
