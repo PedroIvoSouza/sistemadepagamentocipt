@@ -4,6 +4,7 @@ import { format, parse, startOfWeek, getDay } from 'date-fns';
 import ptBR from 'date-fns/locale/pt-BR/index.js';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import './CalendarioReservas.css';
+import { MdEditCalendar, MdCancel } from 'react-icons/md';
 
 const locales = {
   'pt-BR': ptBR
@@ -34,8 +35,9 @@ const CalendarioReservas = ({ events = [], onReschedule, onCancel }) => {
               e.stopPropagation();
               onReschedule && onReschedule(event);
             }}
+            aria-label="Remarcar"
           >
-            🔁
+            <MdEditCalendar />
           </button>
           <button
             className="cancel"
@@ -44,8 +46,9 @@ const CalendarioReservas = ({ events = [], onReschedule, onCancel }) => {
               e.stopPropagation();
               onCancel && onCancel(event);
             }}
+            aria-label="Cancelar"
           >
-            ✖️
+            <MdCancel />
           </button>
         </span>
       )}
@@ -54,7 +57,7 @@ const CalendarioReservas = ({ events = [], onReschedule, onCancel }) => {
 
   const eventPropGetter = (event) => {
     const style = {
-      backgroundColor: event.status === 'livre' ? '#2ecc71' : '#e74c3c',
+      backgroundColor: event.status === 'livre' ? '#34a853' : '#ea4335',
       color: 'white'
     };
     return { style };

@@ -1,5 +1,7 @@
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap');
+
 .calendario-reservas {
-  font-family: 'Arial', sans-serif;
+  font-family: 'Roboto', sans-serif;
   height: 600px;
 }
 
@@ -15,13 +17,20 @@
   border: none;
   background: transparent;
   margin-right: 4px;
+  font-weight: 500;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.rbc-toolbar button:hover {
+  background: rgba(26, 115, 232, 0.1);
 }
 
 .rbc-event {
-  background-color: #1a73e8;
   border: none;
   font-size: 0.85rem;
   padding: 2px 4px;
+  border-radius: 4px;
 }
 
 .event-actions {
@@ -34,8 +43,10 @@
   color: #fff;
   cursor: pointer;
   margin-left: 4px;
+  display: inline-flex;
+  align-items: center;
 }
 
 .event-actions button.cancel {
-  color: #d93025;
+  color: #ea4335;
 }
