@@ -284,7 +284,11 @@ router.post('/:id/emitir', authMiddleware, async (req, res) => {
 
     let guiaSource = { ...dar };
 
-    if (['Vencido', 'Vencida'].includes(dar.status)) {
+    const vencido =
+      ['Vencido', 'Vencida'].includes(dar.status) ||
+      new Date(dar.data_vencimento) < new Date();
+
+    if (vencido) {
       const calculo = await calcularEncargosAtraso(dar);
       if (!forcar) {
         return res.status(200).json({ darVencido: true, calculo });
