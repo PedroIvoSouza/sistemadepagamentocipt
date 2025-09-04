@@ -16,7 +16,7 @@ module.exports = new Promise((resolve, reject) => {
         CREATE TABLE IF NOT EXISTS permissionarios (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             nome_empresa TEXT NOT NULL,
-            cnpj TEXT NOT NULL UNIQUE,
+            cnpj TEXT NOT NULL,
             email TEXT NOT NULL UNIQUE,
             numero_sala TEXT NOT NULL,
             valor_aluguel REAL NOT NULL,

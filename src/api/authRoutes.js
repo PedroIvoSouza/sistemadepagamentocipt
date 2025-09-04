@@ -33,6 +33,7 @@ router.post('/solicitar-acesso', (req, res) => {
 
     // Resposta idempotente para não vazar existência do CNPJ
     if (!users.length) {
+
       return res.status(200).json({
         message: 'Se um CNPJ correspondente for encontrado, um e-mail será enviado.',
         permissionarioId: null
@@ -64,29 +65,32 @@ router.post('/solicitar-acesso', (req, res) => {
     const expires = Date.now() + 10 * 60 * 1000; // 10 minutos
 
     try {
-      const hashedCodigo = await bcrypt.hash(codigo, 10);
-      const updateSql = `
-        UPDATE permissionarios
-        SET senha_reset_token = ?, senha_reset_expires = ?
-        WHERE id = ?
-      `;
-      db.run(updateSql, [hashedCodigo, expires, user.id], async (uErr) => {
-        if (uErr) {
-          console.error('[solicitar-acesso] update error:', uErr);
-          return res.status(500).json({ error: 'Erro ao salvar o token de redefinição.' });
-        }
+      for (const user of users) {
+        const codigo = Math.floor(100000 + Math.random() * 900000).toString();
+        const hashedCodigo = await bcrypt.hash(codigo, 10);
+        const updateSql = `
+          UPDATE permissionarios
+          SET senha_reset_token = ?, senha_reset_expires = ?
+          WHERE id = ?
+        `;
+        await new Promise((resolve, reject) =>
+          db.run(updateSql, [hashedCodigo, expires, user.id], (uErr) =>
+            uErr ? reject(uErr) : resolve()
+          )
+        );
 
         try {
           await enviarEmailRedefinicao(user.email, codigo);
         } catch (mailErr) {
           console.error('[solicitar-acesso] email error:', mailErr);
-          // Ainda retornamos 200 para não vazar detalhes, mas logamos o erro.
         }
+      }
 
         return res.status(200).json({
           message: 'Se um CNPJ correspondente for encontrado, um e-mail será enviado.',
           permissionarioId: user.id
         });
+
       });
     } catch (hashErr) {
       console.error('[solicitar-acesso] hash error:', hashErr);
@@ -120,6 +124,7 @@ router.post('/verificar-codigo', (req, res) => {
 
     const user = users.find((u) => u.id === Number(permissionarioId));
     if (!user) {
+
       return res.status(400).json({
         error: 'Código inválido, expirado ou dados incorretos. Tente novamente.'
       });
@@ -131,14 +136,19 @@ router.post('/verificar-codigo', (req, res) => {
         return res.status(400).json({
           error: 'Código inválido, expirado ou dados incorretos. Tente novamente.'
         });
+      for (const user of users) {
+        const match = await bcrypt.compare(codigo, user.senha_reset_token || '');
+        if (match) {
+          const payload = { id: user.id, reset: true };
+          const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '15m' });
+          return res.status(200).json({
+            message: 'Código verificado com sucesso!',
+            token
+          });
+        }
       }
-
-      const payload = { id: user.id, reset: true };
-      const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '15m' });
-
-      return res.status(200).json({
-        message: 'Código verificado com sucesso!',
-        token
+      return res.status(400).json({
+        error: 'Código inválido, expirado ou CNPJ incorreto. Tente novamente.'
       });
     } catch (cmpErr) {
       console.error('[verificar-codigo] compare error:', cmpErr);
@@ -247,18 +257,7 @@ router.post('/login', async (req, res) => {
         });
       }
 
-      const ok = await bcrypt.compare(senha, user.senha);
-      if (!ok) {
-        return res.status(401).json({ error: 'Credenciais inválidas.' });
-      }
-
-      const payload = { id: user.id, nome: user.nome_empresa };
-      const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '8h' });
-
-      return res.status(200).json({
-        message: 'Login bem-sucedido!',
-        token
-      });
+      return res.status(401).json({ error: 'Credenciais inválidas.' });
     });
   } catch (e) {
     console.error('[login] unexpected:', e);
