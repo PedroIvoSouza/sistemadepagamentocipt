@@ -93,7 +93,7 @@ test('inclui cláusulas 1.2 e 5.21 quando há empréstimo de equipamentos', asyn
   const buffer = await fs.promises.readFile(filePath);
   const parsed = await pdfParse(buffer);
   assert.match(parsed.text, /1\.2 - [\s\S]*TVs, caixas de som e microfones/);
-  assert.match(parsed.text, /5\.21 - Não é permitido desligar as tomadas das baias/);
+  assert.match(parsed.text, /5\.21 - Caso haja danos ou furtos aos equipamentos emprestados, a PERMISSIONÁRIA deverá arcar/);
   await fs.promises.unlink(filePath);
 });
 

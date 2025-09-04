@@ -632,7 +632,7 @@ const saldoISO = parcelas.length > 1
     '5.18 - É proibido o consumo de comidas/bebidas dentro do auditório ou do anfiteatro, de modo que havendo violação deverá ser aplicada multa de 10% do valor de locação, bem como deverá arcar com o valor de danos, caso tenha ocorrido.',
     '5.19 - É proibido som e/ou apresentação musical fora do auditório, sob pena de multa.',
     '5.20 - Não é permitido colocar qualquer estrutura no carpete, tanto do auditório quanto do anfiteatro.',
-    '5.21 - Caso haja danos ou furtos aos equipamentos emprestados, o(a) PERMISSIONÁRIO(A) deverá ressarcir os prejuízos correspondentes.',
+    '5.21 - Caso haja danos ou furtos aos equipamentos emprestados, a PERMISSIONÁRIA deverá arcar com todos os custos de aquisição de novos equipamentos, sem prejuízo de outras sanções cabíveis, como a aplicação de multa.',
     '5.22 - Não é permitido desligar as tomadas das baias.',
     '5.23 - Deverão constar as logomarcas da SECTI e do CIPT nos materiais de divulgação do evento.',
     '5.24 - Somente serão considerados válidos os procedimentos, condições ou benefícios expressamente previstos neste Termo. Qualquer exceção às disposições aqui estabelecidas deverá ser formalmente requerida junto à esta Secretaria responsável, por meio de solicitação oficial e devidamente fundamentada, ficando sua concessão condicionada à análise e autorização expressa da referida Secretaria, a seu exclusivo critério.',
