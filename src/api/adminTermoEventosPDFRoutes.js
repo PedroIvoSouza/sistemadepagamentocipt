@@ -339,6 +339,9 @@ router.get(
 
       // Criado já com bufferPages para paginar ao final
       const doc = new PDFDocument({ size: 'A4', margins: abntMargins(0.5, 0.5, 2), bufferPages: true });
+      doc.on('pageAdded', async () => {
+        await printToken(doc, tokenDoc);
+      });
 
       // Caminho final só após saber o ID (vamos gerar um temporário primeiro)
       // Estratégia: salvar como arquivo, depois stream pro response.
@@ -354,11 +357,6 @@ router.get(
       doc.x = doc.page.margins.left;
       doc.y = doc.page.margins.top;
       await printToken(doc, tokenDoc);
-
-      // Repetir token nas próximas
-      doc.on('pageAdded', async () => {
-        await printToken(doc, tokenDoc);
-      });
 
       // === Conteúdo ===
       const left = doc.page.margins.left;

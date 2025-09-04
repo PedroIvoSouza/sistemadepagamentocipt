@@ -418,6 +418,8 @@ router.get(
         const tokenDoc = await gerarTokenDocumento('RELATORIO_PERMISSIONARIOS', null, db);
 
         const doc = new PDFDocument({ size: 'A4', margins: abntMargins(0.5, 0.5, 2) });
+        doc.on('pageAdded', async () => await printToken(doc, tokenDoc));
+
         res.header('Content-Type', 'application/pdf');
         res.attachment('permissionarios.pdf');
         res.setHeader('X-Document-Token', tokenDoc);
@@ -432,7 +434,6 @@ router.get(
 
         // Token por página (sem mover o cursor do conteúdo)
         await printToken(doc, tokenDoc);
-        doc.on('pageAdded', async () => await printToken(doc, tokenDoc));
 
         // Conteúdo
         doc.fillColor('#333').fontSize(16).text('Relatório de Permissionários', { align: 'center' });
@@ -548,14 +549,15 @@ router.get(
         return res.status(404).json({ error: 'Nenhum devedor encontrado.' });
       }
 
+      const tokenDoc = await gerarTokenDocumento('RELATORIO_DEVEDORES', null, db);
+
       const doc = new PDFDocument({ size: 'A4', margins: abntMargins(0.5, 0.5, 2) });
+      doc.on('pageAdded', async () => await printToken(doc, tokenDoc));
 
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'secti-'));
       const filePath = path.join(tmpDir, `relatorio_devedores_${Date.now()}.pdf`);
       const stream = fs.createWriteStream(filePath);
       doc.pipe(stream);
-
-      const tokenDoc = await gerarTokenDocumento('RELATORIO_DEVEDORES', null, db);
 
       // Papel timbrado em todas as páginas
       applyLetterhead(doc, { imagePath: path.join(__dirname, '..', 'assets', 'papel-timbrado-secti.png') });
@@ -566,7 +568,6 @@ router.get(
 
       // Token por página (sem mover o cursor do conteúdo)
       await printToken(doc, tokenDoc);
-      doc.on('pageAdded', async () => await printToken(doc, tokenDoc));
 
       // Conteúdo
       doc.fillColor('#333').fontSize(16).text('Relatório de Devedores', { align: 'center' });
@@ -646,13 +647,14 @@ router.get(
         return res.status(204).send();
       }
 
+      const tokenDoc = await gerarTokenDocumento('RELATORIO_DARS', null, db);
+
       const doc = new PDFDocument({ size: 'A4', margins: abntMargins(0.5, 0.5, 2) });
+      doc.on('pageAdded', async () => await printToken(doc, tokenDoc));
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'secti-'));
       const filePath = path.join(tmpDir, `relatorio_dars_${Date.now()}.pdf`);
       const stream = fs.createWriteStream(filePath);
       doc.pipe(stream);
-
-      const tokenDoc = await gerarTokenDocumento('RELATORIO_DARS', null, db);
 
       applyLetterhead(doc, { imagePath: path.join(__dirname, '..', 'assets', 'papel-timbrado-secti.png') });
 
@@ -660,7 +662,6 @@ router.get(
       doc.y = doc.page.margins.top;
 
       await printToken(doc, tokenDoc);
-      doc.on('pageAdded', async () => await printToken(doc, tokenDoc));
 
       doc.fillColor('#333').fontSize(16).text('Relatório de DARs', { align: 'center' });
       doc.moveDown(2);
@@ -724,20 +725,20 @@ router.get(
         return res.status(204).send();
       }
 
+      const tokenDoc = await gerarTokenDocumento('RELATORIO_EVENTOS_DARS', null, db);
+
       const doc = new PDFDocument({ size: 'A4', margins: abntMargins(0.5, 0.5, 2) });
+      doc.on('pageAdded', async () => await printToken(doc, tokenDoc));
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'secti-'));
       const filePath = path.join(tmpDir, `relatorio_eventos_dars_${Date.now()}.pdf`);
       const stream = fs.createWriteStream(filePath);
       doc.pipe(stream);
-
-      const tokenDoc = await gerarTokenDocumento('RELATORIO_EVENTOS_DARS', null, db);
 
       applyLetterhead(doc, { imagePath: path.join(__dirname, '..', 'assets', 'papel-timbrado-secti.png') });
 
       doc.x = doc.page.margins.left;
       doc.y = doc.page.margins.top;
       await printToken(doc, tokenDoc);
-      doc.on('pageAdded', async () => await printToken(doc, tokenDoc));
 
       doc.fillColor('#333').fontSize(16).text('Relatório DARs de Eventos', { align: 'center' });
       doc.moveDown(2);

@@ -87,6 +87,10 @@ router.get(
 
       // 3) Cria PDF com margens ABNT (+0,5cm topo/rodapé)
       const doc = new PDFDocument({ size: 'A4', margins: abntMargins(0.5, 0.5, 2) });
+      doc.on('pageAdded', async () => {
+        // applyLetterhead já está plugado no helper
+        await printToken(doc, tokenDoc); // só o token aqui; nada de header/footer com text()
+      });
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `attachment; filename="oficio_${permissionarioId}.pdf"`);
       res.setHeader('X-Document-Token', tokenDoc);
@@ -99,10 +103,6 @@ router.get(
       doc.x = doc.page.margins.left;
       doc.y = doc.page.margins.top;
       await printToken(doc, tokenDoc);
-      doc.on('pageAdded', async () => {
-        // applyLetterhead já está plugado no helper
-        await printToken(doc, tokenDoc); // só o token aqui; nada de header/footer com text()
-      });
 
       // 6) Conteúdo do ofício
       const larguraUtil = doc.page.width - doc.page.margins.left - doc.page.margins.right;

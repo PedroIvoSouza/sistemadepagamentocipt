@@ -325,9 +325,16 @@ router.get(
       };
 
       // ========== Gera PDF em memória ==========
+      const tokenDoc = gerarToken();
       const letterheadPath = resolveLetterheadPath();
       const margins = abntMargins(0.5, 0.5, 2); // inclui espaço para bloco de autenticação
       const doc = new PDFDocument({ size: 'A4', margins });
+      doc.on('pageAdded', async () => {
+        // applyLetterhead já foi plugado pelo helper
+        doc.x = doc.page.margins.left;
+        doc.y = doc.page.margins.top;
+        await printToken(doc, tokenDoc);
+      });
 
       const chunks = [];
       doc.on('data', (c) => chunks.push(c));
@@ -336,16 +343,9 @@ router.get(
       applyLetterhead(doc, { imagePath: letterheadPath });
 
       // Cursor inicial e token a cada página
-      const tokenDoc = gerarToken();
       doc.x = doc.page.margins.left;
       doc.y = doc.page.margins.top;
       await printToken(doc, tokenDoc);
-      doc.on('pageAdded', async () => {
-        // applyLetterhead já foi plugado pelo helper
-        doc.x = doc.page.margins.left;
-        doc.y = doc.page.margins.top;
-        await printToken(doc, tokenDoc);
-      });
 
       const larguraUtil = doc.page.width - doc.page.margins.left - doc.page.margins.right;
 
