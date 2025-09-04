@@ -148,10 +148,11 @@ test('GET /api/documentos/verify/:token retorna metadados', async () => {
     token TEXT,
     evento_id INTEGER,
     pdf_public_url TEXT,
-    created_at TEXT
+    created_at TEXT,
+    status TEXT
   )`);
 
-  await run(`INSERT INTO documentos (tipo, token, evento_id, pdf_public_url, created_at) VALUES ('advertencia','TOK-VER',10,'/documentos/adv.pdf', datetime('now'))`);
+  await run(`INSERT INTO documentos (tipo, token, evento_id, pdf_public_url, created_at, status) VALUES ('advertencia','TOK-VER',10,'/documentos/adv.pdf', datetime('now'), 'gerado')`);
   const assinafyPath = path.resolve(__dirname, '../src/services/assinafyClient.js');
   require.cache[assinafyPath] = { exports: { uploadPdf: async () => {}, getDocumentStatus: async () => ({}), downloadSignedPdf: async () => Buffer.from('') } };
   const documentosRoutes = require('../src/api/documentosRoutes.js');
@@ -159,8 +160,12 @@ test('GET /api/documentos/verify/:token retorna metadados', async () => {
   app.use('/api/documentos', documentosRoutes);
 
   const res = await supertest(app).get('/api/documentos/verify/TOK-VER').expect(200);
-  assert.equal(res.body.token, 'TOK-VER');
+  assert.equal(res.body.valid, true);
   assert.equal(res.body.tipo, 'advertencia');
+  assert.equal(res.body.tipo_titulo, 'Advertência');
   assert.equal(res.body.pdf_public_url, '/documentos/adv.pdf');
+  assert.equal(res.body.status, 'gerado');
+  assert.ok(res.body.created_at);
+  assert.ok(!('token' in res.body));
 });
 
