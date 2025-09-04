@@ -4,7 +4,12 @@ const path = require('path');
 const express = require('express');
 const supertest = require('supertest');
 
-function setup(fetchCnpjMock) {
+function setup(fetchCnpjMock, fetchCepMock = async () => ({
+  logradouro: 'Rua CEP',
+  bairro: 'Bairro CEP',
+  localidade: 'Cidade CEP',
+  uf: 'SP'
+})) {
   const adminAuthPath = path.resolve(__dirname, '../src/middleware/adminAuthMiddleware.js');
   const adminAuthOrig = require.cache[adminAuthPath];
   require.cache[adminAuthPath] = { exports: (_req, _res, next) => next() };
@@ -14,6 +19,9 @@ function setup(fetchCnpjMock) {
   const cnpjPath = path.resolve(__dirname, '../src/services/cnpjLookupService.js');
   const cnpjOrig = require.cache[cnpjPath];
   require.cache[cnpjPath] = { exports: { fetchCnpjData: fetchCnpjMock } };
+  const cepPath = path.resolve(__dirname, '../src/services/cepLookupService.js');
+  const cepOrig = require.cache[cepPath];
+  require.cache[cepPath] = { exports: { fetchCepAddress: fetchCepMock } };
   const assinafyPath = path.resolve(__dirname, '../src/services/assinafyClient.js');
   const assinafyOrig = require.cache[assinafyPath];
   require.cache[assinafyPath] = { exports: { uploadPdf: async () => {} } };
@@ -46,6 +54,7 @@ function setup(fetchCnpjMock) {
   require.cache[adminAuthPath] = adminAuthOrig;
   require.cache[emailPath] = emailOrig;
   require.cache[cnpjPath] = cnpjOrig;
+  require.cache[cepPath] = cepOrig;
   require.cache[sqlite3Path] = sqlite3Orig;
   require.cache[assinafyPath] = assinafyOrig;
   require.cache[termoPath] = termoOrig;
@@ -74,10 +83,10 @@ test('preenche dados do CNPJ e permite sobrescrever', async () => {
   assert.match(res.body.message, /Cliente criado/);
   const params = runCalls[0];
   assert.equal(params[0], 'API RS');
-  assert.equal(params[10], 'Rua Manual');
+  assert.equal(params[10], 'Rua CEP');
   assert.equal(params[9], '12345678');
-  assert.equal(params[13], 'Bairro API');
-  assert.equal(params[14], 'Cidade API');
+  assert.equal(params[13], 'Bairro CEP');
+  assert.equal(params[14], 'Cidade CEP');
   assert.equal(params[15], 'SP');
 });
 
