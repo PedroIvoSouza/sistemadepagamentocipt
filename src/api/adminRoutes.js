@@ -186,7 +186,7 @@ router.get(
 // GET /api/admin/permissionarios
 router.get(
   '/permissionarios',
-  [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN'])],
+  [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN', 'SALAS_ADMIN'])],
   async (req, res) => {
     try {
       const { search = '', page = 1, limit = 10 } = req.query;
@@ -230,7 +230,7 @@ router.get(
 // GET /api/admin/permissionarios/:id
 router.get(
   '/permissionarios/:id',
-  [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN'])],
+  [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN', 'SALAS_ADMIN'])],
   async (req, res) => {
     try {
       const { id } = req.params;
@@ -253,7 +253,7 @@ router.get(
 // PUT /api/admin/permissionarios/:id
 router.put(
   '/permissionarios/:id',
-  [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN'])],
+  [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN', 'SALAS_ADMIN'])],
   async (req, res) => {
     const { id } = req.params;
     const {
@@ -305,7 +305,7 @@ router.put(
 // POST /api/admin/permissionarios
 router.post(
   '/permissionarios',
-  [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN'])],
+  [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN', 'SALAS_ADMIN'])],
   async (req, res) => {
     const {
       nome_empresa,
@@ -363,7 +363,7 @@ router.post(
    =========================================================== */
 router.get(
   '/permissionarios/export/:format',
-  [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN'])],
+  [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN', 'SALAS_ADMIN'])],
   async (req, res) => {
     try {
       const { format } = req.params;
