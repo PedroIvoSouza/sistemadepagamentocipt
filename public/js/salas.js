@@ -123,9 +123,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (!resp.ok) throw new Error('Falha ao carregar reservas');
             const reservas = await resp.json();
             reservasCache = reservas;
+            const agora = new Date();
             if (usarCards) {
                 reservasCards.innerHTML = '';
                 reservas.forEach(r => {
+                    const inicio = new Date(`${r.data}T${r.hora_inicio}`);
+                    const podeCancelar = inicio.getTime() - agora.getTime() >= 24 * 60 * 60 * 1000;
                     const card = document.createElement('div');
                     card.className = 'reserva-card';
                     card.innerHTML = `
@@ -134,20 +137,22 @@ document.addEventListener('DOMContentLoaded', async () => {
                         <div class="reserva-horas">${r.hora_inicio} - ${r.hora_fim}</div>
                         <div class="reserva-actions">
                             <button class="btn btn-sm btn-secondary me-2" data-edit="${r.id}">Editar</button>
-                            <button class="btn btn-sm btn-danger" data-id="${r.id}">Cancelar</button>
+                            <button class="btn btn-sm btn-danger" data-id="${r.id}" ${podeCancelar ? '' : 'disabled title="Cancelamentos permitidos até 24h antes do início"'}>Cancelar</button>
                         </div>`;
                     reservasCards.appendChild(card);
                 });
             } else {
                 reservasBody.innerHTML = '';
                 reservas.forEach(r => {
+                    const inicio = new Date(`${r.data}T${r.hora_inicio}`);
+                    const podeCancelar = inicio.getTime() - agora.getTime() >= 24 * 60 * 60 * 1000;
                     const tr = document.createElement('tr');
                     tr.innerHTML = `
                         <td>${r.sala}</td>
                         <td>${r.data}</td>
                         <td>${r.hora_inicio}</td>
                         <td>${r.hora_fim}</td>
-                        <td><button class="btn btn-sm btn-secondary me-2" data-edit="${r.id}">Editar</button><button class="btn btn-sm btn-danger" data-id="${r.id}">Cancelar</button></td>`;
+                        <td><button class="btn btn-sm btn-secondary me-2" data-edit="${r.id}">Editar</button><button class="btn btn-sm btn-danger" data-id="${r.id}" ${podeCancelar ? '' : 'disabled title="Cancelamentos permitidos até 24h antes do início"'}>Cancelar</button></td>`;
                     reservasBody.appendChild(tr);
                 });
             }
@@ -163,7 +168,14 @@ document.addEventListener('DOMContentLoaded', async () => {
             (async () => {
                 try {
                     const res = await fetch(`/api/salas/reservas/${id}`, { method: 'DELETE', headers });
-                    if (!res.ok) throw new Error('Erro ao cancelar');
+                    if (!res.ok) {
+                        let msg = 'Erro ao cancelar';
+                        try {
+                            const data = await res.json();
+                            msg = data.error || data.message || msg;
+                        } catch {}
+                        throw new Error(msg);
+                    }
                     calendar.refetchEvents();
                     carregarReservas();
                 } catch (err) {
