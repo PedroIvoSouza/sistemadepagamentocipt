@@ -85,11 +85,11 @@ async function gerarDarsEEnviarNotificacoes() {
       .toISOString()
       .slice(0, 10);
 
-    // Busca permissionários (filtrando se TEST_PERMISSIONARIO_ID estiver setado)
-    let sql = `SELECT * FROM permissionarios`;
-    let params = [];
+    // Busca permissionários (filtrando Isentos ou valor_aluguel zerado)
+    let sql = `SELECT * FROM permissionarios WHERE (tipo IS NULL OR tipo != 'Isento') AND COALESCE(valor_aluguel,0) > 0`;
+    const params = [];
     if (Number.isInteger(TEST_PERMISSIONARIO_ID)) {
-      sql += ` WHERE id = ?`;
+      sql += ` AND id = ?`;
       params.push(TEST_PERMISSIONARIO_ID);
     }
 

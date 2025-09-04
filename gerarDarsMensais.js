@@ -36,12 +36,16 @@ async function gerarDarsEEnviarNotificacoes() {
         const dataVencimento = getUltimoDiaUtil(anoReferencia, mesReferencia);
         const dataVencimentoStr = dataVencimento.toISOString().split('T')[0]; // Formato AAAA-MM-DD
 
-        // 1. Busca todos os permissionários no banco
+        // 1. Busca permissionários ativos (ignora isentos ou com valor_aluguel zerado)
         const permissionarios = await new Promise((resolve, reject) => {
-            db.all(`SELECT * FROM permissionarios`, [], (err, rows) => {
-                if (err) reject(err);
-                resolve(rows);
-            });
+            db.all(
+                `SELECT * FROM permissionarios WHERE (tipo IS NULL OR tipo != 'Isento') AND COALESCE(valor_aluguel,0) > 0`,
+                [],
+                (err, rows) => {
+                    if (err) reject(err);
+                    resolve(rows);
+                }
+            );
         });
 
         console.log(`[ROBÔ] Encontrados ${permissionarios.length} permissionários. Gerando DARs para ${mesReferencia}/${anoReferencia}...`);

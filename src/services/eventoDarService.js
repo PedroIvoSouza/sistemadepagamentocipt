@@ -81,11 +81,27 @@ async function criarEventoComDars(db, data, helpers) {
     justificativaGratuito,
   } = data;
 
-  if (!idCliente || !nomeEvento || (!eventoGratuito && (!Array.isArray(parcelas) || parcelas.length === 0))) {
+  if (!idCliente || !nomeEvento) {
     throw new Error('Campos obrigatórios estão faltando.');
   }
 
-  if (!eventoGratuito) {
+  const cliente = await dbGet(
+    db,
+    `SELECT nome_razao_social, documento, endereco, cep, tipo, valor_aluguel FROM Clientes_Eventos WHERE id = ?`,
+    [idCliente]
+  );
+  if (!cliente) throw new Error(`Cliente com ID ${idCliente} não foi encontrado no banco.`);
+
+  const clienteIsento = cliente.tipo === 'Isento' || Number(cliente.valor_aluguel) === 0;
+  let eventoGratuitoFlag = eventoGratuito || clienteIsento;
+  let justificativa = justificativaGratuito;
+  if (clienteIsento && !justificativa) justificativa = 'Isento';
+
+  if (!eventoGratuitoFlag && (!Array.isArray(parcelas) || parcelas.length === 0)) {
+    throw new Error('Campos obrigatórios estão faltando.');
+  }
+
+  if (!eventoGratuitoFlag) {
     const somaParcelas = parcelas.reduce((acc, p) => acc + (Number(p.valor) || 0), 0);
     if (Math.abs(somaParcelas - Number(valorFinal || 0)) > 0.01) {
       throw new Error(`A soma das parcelas (R$ ${somaParcelas.toFixed(2)}) não corresponde ao Valor Final (R$ ${Number(valorFinal||0).toFixed(2)}).`);
@@ -108,52 +124,44 @@ async function criarEventoComDars(db, data, helpers) {
       'numero_processo', 'numero_termo', 'remarcacao_solicitada', 'datas_evento_solicitada', 'data_aprovacao_remarcacao',
       'evento_gratuito', 'justificativa_gratuito', 'status'
     ];
-      const eventoStmt = await dbRun(
-        db,
-        `INSERT INTO Eventos (${colsEvento.join(', ')}) VALUES (${colsEvento.map(() => '?').join(', ')})`,
-        [
-          idCliente,
-          nomeEvento,
-          JSON.stringify(espacosUtilizados || []),
-          areaM2 != null ? Number(areaM2) : null,
-          datasEventoStr,
-          datasEventoStr,
-          dataVigenciaFinal ? dataVigenciaFinal.toISOString().slice(0,10) : null,
-          Number(totalDiarias || 0),
-          Number(valorBruto || 0),
-          String(tipoDescontoAuto || 'Geral'),
-          Number(descontoManualPercent || 0),
-          Number(valorFinal || 0),
-          numeroOficioSei || null,
-          horaInicio || null,
-          horaFim || null,
-          horaMontagem || null,
-          horaDesmontagem || null,
-          numeroProcesso || null,
-          numeroTermo || null,
-          0,
-          null,
-          null,
-          eventoGratuito ? 1 : 0,
-          justificativaGratuito || null,
-          'Pendente'
-        ]
-      );
+    const eventoStmt = await dbRun(
+      db,
+      `INSERT INTO Eventos (${colsEvento.join(', ')}) VALUES (${colsEvento.map(() => '?').join(', ')})`,
+      [
+        idCliente,
+        nomeEvento,
+        JSON.stringify(espacosUtilizados || []),
+        areaM2 != null ? Number(areaM2) : null,
+        datasEventoStr,
+        datasEventoStr,
+        dataVigenciaFinal ? dataVigenciaFinal.toISOString().slice(0,10) : null,
+        Number(totalDiarias || 0),
+        Number(valorBruto || 0),
+        String(tipoDescontoAuto || 'Geral'),
+        Number(descontoManualPercent || 0),
+        Number(valorFinal || 0),
+        numeroOficioSei || null,
+        horaInicio || null,
+        horaFim || null,
+        horaMontagem || null,
+        horaDesmontagem || null,
+        numeroProcesso || null,
+        numeroTermo || null,
+        0,
+        null,
+        null,
+        eventoGratuitoFlag ? 1 : 0,
+        justificativa || null,
+        'Pendente'
+      ]
+    );
 
     const eventoId = eventoStmt.lastID;
-
-    const cliente = await dbGet(
-      db,
-      `SELECT nome_razao_social, documento, endereco, cep
-         FROM Clientes_Eventos WHERE id = ?`,
-      [idCliente]
-    );
-    if (!cliente) throw new Error(`Cliente com ID ${idCliente} não foi encontrado no banco.`);
 
     const cols = await dbAll(db, 'PRAGMA table_info(dars)');
     const hasDataEmissao = cols.some(c => c.name === 'data_emissao');
 
-    if (!eventoGratuito) {
+    if (!eventoGratuitoFlag) {
       const documentoLimpo = onlyDigits(cliente.documento);
       const tipoInscricao = documentoLimpo.length === 11 ? 3 : 4;
       const receitaCod = Number(String(process.env.RECEITA_CODIGO_EVENTO).replace(/\D/g, ''));
@@ -258,10 +266,28 @@ async function atualizarEventoComDars(db, id, data, helpers) {
     eventoGratuito = false,
     justificativaGratuito,
   } = data || {};
-  if (!idCliente || !nomeEvento || (!eventoGratuito && (!Array.isArray(parcelas) || parcelas.length === 0))) {
+  if (!idCliente || !nomeEvento) {
     throw new Error('Campos obrigatórios estão faltando.');
   }
-  if (!eventoGratuito) {
+
+  const cliente = await dbGet(
+    db,
+    `SELECT nome_razao_social, documento, endereco, cep, tipo, valor_aluguel FROM Clientes_Eventos WHERE id = ?`,
+    [idCliente]
+  );
+  if (!cliente) {
+    throw new Error(`Cliente com ID ${idCliente} não encontrado.`);
+  }
+
+  const clienteIsento = cliente.tipo === 'Isento' || Number(cliente.valor_aluguel) === 0;
+  let eventoGratuitoFlag = eventoGratuito || clienteIsento;
+  let justificativa = justificativaGratuito;
+  if (clienteIsento && !justificativa) justificativa = 'Isento';
+
+  if (!eventoGratuitoFlag && (!Array.isArray(parcelas) || parcelas.length === 0)) {
+    throw new Error('Campos obrigatórios estão faltando.');
+  }
+  if (!eventoGratuitoFlag) {
     const somaParcelas = parcelas.reduce((acc, p) => acc + (Number(p.valor) || 0), 0);
     if (Math.abs(somaParcelas - Number(valorFinal || 0)) > 0.01) {
       throw new Error(`A soma das parcelas (R$ ${somaParcelas.toFixed(2)}) não corresponde ao Valor Final (R$ ${Number(valorFinal||0).toFixed(2)}).`);
@@ -319,8 +345,8 @@ async function atualizarEventoComDars(db, id, data, helpers) {
         horaDesmontagem || null,
         numeroProcesso || null,
         numeroTermo || null,
-        eventoGratuito ? 1 : 0,
-        justificativaGratuito || null,
+        eventoGratuitoFlag ? 1 : 0,
+        justificativa || null,
         'Pendente',
         id
       ]
@@ -342,21 +368,9 @@ async function atualizarEventoComDars(db, id, data, helpers) {
       await dbRun(db, `DELETE FROM dars WHERE id IN (${ph})`, antigosIds);
     }
 
-    const cliente = await dbGet(
-      db,
-      `SELECT nome_razao_social, documento, endereco, cep
-         FROM Clientes_Eventos
-        WHERE id = ?`,
-      [idCliente]
-    );
-    if (!cliente) {
-      throw new Error(`Cliente com ID ${idCliente} não encontrado.`);
-    }
-
     const cols = await dbAll(db, 'PRAGMA table_info(dars)');
     const hasDataEmissao = cols.some(c => c.name === 'data_emissao');
-
-    if (!eventoGratuito) {
+    if (!eventoGratuitoFlag) {
       const docLimpo = onlyDigits(cliente.documento);
       const tipoInscricao = docLimpo.length === 11 ? 3 : 4;
       const receitaCod = Number(String(process.env.RECEITA_CODIGO_EVENTO).replace(/\D/g, ''));

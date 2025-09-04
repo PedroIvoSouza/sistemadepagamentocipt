@@ -26,13 +26,13 @@ test('relatorio de dars inclui guias emitidas mesmo sem emitido_por_id ou permis
   const db = require('../src/database/db');
   const run = (sql, params = []) => new Promise((res, rej) => db.run(sql, params, err => err ? rej(err) : res()));
 
-  await run(`CREATE TABLE permissionarios (id INTEGER PRIMARY KEY, nome_empresa TEXT, cnpj TEXT)`);
+  await run(`CREATE TABLE permissionarios (id INTEGER PRIMARY KEY, nome_empresa TEXT, cnpj TEXT, tipo TEXT, valor_aluguel REAL)`);
   await run(`CREATE TABLE dars (id INTEGER PRIMARY KEY, permissionario_id INTEGER, data_vencimento TEXT, mes_referencia INTEGER,
  ano_referencia INTEGER, valor REAL, status TEXT, numero_documento TEXT, pdf_url TEXT, linha_digitavel TEXT, data_emissao TEXT,
  emitido_por_id INTEGER)`);
   await run(`CREATE TABLE documentos (id INTEGER PRIMARY KEY, tipo TEXT, caminho TEXT, token TEXT UNIQUE)`);
 
-  await run(`INSERT INTO permissionarios (id, nome_empresa, cnpj) VALUES (1, 'Perm', '12345678000199')`);
+  await run(`INSERT INTO permissionarios (id, nome_empresa, cnpj, tipo, valor_aluguel) VALUES (1, 'Perm', '12345678000199', 'Normal', 100)`);
   await run(`INSERT INTO dars (id, permissionario_id, data_vencimento, mes_referencia, ano_referencia, valor, status, numero_documento, pdf_url, data_emissao, emitido_por_id) VALUES (10,1,'2025-12-31',12,2025,100,'Emitido','DOC123','PDF','2025-08-15',1)`);
   await run(`INSERT INTO dars (id, permissionario_id, data_vencimento, mes_referencia, ano_referencia, valor, status, numero_documento, pdf_url, data_emissao, emitido_por_id) VALUES (12,NULL,'2025-12-31',12,2025,200,'Emitido','DOC_EVENTO','PDF','2025-08-16',NULL)`);
   await run(`INSERT INTO dars (id, permissionario_id, data_vencimento, mes_referencia, ano_referencia, valor, status, numero_documento) VALUES (11,1,'2025-12-31',12,2025,100,'Novo','DOCNOVO')`);
@@ -74,7 +74,7 @@ test('retorna 204 quando nao existem dars emitidas', async () => {
   const db = require('../src/database/db');
   const run = (sql, params = []) => new Promise((res, rej) => db.run(sql, params, err => err ? rej(err) : res()));
 
-  await run(`CREATE TABLE permissionarios (id INTEGER PRIMARY KEY, nome_empresa TEXT, cnpj TEXT)`);
+  await run(`CREATE TABLE permissionarios (id INTEGER PRIMARY KEY, nome_empresa TEXT, cnpj TEXT, tipo TEXT, valor_aluguel REAL)`);
   await run(`CREATE TABLE dars (id INTEGER PRIMARY KEY, permissionario_id INTEGER, data_vencimento TEXT, mes_referencia INTEGER,
  ano_referencia INTEGER, valor REAL, status TEXT, numero_documento TEXT, pdf_url TEXT, linha_digitavel TEXT, data_emissao TEXT,
  emitido_por_id INTEGER)`);
