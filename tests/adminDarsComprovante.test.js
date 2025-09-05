@@ -92,6 +92,7 @@ test('comprovante persiste data de pagamento encontrada', async () => {
   const darServicePath = path.resolve(__dirname, '../src/services/darService.js');
   delete require.cache[adminPath];
   delete require.cache[darServicePath];
+
   const adminDarsRoutes = require('../src/api/adminDarsRoutes');
   const app = express();
   app.use(express.json());
@@ -220,6 +221,7 @@ test('comprovante busca pagamentos anteriores ao vencimento', async () => {
 
   await new Promise((r) => db.close(r));
 
+
   delete require.cache[sefazPath];
   delete require.cache[tokenPath];
   delete require.cache[letterPath];
@@ -229,4 +231,5 @@ test('comprovante busca pagamentos anteriores ao vencimento', async () => {
   delete require.cache[dbModulePath];
   delete require.cache[adminPath];
   delete require.cache[darServicePath];
+
 });
