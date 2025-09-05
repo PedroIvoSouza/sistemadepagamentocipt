@@ -148,4 +148,37 @@ window.addEventListener('DOMContentLoaded', () => {
       }
     });
   }
+
+  const btnComprovantes = document.getElementById('btnComprovantesMensais');
+  if (btnComprovantes) {
+    btnComprovantes.addEventListener('click', async () => {
+      const mesAno = document.getElementById('mesAno').value;
+      if (!mesAno) {
+        alert('Selecione o mês e o ano.');
+        return;
+      }
+      const [ano, mes] = mesAno.split('-').map(Number);
+      if (!ano || !mes) {
+        alert('Data inválida.');
+        return;
+      }
+      toggleLoading(btnComprovantes, true);
+      try {
+        const resp = await fetch(`/api/admin/relatorios/comprovantes?mes=${mes}&ano=${ano}`);
+        if (!resp.ok) {
+          const errData = await resp.json().catch(() => ({}));
+          throw new Error(errData.error || 'Erro ao gerar comprovantes.');
+        }
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        window.open(url, '_blank');
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      } catch (err) {
+        console.error(err);
+        alert(err.message);
+      } finally {
+        toggleLoading(btnComprovantes, false);
+      }
+    });
+  }
 });
