@@ -288,14 +288,19 @@ publicRouter.post('/definir-senha', async (req, res) => {
   const { token, senha } = req.body;
   if (!token || !senha) return res.status(400).json({ error: 'Token e senha são obrigatórios.' });
 
-  const sql = `SELECT id FROM Clientes_Eventos WHERE token_definir_senha = ?`;
+  const sql = `SELECT id, token_definir_senha_expires FROM Clientes_Eventos WHERE token_definir_senha = ?`;
   db.get(sql, [token], async (err, cliente) => {
     if (err) return res.status(500).json({ error: 'Erro interno no servidor.' });
     if (!cliente) return res.status(404).json({ error: 'Token inválido ou já utilizado.' });
 
+    const now = Date.now();
+    if (!cliente.token_definir_senha_expires || now > Number(cliente.token_definir_senha_expires)) {
+      return res.status(400).json({ error: 'Token expirado.' });
+    }
+
     try {
       const senha_hash = await bcrypt.hash(senha, SALT_ROUNDS);
-      const updateSql = `UPDATE Clientes_Eventos SET senha_hash = ?, token_definir_senha = NULL WHERE id = ?`;
+      const updateSql = `UPDATE Clientes_Eventos SET senha_hash = ?, token_definir_senha = NULL, token_definir_senha_expires = NULL WHERE id = ?`;
       db.run(updateSql, [senha_hash, cliente.id], function (err2) {
         if (err2) return res.status(500).json({ error: 'Não foi possível atualizar a senha.' });
         res.json({ message: 'Senha definida com sucesso!' });
@@ -310,10 +315,16 @@ publicRouter.get('/definir-senha/validar', (req, res) => {
   const { token } = req.query;
   if (!token) return res.status(400).json({ ok: false, error: 'Token ausente.' });
 
-  const sql = `SELECT id, nome_razao_social FROM Clientes_Eventos WHERE token_definir_senha = ?`;
+  const sql = `SELECT id, nome_razao_social, token_definir_senha_expires FROM Clientes_Eventos WHERE token_definir_senha = ?`;
   db.get(sql, [token], (err, row) => {
     if (err) return res.status(500).json({ ok: false, error: 'Erro interno.' });
     if (!row) return res.status(404).json({ ok: false, error: 'Token inválido ou já utilizado.' });
+
+    const now = Date.now();
+    if (!row.token_definir_senha_expires || now > Number(row.token_definir_senha_expires)) {
+      return res.status(400).json({ ok: false, error: 'Token expirado.' });
+    }
+
     res.json({ ok: true, cliente: { id: row.id, nome: row.nome_razao_social } });
   });
 });
