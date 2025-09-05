@@ -17,6 +17,7 @@ const { applyLetterhead, abntMargins, cm } = require('../utils/pdfLetterhead');
 const PDFDocument = require('pdfkit');
 const db = require('../database/db');
 const { BUSCA_PAGAMENTO_MAX_DIAS } = require('../config/dars');
+const { atualizarDataPagamento } = require('../services/darService');
 
 const fs = require('fs');
 const path = require('path');
@@ -527,6 +528,15 @@ router.get(
 
       if (!pagamento) {
         return res.status(404).json({ error: 'Pagamento não localizado na SEFAZ.' });
+      }
+
+      const dataPgISO = toISO(pagamento.dataPagamento);
+      if (dataPgISO) {
+        try {
+          await atualizarDataPagamento(darId, dataPgISO);
+        } catch (e) {
+          console.warn('[AdminDARs] Falha ao persistir data_pagamento:', e.message);
+        }
       }
 
       const tokenDoc = await gerarTokenDocumento('DAR_COMPROVANTE', dar.permissionario_id, db);
