@@ -5,147 +5,116 @@ const sqlite3 = require('sqlite3').verbose();
 
 const DB = process.env.SQLITE_STORAGE || path.resolve(__dirname, '../sistemacipt.db');
 
-// ======== Parâmetros ========
+// ===== Parâmetros =====
 const EVENTO_ID = 22;
-const CLIENTE_NOME = 'CLAUDEMIR DOS SANTOS SILVA';
-const CLIENTE_DOC  = '17361388000159';        // 17.361.388/0001-59 normalizado
-const PARCELA_VAL  = 1247.50;
-const VENC_RESTANTE = '2025-10-16';
-const COMP_MES = 10;
-const COMP_ANO = 2025;
+const PARCELA_VAL = 1247.50;
+const VENC_RESTANTE = '2025-10-16'; // parcela 2
 const CREATED_BY = 'ADMIN:GERACAO-E22';
-// ============================
+// =====================
 
 const db = new sqlite3.Database(DB);
 const all = (sql,p=[]) => new Promise((res,rej)=>db.all(sql,p,(e,r)=>e?rej(e):res(r)));
 const get =  (sql,p=[]) => new Promise((res,rej)=>db.get(sql,p,(e,r)=>e?rej(e):res(r)));
 const run =  (sql,p=[]) => new Promise((res,rej)=>db.run(sql,p,function(e){ e?rej(e):res(this); }));
 
-async function tableHasColumn(table, col) {
+async function hasCol(table, col) {
   const cols = await all(`PRAGMA table_info(${table})`);
   return cols.some(c => c.name === col);
-}
-async function fkColumn(fromTable, targetName) {
-  const rows = await all(`PRAGMA foreign_key_list('${fromTable}')`);
-  const row = rows.find(r => (r.table||'').toLowerCase() === targetName.toLowerCase());
-  return row ? row.from : (targetName.toLowerCase()==='dars' ? 'dar_id' : 'evento_id');
 }
 
 (async () => {
   try {
-    console.log('[START] Gerando 2 DARs para evento 22 (1 paga + 1 emitida)…');
+    console.log('[START] Gerando 2 DARs para o evento', EVENTO_ID);
 
+    // Confere se o evento existe e pega o cliente
+    const ev = await get(`
+      SELECT e.id, e.id_cliente, c.nome_razao_social AS cliente_nome, c.documento AS cliente_doc
+        FROM Eventos e
+        JOIN Clientes_Eventos c ON c.id = e.id_cliente
+       WHERE e.id = ?`, [EVENTO_ID]);
+    if (!ev) throw new Error(`Evento ${EVENTO_ID} não encontrado.`);
+
+    // Colunas opcionais em dars
     const has = {
-      created_at: await tableHasColumn('dars','created_at'),
-      created_by: await tableHasColumn('dars','created_by'),
-      origem: await tableHasColumn('dars','origem'),
-      data_emissao: await tableHasColumn('dars','data_emissao'),
-      data_pagamento: await tableHasColumn('dars','data_pagamento'),
-      data_vencimento: await tableHasColumn('dars','data_vencimento'),
-      mes_referencia: await tableHasColumn('dars','mes_referencia'),
-      ano_referencia: await tableHasColumn('dars','ano_referencia'),
-      permissionario_id: await tableHasColumn('dars','permissionario_id'),
+      created_at:      await hasCol('dars','created_at'),
+      created_by:      await hasCol('dars','created_by'),
+      origem:          await hasCol('dars','origem'),
+      data_emissao:    await hasCol('dars','data_emissao'),
+      data_pagamento:  await hasCol('dars','data_pagamento'),
+      data_vencimento: await hasCol('dars','data_vencimento'),
+      mes_referencia:  await hasCol('dars','mes_referencia'),
+      ano_referencia:  await hasCol('dars','ano_referencia'),
+      numero_documento:await hasCol('dars','numero_documento'),
     };
-    const darFkCol = await fkColumn('DARs_Eventos','dars');
-    const evFkCol  = await fkColumn('DARs_Eventos','Eventos');
 
-    // 0) Garante permissionário pelo CNPJ
-    let perm = await get(`
-      SELECT id, nome_empresa, cnpj
-        FROM permissionarios
-       WHERE REPLACE(REPLACE(REPLACE(REPLACE(cnpj,'.',''),'-',''),'/',''),' ','') = ?`,
-       [CLIENTE_DOC]
-    );
-    if (!perm) {
-      console.log('[INFO] Permissionário não existe. Criando…');
-      const cols = ['nome_empresa','cnpj'];
-      const vals = [CLIENTE_NOME, CLIENTE_DOC];
-      if (await tableHasColumn('permissionarios','created_at')) {
-        cols.push('created_at'); vals.push(new Date().toISOString().slice(0,19).replace('T',' '));
-      }
-      const ins = await run(`INSERT INTO permissionarios (${cols.join(',')}) VALUES (${cols.map(()=>'?').join(',')})`, vals);
-      perm = await get(`SELECT id, nome_empresa, cnpj FROM permissionarios WHERE id=?`, [ins.lastID]);
-      console.log('[OK] Permissionário criado: id=', perm.id);
-    } else {
-      console.log('[OK] Permissionário encontrado: id=', perm.id, 'nome=', perm.nome_empresa);
-    }
+    const hojeDate = new Date();
+    const hoje = hojeDate.toISOString().slice(0,10); // YYYY-MM-DD
+    const agora = new Date(Date.now() - hojeDate.getTimezoneOffset()*60000).toISOString().slice(0,19).replace('T',' ');
 
     await run('BEGIN');
 
-    // 1) Se já existir algo do evento 22, vamos só completar o que faltar
-    const existentes = await all(`
-      SELECT d.id, d.valor, d.status, d.data_vencimento, d.data_pagamento
-        FROM dars d
-        JOIN "DARs_Eventos" de ON de."${darFkCol}" = d.id
-       WHERE de."${evFkCol}" = ?
-       ORDER BY d.id ASC
-    `,[EVENTO_ID]);
+    // 1) Cria PARCELA 1 (Pago hoje)
+    const f1 = [];
+    const v1 = [];
+    f1.push('valor'); v1.push(PARCELA_VAL);
+    f1.push('status'); v1.push('Pago');
+    if (has.numero_documento){ f1.push('numero_documento'); v1.push(`E${EVENTO_ID}-PARC-1-${Date.now()}`); }
+    if (has.data_pagamento)   { f1.push('data_pagamento');   v1.push(hoje); }
+    if (has.data_emissao)     { f1.push('data_emissao');     v1.push(agora); }
+    if (has.data_vencimento)  { f1.push('data_vencimento');  v1.push(hoje); } // opcional: vence hoje
+    if (has.mes_referencia)   { f1.push('mes_referencia');   v1.push(10); }   // comp. exemplo
+    if (has.ano_referencia)   { f1.push('ano_referencia');   v1.push(2025); }
+    if (has.created_at)       { f1.push('created_at');       v1.push(agora); }
+    if (has.created_by)       { f1.push('created_by');       v1.push(CREATED_BY); }
+    if (has.origem)           { f1.push('origem');           v1.push('Evento'); }
 
-    const falta = Math.max(0, 2 - existentes.length);
+    const p1 = await run(`INSERT INTO dars (${f1.join(',')}) VALUES (${f1.map(()=>'?').join(',')})`, v1);
+    const dar1 = p1.lastID;
 
-    // 2) Criar DARs que faltam
-    for (let i=0; i<falta; i++) {
-      const isParcela2 = (existentes.length + i === 1); // a 2ª criada será a "restante"
-      const fields = [];
-      const vals = [];
+    // 2) Cria PARCELA 2 (Emitido, vencimento 16/10/2025)
+    const f2 = [];
+    const v2 = [];
+    f2.push('valor'); v2.push(PARCELA_VAL);
+    f2.push('status'); v2.push('Emitido');
+    if (has.numero_documento){ f2.push('numero_documento'); v2.push(`E${EVENTO_ID}-PARC-2-${Date.now()}`); }
+    if (has.data_vencimento)  { f2.push('data_vencimento'); v2.push(VENC_RESTANTE); }
+    if (has.mes_referencia)   { f2.push('mes_referencia');  v2.push(10); }
+    if (has.ano_referencia)   { f2.push('ano_referencia');  v2.push(2025); }
+    if (has.created_at)       { f2.push('created_at');      v2.push(agora); }
+    if (has.created_by)       { f2.push('created_by');      v2.push(CREATED_BY); }
+    if (has.origem)           { f2.push('origem');          v2.push('Evento'); }
 
-      if (has.permissionario_id){ fields.push('permissionario_id'); vals.push(perm.id); }
-      if (has.mes_referencia){ fields.push('mes_referencia'); vals.push(COMP_MES); }
-      if (has.ano_referencia){ fields.push('ano_referencia'); vals.push(COMP_ANO); }
-      if (has.data_vencimento){ fields.push('data_vencimento'); vals.push(isParcela2 ? VENC_RESTANTE : null); }
+    const p2 = await run(`INSERT INTO dars (${f2.join(',')}) VALUES (${f2.map(()=>'?').join(',')})`, v2);
+    const dar2 = p2.lastID;
 
-      fields.push('valor'); vals.push(PARCELA_VAL);
-      fields.push('status'); vals.push(isParcela2 ? 'Emitido' : 'Pago');
+    // 3) Vincula na DARs_Eventos (usa nomes do seu schema: id_evento, id_dar)
+    await run(
+      `INSERT INTO DARs_Eventos (id_evento, id_dar, numero_parcela, valor_parcela, data_vencimento)
+       VALUES (?, ?, ?, ?, ?)`,
+      [EVENTO_ID, dar1, 1, PARCELA_VAL, (has.data_vencimento ? hoje : VENC_RESTANTE)]
+    );
+    await run(
+      `INSERT INTO DARs_Eventos (id_evento, id_dar, numero_parcela, valor_parcela, data_vencimento)
+       VALUES (?, ?, ?, ?, ?)`,
+      [EVENTO_ID, dar2, 2, PARCELA_VAL, VENC_RESTANTE]
+    );
 
-      fields.push('numero_documento'); vals.push(`EVENTO-22-PARCELA-${isParcela2?2:1}-${Date.now()}`);
-
-      if (has.created_at){ fields.push('created_at'); vals.push(new Date().toISOString().slice(0,19).replace('T',' ')); }
-      if (has.created_by){ fields.push('created_by'); vals.push(CREATED_BY); }
-      if (has.origem){ fields.push('origem'); vals.push('Evento'); }
-      if (has.data_emissao){ fields.push('data_emissao'); vals.push(isParcela2 ? null : new Date().toISOString().slice(0,19).replace('T',' ')); }
-      if (has.data_pagamento && !isParcela2){ fields.push('data_pagamento'); vals.push(new Date().toISOString().slice(0,10)); }
-
-      const placeholders = fields.map(()=>'?').join(',');
-      const ins = await run(`INSERT INTO dars (${fields.join(',')}) VALUES (${placeholders})`, vals);
-      const novoId = ins.lastID;
-      await run(`INSERT INTO "DARs_Eventos" ("${darFkCol}","${evFkCol}") VALUES (?,?)`, [novoId, EVENTO_ID]);
-      existentes.push(await get(`SELECT * FROM dars WHERE id=?`, [novoId]));
-      console.log(`[OK] Criada DAR ${novoId} (${isParcela2?'Emitido venc '+VENC_RESTANTE:'Pago hoje'}) e vinculada ao evento 22.`);
-    }
-
-    // 3) Normaliza os status/valores conforme a regra solicitada
-    const p1 = existentes[0];           // Paga
-    const p2 = existentes[existentes.length-1]; // Restante emitida
-
-    // Parcela 1 -> Pago 1247,50 (com data_pagamento hoje)
-    {
-      let sql = `UPDATE dars SET valor=?, status='Pago'`;
-      const params = [PARCELA_VAL];
-      if (has.data_pagamento){ sql+=`, data_pagamento=?`; params.push(new Date().toISOString().slice(0,10)); }
-      if (has.data_emissao && !p1.data_emissao){ sql+=`, data_emissao=COALESCE(data_emissao, datetime('now','localtime'))`; }
-      sql += ` WHERE id=?`; params.push(p1.id);
-      await run(sql, params);
-    }
-
-    // Parcela 2 -> Emitido 1247,50 com venc 16/10/2025
-    {
-      let sql = `UPDATE dars SET valor=?, status='Emitido'`;
-      const params = [PARCELA_VAL];
-      if (has.data_vencimento){ sql+=`, data_vencimento=?`; params.push(VENC_RESTANTE); }
-      sql += ` WHERE id=?`; params.push(p2.id);
-      await run(sql, params);
-    }
+    // 4) Atualiza status do evento para "Pago Parcialmente"
+    await run(`UPDATE Eventos SET status='Pago Parcialmente' WHERE id=?`, [EVENTO_ID]);
 
     await run('COMMIT');
 
-    const resumo22 = await all(`
+    const resumo = await all(`
       SELECT d.id, d.valor, d.status, d.data_vencimento, d.data_pagamento, d.numero_documento
-        FROM dars d JOIN "DARs_Eventos" de ON de."${darFkCol}"=d.id
-       WHERE de."${evFkCol}"=?
-       ORDER BY d.id ASC
+        FROM dars d
+        JOIN DARs_Eventos de ON de.id_dar = d.id
+       WHERE de.id_evento = ?
+       ORDER BY de.numero_parcela ASC, d.id ASC
     `,[EVENTO_ID]);
-    console.log('\n[RESUMO 22]', resumo22);
-    console.log('\n[OK] Evento 22 pronto: 1 parcela Paga + 1 parcela Emitida (16/10/2025).');
+
+    console.log(`[OK] Evento ${EVENTO_ID} do cliente ${ev.cliente_nome} (${ev.cliente_doc})`);
+    console.log('[DARs]', resumo);
+    console.log('[DONE] 1 parcela Paga + 1 parcela Emitida/venc', VENC_RESTANTE);
   } catch (e) {
     try { await run('ROLLBACK'); } catch(_) {}
     console.error('[ERRO]', e.message);
