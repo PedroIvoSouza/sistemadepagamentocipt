@@ -87,24 +87,23 @@ router.get(
 
       // 3) Cria PDF com margens ABNT (+0,5cm topo/rodapé)
       const doc = new PDFDocument({ size: 'A4', margins: abntMargins(0.5, 0.5, 2) });
-      doc.on('pageAdded', () => {
-        // applyLetterhead já está plugado no helper
-        printToken(doc, tokenDoc, qrBuffer); // só o token aqui; nada de header/footer com text()
-      });
+      // 4) Aplica papel timbrado (todas as páginas)
+      applyLetterhead(doc, { imagePath: path.join(__dirname, '..', 'assets', 'papel-timbrado-secti.png') });
+
+      // 5) Registra o token em cada nova página
+      doc.on('pageAdded', () => printToken(doc, tokenDoc, qrBuffer));
+
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `attachment; filename="oficio_${permissionarioId}.pdf"`);
       res.setHeader('X-Document-Token', tokenDoc);
       doc.pipe(res);
 
-      // 4) Aplica papel timbrado (todas as páginas)
-      applyLetterhead(doc, { imagePath: path.join(__dirname, '..', 'assets', 'papel-timbrado-secti.png') });
-
-      // 5) Cursor inicial na área útil + token por página
+      // 6) Cursor inicial na área útil + token da primeira página
       doc.x = doc.page.margins.left;
       doc.y = doc.page.margins.top;
       printToken(doc, tokenDoc, qrBuffer);
 
-      // 6) Conteúdo do ofício
+      // 7) Conteúdo do ofício
       const larguraUtil = doc.page.width - doc.page.margins.left - doc.page.margins.right;
 
       const hoje = new Date();
@@ -252,7 +251,7 @@ router.get(
 
 
 
-      // 7) Finaliza
+      // 8) Finaliza
       doc.end();
 
       // (opcional) gravar referência no banco
