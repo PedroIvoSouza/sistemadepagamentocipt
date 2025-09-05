@@ -27,6 +27,11 @@ const dbRun = (sql, params = []) =>
 function printToken(doc, token, qrBuffer) {
   if (!token) return;
   const prevX = doc.x, prevY = doc.y; // preserva cursor do conteúdo
+
+  // desativa temporariamente listeners de pageAdded para evitar recursão
+  const pageAddedListeners = doc.listeners('pageAdded');
+  doc.removeAllListeners('pageAdded');
+
   doc.save();
   const x = doc.page.margins.left;
   const qrSize = 40;
@@ -37,8 +42,11 @@ function printToken(doc, token, qrBuffer) {
   const avisoWidth = qrX - x - 10;
   doc.fontSize(7).fillColor('#222');
   const avisoHeight = doc.heightOfString(aviso, { width: avisoWidth });
-  const avisoY = baseY + 2;
-  const tokenY = avisoY + avisoHeight + 2;
+
+  // posiciona elementos acima de baseY para garantir que não ultrapassem a página
+  const tokenY = baseY - qrSize + 8;
+  const avisoY = tokenY - avisoHeight - 2;
+
   doc.text(aviso, x, avisoY, { width: avisoWidth });
 
   const text = `Token: ${token}`;
@@ -49,6 +57,9 @@ function printToken(doc, token, qrBuffer) {
   doc.restore();
   doc.x = prevX;
   doc.y = prevY; // restaura cursor do conteúdo
+
+  // reativa listeners de pageAdded
+  for (const l of pageAddedListeners) doc.on('pageAdded', l);
 }
 
 /* ===========================================================
