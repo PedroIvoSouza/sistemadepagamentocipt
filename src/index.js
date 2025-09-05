@@ -144,7 +144,7 @@ initPromise
     const server = app.listen(PORT, () => {
       console.log(`Servidor rodando na porta ${PORT}.`);
       try {
-        require('../cron/gerarDarsMensais.js');
+        require('../cron');
         console.log('[INFO] Agendador de tarefas (cron) iniciado com sucesso.');
       } catch (error) {
         console.error('[ERRO DE CRON] Falha ao iniciar o agendador de tarefas:', error.message);
