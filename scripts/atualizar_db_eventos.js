@@ -18,7 +18,8 @@ db.serialize(() => {
         endereco TEXT,
         nome_responsavel TEXT,
         senha_hash TEXT NOT NULL,
-        tipo_cliente TEXT NOT NULL DEFAULT 'Geral' CHECK(tipo_cliente IN ('Geral', 'Governo', 'Permissionario'))
+        tipo_cliente TEXT NOT NULL DEFAULT 'Geral' CHECK(tipo_cliente IN ('Geral', 'Governo', 'Permissionario')),
+        valor_aluguel REAL
     );`;
 
     db.run(createClientesEventosTable, (err) => {

@@ -138,24 +138,37 @@ function dbAll(db, sql, params=[]) {
 }
 
 // ----------------- Upserts & criação -----------------
-async function ensureCliente(db, { nome, doc, email }) {
+async function ensureCliente(db, { nome, doc, email, valor_aluguel }) {
   const documento_norm = normDoc(doc);
   const documento_raiz = cnpjRaiz(doc);
   const tp = tipoPessoa(doc);
 
   let row = await dbGet(db,
-    `SELECT id FROM Clientes_Eventos WHERE documento_norm = ? OR documento = ? LIMIT 1`,
+    `SELECT id, valor_aluguel FROM Clientes_Eventos WHERE documento_norm = ? OR documento = ? LIMIT 1`,
     [documento_norm, doc]
   );
-  if (row) return row.id;
+  if (row) {
+    if (valor_aluguel != null && row.valor_aluguel == null) {
+      await dbRun(db, `UPDATE Clientes_Eventos SET valor_aluguel = ? WHERE id = ?`, [valor_aluguel, row.id]);
+    }
+    return row.id;
+  }
 
   if (DRY) { console.log(`[dry] Criaria cliente: ${nome} (${doc})`); return -1; }
 
   const res = await dbRun(db, `
     INSERT INTO Clientes_Eventos
-      (nome_razao_social, tipo_pessoa, documento, email, documento_norm, documento_raiz, tipo_cliente)
-    VALUES (?,?,?,?,?,?, 'Geral')
-  `, [nome || 'Cliente sem nome', tp, doc, email || 'sem-email@exemplo.com', documento_norm, documento_raiz]);
+      (nome_razao_social, tipo_pessoa, documento, email, documento_norm, documento_raiz, tipo_cliente, valor_aluguel)
+    VALUES (?,?,?,?,?,?, 'Geral', ?)
+  `, [
+    nome || 'Cliente sem nome',
+    tp,
+    doc,
+    email || 'sem-email@exemplo.com',
+    documento_norm,
+    documento_raiz,
+    valor_aluguel
+  ]);
   return res.lastID;
 }
 
@@ -278,9 +291,14 @@ async function recomputeEventoStatus(db, id_evento) {
   // 2) Agrupar por evento
   const groups = new Map();
   for (const row of plan) {
-    const cliente_nome = pick(row, 'cliente_nome','nome_cliente','empresa','empresa_plan','cliente');
-    const cliente_doc  = pick(row, 'cliente_documento','documento','cnpj','cpf','doc');
-    const cliente_email= pick(row, 'cliente_email','email','email_cliente');
+    const cliente_nome  = pick(row, 'cliente_nome','nome_cliente','empresa','empresa_plan','cliente');
+    const cliente_doc   = pick(row, 'cliente_documento','documento','cnpj','cpf','doc');
+    const cliente_email = pick(row, 'cliente_email','email','email_cliente');
+    const cliente_valor_aluguel = toNum(pick(row,
+      'cliente_valor_aluguel',
+      'valor_aluguel_cliente',
+      'valor_aluguel'
+    ));
 
     const evento_nome  = pick(row, 'evento_nome','nome_evento','titulo','titulo_evento') || pick(row,'empresa_plan') || 'Evento';
     const num_proc_raw = pick(row, 'numero_processo','processo','processo_norm','processo_plan');
@@ -299,7 +317,12 @@ async function recomputeEventoStatus(db, id_evento) {
     const key = numero_processo || `${normDoc(cliente_doc)}|${evento_nome.toUpperCase()}`;
     if (!groups.has(key)) {
       groups.set(key, {
-        cliente: { nome: cliente_nome || 'Cliente', doc: cliente_doc, email: cliente_email || 'sem-email@exemplo.com' },
+        cliente: {
+          nome: cliente_nome || 'Cliente',
+          doc: cliente_doc,
+          email: cliente_email || 'sem-email@exemplo.com',
+          valor_aluguel: Number.isFinite(cliente_valor_aluguel) ? cliente_valor_aluguel : null
+        },
         evento:  { nome: evento_nome, numero_processo: numero_processo, datas_evento_list: [], parcelas: [] }
       });
     }
