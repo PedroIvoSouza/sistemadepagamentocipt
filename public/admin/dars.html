@@ -181,7 +181,7 @@
             (dar.status==='Pendente' || dar.status==='Vencido' || dar.status==='Vencida' || dar.status==='Emitido' || dar.status==='Reemitido')
             ? `<button class="btn btn-sm btn-outline-info enviar-notificacao-btn" data-id="${esc(dar.id)}" title="Enviar notificação por e-mail"><i class="bi bi-envelope-fill"></i> Notificar</button>`
             : (dar.status==='Pago'
-              ? `<span class="text-muted"><i class="bi bi-check-circle-fill text-success"></i> Pago</span>`
+              ? `<button class="btn btn-sm btn-outline-info comprovante-btn" data-id="${esc(dar.id)}" title="Ver comprovante"><i class="bi bi-file-earmark-pdf-fill"></i> Comprovante</button>`
               : '');
           return `
             <tr>
@@ -223,33 +223,52 @@
 
       tableBody.addEventListener('click', async (e)=>{
         const notifyButton = e.target.closest('.enviar-notificacao-btn');
-        if (!notifyButton) return;
-        e.preventDefault();
+        if (notifyButton) {
+          e.preventDefault();
 
-        const darId = notifyButton.dataset.id;
-        const originalText = notifyButton.innerHTML;
-        notifyButton.disabled = true;
-        notifyButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Enviando...`;
+          const darId = notifyButton.dataset.id;
+          const originalText = notifyButton.innerHTML;
+          notifyButton.disabled = true;
+          notifyButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Enviando...`;
 
-        try{
-          const response = await fetch(`/api/admin/dars/${encodeURIComponent(darId)}/enviar-notificacao`, {
-            method:'POST',
-            headers:{ Authorization:`Bearer ${token}` }
-          });
-          const result = await response.json().catch(()=> ({}));
-          if (!response.ok) throw new Error(result.error || 'Falha ao enviar notificação.');
+          try{
+            const response = await fetch(`/api/admin/dars/${encodeURIComponent(darId)}/enviar-notificacao`, {
+              method:'POST',
+              headers:{ Authorization:`Bearer ${token}` }
+            });
+            const result = await response.json().catch(()=> ({}));
+            if (!response.ok) throw new Error(result.error || 'Falha ao enviar notificação.');
 
-          notifyButton.className = 'btn btn-sm btn-success';
-          notifyButton.innerHTML = `<i class="bi bi-check-lg"></i> Enviado!`;
-        }catch(error){
-          alert('Erro: ' + error.message);
-          notifyButton.innerHTML = originalText;
-        }finally{
-          setTimeout(()=>{
-            notifyButton.disabled = false;
-            notifyButton.className = 'btn btn-sm btn-outline-info enviar-notificacao-btn';
+            notifyButton.className = 'btn btn-sm btn-success';
+            notifyButton.innerHTML = `<i class="bi bi-check-lg"></i> Enviado!`;
+          }catch(error){
+            alert('Erro: ' + error.message);
             notifyButton.innerHTML = originalText;
-          }, 3000);
+          }finally{
+            setTimeout(()=>{
+              notifyButton.disabled = false;
+              notifyButton.className = 'btn btn-sm btn-outline-info enviar-notificacao-btn';
+              notifyButton.innerHTML = originalText;
+            }, 3000);
+          }
+          return;
+        }
+
+        const comprovanteButton = e.target.closest('.comprovante-btn');
+        if (comprovanteButton) {
+          e.preventDefault();
+          const darId = comprovanteButton.dataset.id;
+          try {
+            const response = await fetch(`/api/admin/dars/${encodeURIComponent(darId)}/comprovante`, {
+              headers: { Authorization: `Bearer ${token}` }
+            });
+            if (!response.ok) throw new Error('Falha ao obter comprovante.');
+            const blob = await response.blob();
+            const blobURL = URL.createObjectURL(blob);
+            window.open(blobURL);
+          } catch (error) {
+            alert('Erro: ' + error.message);
+          }
         }
       });
 
