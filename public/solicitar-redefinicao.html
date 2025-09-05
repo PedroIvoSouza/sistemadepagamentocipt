@@ -118,14 +118,14 @@
                 if (!response.ok) {
                     throw new Error(result.error || 'Ocorreu um erro.');
                 }
-                
+
                 messageDiv.innerText = 'Código enviado com sucesso! Verifique seu e-mail. Redirecionando...';
                 messageDiv.className = 'alert alert-success';
                 messageDiv.style.display = 'block';
                 formContainer.style.display = 'none';
 
                 setTimeout(() => {
-                    window.location.href = `/verificar-codigo.html?cnpj=${encodeURIComponent(cnpj)}`;
+                    window.location.href = `/verificar-codigo.html?cnpj=${encodeURIComponent(cnpj)}&pid=${result.permissionarioId}`;
                 }, 3000);
 
             } catch (error) {

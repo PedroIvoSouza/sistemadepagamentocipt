@@ -92,14 +92,15 @@
             const form = event.target;
             const messageDiv = document.getElementById('message');
             
-            // Pega o CNPJ da URL, que foi passado da página anterior
+            // Pega o CNPJ e o ID do permissionário da URL
             const urlParams = new URLSearchParams(window.location.search);
             const cnpj = urlParams.get('cnpj');
+            const permissionarioId = urlParams.get('pid');
             const codigo = document.getElementById('codigo').value;
             const submitButton = form.querySelector('button[type="submit"]');
 
-            if (!cnpj) {
-                messageDiv.innerText = 'Erro: CNPJ não encontrado. Por favor, reinicie o processo.';
+            if (!cnpj || !permissionarioId) {
+                messageDiv.innerText = 'Erro: dados inválidos. Por favor, reinicie o processo.';
                 messageDiv.className = 'alert alert-danger';
                 messageDiv.style.display = 'block';
                 return;
@@ -112,7 +113,7 @@
                 const response = await fetch('/api/auth/verificar-codigo', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ cnpj: cnpj, codigo: codigo })
+                    body: JSON.stringify({ cnpj, codigo, permissionarioId })
                 });
 
                 const result = await response.json();
