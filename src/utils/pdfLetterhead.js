@@ -34,7 +34,11 @@ function applyLetterhead(doc, opts = {}) {
 
   const buf = fs.readFileSync(imgPath);
 
+  const rendered = new WeakSet();
   const render = () => {
+    const page = doc.page;
+    if (rendered.has(page)) return; // evita renderização dupla
+    rendered.add(page);
     doc.save();
     // cobre a página inteira
     doc.image(buf, 0, 0, { width: doc.page.width, height: doc.page.height });
@@ -42,9 +46,16 @@ function applyLetterhead(doc, opts = {}) {
   };
 
   // primeira página
-  setImmediate(render);
+  render();
   // novas páginas
-  doc.on('pageAdded', () => setImmediate(render));
+  doc.on('pageAdded', render);
+
+  // garante que o timbrado seja desenhado antes de finalizar o documento
+  const originalEnd = doc.end.bind(doc);
+  doc.end = (...args) => {
+    render();
+    return originalEnd(...args);
+  };
 }
 
 module.exports = { applyLetterhead, abntMargins, cm };
