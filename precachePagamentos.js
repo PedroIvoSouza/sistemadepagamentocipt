@@ -5,8 +5,8 @@ const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
 const {
   listarPagamentosPorDataArrecadacao,
-} = require('../src/services/sefazService');
-const { toISO } = require('../src/utils/sefazPayload');
+} = require('./src/services/sefazService');
+const { toISO } = require('./src/utils/sefazPayload');
 
 const DB_PATH = process.env.SQLITE_STORAGE || './sistemacipt.db';
 const db = new sqlite3.Database(DB_PATH);
