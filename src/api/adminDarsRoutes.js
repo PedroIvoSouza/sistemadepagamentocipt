@@ -497,8 +497,10 @@ router.get(
       if (!pagamento) {
         let dataInicioISO = toISO(dar.data_pagamento || dar.data_vencimento) || isoHojeLocal();
         let dataFimISO = isoHojeLocal();
-        const diff = Math.abs(new Date(dataFimISO) - new Date(dataInicioISO));
-        if (diff > 24 * 60 * 60 * 1000) {
+        // Compare the start and end dates using the ISO string values.
+        // If they are different, align the end date with the start date so the
+        // lookup queries a single day.
+        if (dataFimISO !== dataInicioISO) {
           dataFimISO = dataInicioISO;
         }
 
