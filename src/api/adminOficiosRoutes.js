@@ -87,6 +87,10 @@ router.get(
 
       // 3) Cria PDF com margens ABNT (+0,5cm topo/rodapé)
       const doc = new PDFDocument({ size: 'A4', margins: abntMargins(0.5, 0.5, 2) });
+      doc.on('error', err => {
+        console.error('[adminOficios] pdf error:', err);
+        if (!res.headersSent) res.status(500).end();
+      });
       // 4) Aplica papel timbrado (todas as páginas)
       applyLetterhead(doc, { imagePath: path.join(__dirname, '..', 'assets', 'papel-timbrado-secti.png') });
 
@@ -263,7 +267,9 @@ router.get(
       );
     } catch (err) {
       console.error('[adminOficios] erro:', err.stack || err);
-      res.status(500).json({ error: err.message || 'Erro ao gerar ofício.' });
+      if (!res.headersSent) {
+        res.status(500).json({ error: err.message || 'Erro ao gerar ofício.' });
+      }
     }
   }
 );
