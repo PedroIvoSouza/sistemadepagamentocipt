@@ -203,7 +203,8 @@ clientRouter.post('/dars/:id/reemitir', async (req, res) => {
     const row = await dbGet(
       `SELECT d.*, e.id_cliente,
               ce.nome_razao_social AS nome,
-              COALESCE(NULLIF(TRIM(ce.documento), ''), NULLIF(TRIM(ce.documento_responsavel), '')) AS doc_raw
+              TRIM(ce.documento) AS documento,
+              TRIM(ce.documento_responsavel) AS documento_responsavel
          FROM dars d
          JOIN DARs_Eventos de ON de.id_dar = d.id
          JOIN Eventos e        ON e.id = de.id_evento
@@ -224,12 +225,14 @@ clientRouter.post('/dars/:id/reemitir', async (req, res) => {
       if (enc.novaDataVencimento) dar.data_vencimento = enc.novaDataVencimento;
     }
 
-    const doc = String(row.doc_raw || '').replace(/\D/g, '');
+    const docCliente = onlyDigits(row.documento);
+    const docResp    = onlyDigits(row.documento_responsavel);
+    const doc        = [docCliente, docResp].find(d => isCpf(d) || isCnpj(d));
     const nome = row.nome || 'Contribuinte';
-    if (!(doc.length === 11 || doc.length === 14)) {
+    if (!doc) {
       return res.status(400).json({ error: 'Documento do cliente ausente ou inválido.' });
     }
-    const tipo = doc.length === 11 ? 3 : 4;
+    const tipo = isCpf(doc) ? 3 : 4;
     const codigoIbgeMunicipio = 2704302;
 
     const mes  = dar.mes_referencia || Number(String(dar.data_vencimento).slice(5, 7));
