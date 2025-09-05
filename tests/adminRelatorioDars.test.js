@@ -68,6 +68,8 @@ test('relatorio de dars inclui guias emitidas mesmo sem emitido_por_id ou permis
   assert.match(parsed.text, /Perm/);
   assert.match(parsed.text, /DOC123/);
   assert.match(parsed.text, /DOC_EVENTO/);
+  assert.match(parsed.text, /Cliente X/);
+  assert.match(parsed.text, /999/);
   assert.ok(!/DOCNOVO/.test(parsed.text));
 });
 
