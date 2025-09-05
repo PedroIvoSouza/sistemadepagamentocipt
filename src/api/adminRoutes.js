@@ -622,15 +622,15 @@ router.get(
       let whereTipo = '';
       const params = [];
       if (tipo) {
-        whereTipo = ' AND COALESCE(p.tipo, "") = ?';
+        whereTipo = ' AND COALESCE(p.tipo, c.tipo_cliente, "Evento") = ?';
         params.push(tipo);
       }
 
       const dars = await dbAll(
         `SELECT
-            COALESCE(p.nome_empresa, '') AS nome_empresa,
-            COALESCE(p.cnpj, '') AS cnpj,
-            COALESCE(p.tipo, '') AS tipo,
+            COALESCE(p.nome_empresa, c.nome_razao_social) AS nome_empresa,
+            COALESCE(p.tipo, c.tipo_cliente, 'Evento') AS tipo,
+            COALESCE(p.cnpj, c.documento) AS documento,
             d.numero_documento,
             d.valor,
             ${emissaoSelect} AS data_emissao,
@@ -638,6 +638,9 @@ router.get(
             d.ano_referencia
          FROM dars d
          LEFT JOIN permissionarios p ON p.id = d.permissionario_id
+         LEFT JOIN DARs_Eventos de ON de.id_dar = d.id
+         LEFT JOIN Eventos e ON e.id = de.id_evento
+         LEFT JOIN Clientes_Eventos c ON c.id = e.id_cliente
          WHERE d.status = 'Emitido'${whereTipo}
            AND (d.permissionario_id IS NULL OR ((p.tipo IS NULL OR p.tipo != 'Isento')
                 AND COALESCE(p.valor_aluguel,0) > 0))
@@ -943,12 +946,12 @@ function generateDarsTable(doc, dados) {
   const colWidths = {
     empresa: availableWidth * 0.25,
     tipo: availableWidth * 0.15,
-    cnpj: availableWidth * 0.15,
+    documento: availableWidth * 0.15,
     emissao: availableWidth * 0.15,
     dar: availableWidth * 0.15,
     valor: availableWidth * 0.15,
   };
-  const headers = ['Empresa', 'Tipo', 'CNPJ', 'Emissão', 'DAR/Comp.', 'Valor (R$)'];
+  const headers = ['Empresa', 'Tipo', 'Documento', 'Emissão', 'DAR/Comp.', 'Valor (R$)'];
 
   const drawRow = (row, currentY, isHeader = false) => {
     let x = doc.page.margins.left;
@@ -981,7 +984,7 @@ function generateDarsTable(doc, dados) {
     const row = [
       item.nome_empresa,
       item.tipo,
-      item.cnpj,
+      item.documento,
       item.data_emissao ? new Date(item.data_emissao).toLocaleDateString('pt-BR') : '',
       numeroComp,
       Number(item.valor).toFixed(2),
