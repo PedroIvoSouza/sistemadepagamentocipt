@@ -951,7 +951,7 @@ function generateDarsTable(doc, dados) {
     dar: availableWidth * 0.15,
     valor: availableWidth * 0.15,
   };
-  const headers = ['Empresa', 'Tipo', 'Documento', 'Emissão', 'DAR/Comp.', 'Valor (R$)'];
+  const headers = ['Empresa', 'Tipo', 'CNPJ/CPF', 'Emissão', 'DAR/Comp.', 'Valor (R$)'];
 
   const drawRow = (row, currentY, isHeader = false) => {
     let x = doc.page.margins.left;
