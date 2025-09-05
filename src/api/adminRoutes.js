@@ -10,6 +10,7 @@ const os = require('os');
 const { gerarTokenDocumento } = require('../utils/token');
 const { applyLetterhead, abntMargins } = require('../utils/pdfLetterhead');
 const generateTokenQr = require('../utils/qrcodeToken');
+const { listarPagamentosPorDataArrecadacao } = require('../services/sefazService');
 
 // Middlewares
 const authMiddleware = require('../middleware/authMiddleware');
@@ -698,6 +699,128 @@ router.get(
     } catch (error) {
       console.error('Erro ao gerar relatório de DARs:', error.stack);
       res.status(500).json({ error: error.message || 'Erro ao gerar relatório.' });
+    }
+  }
+);
+
+/* ===========================================================
+   GET /api/admin/relatorios/comprovantes
+   =========================================================== */
+router.get(
+  '/relatorios/comprovantes',
+  [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN'])],
+  async (req, res) => {
+    try {
+      const mes = parseInt(req.query.mes, 10);
+      const ano = parseInt(req.query.ano, 10);
+      if (!mes || mes < 1 || mes > 12 || !ano) {
+        return res.status(400).json({ error: 'Parâmetros mes e ano são obrigatórios e devem ser válidos.' });
+      }
+
+      const dars = await dbAll(
+        `SELECT d.*, p.nome_empresa, p.cnpj
+           FROM dars d
+           LEFT JOIN permissionarios p ON p.id = d.permissionario_id
+          WHERE d.status = 'Pago'
+            AND d.mes_referencia = ?
+            AND d.ano_referencia = ?`,
+        [mes, ano]
+      );
+
+      if (!dars.length) {
+        return res.status(404).json({ error: 'Nenhuma DAR paga encontrada.' });
+      }
+
+      const inicio = `${ano}-${String(mes).padStart(2, '0')}-01`;
+      const fimDate = new Date(ano, mes, 0);
+      const fim = fimDate.toISOString().slice(0, 10);
+
+      let pagamentos = [];
+      try {
+        pagamentos = await listarPagamentosPorDataArrecadacao(inicio, fim);
+      } catch (e) {
+        console.warn('[AdminRelatorios] Falha ao consultar pagamentos na SEFAZ:', e.message);
+      }
+
+      const pagMap = new Map();
+      for (const p of pagamentos) {
+        if (p.numeroGuia) pagMap.set(String(p.numeroGuia).trim(), p);
+        if (p.codigoBarras) pagMap.set(String(p.codigoBarras).trim(), p);
+        if (p.linhaDigitavel) pagMap.set(String(p.linhaDigitavel).trim(), p);
+      }
+
+      const tokenDoc = await gerarTokenDocumento('RELATORIO_COMPROVANTES', null, db);
+      const qrBuffer = await generateTokenQr(tokenDoc);
+      const doc = new PDFDocument({ size: 'A4', margins: abntMargins(0.5, 0.5, 2) });
+      doc.on('pageAdded', () => printToken(doc, tokenDoc, qrBuffer));
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'secti-'));
+      const filePath = path.join(tmpDir, `comprovantes_${ano}_${mes}_${Date.now()}.pdf`);
+      const stream = fs.createWriteStream(filePath);
+      doc.pipe(stream);
+
+      applyLetterhead(doc, { imagePath: path.join(__dirname, '..', 'assets', 'papel-timbrado-secti.png') });
+      doc.x = doc.page.margins.left;
+      doc.y = doc.page.margins.top;
+      printToken(doc, tokenDoc, qrBuffer);
+
+      dars.forEach((dar, idx) => {
+        if (idx > 0) {
+          doc.addPage();
+          doc.x = doc.page.margins.left;
+          doc.y = doc.page.margins.top;
+        }
+
+        const numeroGuia = String(dar.numero_documento || '').trim();
+        const ld = dar.linha_digitavel || dar.codigo_barras;
+        let pagamento = pagMap.get(numeroGuia);
+        if (!pagamento && ld) pagamento = pagMap.get(ld);
+
+        doc.fontSize(16).fillColor('#333').text('COMPROVANTE DE PAGAMENTO DE DAR', { align: 'center' });
+        doc.moveDown();
+
+        doc.fontSize(12).fillColor('#000');
+        if (dar.nome_empresa) doc.text(`Permissionário: ${dar.nome_empresa}`);
+        if (dar.cnpj) doc.text(`CNPJ: ${dar.cnpj}`);
+        if (numeroGuia) doc.text(`Número da Guia: ${numeroGuia}`);
+        if (ld) doc.text(`Linha Digitável/Código de Barras: ${ld}`);
+        if (pagamento) {
+          const dataPg = pagamento.dataPagamento
+            ? new Date(pagamento.dataPagamento).toLocaleDateString('pt-BR')
+            : '';
+          doc.text(`Data do Pagamento: ${dataPg}`);
+          doc.text(`Valor Pago: R$ ${Number(pagamento.valorPago || 0).toFixed(2)}`);
+        } else {
+          doc.fillColor('red').text('Pagamento não localizado na SEFAZ.');
+          doc.fillColor('#000');
+        }
+      });
+
+      doc.end();
+
+      await new Promise((resolve, reject) => {
+        stream.on('finish', resolve);
+        stream.on('error', reject);
+      });
+
+      await dbRun(
+        `INSERT INTO documentos (tipo, caminho, token) VALUES (?, ?, ?)
+         ON CONFLICT(token) DO UPDATE SET caminho = excluded.caminho`,
+        ['RELATORIO_COMPROVANTES', filePath, tokenDoc]
+      );
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', 'attachment; filename="comprovantes.pdf"');
+      res.setHeader('X-Document-Token', tokenDoc);
+      const fileStream = fs.createReadStream(filePath);
+      fileStream.pipe(res);
+      fileStream.on('close', () => {
+        fs.unlink(filePath, () => {
+          fs.rm(tmpDir, { recursive: true }, () => {});
+        });
+      });
+    } catch (error) {
+      console.error('Erro ao gerar comprovantes mensais:', error.stack);
+      res.status(500).json({ error: error.message || 'Erro ao gerar comprovantes.' });
     }
   }
 );
