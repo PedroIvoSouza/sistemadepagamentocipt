@@ -488,6 +488,22 @@ router.get(
       );
       if (!dar) return res.status(404).json({ error: 'DAR não encontrado.' });
 
+      if (dar.comprovante_token) {
+        try {
+          const docRow = await dbGetAsync(
+            `SELECT caminho FROM documentos WHERE token = ?`,
+            [dar.comprovante_token]
+          );
+          if (docRow?.caminho && fs.existsSync(docRow.caminho)) {
+            res.setHeader('X-Document-Token', dar.comprovante_token);
+            res.attachment(`comprovante_dar_${darId}.pdf`);
+            return fs.createReadStream(docRow.caminho).pipe(res);
+          }
+        } catch (e) {
+          console.warn('[AdminDARs] Falha ao recuperar comprovante existente:', e.message);
+        }
+      }
+
       const numeroGuia = String(dar.numero_documento || '').trim();
       const ld = dar.linha_digitavel || dar.codigo_barras || '';
 
@@ -579,6 +595,7 @@ router.get(
           const filePath = path.join(dir, filename);
           fs.writeFileSync(filePath, finalBuffer);
           await dbRunAsync(`UPDATE documentos SET caminho = ? WHERE token = ?`, [filePath, tokenDoc]);
+          await dbRunAsync(`UPDATE dars SET comprovante_token = ? WHERE id = ?`, [tokenDoc, darId]);
 
           res.setHeader('X-Document-Token', tokenDoc);
           res.attachment(`comprovante_dar_${darId}.pdf`);
