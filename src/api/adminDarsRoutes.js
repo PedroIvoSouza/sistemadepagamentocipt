@@ -557,7 +557,6 @@ router.get(
       if (dar.nome_empresa) doc.text(`Permissionário: ${dar.nome_empresa}`);
       if (dar.cnpj) doc.text(`CNPJ: ${dar.cnpj}`);
       if (numeroGuia) doc.text(`Número da Guia: ${numeroGuia}`);
-      const ld = dar.linha_digitavel || dar.codigo_barras;
       if (ld) doc.text(`Linha Digitável/Código de Barras: ${ld}`);
       const dataPg = pagamento.dataPagamento ? new Date(pagamento.dataPagamento).toLocaleDateString('pt-BR') : '';
       doc.text(`Data do Pagamento: ${dataPg}`);
