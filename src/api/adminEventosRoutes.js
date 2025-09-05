@@ -565,6 +565,7 @@ router.get('/:eventoId/dars', async (req, res) => {
   try {
     const sql = `
       SELECT
+        d.id                                AS id,
         de.numero_parcela,
         COALESCE(de.valor_parcela, d.valor) AS valor,
         d.id                                AS dar_id,
