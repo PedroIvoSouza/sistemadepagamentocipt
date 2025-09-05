@@ -283,7 +283,7 @@
                 try {
                     const vencido =
                         ['Vencido', 'Vencida'].includes(darStatus) ||
-                        (['Emitido', 'Reemitido'].includes(darStatus) && new Date(button.dataset.vencimento) < new Date());
+                        (['Emitido', 'Reemitido', 'Pendente'].includes(darStatus) && new Date(button.dataset.vencimento) < new Date());
                     if (vencido) {
                         const response = await fetch(`/api/dars/${darId}/recalcular`, { headers });
                         if (!response.ok) throw new Error('Erro ao recalcular o DAR.');
@@ -309,6 +309,20 @@
                         const result = await response.json().catch(() => ({}));
                         if (!response.ok) {
                             showBackendError(result, 'Falha ao emitir o DAR.');
+                            return;
+                        }
+
+                        if (result.darVencido) {
+                            const calculo = result.calculo || {};
+                            document.getElementById('modalDiasAtraso').innerText = calculo.diasAtraso;
+                            document.getElementById('modalValorOriginal').innerText = `R$ ${calculo.valorOriginal.toFixed(2).replace('.', ',')}`;
+                            document.getElementById('modalMulta').innerText = `R$ ${calculo.multa.toFixed(2).replace('.', ',')}`;
+                            document.getElementById('modalJuros').innerText = `R$ ${calculo.juros.toFixed(2).replace('.', ',')}`;
+                            document.getElementById('modalValorAtualizado').innerText = `R$ ${calculo.valorAtualizado.toFixed(2).replace('.', ',')}`;
+                            document.getElementById('modalCompetencia').innerText = `${String(mesReferencia).padStart(2, '0')}/${anoReferencia}`;
+
+                            darIdParaEmitir = darId;
+                            recalculateModal.show();
                             return;
                         }
 
