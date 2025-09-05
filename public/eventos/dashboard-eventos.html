@@ -336,7 +336,11 @@
             catch{ alert('Não foi possível baixar a DAR. PDF inválido.'); }
             return;
           }
-          if (btn.dataset.darReemitir){
+          if (btn.dataset.darReemitir !== undefined){
+            if (!btn.dataset.darReemitir){
+              alert('Não é possível emitir esta DAR: identificador ausente.');
+              return;
+            }
             const evento = btn.dataset.evento;
             const linha  = btn.closest('tr');
             const idx    = linha?.children?.[0]?.textContent?.trim();
