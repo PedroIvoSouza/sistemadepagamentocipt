@@ -5,7 +5,11 @@ const authMiddleware = require('../middleware/authMiddleware');
 const authorizeRole = require('../middleware/roleMiddleware');
 const { calcularEncargosAtraso } = require('../services/cobrancaService');
 const { notificarDarGerado } = require('../services/notificacaoService');
-const { emitirGuiaSefaz, listarPagamentosPorDataArrecadacao } = require('../services/sefazService');
+const {
+  emitirGuiaSefaz,
+  listarPagamentosPorDataArrecadacao,
+  consultarPagamentoPorCodigoBarras,
+} = require('../services/sefazService');
 const { buildSefazPayloadPermissionario } = require('../utils/sefazPayload'); // <- reative o helper
 const { gerarTokenDocumento, imprimirTokenEmPdf } = require('../utils/token');
 const { isoHojeLocal, toISO } = require('../utils/sefazPayload');
@@ -481,20 +485,34 @@ router.get(
       if (!dar) return res.status(404).json({ error: 'DAR não encontrado.' });
 
       const numeroGuia = String(dar.numero_documento || '').trim();
-      const inicio = toISO(dar.data_pagamento || dar.data_vencimento) || isoHojeLocal();
-      const fim = isoHojeLocal();
+      const ld = dar.linha_digitavel || dar.codigo_barras || '';
 
       let pagamento;
       try {
-        const lista = await listarPagamentosPorDataArrecadacao(inicio, fim);
-        pagamento = lista.find(
-          (p) =>
-            p.numeroGuia === numeroGuia ||
-            (dar.codigo_barras && p.codigoBarras === dar.codigo_barras) ||
-            (dar.linha_digitavel && p.linhaDigitavel === dar.linha_digitavel)
-        );
+        pagamento = await consultarPagamentoPorCodigoBarras(numeroGuia, ld);
       } catch (e) {
-        console.warn('[AdminDARs] Falha ao consultar pagamento na SEFAZ:', e.message);
+        console.warn('[AdminDARs] Falha lookup direto na SEFAZ:', e.message);
+      }
+
+      if (!pagamento) {
+        let dataInicioISO = toISO(dar.data_pagamento || dar.data_vencimento) || isoHojeLocal();
+        let dataFimISO = isoHojeLocal();
+        const diff = Math.abs(new Date(dataFimISO) - new Date(dataInicioISO));
+        if (diff > 24 * 60 * 60 * 1000) {
+          dataFimISO = dataInicioISO;
+        }
+
+        try {
+          const lista = await listarPagamentosPorDataArrecadacao(dataInicioISO, dataFimISO);
+          pagamento = lista.find(
+            (p) =>
+              p.numeroGuia === numeroGuia ||
+              (dar.codigo_barras && p.codigoBarras === dar.codigo_barras) ||
+              (dar.linha_digitavel && p.linhaDigitavel === dar.linha_digitavel)
+          );
+        } catch (e) {
+          console.warn('[AdminDARs] Falha ao consultar pagamento na SEFAZ:', e.message);
+        }
       }
 
       if (!pagamento) {

@@ -534,6 +534,21 @@ async function listarPagamentosPorDataArrecadacao(dataInicioISO, dataFimISO, cod
   return lista.map(mapPagamento);
 }
 
+async function consultarPagamentoPorCodigoBarras(numeroGuia, linhaDigitavel) {
+  const payload = {};
+  if (numeroGuia) payload.numeroGuia = onlyDigits(numeroGuia);
+  if (linhaDigitavel) payload.linhaDigitavel = onlyDigits(linhaDigitavel);
+  if (!payload.numeroGuia && !payload.linhaDigitavel) return null;
+
+  const { data } = await reqWithRetry(
+    () => sefaz.post('/api/public/v2/guia/pagamento/por-barras', payload),
+    'pagamento/por-barras'
+  );
+
+  const item = Array.isArray(data) ? data[0] : data;
+  return item ? mapPagamento(item) : null;
+}
+
 async function listarPagamentosPorDataInclusao(dataInicioDateTime, dataFimDateTime, codigoReceita) {
   const payload = {
     dataHoraInicioInclusao: dataInicioDateTime,
@@ -564,6 +579,7 @@ module.exports = {
   onlyDigits,
   normalizeCodigoReceita,
   // conciliação
+  consultarPagamentoPorCodigoBarras,
   listarPagamentosPorDataArrecadacao,
   listarPagamentosPorDataInclusao,
 };
