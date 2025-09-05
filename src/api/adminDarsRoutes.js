@@ -5,10 +5,12 @@ const authMiddleware = require('../middleware/authMiddleware');
 const authorizeRole = require('../middleware/roleMiddleware');
 const { calcularEncargosAtraso } = require('../services/cobrancaService');
 const { notificarDarGerado } = require('../services/notificacaoService');
-const { emitirGuiaSefaz } = require('../services/sefazService');
+const { emitirGuiaSefaz, listarPagamentosPorDataArrecadacao } = require('../services/sefazService');
 const { buildSefazPayloadPermissionario } = require('../utils/sefazPayload'); // <- reative o helper
 const { gerarTokenDocumento, imprimirTokenEmPdf } = require('../utils/token');
 const { isoHojeLocal, toISO } = require('../utils/sefazPayload');
+const { applyLetterhead, abntMargins } = require('../utils/pdfLetterhead');
+const PDFDocument = require('pdfkit');
 const db = require('../database/db');
 
 const fs = require('fs');
@@ -458,6 +460,98 @@ return res.json({ ok: true, numero: sefaz.numeroGuia });
   }
 );
 
+
+/**
+ * GET /api/admin/dars/:id/comprovante
+ * Gera comprovante de pagamento da DAR com timbrado e token de verificação.
+ */
+router.get(
+  '/:id/comprovante',
+  [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN'])],
+  async (req, res) => {
+    try {
+      const darId = Number(req.params.id);
+      const dar = await dbGetAsync(
+        `SELECT d.*, p.nome_empresa, p.cnpj, p.id AS perm_id
+           FROM dars d
+           LEFT JOIN permissionarios p ON p.id = d.permissionario_id
+          WHERE d.id = ?`,
+        [darId]
+      );
+      if (!dar) return res.status(404).json({ error: 'DAR não encontrado.' });
+
+      const numeroGuia = String(dar.numero_documento || '').trim();
+      const inicio = toISO(dar.data_pagamento || dar.data_vencimento) || isoHojeLocal();
+      const fim = isoHojeLocal();
+
+      let pagamento;
+      try {
+        const lista = await listarPagamentosPorDataArrecadacao(inicio, fim);
+        pagamento = lista.find(
+          (p) =>
+            p.numeroGuia === numeroGuia ||
+            (dar.codigo_barras && p.codigoBarras === dar.codigo_barras) ||
+            (dar.linha_digitavel && p.linhaDigitavel === dar.linha_digitavel)
+        );
+      } catch (e) {
+        console.warn('[AdminDARs] Falha ao consultar pagamento na SEFAZ:', e.message);
+      }
+
+      if (!pagamento) {
+        return res.status(404).json({ error: 'Pagamento não localizado na SEFAZ.' });
+      }
+
+      const tokenDoc = await gerarTokenDocumento('DAR_COMPROVANTE', dar.permissionario_id, db);
+
+      const doc = new PDFDocument({ size: 'A4', margins: abntMargins(0.5, 0.5, 2) });
+      applyLetterhead(doc);
+
+      const chunks = [];
+      doc.on('data', (c) => chunks.push(c));
+      doc.on('end', async () => {
+        try {
+          const pdfBuffer = Buffer.concat(chunks);
+          const pdfBase64 = pdfBuffer.toString('base64');
+          const stampedBase64 = await imprimirTokenEmPdf(pdfBase64, tokenDoc);
+          const finalBuffer = Buffer.from(stampedBase64, 'base64');
+
+          const dir = path.join(process.cwd(), 'public', 'documentos');
+          fs.mkdirSync(dir, { recursive: true });
+          const filename = `comprovante_dar_${darId}_${Date.now()}.pdf`;
+          const filePath = path.join(dir, filename);
+          fs.writeFileSync(filePath, finalBuffer);
+          await dbRunAsync(`UPDATE documentos SET caminho = ? WHERE token = ?`, [filePath, tokenDoc]);
+
+          res.setHeader('X-Document-Token', tokenDoc);
+          res.attachment(`comprovante_dar_${darId}.pdf`);
+          res.send(finalBuffer);
+        } catch (e) {
+          console.error('[AdminDARs] Falha ao finalizar comprovante:', e);
+          if (!res.headersSent) res.status(500).json({ error: 'Erro ao gerar comprovante.' });
+        }
+      });
+
+      // ==== Conteúdo do PDF ====
+      doc.fontSize(16).fillColor('#333').text('COMPROVANTE DE PAGAMENTO DE DAR', { align: 'center' });
+      doc.moveDown();
+
+      doc.fontSize(12).fillColor('#000');
+      if (dar.nome_empresa) doc.text(`Permissionário: ${dar.nome_empresa}`);
+      if (dar.cnpj) doc.text(`CNPJ: ${dar.cnpj}`);
+      if (numeroGuia) doc.text(`Número da Guia: ${numeroGuia}`);
+      const ld = dar.linha_digitavel || dar.codigo_barras;
+      if (ld) doc.text(`Linha Digitável/Código de Barras: ${ld}`);
+      const dataPg = pagamento.dataPagamento ? new Date(pagamento.dataPagamento).toLocaleDateString('pt-BR') : '';
+      doc.text(`Data do Pagamento: ${dataPg}`);
+      doc.text(`Valor Pago: R$ ${Number(pagamento.valorPago || 0).toFixed(2)}`);
+
+      doc.end();
+    } catch (err) {
+      console.error('[AdminDARs] ERRO GET /:id/comprovante:', err);
+      return res.status(500).json({ error: 'Erro interno.' });
+    }
+  }
+);
 
 /**
  * GET /api/admin/dars/:id/pdf
