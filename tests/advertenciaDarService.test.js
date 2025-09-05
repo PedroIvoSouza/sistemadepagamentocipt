@@ -74,6 +74,8 @@ test('emitirDarAdvertencia cria dar e vincula à advertencia', async () => {
   assert.strictEqual(dar.data_vencimento, '2025-03-10');
   assert.strictEqual(dar.status, 'Emitido');
   assert.strictEqual(dar.numero_documento, '999');
+   assert.strictEqual(dar.linha_digitavel, 'LD');
+   assert.strictEqual(dar.codigo_barras, 'CB');
   await new Promise(res => db.close(res));
 });
 
