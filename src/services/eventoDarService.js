@@ -227,12 +227,23 @@ async function criarEventoComDars(db, data, helpers) {
         };
 
         const retorno = await emitirGuiaSefaz(payloadSefaz);
+        const { linhaDigitavel, codigoBarras } = retorno;
         const tokenDoc = await gerarTokenDocumento('DAR_EVENTO', null, db);
         const pdf = await imprimirTokenEmPdf(retorno.pdfBase64, tokenDoc);
+        const extraCols = [];
+        const extraVals = [];
+        if (linhaDigitavel) {
+          extraCols.push('linha_digitavel = ?');
+          extraVals.push(linhaDigitavel);
+        }
+        if (codigoBarras) {
+          extraCols.push('codigo_barras = ?');
+          extraVals.push(codigoBarras);
+        }
         await dbRun(
           db,
-          `UPDATE dars SET numero_documento = ?, pdf_url = ?, status = 'Emitido' WHERE id = ?`,
-          [retorno.numeroGuia, pdf, darId]
+          `UPDATE dars SET numero_documento = ?, pdf_url = ?, status = 'Emitido'${extraCols.length ? ', ' + extraCols.join(', ') : ''} WHERE id = ?`,
+          [retorno.numeroGuia, pdf, ...extraVals, darId]
         );
       }
     }
@@ -446,12 +457,23 @@ async function atualizarEventoComDars(db, id, data, helpers) {
         };
 
         const retorno = await emitirGuiaSefaz(payloadSefaz);
+        const { linhaDigitavel, codigoBarras } = retorno;
         const tokenDoc = await gerarTokenDocumento('DAR_EVENTO', null, db);
         const pdf = await imprimirTokenEmPdf(retorno.pdfBase64, tokenDoc);
+        const extraCols = [];
+        const extraVals = [];
+        if (linhaDigitavel) {
+          extraCols.push('linha_digitavel = ?');
+          extraVals.push(linhaDigitavel);
+        }
+        if (codigoBarras) {
+          extraCols.push('codigo_barras = ?');
+          extraVals.push(codigoBarras);
+        }
         await dbRun(
           db,
-          `UPDATE dars SET numero_documento = ?, pdf_url = ?, status = 'Emitido' WHERE id = ?`,
-          [retorno.numeroGuia, pdf, darId]
+          `UPDATE dars SET numero_documento = ?, pdf_url = ?, status = 'Emitido'${extraCols.length ? ', ' + extraCols.join(', ') : ''} WHERE id = ?`,
+          [retorno.numeroGuia, pdf, ...extraVals, darId]
         );
       }
     }

@@ -79,6 +79,8 @@ async function setupSchema(db) {
     tipo_permissionario TEXT,
     numero_documento TEXT,
     pdf_url TEXT,
+    linha_digitavel TEXT,
+    codigo_barras TEXT,
     data_emissao TEXT DEFAULT CURRENT_TIMESTAMP
   );`);
   await run(db, `CREATE TABLE DARs_Eventos (
@@ -91,7 +93,7 @@ async function setupSchema(db) {
 }
 
 const helpers = {
-  emitirGuiaSefaz: async () => ({ numeroGuia: '123', pdfBase64: 'pdf' }),
+  emitirGuiaSefaz: async () => ({ numeroGuia: '123', pdfBase64: 'pdf', linhaDigitavel: 'LD', codigoBarras: 'CB' }),
   gerarTokenDocumento: async () => 'token',
   imprimirTokenEmPdf: async (pdf, token) => `${pdf}-${token}`,
 };
@@ -133,6 +135,8 @@ test('criarEventoComDars insere evento e dars', async () => {
   assert.strictEqual(eventos.length, 1);
   const dars = await all(db, 'SELECT * FROM dars');
   assert.strictEqual(dars.length, 1);
+  assert.strictEqual(dars[0].linha_digitavel, 'LD');
+  assert.strictEqual(dars[0].codigo_barras, 'CB');
   await new Promise(res => db.close(res));
 });
 
@@ -190,6 +194,7 @@ test('atualizarEventoComDars substitui dars', async () => {
   await atualizarEventoComDars(db, id, updateData, helpers);
   const dars = await all(db, 'SELECT * FROM dars');
   assert.strictEqual(dars.length, 2);
+  assert.ok(dars.every(d => d.linha_digitavel === 'LD' && d.codigo_barras === 'CB'));
   await new Promise(res => db.close(res));
 });
 
