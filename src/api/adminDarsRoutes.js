@@ -16,6 +16,7 @@ const { isoHojeLocal, toISO } = require('../utils/sefazPayload');
 const { applyLetterhead, abntMargins, cm } = require('../utils/pdfLetterhead');
 const PDFDocument = require('pdfkit');
 const db = require('../database/db');
+const { BUSCA_PAGAMENTO_MAX_DIAS } = require('../config/dars');
 
 const fs = require('fs');
 const path = require('path');
@@ -497,25 +498,30 @@ router.get(
       }
 
       if (!pagamento) {
-        let dataInicioISO = toISO(dar.data_pagamento || dar.data_vencimento) || isoHojeLocal();
-        let dataFimISO = isoHojeLocal();
-        // Compare the start and end dates using the ISO string values.
-        // If they are different, align the end date with the start date so the
-        // lookup queries a single day.
-        if (dataFimISO !== dataInicioISO) {
-          dataFimISO = dataInicioISO;
-        }
+        const inicioISO = toISO(dar.data_vencimento) || isoHojeLocal();
+        const inicio = new Date(inicioISO);
+        const hoje = new Date(isoHojeLocal());
+        const msDia = 24 * 60 * 60 * 1000;
+        let dias = Math.floor((hoje - inicio) / msDia) + 1;
+        if (dias < 1) dias = 1;
+        const limite = Math.min(BUSCA_PAGAMENTO_MAX_DIAS, dias);
 
-        try {
-          const lista = await listarPagamentosPorDataArrecadacao(dataInicioISO, dataFimISO);
-          pagamento = lista.find(
-            (p) =>
-              p.numeroGuia === numeroGuia ||
-              (dar.codigo_barras && p.codigoBarras === dar.codigo_barras) ||
-              (dar.linha_digitavel && p.linhaDigitavel === dar.linha_digitavel)
-          );
-        } catch (e) {
-          console.warn('[AdminDARs] Falha ao consultar pagamento na SEFAZ:', e.message);
+        for (let i = 0; i < limite && !pagamento; i++) {
+          const dia = new Date(inicio);
+          dia.setDate(inicio.getDate() + i);
+          const diaISO = toISO(dia);
+
+          try {
+            const lista = await listarPagamentosPorDataArrecadacao(diaISO, diaISO);
+            pagamento = lista.find(
+              (p) =>
+                p.numeroGuia === numeroGuia ||
+                (dar.codigo_barras && p.codigoBarras === dar.codigo_barras) ||
+                (dar.linha_digitavel && p.linhaDigitavel === dar.linha_digitavel)
+            );
+          } catch (e) {
+            console.warn('[AdminDARs] Falha ao consultar pagamento na SEFAZ:', e.message);
+          }
         }
       }
 
