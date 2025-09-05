@@ -19,6 +19,8 @@ const db = require('../database/db');
 
 const fs = require('fs');
 const path = require('path');
+const QRCode = require('qrcode');
+const bwipjs = require('bwip-js');
 
 const router = express.Router();
 
@@ -552,17 +554,49 @@ router.get(
       });
 
       // ==== Conteúdo do PDF ====
-      doc.fontSize(16).fillColor('#333').text('COMPROVANTE DE PAGAMENTO DE DAR', { align: 'center' });
-      doc.moveDown();
+      const formatDate = (d) => (d ? new Date(d).toLocaleDateString('pt-BR') : '');
+      const formatCurrency = (v) => `R$ ${Number(v || 0).toFixed(2)}`;
 
+      // Título
+      doc.fontSize(16).fillColor('#333').text('COMPROVANTE DE PAGAMENTO DE DAR', { align: 'center' });
+
+      // Selo "PAGO"
+      doc.save();
+      doc.fontSize(80).fillColor('#2E7D32').opacity(0.15);
+      doc.rotate(-30, { origin: [doc.page.width / 2, doc.page.height / 2] });
+      doc.text('PAGO', doc.page.width / 2 - 120, doc.page.height / 2 - 40);
+      doc.restore();
+
+      const resumoTop = 120;
+      // Bloco-resumo
+      doc.rect(50, resumoTop, 495, 70).stroke();
       doc.fontSize(12).fillColor('#000');
-      if (dar.nome_empresa) doc.text(`Permissionário: ${dar.nome_empresa}`);
-      if (dar.cnpj) doc.text(`CNPJ: ${dar.cnpj}`);
-      if (numeroGuia) doc.text(`Número da Guia: ${numeroGuia}`);
-      if (ld) doc.text(`Linha Digitável/Código de Barras: ${ld}`);
-      const dataPg = pagamento.dataPagamento ? new Date(pagamento.dataPagamento).toLocaleDateString('pt-BR') : '';
-      doc.text(`Data do Pagamento: ${dataPg}`);
-      doc.text(`Valor Pago: R$ ${Number(pagamento.valorPago || 0).toFixed(2)}`);
+      doc.text(`Permissionário: ${dar.nome_empresa || ''}`, 60, resumoTop + 10);
+      doc.text(`CNPJ: ${dar.cnpj || ''}`, 60, resumoTop + 30);
+      doc.text(`Número da Guia: ${numeroGuia}`, 300, resumoTop + 10);
+      doc.text(`Data do Pagamento: ${formatDate(pagamento.dataPagamento)}`, 300, resumoTop + 30);
+      doc.text(`Valor Pago: ${formatCurrency(pagamento.valorPago)}`, 300, resumoTop + 50);
+
+      // Caixas de dados
+      const boxTop = resumoTop + 90;
+      doc.rect(50, boxTop, 245, 80).stroke();
+      doc.rect(300, boxTop, 245, 80).stroke();
+      doc.fontSize(11);
+      doc.text(`Linha Digitável: ${ld}`, 60, boxTop + 10, { width: 225 });
+      doc.text(`Código de Barras: ${ld}`, 310, boxTop + 10, { width: 225 });
+
+      // QR code e código de barras
+      const qrBuffer = await QRCode.toBuffer(ld || numeroGuia || '', { width: 100, margin: 1 });
+      doc.image(qrBuffer, 50, boxTop + 100, { width: 100, height: 100 });
+
+      const barcodeBuffer = await bwipjs.toBuffer({
+        bcid: 'code128',
+        text: ld || numeroGuia || '',
+        scale: 3,
+        height: 10,
+        includetext: false,
+      });
+      doc.image(barcodeBuffer, 170, boxTop + 130, { width: 350, height: 50 });
 
       doc.end();
     } catch (err) {
