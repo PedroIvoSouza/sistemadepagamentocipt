@@ -608,10 +608,10 @@ router.get(
       doc.rect(50, resumoTop, 495, 70).stroke();
       doc.fontSize(12).fillColor('#000');
       doc.text(`Permissionário: ${dar.nome_empresa || ''}`, 60, resumoTop + 10, { width: 225 });
-      doc.text(`CNPJ: ${dar.cnpj || ''}`, 60, resumoTop + 40, { width: 225 });
-      doc.text(`Número da Guia: ${numeroGuia}`, 300, resumoTop + 10);
-      doc.text(`Data do Pagamento: ${formatDate(pagamento.dataPagamento)}`, 300, resumoTop + 30);
-      doc.text(`Valor Pago: ${formatCurrency(pagamento.valorPago)}`, 300, resumoTop + 50);
+      doc.text(`CNPJ: ${dar.cnpj || ''}`, 60, resumoTop + 43, { width: 225 });
+      doc.text(`Número da Guia: ${numeroGuia}`, 310, resumoTop + 10);
+      doc.text(`Data do Pagamento: ${formatDate(pagamento.dataPagamento)}`, 310, resumoTop + 30);
+      doc.text(`Valor Pago: ${formatCurrency(pagamento.valorPago)}`, 310, resumoTop + 50);
 
       // Caixas de dados
       const boxTop = resumoTop + 90;
