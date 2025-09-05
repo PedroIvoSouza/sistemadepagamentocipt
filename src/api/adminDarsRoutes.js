@@ -13,7 +13,7 @@ const {
 const { buildSefazPayloadPermissionario } = require('../utils/sefazPayload'); // <- reative o helper
 const { gerarTokenDocumento, imprimirTokenEmPdf } = require('../utils/token');
 const { isoHojeLocal, toISO } = require('../utils/sefazPayload');
-const { applyLetterhead, abntMargins } = require('../utils/pdfLetterhead');
+const { applyLetterhead, abntMargins, cm } = require('../utils/pdfLetterhead');
 const PDFDocument = require('pdfkit');
 const db = require('../database/db');
 
@@ -529,12 +529,13 @@ router.get(
       applyLetterhead(doc);
 
       const chunks = [];
+      let tokenYFromBottom = 0;
       doc.on('data', (c) => chunks.push(c));
       doc.on('end', async () => {
         try {
           const pdfBuffer = Buffer.concat(chunks);
           const pdfBase64 = pdfBuffer.toString('base64');
-          const stampedBase64 = await imprimirTokenEmPdf(pdfBase64, tokenDoc);
+          const stampedBase64 = await imprimirTokenEmPdf(pdfBase64, tokenDoc, { y: tokenYFromBottom });
           const finalBuffer = Buffer.from(stampedBase64, 'base64');
 
           const dir = path.join(process.cwd(), 'public', 'documentos');
@@ -571,8 +572,8 @@ router.get(
       // Bloco-resumo
       doc.rect(50, resumoTop, 495, 70).stroke();
       doc.fontSize(12).fillColor('#000');
-      doc.text(`Permissionário: ${dar.nome_empresa || ''}`, 60, resumoTop + 10);
-      doc.text(`CNPJ: ${dar.cnpj || ''}`, 60, resumoTop + 30);
+      doc.text(`Permissionário: ${dar.nome_empresa || ''}`, 60, resumoTop + 10, { width: 225 });
+      doc.text(`CNPJ: ${dar.cnpj || ''}`, 60, resumoTop + 30, { width: 225 });
       doc.text(`Número da Guia: ${numeroGuia}`, 300, resumoTop + 10);
       doc.text(`Data do Pagamento: ${formatDate(pagamento.dataPagamento)}`, 300, resumoTop + 30);
       doc.text(`Valor Pago: ${formatCurrency(pagamento.valorPago)}`, 300, resumoTop + 50);
@@ -597,6 +598,10 @@ router.get(
         includetext: false,
       });
       doc.image(barcodeBuffer, 170, boxTop + 130, { width: 350, height: 50 });
+
+      // posição do token: 2 cm abaixo do QR code
+      tokenYFromBottom = doc.page.height - ((boxTop + 100) + 100 + cm(2));
+
 
       doc.end();
     } catch (err) {
