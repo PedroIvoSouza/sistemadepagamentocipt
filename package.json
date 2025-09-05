@@ -6,11 +6,13 @@
     "test": "node test/TermoService.test.js"
   },
   "dependencies": {
-    "puppeteer": "^22.15.0",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "react-big-calendar": "^1.8.0",
+    "bwip-js": "^4.7.0",
     "date-fns": "^2.30.0",
+    "puppeteer": "^22.15.0",
+    "qrcode": "^1.5.4",
+    "react": "^18.2.0",
+    "react-big-calendar": "^1.8.0",
+    "react-dom": "^18.2.0",
     "react-icons": "^4.12.0"
   }
 }
