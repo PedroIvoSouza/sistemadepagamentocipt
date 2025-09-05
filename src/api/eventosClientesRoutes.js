@@ -625,6 +625,41 @@ adminRouter.put('/:id', async (req, res) => {
   }
 });
 
+// REENVIAR LINK DE DEFINIÇÃO DE SENHA
+adminRouter.post('/:id/reenviar-senha', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const cliente = await dbGet(
+      `SELECT email, nome_razao_social, token_definir_senha, token_definir_senha_expires FROM Clientes_Eventos WHERE id = ?`,
+      [id]
+    );
+    if (!cliente) return res.status(404).json({ error: 'Cliente não encontrado.' });
+
+    let { token_definir_senha: token, token_definir_senha_expires: exp } = cliente;
+    const now = Date.now();
+    if (!token || !exp || now > Number(exp)) {
+      token = crypto.randomBytes(32).toString('hex');
+      const expiresAt = now + 60 * 60 * 1000; // 1h
+      await dbRun(
+        `UPDATE Clientes_Eventos SET token_definir_senha = ?, token_definir_senha_expires = ? WHERE id = ?`,
+        [token, expiresAt, id]
+      );
+    }
+
+    const ok = await enviarEmailDefinirSenha(
+      cliente.email,
+      cliente.nome_razao_social,
+      token
+    );
+    if (!ok) return res.status(500).json({ error: 'Falha ao enviar e-mail.' });
+
+    res.json({ ok: true, message: 'E-mail de definição de senha reenviado.' });
+  } catch (err) {
+    console.error('[ADMIN EVENTOS CLIENTES][REENVIAR SENHA] ERRO:', err.message);
+    res.status(500).json({ error: 'Erro ao reenviar senha.' });
+  }
+});
+
 module.exports = {
   adminRoutes:  adminRouter,
   publicRoutes: publicRouter,
