@@ -21,6 +21,9 @@ const authorizeRole               = require('../middleware/roleMiddleware');
 // === Serviços usados no Termo + Assinafy ===
 const { gerarTermoEventoPdfkitEIndexar } = require('../services/termoEventoPdfkitService');
 const { uploadPdf } = require('../services/assinafyClient');
+const { calcularEncargosAtraso } = require('../services/cobrancaService');
+const { emitirGuiaSefaz } = require('../services/sefazService');
+const { imprimirTokenEmPdf } = require('../utils/token');
 
 const adminRouter  = express.Router();
 const publicRouter = express.Router();
@@ -187,6 +190,119 @@ clientRouter.put('/:id/remarcar', async (req, res) => {
   } catch (err) {
     console.error('[PORTAL] /:id/remarcar erro:', err);
     res.status(500).json({ error: 'Erro ao remarcar o evento.' });
+  }
+});
+
+/**
+ * POST /api/portal/eventos/dars/:id/reemitir
+ * Reemite uma DAR vinculada a um evento do cliente logado.
+ */
+clientRouter.post('/dars/:id/reemitir', async (req, res) => {
+  try {
+    const darId = Number(req.params.id);
+    const row = await dbGet(
+      `SELECT d.*, e.id_cliente,
+              ce.nome_razao_social AS nome,
+              COALESCE(NULLIF(TRIM(ce.documento), ''), NULLIF(TRIM(ce.documento_responsavel), '')) AS doc_raw
+         FROM dars d
+         JOIN DARs_Eventos de ON de.id_dar = d.id
+         JOIN Eventos e        ON e.id = de.id_evento
+         JOIN Clientes_Eventos ce ON ce.id = e.id_cliente
+        WHERE d.id = ?
+        LIMIT 1`,
+      [darId]
+    );
+    if (!row) return res.status(404).json({ error: 'DAR não encontrada.' });
+    if (row.id_cliente !== req.user.id) {
+      return res.status(403).json({ error: 'Este DAR não pertence ao seu evento.' });
+    }
+
+    let dar = { ...row };
+    const enc = await calcularEncargosAtraso(dar).catch(() => null);
+    if (enc) {
+      if (enc.valorAtualizado != null) dar.valor = enc.valorAtualizado;
+      if (enc.novaDataVencimento) dar.data_vencimento = enc.novaDataVencimento;
+    }
+
+    const doc = String(row.doc_raw || '').replace(/\D/g, '');
+    const nome = row.nome || 'Contribuinte';
+    if (!(doc.length === 11 || doc.length === 14)) {
+      return res.status(400).json({ error: 'Documento do cliente ausente ou inválido.' });
+    }
+    const tipo = doc.length === 11 ? 3 : 4;
+    const codigoIbgeMunicipio = 2704302;
+
+    const mes  = dar.mes_referencia || Number(String(dar.data_vencimento).slice(5, 7));
+    const ano  = dar.ano_referencia || Number(String(dar.data_vencimento).slice(0, 4));
+    const venc = String(dar.data_vencimento).slice(0, 10);
+
+    const receitaCodigo = tipo === 3 ? 20165 : 20164;
+    const observacao = nome ? `Evento CIPT - ${nome}` : 'Evento CIPT';
+
+    const payload = {
+      contribuinteEmitente: { codigoTipoInscricao: tipo, numeroInscricao: doc, nome, codigoIbgeMunicipio },
+      receitas: [{
+        codigo: receitaCodigo,
+        competencia: { mes, ano },
+        valorPrincipal: Number(dar.valor),
+        valorDesconto: 0,
+        dataVencimento: venc
+      }],
+      dataLimitePagamento: venc,
+      observacao
+    };
+    const guiaLike = {
+      codigo: receitaCodigo,
+      competencia: { mes, ano },
+      valorPrincipal: Number(dar.valor),
+      valorDesconto: 0,
+      dataVencimento: venc,
+      observacao
+    };
+
+    let sefaz;
+    try {
+      sefaz = await emitirGuiaSefaz(payload);
+    } catch (e1) {
+      console.warn('[PORTAL][dars/:id/reemitir] payload único falhou -> tentando (contrib, guiaLike):', e1?.message);
+      sefaz = await emitirGuiaSefaz({ codigoTipoInscricao: tipo, numeroInscricao: doc, nome, codigoIbgeMunicipio }, guiaLike);
+    }
+
+    if (!sefaz || !sefaz.numeroGuia || !sefaz.pdfBase64) {
+      return res.status(502).json({ error: 'Retorno da SEFAZ incompleto (sem numeroGuia/pdfBase64).' });
+    }
+
+    const tokenDoc = `DAR-${sefaz.numeroGuia}`;
+    const pdfComToken = await imprimirTokenEmPdf(sefaz.pdfBase64, tokenDoc);
+
+    await dbRun(
+      `UPDATE dars
+          SET numero_documento = ?,
+              pdf_url          = ?,
+              status           = CASE WHEN COALESCE(status,'') IN ('','Pendente','Vencido','Vencida') THEN 'Reemitido' ELSE status END,
+              data_emissao     = COALESCE(data_emissao, date('now')),
+              emitido_por_id   = COALESCE(emitido_por_id, ?),
+              valor            = ?,
+              data_vencimento  = ?
+        WHERE id = ?`,
+      [sefaz.numeroGuia, pdfComToken, req.user?.id || null, dar.valor, dar.data_vencimento, darId]
+    );
+
+    const ld = sefaz.linhaDigitavel || sefaz.linha_digitavel || null;
+    const cb = sefaz.codigoBarras || sefaz.codigo_barras || null;
+    if (ld || cb) {
+      await dbRun(
+        `UPDATE dars SET linha_digitavel = COALESCE(?, linha_digitavel),
+                         codigo_barras  = COALESCE(?, codigo_barras)
+         WHERE id = ?`,
+        [ld, cb, darId]
+      );
+    }
+
+    return res.json({ ok: true, numero: sefaz.numeroGuia, dar_pdf: pdfComToken });
+  } catch (err) {
+    console.error('[PORTAL] ERRO POST /dars/:id/reemitir:', err);
+    return res.status(400).json({ error: err.message || 'Falha ao reemitir a DAR.' });
   }
 });
 
