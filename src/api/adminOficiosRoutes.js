@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-const { applyLetterhead, abntMargins } = require('../utils/pdfLetterhead');
+const { applyLetterhead, abntMargins, cm } = require('../utils/pdfLetterhead');
 const { gerarTokenDocumento } = require('../utils/token');
 const generateTokenQr = require('../utils/qrcodeToken');
 
@@ -24,9 +24,14 @@ const dbRun = (sql, params = []) =>
   new Promise((resolve, reject) => db.run(sql, params, function (err) { if (err) reject(err); else resolve(this); }));
 
 /* ========= Util: imprime token sem mexer no cursor do conteúdo ========= */
-function printToken(doc, token, qrBuffer) {
+function printToken(doc, token, qrBuffer, tokenYOverride) {
   if (!token) return;
   const prevX = doc.x, prevY = doc.y; // preserva cursor do conteúdo
+
+  // desativa temporariamente listeners de pageAdded para evitar recursão
+  const pageAddedListeners = doc.listeners('pageAdded');
+  doc.removeAllListeners('pageAdded');
+
   doc.save();
   const x = doc.page.margins.left;
   const qrSize = 40;
@@ -37,8 +42,12 @@ function printToken(doc, token, qrBuffer) {
   const avisoWidth = qrX - x - 10;
   doc.fontSize(7).fillColor('#222');
   const avisoHeight = doc.heightOfString(aviso, { width: avisoWidth });
-  const avisoY = baseY + 2;
-  const tokenY = avisoY + avisoHeight + 2;
+
+  // posiciona elementos acima de baseY para garantir que não ultrapassem a página
+  let tokenY = baseY - qrSize + 8;
+  if (typeof tokenYOverride === 'number') tokenY = tokenYOverride;
+  const avisoY = tokenY - avisoHeight - 2;
+
   doc.text(aviso, x, avisoY, { width: avisoWidth });
 
   const text = `Token: ${token}`;
@@ -49,6 +58,9 @@ function printToken(doc, token, qrBuffer) {
   doc.restore();
   doc.x = prevX;
   doc.y = prevY; // restaura cursor do conteúdo
+
+  // reativa listeners de pageAdded
+  for (const l of pageAddedListeners) doc.on('pageAdded', l);
 }
 
 /* ===========================================================
@@ -94,20 +106,16 @@ router.get(
       // 4) Aplica papel timbrado (todas as páginas)
       applyLetterhead(doc, { imagePath: path.join(__dirname, '..', 'assets', 'papel-timbrado-secti.png') });
 
-      // 5) Registra o token em cada nova página
-      doc.on('pageAdded', () => printToken(doc, tokenDoc, qrBuffer));
-
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `attachment; filename="oficio_${permissionarioId}.pdf"`);
       res.setHeader('X-Document-Token', tokenDoc);
       doc.pipe(res);
 
-      // 6) Cursor inicial na área útil + token da primeira página
+      // 5) Cursor inicial na área útil
       doc.x = doc.page.margins.left;
       doc.y = doc.page.margins.top;
-      printToken(doc, tokenDoc, qrBuffer);
 
-      // 7) Conteúdo do ofício
+      // 6) Conteúdo do ofício
       const larguraUtil = doc.page.width - doc.page.margins.left - doc.page.margins.right;
 
       const hoje = new Date();
@@ -253,7 +261,17 @@ router.get(
         );
       }
 
-
+      // 7) Token ~2cm abaixo da assinatura
+      {
+        const twoCm = cm(2);
+        const qrSize = 40;
+        let tokenY = doc.y + twoCm;
+        if (tokenY + qrSize > doc.page.height - doc.page.margins.bottom) {
+          doc.addPage();
+          tokenY = doc.page.margins.top + twoCm;
+        }
+        printToken(doc, tokenDoc, qrBuffer, tokenY);
+      }
 
       // 8) Finaliza
       doc.end();
