@@ -24,7 +24,11 @@ test('reemitir DAR vencido atualiza valor e vencimento', async () => {
   process.env.RECEITA_CODIGO_PERMISSIONARIO = '12345';
 
   const sefazPath = path.resolve(__dirname, '../src/services/sefazService.js');
-  require.cache[sefazPath] = { exports: { emitirGuiaSefaz: async () => ({ numeroGuia: '999', pdfBase64: 'PDF' }) } };
+  require.cache[sefazPath] = { exports: {
+    emitirGuiaSefaz: async () => ({ numeroGuia: '999', pdfBase64: 'PDF' }),
+    consultarPagamentoPorCodigoBarras: async () => null,
+    listarPagamentosPorDataArrecadacao: async () => [],
+  } };
 
   const cobrancaPath = path.resolve(__dirname, '../src/services/cobrancaService.js');
   require.cache[cobrancaPath] = { exports: { calcularEncargosAtraso: async () => ({ valorAtualizado: 150, novaDataVencimento: '2030-01-31' }) } };
