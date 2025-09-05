@@ -51,6 +51,9 @@ O projeto também tenta rodar esse comando automaticamente na inicialização, m
 Após atualizar o código para versões mais recentes, execute novamente as migrações para criar novas estruturas de banco de dados,
 como a tabela de auditoria de reservas (`reservas_audit`).
 
+Arquivos de banco de dados criados antes da inclusão da coluna `valor_aluguel` em `permissionarios` precisam ser migrados ou
+recriados para que essa coluna seja adicionada corretamente.
+
 ## Salas de Reunião
 
 Para habilitar o módulo de salas:
