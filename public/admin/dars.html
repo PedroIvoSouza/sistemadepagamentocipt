@@ -258,6 +258,9 @@
         if (comprovanteButton) {
           e.preventDefault();
           const darId = comprovanteButton.dataset.id;
+          const originalText = comprovanteButton.innerHTML;
+          comprovanteButton.disabled = true;
+          comprovanteButton.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Consultando...`;
           try {
             const response = await fetch(`/api/admin/dars/${encodeURIComponent(darId)}/comprovante`, {
               headers: { Authorization: `Bearer ${token}` }
@@ -268,6 +271,9 @@
             window.open(blobURL);
           } catch (error) {
             alert('Erro: ' + error.message);
+          } finally {
+            comprovanteButton.disabled = false;
+            comprovanteButton.innerHTML = originalText;
           }
         }
       });

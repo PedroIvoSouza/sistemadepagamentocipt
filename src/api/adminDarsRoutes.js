@@ -17,6 +17,7 @@ const { applyLetterhead, abntMargins, cm } = require('../utils/pdfLetterhead');
 const PDFDocument = require('pdfkit');
 const db = require('../database/db');
 const { BUSCA_PAGAMENTO_MAX_DIAS } = require('../config/dars');
+const { atualizarDataPagamento } = require('../services/darService');
 
 const fs = require('fs');
 const path = require('path');
@@ -502,31 +503,59 @@ router.get(
         const inicio = new Date(inicioISO);
         const hoje = new Date(isoHojeLocal());
         const msDia = 24 * 60 * 60 * 1000;
-        let dias = Math.floor((hoje - inicio) / msDia) + 1;
-        if (dias < 1) dias = 1;
-        const limite = Math.min(BUSCA_PAGAMENTO_MAX_DIAS, dias);
+        let diasFrente = Math.floor((hoje - inicio) / msDia) + 1;
+        if (diasFrente < 1) diasFrente = 1;
+        const limiteFrente = Math.min(BUSCA_PAGAMENTO_MAX_DIAS, diasFrente);
+        const limiteTras = BUSCA_PAGAMENTO_MAX_DIAS;
+        const maxOffset = Math.max(limiteFrente, limiteTras) + 1;
 
-        for (let i = 0; i < limite && !pagamento; i++) {
-          const dia = new Date(inicio);
-          dia.setDate(inicio.getDate() + i);
-          const diaISO = toISO(dia);
-
-          try {
-            const lista = await listarPagamentosPorDataArrecadacao(diaISO, diaISO);
-            pagamento = lista.find(
-              (p) =>
-                p.numeroGuia === numeroGuia ||
-                (dar.codigo_barras && p.codigoBarras === dar.codigo_barras) ||
-                (dar.linha_digitavel && p.linhaDigitavel === dar.linha_digitavel)
-            );
-          } catch (e) {
-            console.warn('[AdminDARs] Falha ao consultar pagamento na SEFAZ:', e.message);
+        for (let i = 0; i < maxOffset && !pagamento; i++) {
+          if (i < limiteFrente) {
+            const dia = new Date(inicio);
+            dia.setDate(inicio.getDate() + i);
+            const diaISO = toISO(dia);
+            try {
+              const lista = await listarPagamentosPorDataArrecadacao(diaISO, diaISO);
+              pagamento = lista.find(
+                (p) =>
+                  p.numeroGuia === numeroGuia ||
+                  (dar.codigo_barras && p.codigoBarras === dar.codigo_barras) ||
+                  (dar.linha_digitavel && p.linhaDigitavel === dar.linha_digitavel)
+              );
+            } catch (e) {
+              console.warn('[AdminDARs] Falha ao consultar pagamento na SEFAZ:', e.message);
+            }
+          }
+          if (!pagamento && i > 0 && i <= limiteTras) {
+            const dia = new Date(inicio);
+            dia.setDate(inicio.getDate() - i);
+            const diaISO = toISO(dia);
+            try {
+              const lista = await listarPagamentosPorDataArrecadacao(diaISO, diaISO);
+              pagamento = lista.find(
+                (p) =>
+                  p.numeroGuia === numeroGuia ||
+                  (dar.codigo_barras && p.codigoBarras === dar.codigo_barras) ||
+                  (dar.linha_digitavel && p.linhaDigitavel === dar.linha_digitavel)
+              );
+            } catch (e) {
+              console.warn('[AdminDARs] Falha ao consultar pagamento na SEFAZ:', e.message);
+            }
           }
         }
       }
 
       if (!pagamento) {
         return res.status(404).json({ error: 'Pagamento não localizado na SEFAZ.' });
+      }
+
+      const dataPgISO = toISO(pagamento.dataPagamento);
+      if (dataPgISO) {
+        try {
+          await atualizarDataPagamento(darId, dataPgISO);
+        } catch (e) {
+          console.warn('[AdminDARs] Falha ao persistir data_pagamento:', e.message);
+        }
       }
 
       const tokenDoc = await gerarTokenDocumento('DAR_COMPROVANTE', dar.permissionario_id, db);
