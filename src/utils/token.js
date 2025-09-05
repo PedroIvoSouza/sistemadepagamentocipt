@@ -70,7 +70,7 @@ async function gerarTokenDocumento(tipo, permissionarioId, db) {
   return token;
 }
 
-async function imprimirTokenEmPdf(pdfBase64, token) {
+async function imprimirTokenEmPdf(pdfBase64, token, opts = {}) {
   const pdfBytes = Buffer.from(pdfBase64, 'base64');
   const pdfDoc = await PDFDocument.load(pdfBytes);
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
@@ -82,14 +82,15 @@ async function imprimirTokenEmPdf(pdfBase64, token) {
     'Para checar a autenticidade do documento insira o token abaixo no Portal do Permissionário que pode ser acessado através do qr code ao lado.';
   const tokenFontSize = 8;
   const avisoFontSize = 7;
-  const marginX = 50;
-  const qrSize = 40;
+  const marginX = opts.marginX ?? 50;
+  const qrSize = opts.qrSize ?? 40;
 
   pages.forEach(page => {
     const pageWidth = page.getWidth();
-    const qrX = pageWidth - qrSize - marginX;
-    const tokenY = 10;
-    const avisoWidth = qrX - marginX - 10;
+    const qrX = opts.qrX ?? pageWidth - qrSize - marginX;
+    const tokenY = opts.y ?? 10;
+    const qrY = opts.qrY ?? (tokenY - tokenFontSize - 2);
+    const avisoWidth = (opts.avisoWidth ?? qrX) - marginX - 10;
 
     const lines = wrapText(aviso, font, avisoFontSize, avisoWidth);
     lines.forEach((line, idx) => {
@@ -112,7 +113,7 @@ async function imprimirTokenEmPdf(pdfBase64, token) {
 
     page.drawImage(qrImage, {
       x: qrX,
-      y: 0,
+      y: qrY,
       width: qrSize,
       height: qrSize,
     });
