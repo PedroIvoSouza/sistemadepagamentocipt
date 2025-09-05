@@ -7,22 +7,13 @@ const { calcularEncargosAtraso } = require('../services/cobrancaService');
 const { notificarDarGerado } = require('../services/notificacaoService');
 const {
   emitirGuiaSefaz,
-  listarPagamentosPorDataArrecadacao,
-  consultarPagamentoPorCodigoBarras,
 } = require('../services/sefazService');
 const { buildSefazPayloadPermissionario } = require('../utils/sefazPayload'); // <- reative o helper
-const { gerarTokenDocumento, imprimirTokenEmPdf } = require('../utils/token');
 const { isoHojeLocal, toISO } = require('../utils/sefazPayload');
-const { applyLetterhead, abntMargins, cm } = require('../utils/pdfLetterhead');
-const PDFDocument = require('pdfkit');
 const db = require('../database/db');
-const { BUSCA_PAGAMENTO_MAX_DIAS } = require('../config/dars');
-const { atualizarDataPagamento } = require('../services/darService');
-
 const fs = require('fs');
 const path = require('path');
-const QRCode = require('qrcode');
-const bwipjs = require('bwip-js');
+const { gerarComprovante } = require('../services/darComprovanteService');
 
 const router = express.Router();
 
@@ -479,184 +470,14 @@ router.get(
   async (req, res) => {
     try {
       const darId = Number(req.params.id);
-      const dar = await dbGetAsync(
-        `SELECT d.*, p.nome_empresa, p.cnpj, p.id AS perm_id
-           FROM dars d
-           LEFT JOIN permissionarios p ON p.id = d.permissionario_id
-          WHERE d.id = ?`,
-        [darId]
-      );
-      if (!dar) return res.status(404).json({ error: 'DAR não encontrado.' });
-
-      if (dar.comprovante_token) {
-        try {
-          const docRow = await dbGetAsync(
-            `SELECT caminho FROM documentos WHERE token = ?`,
-            [dar.comprovante_token]
-          );
-          if (docRow?.caminho && fs.existsSync(docRow.caminho)) {
-            res.setHeader('X-Document-Token', dar.comprovante_token);
-            res.attachment(`comprovante_dar_${darId}.pdf`);
-            return fs.createReadStream(docRow.caminho).pipe(res);
-          }
-        } catch (e) {
-          console.warn('[AdminDARs] Falha ao recuperar comprovante existente:', e.message);
-        }
-      }
-
-      const numeroGuia = String(dar.numero_documento || '').trim();
-      const ld = dar.linha_digitavel || dar.codigo_barras || '';
-
-      let pagamento;
-      try {
-        pagamento = await consultarPagamentoPorCodigoBarras(numeroGuia, ld);
-      } catch (e) {
-        console.warn('[AdminDARs] Falha lookup direto na SEFAZ:', e.message);
-      }
-
-      if (!pagamento) {
-        const inicioISO = toISO(dar.data_vencimento) || isoHojeLocal();
-        const inicio = new Date(inicioISO);
-        const hoje = new Date(isoHojeLocal());
-        const msDia = 24 * 60 * 60 * 1000;
-        let diasFrente = Math.floor((hoje - inicio) / msDia) + 1;
-        if (diasFrente < 1) diasFrente = 1;
-        const limiteFrente = Math.min(BUSCA_PAGAMENTO_MAX_DIAS, diasFrente);
-        const limiteTras = BUSCA_PAGAMENTO_MAX_DIAS;
-        const maxOffset = Math.max(limiteFrente, limiteTras) + 1;
-
-        for (let i = 0; i < maxOffset && !pagamento; i++) {
-          if (i < limiteFrente) {
-            const dia = new Date(inicio);
-            dia.setDate(inicio.getDate() + i);
-            const diaISO = toISO(dia);
-            try {
-              const lista = await listarPagamentosPorDataArrecadacao(diaISO, diaISO);
-              pagamento = lista.find(
-                (p) =>
-                  p.numeroGuia === numeroGuia ||
-                  (dar.codigo_barras && p.codigoBarras === dar.codigo_barras) ||
-                  (dar.linha_digitavel && p.linhaDigitavel === dar.linha_digitavel)
-              );
-            } catch (e) {
-              console.warn('[AdminDARs] Falha ao consultar pagamento na SEFAZ:', e.message);
-            }
-          }
-          if (!pagamento && i > 0 && i <= limiteTras) {
-            const dia = new Date(inicio);
-            dia.setDate(inicio.getDate() - i);
-            const diaISO = toISO(dia);
-            try {
-              const lista = await listarPagamentosPorDataArrecadacao(diaISO, diaISO);
-              pagamento = lista.find(
-                (p) =>
-                  p.numeroGuia === numeroGuia ||
-                  (dar.codigo_barras && p.codigoBarras === dar.codigo_barras) ||
-                  (dar.linha_digitavel && p.linhaDigitavel === dar.linha_digitavel)
-              );
-            } catch (e) {
-              console.warn('[AdminDARs] Falha ao consultar pagamento na SEFAZ:', e.message);
-            }
-          }
-        }
-      }
-
-      if (!pagamento) {
-        return res.status(404).json({ error: 'Pagamento não localizado na SEFAZ.' });
-      }
-
-      const dataPgISO = toISO(pagamento.dataPagamento);
-      if (dataPgISO) {
-        try {
-          await atualizarDataPagamento(darId, dataPgISO);
-        } catch (e) {
-          console.warn('[AdminDARs] Falha ao persistir data_pagamento:', e.message);
-        }
-      }
-
-      const tokenDoc = await gerarTokenDocumento('DAR_COMPROVANTE', dar.permissionario_id, db);
-
-      const doc = new PDFDocument({ size: 'A4', margins: abntMargins(0.5, 0.5, 2) });
-      applyLetterhead(doc);
-
-      const chunks = [];
-      let tokenYFromBottom = 0;
-      doc.on('data', (c) => chunks.push(c));
-      doc.on('end', async () => {
-        try {
-          const pdfBuffer = Buffer.concat(chunks);
-          const pdfBase64 = pdfBuffer.toString('base64');
-          const stampedBase64 = await imprimirTokenEmPdf(pdfBase64, tokenDoc, { y: tokenYFromBottom });
-          const finalBuffer = Buffer.from(stampedBase64, 'base64');
-
-          const dir = path.join(process.cwd(), 'public', 'documentos');
-          fs.mkdirSync(dir, { recursive: true });
-          const filename = `comprovante_dar_${darId}_${Date.now()}.pdf`;
-          const filePath = path.join(dir, filename);
-          fs.writeFileSync(filePath, finalBuffer);
-          await dbRunAsync(`UPDATE documentos SET caminho = ? WHERE token = ?`, [filePath, tokenDoc]);
-          await dbRunAsync(`UPDATE dars SET comprovante_token = ? WHERE id = ?`, [tokenDoc, darId]);
-
-          res.setHeader('X-Document-Token', tokenDoc);
-          res.attachment(`comprovante_dar_${darId}.pdf`);
-          res.send(finalBuffer);
-        } catch (e) {
-          console.error('[AdminDARs] Falha ao finalizar comprovante:', e);
-          if (!res.headersSent) res.status(500).json({ error: 'Erro ao gerar comprovante.' });
-        }
-      });
-
-      // ==== Conteúdo do PDF ====
-      const formatDate = (d) => (d ? new Date(d).toLocaleDateString('pt-BR') : '');
-      const formatCurrency = (v) => `R$ ${Number(v || 0).toFixed(2)}`;
-
-      // Título
-      doc.fontSize(16).fillColor('#333').text('COMPROVANTE DE PAGAMENTO DE DAR', { align: 'center' });
-
-      // Selo "PAGO"
-      doc.save();
-      doc.fontSize(80).fillColor('#2E7D32').opacity(0.15);
-      doc.rotate(-30, { origin: [doc.page.width / 2, doc.page.height / 2] });
-      doc.text('PAGO', doc.page.width / 2 - 120, doc.page.height / 2 - 40);
-      doc.restore();
-
-      const resumoTop = 120;
-      // Bloco-resumo
-      doc.rect(50, resumoTop, 495, 70).stroke();
-      doc.fontSize(12).fillColor('#000');
-      doc.text(`Permissionário: ${dar.nome_empresa || ''}`, 60, resumoTop + 10, { width: 225 });
-      doc.text(`CNPJ: ${dar.cnpj || ''}`, 60, resumoTop + 43, { width: 225 });
-      doc.text(`Número da Guia: ${numeroGuia}`, 310, resumoTop + 10);
-      doc.text(`Data do Pagamento: ${formatDate(pagamento.dataPagamento)}`, 310, resumoTop + 30);
-      doc.text(`Valor Pago: ${formatCurrency(pagamento.valorPago)}`, 310, resumoTop + 50);
-
-      // Caixas de dados
-      const boxTop = resumoTop + 90;
-      doc.rect(50, boxTop, 245, 80).stroke();
-      doc.rect(300, boxTop, 245, 80).stroke();
-      doc.fontSize(11);
-      doc.text(`Linha Digitável: ${ld}`, 60, boxTop + 10, { width: 225 });
-      doc.text(`Código de Barras: ${ld}`, 310, boxTop + 10, { width: 225 });
-
-      // QR code e código de barras
-      const qrBuffer = await QRCode.toBuffer(ld || numeroGuia || '', { width: 100, margin: 1 });
-      doc.image(qrBuffer, 50, boxTop + 100, { width: 100, height: 100 });
-
-      const barcodeBuffer = await bwipjs.toBuffer({
-        bcid: 'code128',
-        text: ld || numeroGuia || '',
-        scale: 3,
-        height: 10,
-        includetext: false,
-      });
-      doc.image(barcodeBuffer, 170, boxTop + 130, { width: 350, height: 50 });
-
-      // posição do token: 2 cm abaixo do QR code
-      tokenYFromBottom = doc.page.height - ((boxTop + 100) + 100 + cm(2));
-
-
-      doc.end();
+      const { buffer, token } = await gerarComprovante(darId, db);
+      res.setHeader('X-Document-Token', token);
+      res.attachment(`comprovante_dar_${darId}.pdf`);
+      res.send(buffer);
     } catch (err) {
+      if (err.status === 404) {
+        return res.status(404).json({ error: err.message });
+      }
       console.error('[AdminDARs] ERRO GET /:id/comprovante:', err);
       return res.status(500).json({ error: 'Erro interno.' });
     }
