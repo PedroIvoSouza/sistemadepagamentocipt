@@ -281,14 +281,15 @@
       async function reemitirDAR(headers, eventoId, dar){
         const darId   = dar.id || dar.dar_id || dar.parcela_id || dar.referencia || dar.parcela_num;
         const parcNum = dar.parcela_num || dar.referencia || null;
-        const resp = await fetch(`/api/admin/dars/${darId}/reemitir`, {
+        const resp = await fetch(`/api/portal/eventos/dars/${darId}/reemitir`, {
           method: 'POST',
           headers: { ...headers, 'Content-Type': 'application/json' },
           body: JSON.stringify({ evento_id: eventoId, parcela_num: parcNum })
         });
         const json = await resp.json().catch(() => ({}));
         if (resp.ok) return json;
-        throw new Error('Não foi possível emitir a DAR.');
+        const msg = json?.error || 'Não foi possível emitir a DAR.';
+        throw new Error(msg);
       }
 
       async function abrirDARsDoEvento(eventoId, nomeEvento){
