@@ -1,6 +1,7 @@
 // src/utils/pdfLetterhead.js
 const fs = require('fs');
 const path = require('path');
+const logger = require('./logger');
 
 const CM = 28.3464566929; // pontos por cm
 const cm = (n) => Math.round(n * CM);
@@ -34,15 +35,33 @@ function applyLetterhead(doc, opts = {}) {
 
   const buf = fs.readFileSync(imgPath);
 
+  // Verifica assinatura PNG: 0x89 0x50 0x4E 0x47
+  if (
+    buf.length < 4 ||
+    buf[0] !== 0x89 ||
+    buf[1] !== 0x50 ||
+    buf[2] !== 0x4e ||
+    buf[3] !== 0x47
+  ) {
+    logger.warn(`Imagem de papel timbrado inválida (não PNG): ${imgPath}`);
+    return;
+  }
+
   const rendered = new WeakSet();
   const render = () => {
     const page = doc.page;
     if (rendered.has(page)) return; // evita renderização dupla
     rendered.add(page);
+
     doc.save();
-    // cobre a página inteira
-    doc.image(buf, 0, 0, { width: doc.page.width, height: doc.page.height });
-    doc.restore();
+    try {
+      // cobre a página inteira
+      doc.image(buf, 0, 0, { width: doc.page.width, height: doc.page.height });
+    } catch (err) {
+      logger.error(`Falha ao renderizar papel timbrado: ${err.message || err}`);
+    } finally {
+      doc.restore();
+    }
   };
 
   // primeira página
