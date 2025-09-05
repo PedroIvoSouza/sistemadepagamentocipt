@@ -602,6 +602,7 @@ router.get(
       // posição do token: 2 cm abaixo do QR code
       tokenYFromBottom = doc.page.height - ((boxTop + 100) + 100 + cm(2));
 
+
       doc.end();
     } catch (err) {
       console.error('[AdminDARs] ERRO GET /:id/comprovante:', err);
