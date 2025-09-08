@@ -534,7 +534,7 @@ async function emitirDarAdvertencia(evento, valorMulta, { db, helpers = {}, hoje
 
   const cliente = await dbGet(
     db,
-    `SELECT nome_razao_social, documento, endereco, cep FROM Clientes WHERE id = ?`,
+    `SELECT nome_razao_social, documento, endereco, cep FROM Clientes_Eventos WHERE id = ?`,
     [evento.cliente_id]
   );
   if (!cliente) throw new Error('Cliente não encontrado.');
