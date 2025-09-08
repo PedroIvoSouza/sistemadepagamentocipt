@@ -286,3 +286,48 @@ test('atualizarEventoComDars para evento gratuito remove dars', async () => {
   assert.strictEqual(eventos[0].justificativa_gratuito, 'Isento');
   await new Promise(res => db.close(res));
 });
+
+test('criarEventoComDars em paralelo gera numero_termo distinto', async () => {
+  const fs = require('fs');
+  const dbPath = '/tmp/eventos-paralelo.sqlite';
+  try { fs.unlinkSync(dbPath); } catch {}
+
+  const initDb = new sqlite3.Database(dbPath);
+  initDb.configure('busyTimeout', 1000);
+  await setupSchema(initDb);
+  await seedCliente(initDb);
+  await new Promise(res => initDb.close(res));
+
+  const base = {
+    idCliente: 1,
+    numeroOficioSei: null,
+    espacosUtilizados: ['Auditório'],
+    datasEvento: ['2025-10-10'],
+    totalDiarias: 1,
+    valorBruto: 100,
+    tipoDescontoAuto: 'Geral',
+    descontoManualPercent: 0,
+    valorFinal: 100,
+    parcelas: [{ valor: 100, vencimento: '2025-09-01' }],
+  };
+
+  const total = 5;
+  await Promise.all(
+    Array.from({ length: total }, (_, i) =>
+      (async () => {
+        const conn = new sqlite3.Database(dbPath);
+        conn.configure('busyTimeout', 1000);
+        await criarEventoComDars(conn, { ...base, nomeEvento: `Evento ${i}` }, helpers);
+        await new Promise(r => conn.close(r));
+      })()
+    )
+  );
+
+  const verify = new sqlite3.Database(dbPath);
+  verify.configure('busyTimeout', 1000);
+  const eventos = await all(verify, 'SELECT numero_termo FROM Eventos');
+  assert.strictEqual(eventos.length, total);
+  const termos = eventos.map(e => e.numero_termo);
+  assert.strictEqual(new Set(termos).size, total);
+  await new Promise(res => verify.close(res));
+});

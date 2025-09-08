@@ -126,13 +126,6 @@ async function criarEventoComDars(db, data, helpers) {
       throw new Error(`A soma das parcelas (R$ ${somaParcelas.toFixed(2)}) não corresponde ao Valor Final (R$ ${Number(valorFinal||0).toFixed(2)}).`);
     }
   }
-  let numeroTermoFinal = numeroTermo;
-  if (!numeroTermoFinal) {
-    numeroTermoFinal = await getNextNumeroTermo(db, new Date().getFullYear());
-  } else {
-    const exists = await dbGet(db, 'SELECT 1 FROM Eventos WHERE numero_termo = ?', [numeroTermoFinal]);
-    if (exists) throw new Error('Número de termo já existe.');
-  }
 
   const datasOrdenadas = Array.isArray(datasEvento) ? [...datasEvento].sort((a,b)=> new Date(a)-new Date(b)) : [];
   const dataVigenciaFinal = datasOrdenadas.length ? new Date(datasOrdenadas.at(-1)) : null;
@@ -140,10 +133,27 @@ async function criarEventoComDars(db, data, helpers) {
     dataVigenciaFinal.setDate(dataVigenciaFinal.getDate() + 1);
   }
 
-  await dbRun(db, 'BEGIN TRANSACTION');
-  try {
-    const datasEventoStr = JSON.stringify(datasEvento || []);
-    const colsEvento = [
+  const MAX_ATTEMPTS = 5;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    let numeroTermoFinal = numeroTermo;
+    try {
+      await dbRun(db, 'BEGIN IMMEDIATE');
+    } catch (err) {
+      if (err?.code === 'SQLITE_BUSY') {
+        continue;
+      }
+      throw err;
+    }
+    try {
+      if (!numeroTermoFinal) {
+        numeroTermoFinal = await getNextNumeroTermo(db, new Date().getFullYear());
+      } else {
+        const exists = await dbGet(db, 'SELECT 1 FROM Eventos WHERE numero_termo = ?', [numeroTermoFinal]);
+        if (exists) throw new Error('Número de termo já existe.');
+      }
+
+      const datasEventoStr = JSON.stringify(datasEvento || []);
+      const colsEvento = [
       'id_cliente', 'nome_evento', 'espaco_utilizado', 'area_m2', 'datas_evento',
       'datas_evento_original', 'data_vigencia_final', 'total_diarias', 'valor_bruto',
       'tipo_desconto', 'desconto_manual', 'valor_final', 'numero_oficio_sei',
@@ -275,8 +285,13 @@ async function criarEventoComDars(db, data, helpers) {
     return eventoId;
   } catch (err) {
     try { await dbRun(db, 'ROLLBACK'); } catch {}
+    if (!numeroTermo && err?.code === 'SQLITE_CONSTRAINT') {
+      continue;
+    }
     throw err;
   }
+  }
+  throw new Error('Não foi possível gerar número de termo único.');
 }
 
 async function atualizarEventoComDars(db, id, data, helpers) {
