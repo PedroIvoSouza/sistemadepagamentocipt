@@ -24,6 +24,21 @@ const dbAll = (db, sql, p = []) =>
     });
   });
 
+async function getNextNumeroTermo(db, year = new Date().getFullYear()) {
+  await dbRun(
+    db,
+    'CREATE UNIQUE INDEX IF NOT EXISTS ux_eventos_numero_termo ON Eventos(numero_termo)'
+  );
+  const row = await dbGet(
+    db,
+    `SELECT numero_termo FROM Eventos WHERE numero_termo LIKE ? ORDER BY CAST(SUBSTR(numero_termo,1,INSTR(numero_termo,'/')-1) AS INTEGER) DESC LIMIT 1`,
+    [`%/${year}`]
+  );
+  const current = row?.numero_termo ? Number(row.numero_termo.split('/')[0]) : 0;
+  const next = String(current + 1).padStart(3, '0');
+  return `${next}/${year}`;
+}
+
 const feriadosFixos = [
   '01/01', '21/04', '01/05', '24/06', '07/09',
   '16/09', '12/10', '02/11', '15/11', '25/12'
@@ -111,6 +126,14 @@ async function criarEventoComDars(db, data, helpers) {
       throw new Error(`A soma das parcelas (R$ ${somaParcelas.toFixed(2)}) não corresponde ao Valor Final (R$ ${Number(valorFinal||0).toFixed(2)}).`);
     }
   }
+  let numeroTermoFinal = numeroTermo;
+  if (!numeroTermoFinal) {
+    numeroTermoFinal = await getNextNumeroTermo(db, new Date().getFullYear());
+  } else {
+    const exists = await dbGet(db, 'SELECT 1 FROM Eventos WHERE numero_termo = ?', [numeroTermoFinal]);
+    if (exists) throw new Error('Número de termo já existe.');
+  }
+
   const datasOrdenadas = Array.isArray(datasEvento) ? [...datasEvento].sort((a,b)=> new Date(a)-new Date(b)) : [];
   const dataVigenciaFinal = datasOrdenadas.length ? new Date(datasOrdenadas.at(-1)) : null;
   if (dataVigenciaFinal) {
@@ -151,7 +174,7 @@ async function criarEventoComDars(db, data, helpers) {
         horaMontagem || null,
         horaDesmontagem || null,
         numeroProcesso || null,
-        numeroTermo || null,
+        numeroTermoFinal || null,
         0,
         null,
         null,
@@ -577,5 +600,6 @@ module.exports = {
   criarEventoComDars,
   atualizarEventoComDars,
   emitirDarAdvertencia,
+  getNextNumeroTermo,
 };
 
