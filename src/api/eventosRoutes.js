@@ -107,14 +107,6 @@ router.post('/', async (req, res) => {
         return res.status(400).json({ error: 'A data de vencimento da última parcela deve ser anterior à data de início do evento.' });
     }
     
-    // Garante índice único e resolve número do termo
-    await new Promise((resolve, reject) => {
-        db.run(
-            'CREATE UNIQUE INDEX IF NOT EXISTS ux_eventos_numero_termo ON Eventos(numero_termo)',
-            (err) => (err ? reject(err) : resolve())
-        );
-    });
-
     let numeroTermoFinal = numeroTermo;
     if (!numeroTermoFinal) {
         numeroTermoFinal = await getNextNumeroTermo(db, new Date().getFullYear());

@@ -25,10 +25,6 @@ const dbAll = (db, sql, p = []) =>
   });
 
 async function getNextNumeroTermo(db, year = new Date().getFullYear()) {
-  await dbRun(
-    db,
-    'CREATE UNIQUE INDEX IF NOT EXISTS ux_eventos_numero_termo ON Eventos(numero_termo)'
-  );
   const row = await dbGet(
     db,
     `SELECT numero_termo FROM Eventos WHERE numero_termo LIKE ? ORDER BY CAST(SUBSTR(numero_termo,1,INSTR(numero_termo,'/')-1) AS INTEGER) DESC LIMIT 1`,
