@@ -2,16 +2,17 @@
 
 module.exports = {
   async up(queryInterface, Sequelize) {
-    // Remove duplicated numero_termo keeping the lowest rowid
+    // Set numero_termo to NULL for duplicates, keeping the lowest rowid
     await queryInterface.sequelize.query(`
-      DELETE FROM Eventos
-      WHERE numero_termo IS NOT NULL
-        AND rowid NOT IN (
-          SELECT MIN(rowid)
-          FROM Eventos
-          WHERE numero_termo IS NOT NULL
-          GROUP BY numero_termo
-        );
+      WITH ranked AS (
+        SELECT rowid, numero_termo,
+               ROW_NUMBER() OVER (PARTITION BY numero_termo ORDER BY rowid) AS rn
+        FROM Eventos
+        WHERE numero_termo IS NOT NULL
+      )
+      UPDATE Eventos
+      SET numero_termo = NULL
+      WHERE rowid IN (SELECT rowid FROM ranked WHERE rn > 1);
     `);
 
     // Create unique index to enforce uniqueness
