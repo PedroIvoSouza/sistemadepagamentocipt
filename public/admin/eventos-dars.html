@@ -244,7 +244,7 @@
           </div>
           <div class="mb-3">
             <label for="numero-termo" class="form-label">Número do Termo</label>
-            <input type="text" class="form-control" id="numero-termo">
+            <input type="text" class="form-control" id="numero-termo" readonly>
           </div>
         </fieldset>
 
@@ -418,6 +418,7 @@
   <script defer src="/js/mobile-adapter.js"></script>
   <script defer src="/js/ui-kit.js"></script>
   <script defer src="/js/mobile-tweaks.js"></script>
+  <script src="/js/proximoNumeroTermo.js"></script>
   <script>
 window.onload = () => {
   // =======================
@@ -1676,6 +1677,8 @@ function normalizarEvento(payload){
   parcelamentoFieldset.disabled = false;
   adicionarParcela();
   atualizarCalculos();
+
+  fillNextNumeroTermo(numeroTermoMask);
 
   // garante modo criação
   modoEdicao = false;

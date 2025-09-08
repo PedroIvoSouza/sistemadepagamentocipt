@@ -10,6 +10,7 @@ const authMiddleware = require('../middleware/authMiddleware');
 const authorizeRole = require('../middleware/roleMiddleware');
 
 const db = require('../database/db');
+const { getNextNumeroTermo } = require('../services/eventoDarService');
 const router = express.Router();
 
 /* ========= SQLite helpers ========= */
@@ -221,6 +222,23 @@ function printToken(doc, token, qrBuffer) {
   doc.restore();
   doc.x = prevX; doc.y = prevY;
 }
+
+/* ===========================================================
+   GET /api/admin/termos/proximo-numero
+   =========================================================== */
+router.get(
+  '/termos/proximo-numero',
+  [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN'])],
+  async (req, res) => {
+    try {
+      const ano = Number(req.query.ano) || new Date().getFullYear();
+      const numeroTermo = await getNextNumeroTermo(db, ano);
+      res.json({ numeroTermo });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  }
+);
 
 /* ===========================================================
    GET /api/admin/eventos/:eventoId/termo

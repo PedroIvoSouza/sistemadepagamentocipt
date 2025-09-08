@@ -38,6 +38,7 @@ const adminRoutes           = require('./api/adminRoutes');
 const adminManagementRoutes = require('./api/adminManagementRoutes');
 const adminDarsRoutes       = require('./api/adminDarsRoutes');
 const adminOficiosRoutes    = require('./api/adminOficiosRoutes');
+const adminTermoEventosRoutes = require('./api/adminTermoEventosRoutes');
 const permissionariosRoutes = require('./api/permissionariosRoutes');
 const botRoutes             = require('./api/botRoutes');
 const adminSalasRoutes      = require('./api/adminSalasRoutes');
@@ -104,6 +105,7 @@ mount('/api/admins',            'adminManagementRoutes', adminManagementRoutes, 
 mount('/api/admin',             'adminRoutes',           adminRoutes,           app);
 mount('/api/admin',             'adminOficiosRoutes',    adminOficiosRoutes,    app);
 mount('/api/admin',             'adminAdvertenciasRoutes', adminAdvertenciasRoutes, app);
+mount('/api/admin',             'adminTermoEventosRoutes', adminTermoEventosRoutes, app);
 mount('/api/admin/salas',       'adminSalasRoutes',      adminSalasRoutes,      app);
 
 // Webhook Assinafy
