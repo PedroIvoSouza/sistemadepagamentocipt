@@ -4,7 +4,7 @@ module.exports = {
   async up(queryInterface, Sequelize) {
     const fks = await queryInterface.getForeignKeyReferencesForTable('Advertencias');
     for (const fk of fks) {
-      if (fk.columnName === 'cliente_id') {
+      if (fk.columnName === 'cliente_id' && fk.constraintName) {
         await queryInterface.removeConstraint('Advertencias', fk.constraintName);
       }
     }
@@ -24,7 +24,7 @@ module.exports = {
   async down(queryInterface, Sequelize) {
     const fks = await queryInterface.getForeignKeyReferencesForTable('Advertencias');
     for (const fk of fks) {
-      if (fk.columnName === 'cliente_id') {
+      if (fk.columnName === 'cliente_id' && fk.constraintName) {
         await queryInterface.removeConstraint('Advertencias', fk.constraintName);
       }
     }
