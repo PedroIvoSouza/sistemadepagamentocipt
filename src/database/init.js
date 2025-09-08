@@ -72,30 +72,6 @@ module.exports = new Promise((resolve, reject) => {
       console.log('Tabela "certidoes_quitacao" verificada/criada com sucesso.');
     });
 
-    // Tabela 3: Clientes
-    db.run(`
-        CREATE TABLE IF NOT EXISTS Clientes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nome_razao_social TEXT,
-            documento TEXT,
-            endereco TEXT,
-            cep TEXT,
-            email TEXT,
-            telefone TEXT,
-            logradouro TEXT,
-            numero TEXT,
-            complemento TEXT,
-            bairro TEXT,
-            cidade TEXT,
-            uf TEXT
-        );
-    `, (err) => {
-      if (err) {
-        return console.error('Erro ao criar a tabela "Clientes":', err.message);
-      }
-      console.log('Tabela "Clientes" verificada/criada com sucesso.');
-    });
-
     // Garantir colunas de inelegibilidade na tabela Clientes_Eventos
     db.all(`PRAGMA table_info('Clientes_Eventos')`, (err, columns) => {
       if (err) {
