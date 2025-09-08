@@ -5,6 +5,7 @@ const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const { calcularValorBruto, calcularValorFinal } = require('../services/eventoValorService');
 const { emitirGuiaSefaz } = require('../services/sefazService'); // Reutilizamos nosso serviço da SEFAZ
+const { getNextNumeroTermo } = require('../services/eventoDarService');
 
 const router = express.Router();
 const dbPath = path.resolve(__dirname, '..', '..', 'sistemacipt.db');
@@ -106,6 +107,29 @@ router.post('/', async (req, res) => {
         return res.status(400).json({ error: 'A data de vencimento da última parcela deve ser anterior à data de início do evento.' });
     }
     
+    // Garante índice único e resolve número do termo
+    await new Promise((resolve, reject) => {
+        db.run(
+            'CREATE UNIQUE INDEX IF NOT EXISTS ux_eventos_numero_termo ON Eventos(numero_termo)',
+            (err) => (err ? reject(err) : resolve())
+        );
+    });
+
+    let numeroTermoFinal = numeroTermo;
+    if (!numeroTermoFinal) {
+        numeroTermoFinal = await getNextNumeroTermo(db, new Date().getFullYear());
+    } else {
+        const existente = await new Promise((resolve, reject) => {
+            db.get('SELECT 1 FROM Eventos WHERE numero_termo = ?', [numeroTermoFinal], (err, row) => {
+                if (err) reject(err);
+                else resolve(row);
+            });
+        });
+        if (existente) {
+            return res.status(400).json({ error: 'Número de termo já existe.' });
+        }
+    }
+
     // --- Início do Processo de Criação ---
     db.serialize(async () => {
         db.run('BEGIN TRANSACTION');
@@ -132,7 +156,7 @@ router.post('/', async (req, res) => {
                 horaMontagem || null,
                 horaDesmontagem || null,
                 numeroProcesso || null,
-                numeroTermo || null,
+                numeroTermoFinal || null,
                 emprestimoTvs ? 1 : 0,
                 emprestimoCaixasSom ? 1 : 0,
                 emprestimoMicrofones ? 1 : 0,
