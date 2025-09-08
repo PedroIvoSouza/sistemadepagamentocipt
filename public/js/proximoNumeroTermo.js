@@ -1,7 +1,7 @@
 async function fillNextNumeroTermo(mask, year) {
   try {
     const query = year ? `?ano=${year}` : '';
-    const res = await fetch(`/api/admin/termos/proximo-numero${query}`);
+    const res = await fetch(`/api/admin/termos/proximo-numero${query}`, { credentials: 'include' });
     if (!res.ok) throw new Error('Falha ao obter número');
     const data = await res.json();
     const valor = data.numeroTermo || '';

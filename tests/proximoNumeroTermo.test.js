@@ -59,12 +59,15 @@ test('rota retorna próximo numeroTermo', async () => {
 // ==== Teste do front-end util ====
 test('fillNextNumeroTermo preenche campo automaticamente', async () => {
   let called = false;
-  global.fetch = async () => {
+  let options;
+  global.fetch = async (_url, opts) => {
     called = true;
+    options = opts;
     return { ok: true, json: async () => ({ numeroTermo: '010/2025' }) };
   };
   const mask = { value: '' };
   await fillNextNumeroTermo(mask);
   assert.ok(called);
+  assert.deepStrictEqual(options, { credentials: 'include' });
   assert.strictEqual(mask.value, '010/2025');
 });
