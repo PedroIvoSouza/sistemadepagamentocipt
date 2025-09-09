@@ -458,9 +458,6 @@ router.get(
       linhaAssin('TESTEMUNHA – CPF');
       linhaAssin('TESTEMUNHA – CPF');
 
-      // Finaliza
-      doc.end();
-
       // ====== Ao terminar, salva em disco + indexa + devolve download ======
       doc.on('end', async () => {
         try {
@@ -505,6 +502,9 @@ router.get(
           return res.status(500).json({ error: 'Erro ao finalizar o PDF do termo.' });
         }
       });
+
+      // Finaliza
+      doc.end();
 
     } catch (err) {
       console.error('[adminTermosEventos] erro:', err);
