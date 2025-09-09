@@ -618,13 +618,14 @@ const saldoISO = parcelas.length > 1
     '5.16 - Toda estrutura que não for retirada no dia da desmontagem que consta neste termo de permissão de uso será destinada a outros fins, bem como será aplicada multa no valor de 10% da locação.',
     '5.17 - É vedada a utilização da porta de emergência para fins que não seja de segurança, tais como movimentação de estrutura de eventos, sob pena de multa em caso de desobediência.',
     '5.18 - É proibido o consumo de comidas/bebidas dentro do auditório ou do anfiteatro, de modo que havendo violação deverá ser aplicada multa de 10% do valor de locação, bem como deverá arcar com o valor de danos, caso tenha ocorrido.',
-    '5.19 - É proibido som e/ou apresentação musical fora do auditório, sob pena de multa.',
-    '5.20 - Não é permitido colocar qualquer estrutura no carpete, tanto do auditório quanto do anfiteatro.',
-    '5.21 - Caso haja danos ou furtos aos equipamentos emprestados, a PERMISSIONÁRIA deverá arcar com todos os custos de aquisição de novos equipamentos, sem prejuízo de outras sanções cabíveis, como a aplicação de multa.',
-    '5.22 - Não é permitido desligar as tomadas das baias.',
-    '5.23 - Deverão constar as logomarcas da SECTI e do CIPT nos materiais de divulgação do evento.',
-    '5.24 - Somente serão considerados válidos os procedimentos, condições ou benefícios expressamente previstos neste Termo. Qualquer exceção às disposições aqui estabelecidas deverá ser formalmente requerida junto à esta Secretaria responsável, por meio de solicitação oficial e devidamente fundamentada, ficando sua concessão condicionada à análise e autorização expressa da referida Secretaria, a seu exclusivo critério.',
-    '5.25 - O Permissionário deve enviar o termo de permissão de uso devidamente assinado no prazo de até 5 (cinco) dias contados da data do envio do documento, sob pena de CANCELAMENTO da reserva da data, sem devolução de qualquer valor pago.'
+    '5.19 - Somente serão considerados válidos os procedimentos, condições ou benefícios expressamente previstos neste Termo. Qualquer exceção às disposições aqui estabelecidas deverá ser formalmente requerida junto à esta Secretaria responsável, por meio de solicitação oficial e devidamente fundamentada, ficando sua concessão condicionada à análise e autorização expressa da referida Secretaria, a seu exclusivo critério.',
+    '5.20 - Todo o equipamento disponível no Coworking do Espaço de Fomento do CIPT deverá ser utilizado exclusivamente pelos Permissionários que estiverem ocupando os postos de trabalho para a realização de suas atividades, sendo vedada a circulação e retirada desses equipamentos dos ambientes, sob pena de responsabilização por perdas e danos.',
+    '5.21 - É proibido som e/ou apresentação musical fora do auditório, sob pena de multa.',
+    '5.22 - Não é permitido colocar qualquer estrutura no carpete, tanto do auditório quanto do anfiteatro.',
+    '5.23 - Caso haja danos ou furtos aos equipamentos emprestados, a PERMISSIONÁRIA deverá arcar com todos os custos de aquisição de novos equipamentos, sem prejuízo de outras sanções cabíveis, como a aplicação de multa.',
+    '5.24 - Não é permitido desligar as tomadas das baias.',
+    '5.25 - Deverão constar as logomarcas da SECTI e do CIPT nos materiais de divulgação do evento.',
+    '5.26 - O Permissionário deve enviar o termo de permissão de uso devidamente assinado no prazo de até 5 (cinco) dias contados da data do envio do documento, sob pena de CANCELAMENTO da reserva da data, sem devolução de qualquer valor pago.'
   ].forEach(p => paragrafo(doc, p));
 
   // CLÁUSULA 6 – Penalidades
