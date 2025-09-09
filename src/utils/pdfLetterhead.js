@@ -68,13 +68,8 @@ function applyLetterhead(doc, opts = {}) {
   render();
   // novas páginas
   doc.on('pageAdded', render);
-
-  // garante que o timbrado seja desenhado antes de finalizar o documento
-  const originalEnd = doc.end.bind(doc);
-  doc.end = (...args) => {
-    render();
-    return originalEnd(...args);
-  };
+  // retorna função para permitir renderização manual antes de finalizar o documento
+  return render;
 }
 
 module.exports = { applyLetterhead, abntMargins, cm };

@@ -428,7 +428,7 @@ router.get(
         doc.pipe(res);
 
         // Papel timbrado em todas as páginas
-        applyLetterhead(doc, { imagePath: path.join(__dirname, '..', 'assets', 'papel-timbrado-secti.png') });
+        const renderLetterhead = applyLetterhead(doc, { imagePath: path.join(__dirname, '..', 'assets', 'papel-timbrado-secti.png') });
 
         // Cursor inicial dentro da área útil
         doc.x = doc.page.margins.left;
@@ -442,6 +442,7 @@ router.get(
         doc.moveDown(2);
         generateTable(doc, permissionarios);
 
+        renderLetterhead();
         doc.end();
         return;
       }
@@ -563,7 +564,7 @@ router.get(
       doc.pipe(stream);
 
       // Papel timbrado em todas as páginas
-      applyLetterhead(doc, { imagePath: path.join(__dirname, '..', 'assets', 'papel-timbrado-secti.png') });
+      const renderLetterhead = applyLetterhead(doc, { imagePath: path.join(__dirname, '..', 'assets', 'papel-timbrado-secti.png') });
 
       // Cursor inicial dentro da área útil
       doc.x = doc.page.margins.left;
@@ -576,6 +577,7 @@ router.get(
       doc.fillColor('#333').fontSize(16).text('Relatório de Devedores', { align: 'center' });
       doc.moveDown(2);
       generateDebtorsTable(doc, devedores);
+      renderLetterhead();
       doc.end();
 
       await new Promise((resolve, reject) => {
@@ -663,7 +665,7 @@ router.get(
       const stream = fs.createWriteStream(filePath);
       doc.pipe(stream);
 
-      applyLetterhead(doc, { imagePath: path.join(__dirname, '..', 'assets', 'papel-timbrado-secti.png') });
+      const renderLetterhead = applyLetterhead(doc, { imagePath: path.join(__dirname, '..', 'assets', 'papel-timbrado-secti.png') });
 
       doc.x = doc.page.margins.left;
       doc.y = doc.page.margins.top;
@@ -673,6 +675,7 @@ router.get(
       doc.fillColor('#333').fontSize(16).text('Relatório de DARs', { align: 'center' });
       doc.moveDown(2);
       generateDarsTable(doc, dars);
+      renderLetterhead();
       doc.end();
 
       await new Promise((resolve, reject) => {
@@ -758,7 +761,7 @@ router.get(
       const stream = fs.createWriteStream(filePath);
       doc.pipe(stream);
 
-      applyLetterhead(doc, { imagePath: path.join(__dirname, '..', 'assets', 'papel-timbrado-secti.png') });
+      const renderLetterhead = applyLetterhead(doc, { imagePath: path.join(__dirname, '..', 'assets', 'papel-timbrado-secti.png') });
       doc.x = doc.page.margins.left;
       doc.y = doc.page.margins.top;
       printToken(doc, tokenDoc, qrBuffer);
@@ -795,6 +798,7 @@ router.get(
         }
       });
 
+      renderLetterhead();
       doc.end();
 
       await new Promise((resolve, reject) => {
@@ -864,7 +868,7 @@ router.get(
       const stream = fs.createWriteStream(filePath);
       doc.pipe(stream);
 
-      applyLetterhead(doc, { imagePath: path.join(__dirname, '..', 'assets', 'papel-timbrado-secti.png') });
+      const renderLetterhead = applyLetterhead(doc, { imagePath: path.join(__dirname, '..', 'assets', 'papel-timbrado-secti.png') });
 
       doc.x = doc.page.margins.left;
       doc.y = doc.page.margins.top;
@@ -873,6 +877,7 @@ router.get(
       doc.fillColor('#333').fontSize(16).text('Relatório DARs de Eventos', { align: 'center' });
       doc.moveDown(2);
       generateEventoDarsTable(doc, dars);
+      renderLetterhead();
       doc.end();
 
       await new Promise((resolve, reject) => {

@@ -104,7 +104,7 @@ router.get(
         if (!res.headersSent) res.status(500).end();
       });
       // 4) Aplica papel timbrado (todas as páginas)
-      applyLetterhead(doc, { imagePath: path.join(__dirname, '..', 'assets', 'papel-timbrado-secti.png') });
+      const renderLetterhead = applyLetterhead(doc, { imagePath: path.join(__dirname, '..', 'assets', 'papel-timbrado-secti.png') });
 
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `attachment; filename="oficio_${permissionarioId}.pdf"`);
@@ -274,6 +274,7 @@ router.get(
       }
 
       // 8) Finaliza
+      renderLetterhead();
       doc.end();
 
       // (opcional) gravar referência no banco

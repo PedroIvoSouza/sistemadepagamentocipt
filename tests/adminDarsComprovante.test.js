@@ -64,7 +64,7 @@ test('comprovante persiste data de pagamento encontrada', async () => {
   } };
 
   const letterPath = path.resolve(__dirname, '../src/utils/pdfLetterhead.js');
-  require.cache[letterPath] = { exports: { applyLetterhead: () => {}, abntMargins: () => ({}), cm: () => 0 } };
+  require.cache[letterPath] = { exports: { applyLetterhead: () => () => {}, abntMargins: () => ({}), cm: () => 0 } };
 
   const pdfkitPath = require.resolve('pdfkit');
   require.cache[pdfkitPath] = { exports: class {
@@ -179,7 +179,7 @@ test('comprovante busca pagamentos anteriores ao vencimento', async () => {
   } };
 
   const letterPath = path.resolve(__dirname, '../src/utils/pdfLetterhead.js');
-  require.cache[letterPath] = { exports: { applyLetterhead: () => {}, abntMargins: () => ({}), cm: () => 0 } };
+  require.cache[letterPath] = { exports: { applyLetterhead: () => () => {}, abntMargins: () => ({}), cm: () => 0 } };
 
   const pdfkitPath = require.resolve('pdfkit');
   require.cache[pdfkitPath] = { exports: class {
@@ -290,7 +290,7 @@ test('comprovante reutiliza PDF existente quando token e arquivo presentes', asy
   const tokenPath = path.resolve(__dirname, '../src/utils/token.js');
   require.cache[tokenPath] = { exports: { gerarTokenDocumento: async () => 'tok', imprimirTokenEmPdf: async (b64) => b64 } };
   const letterPath = path.resolve(__dirname, '../src/utils/pdfLetterhead.js');
-  require.cache[letterPath] = { exports: { applyLetterhead: () => {}, abntMargins: () => ({}), cm: () => 0 } };
+  require.cache[letterPath] = { exports: { applyLetterhead: () => () => {}, abntMargins: () => ({}), cm: () => 0 } };
   const pdfkitPath = require.resolve('pdfkit');
   require.cache[pdfkitPath] = { exports: class { constructor() { this.page = { width: 0, height: 0 }; } on(){} end(){} } };
   const qrPath = require.resolve('qrcode');
