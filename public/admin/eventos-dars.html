@@ -361,33 +361,35 @@
   </div>
 
   <!-- Modal para confirmação/edição dos dados do signatário -->
-  <div id="assinafy-modal" class="modal">
-    <div class="modal-content small">
-      <header class="d-flex justify-content-between align-items-center mb-3">
-        <h5>Dados do Signatário</h5>
-        <button id="close-assinafy-modal-btn" class="btn-close" aria-label="Fechar"></button>
-      </header>
-      <form id="assinafy-form">
-        <div class="mb-3">
-          <label for="assinafy-signer-name" class="form-label">Nome</label>
-          <input type="text" id="assinafy-signer-name" class="form-control" required>
-        </div>
-        <div class="mb-3">
-          <label for="assinafy-signer-email" class="form-label">E-mail</label>
-          <input type="email" id="assinafy-signer-email" class="form-control" required>
-        </div>
-        <div class="mb-3">
-          <label for="assinafy-signer-cpf" class="form-label">CPF</label>
-          <input type="text" id="assinafy-signer-cpf" class="form-control">
-        </div>
-        <div class="mb-3">
-          <label for="assinafy-signer-phone" class="form-label">Telefone</label>
-          <input type="text" id="assinafy-signer-phone" class="form-control">
-        </div>
-        <div class="text-end">
-          <button type="submit" class="btn btn-primary fw-bold">Enviar</button>
-        </div>
-      </form>
+  <div id="assinafy-modal" class="modal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content small">
+        <header class="d-flex justify-content-between align-items-center mb-3">
+          <h5>Dados do Signatário</h5>
+          <button id="close-assinafy-modal-btn" class="btn-close" aria-label="Fechar"></button>
+        </header>
+        <form id="assinafy-form">
+          <div class="mb-3">
+            <label for="assinafy-signer-name" class="form-label">Nome</label>
+            <input type="text" id="assinafy-signer-name" class="form-control" required>
+          </div>
+          <div class="mb-3">
+            <label for="assinafy-signer-email" class="form-label">E-mail</label>
+            <input type="email" id="assinafy-signer-email" class="form-control" required>
+          </div>
+          <div class="mb-3">
+            <label for="assinafy-signer-cpf" class="form-label">CPF</label>
+            <input type="text" id="assinafy-signer-cpf" class="form-control">
+          </div>
+          <div class="mb-3">
+            <label for="assinafy-signer-phone" class="form-label">Telefone</label>
+            <input type="text" id="assinafy-signer-phone" class="form-control">
+          </div>
+          <div class="text-end">
+            <button type="submit" class="btn btn-primary fw-bold">Enviar</button>
+          </div>
+        </form>
+      </div>
     </div>
   </div>
   <!-- Modal para solicitar CPF do responsável -->
@@ -697,7 +699,7 @@ window.onload = () => {
 
   closeModalBtn?.addEventListener('click', ()=> modal.style.display='none');
   closeDarsModalBtn?.addEventListener('click', ()=> darsModal.style.display='none');
-  closeAssinafyModalBtn?.addEventListener('click', ()=> assinafyModal.style.display='none');
+  closeAssinafyModalBtn?.addEventListener('click', ()=> assinafyModalInstance?.hide());
   closeCpfModalBtn?.addEventListener('click', ()=> cpfModal.style.display='none');
 
   // =======================
@@ -1473,7 +1475,7 @@ function normalizarEvento(payload){
           assinafyCpfMask.unmaskedValue = (cliente.documento_responsavel || cliente.documento || '').replace(/\D/g,'');
           assinafyPhoneMask.unmaskedValue = (cliente.telefone || '').replace(/\D/g,'');
         }
-        assinafyModal.style.display = 'block';
+        assinafyModalInstance?.show();
         return;
       }
 
@@ -1525,6 +1527,7 @@ function normalizarEvento(payload){
         if (!response.ok) throw new Error(result.error || 'Falha no envio');
 
         if (assinafyModalInstance) assinafyModalInstance.hide();
+        if (assinafyModal) assinafyModal.style.display = 'none';
         if (successModal) successModal.show();
         
         carregarEventos();
