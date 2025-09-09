@@ -1,11 +1,11 @@
 const express = require('express');
 const router = express.Router();
-const { gerarTermoEventoEIndexar } = require('../services/termoEventoExportService');
+const { gerarTermoEventoPdfkitEIndexar } = require('../services/termoEventoPdfkitService');
 
 router.post('/:eventoId/gerar-termo', async (req, res) => {
   try {
     const { eventoId } = req.params;
-    const out = await gerarTermoEventoEIndexar(eventoId);
+    const out = await gerarTermoEventoPdfkitEIndexar(eventoId);
     return res.json({
       ok: true,
       documentoId: out.documentoId,
