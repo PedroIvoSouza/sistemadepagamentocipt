@@ -661,40 +661,6 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-router.get('/:id/termo', async (req, res) => {
-  const { id } = req.params;
-
-  const resolved = require.resolve('../services/termoEventoPdfkitService');
-  console.log('[TERMO][ROUTE] usando service em:', resolved);
-
-  res.setHeader('X-Doc-Route', 'adminEventosRoutes/:id/termo');
-  res.setHeader('X-Doc-Gen', 'pdfkit-v3');
-  res.setHeader('X-Doc-Resolved', resolved);
-
-  try {
-    const docAssinado = await dbGet(
-      `SELECT signed_pdf_public_url FROM documentos WHERE evento_id = ? AND tipo = 'termo_evento' ORDER BY id DESC LIMIT 1`,
-      [id],
-      'termo/check-signed'
-    );
-    if (docAssinado?.signed_pdf_public_url) {
-      const filePath = path.join(process.cwd(), 'public', docAssinado.signed_pdf_public_url.replace(/^\/+/, ''));
-      if (fs.existsSync(filePath)) return res.sendFile(filePath);
-    }
-
-    const out = await gerarTermoEventoPdfkitEIndexar(id);
-    const stat = fs.statSync(out.filePath);
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${out.fileName}"`);
-    res.setHeader('Content-Length', stat.size);
-    res.setHeader('Cache-Control', 'no-store');
-
-    fs.createReadStream(out.filePath).pipe(res);
-  } catch (err) {
-    console.error('[admin/eventos] termo erro:', err);
-    res.status(500).json({ error: 'Falha ao gerar termo' });
-  }
-});
 
 router.post('/:eventoId/termo/disponibilizar', async (req, res) => {
   try {
