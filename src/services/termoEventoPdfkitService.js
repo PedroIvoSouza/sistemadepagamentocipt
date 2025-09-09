@@ -5,6 +5,7 @@ const PDFDocument = require('pdfkit');
 const sqlite3 = require('sqlite3').verbose();
 
 const { applyLetterhead, abntMargins } = require('../utils/pdfLetterhead');
+const { gerarTokenDocumento, imprimirTokenEmPdf } = require('../utils/token');
 
 const DB_PATH = path.resolve(process.cwd(), process.env.SQLITE_STORAGE || './sistemacipt.db');
 const db = new sqlite3.Database(DB_PATH);
@@ -331,30 +332,6 @@ function tabelaDiscriminacao(doc, dados) {
 }
 
 
-function assinaturasKeepTogether(doc, rotulos = ['PERMITENTE', 'PERMISSIONÁRIA', 'TESTEMUNHA – CPF Nº', 'TESTEMUNHA – CPF Nº']) {
-  const largura = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-  const left = doc.page.margins.left;
-
-  // estimativa de altura necessária (linha + rótulo) * 4
-  const hRot = doc.heightOfString('X', { width: largura, align: 'center' });
-  const hCada = 40 + 4 + hRot + 10; // 40pt de “linha”, uns respiros
-  const alturaTotal = hCada * rotulos.length;
-
-  const yMax = doc.page.height - doc.page.margins.bottom;
-  if (doc.y + alturaTotal > yMax) {
-    doc.addPage();
-  }
-
-  doc.font('Times-Roman').fontSize(11);
-
-  rotulos.forEach(rotulo => {
-    doc.moveDown(3);
-    const y0 = doc.y;
-    doc.moveTo(left, y0).lineTo(left + largura, y0).stroke('#000');
-    doc.moveDown(0.2);
-    doc.text(rotulo, left, doc.y, { width: largura, align: 'center' });
-  });
-}
 
 /* ================== Função principal ================== */
 async function gerarTermoEventoPdfkitEIndexar(eventoId) {
@@ -377,6 +354,10 @@ async function gerarTermoEventoPdfkitEIndexar(eventoId) {
     'termo/get-evento'
   );
   if (!ev) throw new Error('Evento não encontrado');
+
+  const permissionarioId = ev.id_cliente;
+  const token = await gerarTokenDocumento('termo_evento', permissionarioId, db);
+  let tokenY;
 
   // 2) Parcelas (pega, por parcela, a DAR mais recente e válida, via dar_id DESC)
 const parcelas = await dbAll(
@@ -671,8 +652,28 @@ const saldoISO = parcelas.length > 1
   paragrafo(doc, 'Para firmeza e validade do que foi pactuado, lavra-se o presente instrumento em 3 (três) vias de igual teor e forma, para que surtam um só efeito, as quais, depois de lidas, são assinadas pelos representantes das partes, PERMITENTE e PERMISSIONÁRIO(A) e pelas testemunhas abaixo.');
   paragrafo(doc, `${cidadeUfDefault}, ${fmtDataExtenso(isoLocalToday())}.`);
 
-  // Assinaturas (mantém o bloco junto)
-  assinaturasKeepTogether(doc);
+  // Assinaturas (mantém o bloco junto) e captura posição para o token
+  const rotulosAss = ['PERMITENTE', 'PERMISSIONÁRIO', 'TESTEMUNHA – CPF Nº', 'TESTEMUNHA – CPF Nº'];
+  const larguraAss = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+  const leftAss = doc.page.margins.left;
+  const hRotAss = doc.heightOfString('X', { width: larguraAss, align: 'center' });
+  const hCadaAss = 40 + 4 + hRotAss + 10;
+  const alturaTotalAss = hCadaAss * rotulosAss.length;
+  const yMaxAss = doc.page.height - doc.page.margins.bottom;
+  if (doc.y + alturaTotalAss > yMaxAss) {
+    doc.addPage();
+  }
+  doc.font('Times-Roman').fontSize(11);
+  rotulosAss.forEach(r => {
+    doc.moveDown(3);
+    const y0 = doc.y;
+    doc.moveTo(leftAss, y0).lineTo(leftAss + larguraAss, y0).stroke('#000');
+    doc.moveDown(0.2);
+    doc.text(r, leftAss, doc.y, { width: larguraAss, align: 'center' });
+    if (r.startsWith('PERMISSIONÁRIO')) {
+      tokenY = doc.page.height - doc.y;
+    }
+  });
 
   // Finaliza
   const finishPromise = new Promise((resolve, reject) => {
@@ -690,18 +691,30 @@ const saldoISO = parcelas.length > 1
     throw new Error('Falha ao gerar PDF do termo do evento');
   }
 
+  // Imprime token no PDF
+  try {
+    const base64 = fs.readFileSync(filePath).toString('base64');
+    const comToken = await imprimirTokenEmPdf(base64, token, { onlyLastPage: true, y: tokenY });
+    fs.writeFileSync(filePath, Buffer.from(comToken, 'base64'));
+  } catch (err) {
+    console.error('[TERMO][SERVICE] Falha ao imprimir token no PDF', err);
+    throw err;
+  }
+
   // 6) Indexa (UPSERT por evento+tipo)
   const createdAt = new Date().toISOString();
   const publicUrl = `/documentos/${fileName}`;
   await dbRun(
     `INSERT INTO documentos (tipo, token, permissionario_id, evento_id, pdf_url, pdf_public_url, status, created_at)
-     VALUES ('termo_evento', NULL, NULL, ?, ?, ?, 'gerado', ?)
-     ON CONFLICT(evento_id, tipo) DO UPDATE SET
+     VALUES ('termo_evento', ?, ?, ?, ?, ?, 'gerado', ?)
+     ON CONFLICT(token) DO UPDATE SET
+       permissionario_id = excluded.permissionario_id,
+       evento_id = excluded.evento_id,
        pdf_url = excluded.pdf_url,
        pdf_public_url = excluded.pdf_public_url,
        status = 'gerado',
        created_at = excluded.created_at`,
-    [eventoId, filePath, publicUrl, createdAt],
+    [token, permissionarioId, eventoId, filePath, publicUrl, createdAt],
     'termo/upsert-documento'
   );
 
