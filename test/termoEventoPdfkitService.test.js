@@ -25,6 +25,9 @@ assert.strictEqual(dados.vigencia.fim, vigenciaEsperada.toISOString());
 assert.deepStrictEqual(dados.dars, evento.dars);
 
 assert.deepStrictEqual(getEspacoInfo('default'), ESPACOS_INFO.default);
+assert.deepStrictEqual(getEspacoInfo('coworking'), ESPACOS_INFO.coworking);
+assert.strictEqual(ESPACOS_INFO.coworking.nome, 'Coworking do Espaço de Fomento');
+assert.strictEqual(ESPACOS_INFO.coworking.capacidade, 30);
 
 (async () => {
   const token = 'TOKEN123';
