@@ -755,6 +755,26 @@ adminRouter.put('/:id', async (req, res) => {
   }
 });
 
+
+adminRouter.patch('/:id/cpf', async (req, res) => {
+  const { id } = req.params;
+  let { documento_responsavel } = req.body || {};
+  documento_responsavel = onlyDigits(documento_responsavel || '');
+  if (!isCpf(documento_responsavel)) {
+    return res.status(400).json({ error: 'CPF inválido.' });
+  }
+  try {
+    const result = await dbRun(`UPDATE Clientes_Eventos SET documento_responsavel = ? WHERE id = ?`, [documento_responsavel, id]);
+    if (!result.changes) {
+      return res.status(404).json({ error: 'Cliente de evento não encontrado.' });
+    }
+    res.json({ message: 'CPF do responsável atualizado com sucesso.' });
+  } catch (err) {
+    console.error('[EVENTOS-CLIENTES][PATCH CPF] ERRO:', err.message);
+    res.status(500).json({ error: 'Erro ao atualizar CPF do responsável.' });
+  }
+});
+
 // REENVIAR LINK DE DEFINIÇÃO DE SENHA
 adminRouter.post('/:id/reenviar-senha', async (req, res) => {
   const { id } = req.params;

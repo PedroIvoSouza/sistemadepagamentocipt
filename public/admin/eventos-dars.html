@@ -1548,14 +1548,32 @@ function normalizarEvento(payload){
       submitBtn.disabled = true;
       submitBtn.innerHTML = `<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Salvando...`;
       try {
+        const cli = clientes.find(c => String(c.id) === String(clienteId));
+        if (!cli) throw new Error('Cliente não encontrado');
+        const payload = {
+          nome_razao_social: cli.nome_razao_social,
+          tipo_pessoa: cli.tipo_pessoa,
+          documento: cli.documento,
+          email: cli.email,
+          telefone: cli.telefone,
+          nome_responsavel: cli.nome_responsavel,
+          tipo_cliente: cli.tipo_cliente,
+          documento_responsavel: cpf,
+          cep: cli.cep,
+          logradouro: cli.logradouro,
+          numero: cli.numero,
+          complemento: cli.complemento,
+          bairro: cli.bairro,
+          cidade: cli.cidade,
+          uf: cli.uf
+        };
         const resp = await fetch(`/api/admin/eventos-clientes/${clienteId}`, {
           method:'PUT',
           headers:{ 'Content-Type':'application/json', ...AUTH_HEADERS },
-          body: JSON.stringify({ documento_responsavel: cpf })
+          body: JSON.stringify(payload)
         });
         if (!resp.ok) throw new Error('Falha ao salvar CPF');
-        const cli = clientes.find(c => String(c.id) === String(clienteId));
-        if (cli) cli.documento_responsavel = cpf;
+        cli.documento_responsavel = cpf;
         cpfModal.style.display = 'none';
         await baixarTermoOriginal(eventoId, btn);
       } catch(err){
