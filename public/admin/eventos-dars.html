@@ -390,6 +390,25 @@
       </form>
     </div>
   </div>
+  <!-- Modal para solicitar CPF do responsável -->
+  <div id="cpf-modal" class="modal">
+    <div class="modal-content small">
+      <header class="d-flex justify-content-between align-items-center mb-3">
+        <h5>CPF do Responsável</h5>
+        <button id="close-cpf-modal-btn" class="btn-close" aria-label="Fechar"></button>
+      </header>
+      <form id="cpf-form">
+        <p class="mb-3">Responsável: <strong id="cpf-cliente-nome"></strong></p>
+        <div class="mb-3">
+          <label for="cpf-input" class="form-label">CPF</label>
+          <input type="text" id="cpf-input" class="form-control" required>
+        </div>
+        <div class="text-end">
+          <button type="submit" class="btn btn-primary fw-bold">Salvar</button>
+        </div>
+      </form>
+    </div>
+  </div>
   <div class="modal fade" id="adminSuccessModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
       <div class="modal-content">
@@ -449,6 +468,32 @@ window.onload = () => {
     const ano = (year || '').replace(/\D/g, '');
     return ano ? `${prefix}.${four}/${ano}` : `${prefix}.${four}`;
   };
+
+  async function baixarTermoOriginal(eventoId, btn){
+    const original = btn.innerHTML;
+    btn.disabled = true;
+    btn.dataset.loading = '1';
+    btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
+    try {
+      const r = await fetch(TERMO_ENDPOINT(eventoId), { headers: AUTH_HEADERS, cache: 'no-store' });
+      if (!r.ok) throw new Error('Falha ao gerar termo');
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `termo_original_evento_${eventoId}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch(err) {
+      alert(`Erro ao baixar termo original: ${err.message}`);
+    } finally {
+      btn.disabled = false;
+      btn.dataset.loading = '0';
+      btn.innerHTML = original;
+    }
+  }
 
   function baixarPdfBase64(base64, nome){
     const href = base64?.startsWith('data:')
@@ -639,6 +684,13 @@ window.onload = () => {
   const assinafySignerPhoneInput = document.getElementById('assinafy-signer-phone');
   const assinafyCpfMask = IMask(assinafySignerCpfInput, { mask: '000.000.000-00' });
   const assinafyPhoneMask = IMask(assinafySignerPhoneInput, { mask: '(00) 00000-0000' });
+  // Modal CPF do responsável
+  const cpfModal = document.getElementById('cpf-modal');
+  const closeCpfModalBtn = document.getElementById('close-cpf-modal-btn');
+  const cpfForm = document.getElementById('cpf-form');
+  const cpfClienteNome = document.getElementById('cpf-cliente-nome');
+  const cpfInput = document.getElementById('cpf-input');
+  const cpfMask = IMask(cpfInput, { mask: '000.000.000-00' });
   const assinafyModalInstance = assinafyModal ? new bootstrap.Modal(assinafyModal) : null;
   const adminSuccessModalEl = document.getElementById('adminSuccessModal');
   const successModal = adminSuccessModalEl ? new bootstrap.Modal(adminSuccessModalEl) : null;
@@ -646,6 +698,7 @@ window.onload = () => {
   closeModalBtn?.addEventListener('click', ()=> modal.style.display='none');
   closeDarsModalBtn?.addEventListener('click', ()=> darsModal.style.display='none');
   closeAssinafyModalBtn?.addEventListener('click', ()=> assinafyModal.style.display='none');
+  closeCpfModalBtn?.addEventListener('click', ()=> cpfModal.style.display='none');
 
   // =======================
   // Estado
@@ -656,6 +709,7 @@ window.onload = () => {
   let parcelasMasks = [];
   let generatedDates = [];
   let assinafyContext = {};
+  let cpfContext = {};
   let modoEdicao = false;
   let editEventoId = null;
 
@@ -960,7 +1014,7 @@ async function carregarClientes(){
     </td>
     <td class="text-center">
       <div class="btn-group">
-        <button class="btn btn-sm btn-outline-secondary btn-termo" title="Baixar Termo Original" data-evento-id="${id}">
+        <button class="btn btn-sm btn-outline-secondary btn-termo" title="Baixar Termo Original" data-evento-id="${id}" data-cliente-id="${ev.id_cliente}">
           <i class="bi bi-file-earmark-text"></i>
         </button>
         ${mostraBtnEnviar 
@@ -1391,29 +1445,18 @@ function normalizarEvento(payload){
       
       if (btnTermo){
         const eventoId = btnTermo.dataset.eventoId;
+        const clienteId = btnTermo.dataset.clienteId;
         if (btnTermo.dataset.loading === '1') return;
-        const original = btnTermo.innerHTML;
-        btnTermo.disabled = true;
-        btnTermo.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
-
-        try {
-          const r = await fetch(TERMO_ENDPOINT(eventoId), { headers: AUTH_HEADERS, cache: 'no-store' });
-          if (!r.ok) throw new Error('Falha ao gerar termo');
-          const blob = await r.blob();
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `termo_original_evento_${eventoId}.pdf`;
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-          URL.revokeObjectURL(url);
-        } catch(err) {
-          alert(`Erro ao baixar termo original: ${err.message}`);
-        } finally {
-          btnTermo.disabled = false;
-          btnTermo.innerHTML = original;
+        if (!clientesCarregados) await carregarClientes();
+        const cliente = clientes.find(c => String(c.id) === String(clienteId));
+        if (cliente && !(cliente.documento_responsavel || '').trim()){
+          cpfContext = { eventoId, clienteId, btn: btnTermo };
+          cpfClienteNome.textContent = cliente.nome_responsavel || '';
+          cpfMask.unmaskedValue = '';
+          cpfModal.style.display = 'block';
+          return;
         }
+        await baixarTermoOriginal(eventoId, btnTermo);
         return;
       }
       
@@ -1491,6 +1534,35 @@ function normalizarEvento(payload){
       } finally {
         submitBtn.disabled = false;
         submitBtn.innerHTML = originalSubmitText;
+      }
+    });
+
+    // Listener para o formulário de CPF do responsável
+    cpfForm?.addEventListener('submit', async (ev)=>{
+      ev.preventDefault();
+      const cpf = cpfMask.unmaskedValue;
+      const { clienteId, eventoId, btn } = cpfContext || {};
+      if (!clienteId || !cpf) return;
+      const submitBtn = ev.target.querySelector('button[type="submit"]');
+      const originalText = submitBtn.innerHTML;
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = `<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Salvando...`;
+      try {
+        const resp = await fetch(`/api/admin/eventos-clientes/${clienteId}`, {
+          method:'PUT',
+          headers:{ 'Content-Type':'application/json', ...AUTH_HEADERS },
+          body: JSON.stringify({ documento_responsavel: cpf })
+        });
+        if (!resp.ok) throw new Error('Falha ao salvar CPF');
+        const cli = clientes.find(c => String(c.id) === String(clienteId));
+        if (cli) cli.documento_responsavel = cpf;
+        cpfModal.style.display = 'none';
+        await baixarTermoOriginal(eventoId, btn);
+      } catch(err){
+        alert(`Erro ao salvar CPF: ${err.message}`);
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalText;
       }
     });
 
