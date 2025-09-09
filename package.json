@@ -8,6 +8,7 @@
   "dependencies": {
     "bwip-js": "^4.7.0",
     "date-fns": "^2.30.0",
+    "pdf-parse": "^1.1.1",
     "pdfkit": "^0.17.2",
     "qrcode": "^1.5.4",
     "react": "^18.2.0",
