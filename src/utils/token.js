@@ -70,13 +70,32 @@ async function gerarTokenDocumento(tipo, permissionarioId, db) {
   return token;
 }
 
+/**
+ * Desenha o token e o QR Code em um PDF.
+ *
+ * @param {string} pdfBase64 - PDF em base64.
+ * @param {string} token - Token a ser impresso.
+ * @param {Object} [opts] - Opções de desenho.
+ * @param {boolean} [opts.onlyLastPage=false] - Aplica o desenho apenas na última página.
+ * @param {Array} [opts.pages] - Lista de páginas a serem utilizadas. Caso omitida, utiliza todas as páginas do documento.
+ * @param {number} [opts.marginX=50] - Margem horizontal esquerda.
+ * @param {number} [opts.qrSize=40] - Tamanho do QR Code.
+ * @param {number} [opts.qrX] - Posição X do QR Code.
+ * @param {number} [opts.qrY] - Posição Y do QR Code.
+ * @param {number} [opts.y] - Posição Y do texto do token.
+ * @param {number} [opts.avisoWidth] - Largura do texto de aviso.
+ */
 async function imprimirTokenEmPdf(pdfBase64, token, opts = {}) {
   const pdfBytes = Buffer.from(pdfBase64, 'base64');
   const pdfDoc = await PDFDocument.load(pdfBytes);
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const qrBuffer = await generateTokenQr(token);
   const qrImage = await pdfDoc.embedPng(qrBuffer);
-  const pages = pdfDoc.getPages();
+  let pages = opts.pages || pdfDoc.getPages();
+
+  if (opts.onlyLastPage && pages.length) {
+    pages = [pages[pages.length - 1]];
+  }
 
   const aviso =
     'Para checar a autenticidade do documento insira o token abaixo no Portal do Permissionário que pode ser acessado através do qr code ao lado.';
