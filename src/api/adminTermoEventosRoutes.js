@@ -263,7 +263,7 @@ router.get(
         const filePath = path.join(
           process.cwd(),
           'public',
-          docAssinado.signed_pdf_public_url.replace(/^\\/+/, '')
+          String(docAssinado.signed_pdf_public_url || '').replace(/^[/\\]+/, '')
         );
         if (fs.existsSync(filePath)) {
           if (docAssinado.token) res.set('X-Documento-Token', docAssinado.token);
