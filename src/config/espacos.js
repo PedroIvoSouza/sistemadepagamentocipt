@@ -3,4 +3,8 @@ export const ESPACOS_INFO = {
     nome: 'Espaço Principal',
     capacidade: 100,
   },
+  coworking: {
+    nome: 'Coworking do Espaço de Fomento',
+    capacidade: 30,
+  },
 };
