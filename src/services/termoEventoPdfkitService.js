@@ -23,6 +23,7 @@ export function composeDataFromEvent(evento) {
   return {
     valor: evento.valor,
     data: evento.dataRealizacaoInicio,
+    espacos: Array.isArray(evento.espacos) ? [...evento.espacos] : [],
     vigencia: {
       inicio: evento.dataMontagem,
       fim: vigenciaFim.toISOString()
@@ -33,9 +34,20 @@ export function composeDataFromEvent(evento) {
   };
 }
 
+export function buildClausula4Paragrafo(espacos = []) {
+  if (!Array.isArray(espacos) || espacos.length === 0) {
+    return '';
+  }
+  const nomes = espacos.map(e => ESPACOS_INFO[e]?.nome || e);
+  const lista = nomes.length > 1 ? `${nomes.slice(0, -1).join(', ')} e ${nomes[nomes.length - 1]}` : nomes[0];
+  return `Cláusula 4 - Parágrafo Único: Espaços envolvidos: ${lista}.`;
+}
+
 function buildDescription(data) {
   const clausulas = Array.isArray(data.clausulas) ? data.clausulas.join('; ') : '';
-  return `Evento em ${formatDate(data.data)} com valor de ${formatCurrency(data.valor)}. Vigência: ${formatDate(data.vigencia.inicio)} a ${formatDate(data.vigencia.fim)}. Saldo: ${formatCurrency(data.saldoPagamento)}. Cláusulas: ${clausulas}.`;
+  const clausula4 = buildClausula4Paragrafo(data.espacos);
+  const base = `Evento em ${formatDate(data.data)} com valor de ${formatCurrency(data.valor)}. Vigência: ${formatDate(data.vigencia.inicio)} a ${formatDate(data.vigencia.fim)}. Saldo: ${formatCurrency(data.saldoPagamento)}. Cláusulas: ${clausulas}.`;
+  return clausula4 ? `${base} ${clausula4}` : base;
 }
 
 export async function generateTermoPdf(data, token = '') {
