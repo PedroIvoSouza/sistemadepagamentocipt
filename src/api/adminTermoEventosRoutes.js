@@ -1,11 +1,8 @@
 // src/api/adminTermoEventosRoutes.js
 const express = require('express');
-const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
-const generateTokenQr = require('../utils/qrcodeToken');
-
-const { applyLetterhead, abntMargins } = require('../utils/pdfLetterhead');
+const { gerarTermoEventoPdfkitEIndexar } = require('../services/termoEventoPdfkitService');
 const authMiddleware = require('../middleware/authMiddleware');
 const authorizeRole = require('../middleware/roleMiddleware');
 
@@ -250,263 +247,35 @@ router.get(
   async (req, res) => {
     try {
       await ensureDocumentosSchema();
-
       const { eventoId } = req.params;
 
-      // Se houver PDF assinado, retorna diretamente
       const docAssinado = await dbGet(
-        `SELECT signed_pdf_public_url FROM documentos WHERE evento_id = ? AND tipo = 'termo_evento' ORDER BY id DESC LIMIT 1`,
+        `SELECT id, token, signed_pdf_public_url FROM documentos WHERE evento_id = ? AND tipo = 'termo_evento' ORDER BY id DESC LIMIT 1`,
         [eventoId]
       );
       if (docAssinado?.signed_pdf_public_url) {
         const filePath = path.join(
           process.cwd(),
           'public',
-          docAssinado.signed_pdf_public_url.replace(/^\/+/, '')
+          docAssinado.signed_pdf_public_url.replace(/^\\/+/, '')
         );
         if (fs.existsSync(filePath)) {
+          if (docAssinado.token) res.set('X-Documento-Token', docAssinado.token);
+          res.set('X-Documento-Id', String(docAssinado.id));
           return res.sendFile(filePath);
         }
       }
 
-      // Evento + Cliente
-      const ev = await dbGet(
-        `SELECT e.*, c.nome_razao_social, c.tipo_pessoa, c.documento, c.email, c.telefone,
-                c.endereco, c.nome_responsavel, c.documento_responsavel
-           FROM Eventos e
-           JOIN Clientes_Eventos c ON c.id = e.id_cliente
-          WHERE e.id = ?`, [eventoId]
+      const out = await gerarTermoEventoPdfkitEIndexar(eventoId);
+
+      const docInfo = await dbGet(
+        `SELECT id, token FROM documentos WHERE evento_id = ? AND tipo = 'termo_evento' ORDER BY id DESC LIMIT 1`,
+        [eventoId]
       );
-      if (!ev) return res.status(404).json({ error: 'Evento não encontrado.' });
+      if (docInfo?.token) res.set('X-Documento-Token', docInfo.token);
+      if (docInfo?.id) res.set('X-Documento-Id', String(docInfo.id));
 
-      // Parcelas (para datas de sinal/saldo se quiser no texto)
-      const parcelas = await dbAll(
-        `SELECT de.numero_parcela, de.valor_parcela, de.data_vencimento, d.status
-           FROM DARs_Eventos de
-           JOIN dars d ON d.id = de.id_dar
-          WHERE de.id_evento = ?
-          ORDER BY de.numero_parcela ASC`, [eventoId]
-      );
-
-      // Derivados p/ placeholders
-      const datasArr = String(ev.datas_evento||'').split(',').map(s=>s.trim()).filter(Boolean);
-      const primeiraDataISO = datasArr[0] || null;
-
-      const payload = {
-        org_uf: process.env.ORG_UF || 'ESTADO DE ALAGOAS',
-        org_secretaria: process.env.ORG_SECRETARIA || 'SECRETARIA DA CIÊNCIA, TECNOLOGIA E INOVAÇÃO',
-        org_unidade: process.env.ORG_UNIDADE || 'CENTRO DE INOVAÇÃO DO JARAGUÁ',
-
-        processo_numero: ev.numero_processo || '',
-        termo_numero: ev.numero_termo || '',
-
-        permitente_razao: process.env.PERMITENTE_RAZAO || 'SECRETARIA DE ESTADO DA CIÊNCIA, DA TECNOLOGIA E DA INOVAÇÃO DE ALAGOAS - SECTI',
-        permitente_cnpj: process.env.PERMITENTE_CNPJ  || '04.007.216/0001-30',
-        permitente_endereco: process.env.PERMITENTE_ENDERECO || 'R. BARÃO DE JARAGUÁ, Nº 590, JARAGUÁ, MACEIÓ - ALAGOAS - CEP: 57022-140',
-        permitente_representante_nome: process.env.PERMITENTE_REP_NOME || 'SÍLVIO ROMERO BULHÕES AZEVEDO',
-        permitente_representante_cargo: process.env.PERMITENTE_REP_CARGO || 'SECRETÁRIO',
-        permitente_representante_cpf: process.env.PERMITENTE_REP_CPF || '053.549.204-93',
-
-        permissionario_razao: ev.nome_razao_social || '',
-        permissionario_cnpj: onlyDigits(ev.documento || ''),
-        permissionario_endereco: ev.endereco || '',
-        permissionario_representante_nome: ev.nome_responsavel || '',
-        permissionario_representante_cpf: onlyDigits(ev.documento_responsavel || ''),
-
-        evento_titulo: ev.nome_evento || '',
-        local_espaco: parseEspacoUtilizado(ev.espaco_utilizado).join(', ') || 'AUDITÓRIO',
-        imovel_nome: process.env.IMOVEL_NOME || 'CENTRO DE INOVAÇÃO DO JARAGUÁ',
-
-        data_evento: dataExt(primeiraDataISO),
-        hora_inicio: ev.hora_inicio || '-',
-        hora_fim: ev.hora_fim || '-',
-        data_montagem: dataExt(primeiraDataISO),
-        data_desmontagem: dataExt(primeiraDataISO),
-
-        area_m2_fmt: areaFmt(ev.area_m2),
-        capacidade_pessoas: process.env.CAPACIDADE_PADRAO ? Number(process.env.CAPACIDADE_PADRAO) : 313,
-
-        numero_dias: ev.total_diarias || (datasArr.length || 1),
-        valor_total: ev.valor_final || 0,
-        valor_total_fmt: moeda(ev.valor_final || 0),
-
-        vigencia_fim_datahora: ev.data_vigencia_final
-          ? `${new Date(ev.data_vigencia_final+'T12:00:00').toLocaleDateString('pt-BR')} às 12h` : '',
-
-        pagto_sinal_data: dataExt(parcelas[0]?.data_vencimento || ''),
-        pagto_saldo_data: dataExt(parcelas[1]?.data_vencimento || parcelas[0]?.data_vencimento || ''),
-
-        fundo_nome: process.env.FUNDO_NOME || 'FUNDENTES',
-        cidade_uf: process.env.CIDADE_UF || 'Maceió/AL',
-        data_assinatura: dataExt(new Date().toISOString()),
-      };
-
-      // ========== Gera PDF em memória ==========
-      const tokenDoc = gerarToken();
-      const qrBuffer = await generateTokenQr(tokenDoc);
-      const letterheadPath = resolveLetterheadPath();
-      const margins = abntMargins(0.5, 0.5, 2); // inclui espaço para bloco de autenticação
-      const doc = new PDFDocument({ size: 'A4', margins });
-      doc.on('pageAdded', () => {
-        // applyLetterhead já foi plugado pelo helper
-        doc.x = doc.page.margins.left;
-        doc.y = doc.page.margins.top;
-        printToken(doc, tokenDoc, qrBuffer);
-      });
-
-      const chunks = [];
-      doc.on('data', (c) => chunks.push(c));
-
-      // Timbrado (todas as páginas)
-      const renderLetterhead = applyLetterhead(doc, { imagePath: letterheadPath });
-
-      // Cursor inicial e token a cada página
-      doc.x = doc.page.margins.left;
-      doc.y = doc.page.margins.top;
-      printToken(doc, tokenDoc, qrBuffer);
-
-      const larguraUtil = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-
-      // ====== PARÁGRAFO INICIAL (recúo 6 cm, JUSTIFICADO) ======
-      // “TERMO DE PERMISSÃO…” justificado dentro de uma coluna deslocada 6cm à direita
-      {
-        const blocoX = doc.page.margins.left + cm(6);           // recúo 6cm
-        const blocoW = larguraUtil - cm(6);                      // coluna até a margem direita
-        const textoIntro =
-          `TERMO DE PERMISSÃO DE USO QUE CELEBRAM ENTRE SI DE UM LADO A ${payload.permitente_razao} ` +
-          `E DO OUTRO ${payload.permissionario_razao}`.toUpperCase();
-
-        doc.font('Helvetica-Bold').fontSize(11).fillColor('#000')
-           .text(textoIntro, blocoX, doc.y, { width: blocoW, align: 'justify' });
-        doc.moveDown(1.2);
-      }
-
-      // ====== BLOCO: Processo / Termo / Partes ======
-      const linhas = clausulasTexto(payload);
-      for (const it of linhas) {
-        doc.font(it.bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(11)
-           .fillColor('#000').text(it.text, { width: larguraUtil, align: it.bold ? 'left' : 'justify' });
-      }
-
-      // ====== TABELA ======
-      desenharTabela(doc, payload);
-
-      // ====== Demais cláusulas (resumo fiel ao seu texto padrão) ======
-      const addClausula = (titulo, corpo) => {
-        doc.font('Helvetica-Bold').fontSize(11).text(`\n${titulo.toUpperCase()}`, { width: larguraUtil });
-        doc.font('Helvetica').fontSize(11).text(corpo, { width: larguraUtil, align: 'justify', lineGap: 2 });
-      };
-
-      addClausula('Cláusula Segunda – Da Vigência',
-        `O prazo de vigência se inicia na data de assinatura do presente termo até ${payload.vigencia_fim_datahora}.`);
-
-      addClausula('Cláusula Terceira – Do Pagamento',
-        `O(A) PERMISSIONÁRIO(A) pagará pela utilização do espaço o valor total de ${
-          payload.valor_total_fmt
-        }, através de Documento de Arrecadação – DAR, efetuado em favor do ${
-          payload.fundo_nome
-        }, devendo ser pago o valor de 50% até ${
-          payload.pagto_sinal_data
-        } e o restante até ${
-          payload.pagto_saldo_data
-        }. Ficam mantidas as demais condições do texto padrão (água, esgoto, energia elétrica, reserva e desistência).`);
-
-      addClausula('Cláusula Quarta – Das Obrigações do Permitente',
-        `Ceder o espaço nas condições acordadas e fiscalizar a utilização. Parágrafo único: espaços físicos disponíveis conforme regulamento do ${payload.imovel_nome}; ` +
-        `não inclui baias/coworking; vedada apresentação musical fora do auditório e consumo de alimentos/bebidas no auditório; descumprimento sujeita a multa de 10% do valor de locação.`);
-
-      addClausula('Cláusula Quinta – Das Obrigações da Permissionária',
-        `Utilizar o espaço para o fim específico; zelar pelo imóvel; montagem/desmontagem no período; indenizar danos ao patrimônio e a terceiros; ` +
-        `respeitar lotação; arcar com segurança/limpeza/container/remoção de lixo; restituir o espaço; participar de check list; ` +
-        `apresentar layout e, se necessário, providenciar gerador; não usar porta de emergência indevidamente; ` +
-        `proibido consumo de comidas/bebidas no auditório; proibido som/apresentação musical fora do auditório, sob pena de multa.`);
-
-      addClausula('Cláusula Sexta – Das Penalidades',
-        `Multa de 10% do valor da permissão pelo descumprimento; correção pelo IPCA e juros de 1% a.m.; ` +
-        `rescisão por desistência até 30 dias: perda da taxa de reserva + multa de 20%; ` +
-        `poderá haver impedimento de novas reservas por até 2 anos em caso de violação e inadimplemento.`);
-
-      addClausula('Cláusula Sétima – Da Rescisão',
-        `Inexecução total/parcial sujeita às sanções (Lei nº 14.133/2021). ` +
-        `Rescisão pelo(a) permissionário(a) com notificação mínima (30 dias eventos particulares / 90 dias eventos públicos). ` +
-        `Atraso mínimo impede alteração de data (desistência definitiva); poderá remarcar 1 vez em até 1 ano, condicionado à disponibilidade; ` +
-        `sinistro/incêndio/impossibilidade de posse ensejam rescisão automática; rescisões devem ser formalmente motivadas com contraditório e ampla defesa.`);
-
-      addClausula('Cláusula Oitava – Omissões Contratuais',
-        `Casos omissos serão decididos pela PERMITENTE conforme Lei nº 14.133/2021, demais normas aplicáveis e, subsidiariamente, o Código de Defesa do Consumidor.`);
-
-      addClausula('Cláusula Nona – Do Foro',
-        `Fica eleito o Foro da Cidade de Maceió – AL para dirimir quaisquer dúvidas oriundas do presente Termo.`);
-
-      // Assinaturas
-      doc.moveDown(1);
-      doc.font('Helvetica').fontSize(11).text(`${payload.cidade_uf}, ${payload.data_assinatura}.`, {
-        width: larguraUtil, align: 'left'
-      });
-
-      const linhaAssin = (rotulo) => {
-        const h = 60;
-        if (doc.y + h > doc.page.height - doc.page.margins.bottom) doc.addPage();
-        doc.moveDown(2.5);
-        doc.text(''.padEnd(60,'_'), { width: larguraUtil, align: 'center' });
-        doc.moveDown(0.2);
-        doc.text(rotulo, { width: larguraUtil, align: 'center' });
-      };
-
-      linhaAssin('PERMITENTE');
-      linhaAssin('PERMISSIONÁRIA');
-      linhaAssin('TESTEMUNHA – CPF');
-      linhaAssin('TESTEMUNHA – CPF');
-
-      // ====== Ao terminar, salva em disco + indexa + devolve download ======
-      doc.on('end', async () => {
-        try {
-          const pdfBuf = Buffer.concat(chunks);
-
-          // cria registro (UPSERT por (evento_id, tipo))
-          const createdAt = new Date().toISOString();
-          const token = tokenDoc;
-
-          // cria pasta
-          const dir = path.join(process.cwd(), 'public', 'documentos');
-          fs.mkdirSync(dir, { recursive: true });
-
-          // precisamos do id para compor nome; primeiro insere (ou busca) e pega id
-          await dbRun(
-            `INSERT INTO documentos (tipo, token, permissionario_id, evento_id, status, created_at)
-             VALUES (?, ?, NULL, ?, 'gerado', ?)
-             ON CONFLICT(evento_id, tipo) DO UPDATE SET
-               token=excluded.token,
-               status='gerado',
-               created_at=excluded.created_at`,
-            ['termo_evento', token, eventoId, createdAt]
-          );
-
-          const docRow = await dbGet(`SELECT id FROM documentos WHERE evento_id = ? AND tipo = ?`, [eventoId, 'termo_evento']);
-          const docId = docRow?.id || 0;
-
-          const fileName = nomeArquivo(ev, docId);
-          const filePath = path.join(dir, fileName);
-          fs.writeFileSync(filePath, pdfBuf);
-
-          const publicUrl = `/documentos/${fileName}`;
-          await dbRun(`UPDATE documentos SET pdf_url = ?, pdf_public_url = ? WHERE id = ?`, [filePath, publicUrl, docId]);
-
-          // devolve download
-          res.setHeader('Content-Type', 'application/pdf');
-          res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
-          res.setHeader('X-Document-Token', token);
-          return res.send(pdfBuf);
-        } catch (e) {
-          console.error('[adminTermosEventos] pós-geração erro:', e);
-          return res.status(500).json({ error: 'Erro ao finalizar o PDF do termo.' });
-        }
-      });
-
-      // Finaliza
-      renderLetterhead();
-      doc.end();
-
+      return res.sendFile(out.filePath);
     } catch (err) {
       console.error('[adminTermosEventos] erro:', err);
       return res.status(500).json({ error: 'Erro ao gerar termo.' });
@@ -514,4 +283,6 @@ router.get(
   }
 );
 
+
 module.exports = router;
+
