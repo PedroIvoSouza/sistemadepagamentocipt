@@ -155,6 +155,13 @@ function parseEspacos(v) {
   return [];
 }
 
+// Formata lista de espaços com vírgula e "e" antes do último
+function formatEspacos(arr) {
+  if (!Array.isArray(arr) || arr.length === 0) return '';
+  if (arr.length === 1) return arr[0];
+  return `${arr.slice(0, -1).join(', ')} e ${arr[arr.length - 1]}`;
+}
+
 /* ================== Schema: documentos ================== */
 async function ensureDocumentosSchema() {
   await dbRun(`CREATE TABLE IF NOT EXISTS documentos (
@@ -453,7 +460,9 @@ const saldoISO = parcelas.length > 1
   const fundoNome = process.env.FUNDO_NOME || 'FUNDECTES';
   const imovelNome = process.env.IMOVEL_NOME || 'CENTRO DE INOVAÇÃO DO JARAGUÁ';
   const capDefault = process.env.CAPACIDADE_PADRAO ? Number(process.env.CAPACIDADE_PADRAO) : 313;
-  const localEspaco = parseEspacos(ev.espaco_utilizado).join(', ') || 'AUDITÓRIO';
+  const espacos = parseEspacos(ev.espaco_utilizado);
+  const localEspaco = formatEspacos(espacos) || 'AUDITÓRIO';
+  const espacoPlural = espacos.length > 1;
 
   // 4) Arquivo de saída
   const publicDir = path.join(process.cwd(), 'public', 'documentos');
@@ -584,9 +593,8 @@ const saldoISO = parcelas.length > 1
   tituloClausula(doc, 'Cláusula Quarta – Das Obrigações do Permitente');
   paragrafo(doc, '4.1 - Ceder o espaço, na data e hora acordadas, entregando o local em perfeitas condições de higiene, limpeza e conservação.');
   paragrafo(doc, '4.2 - Fiscalizar, por meio do gestor indicado pela SECTI, a utilização do espaço objeto deste termo de permissão, podendo impedir a utilização inadequada do espaço cedido evitando assim danos ao patrimônio do objeto do presente termo de permissão.');
-  paragrafo(doc,
-    'Parágrafo Único - Os espaços físicos disponíveis são as áreas do auditório do Centro de Inovação do Jaraguá destinada à realização de eventos, compreendendo o espaço de 429,78 m² (banheiro masculino e feminino, 02 salas de tradução, 09 espaços destinados a cadeirantes, palco - com acesso externo -, 02 coxias, 02 camarins, 01 copa e 01 área técnica), do espaço aberto em frente ao auditório, não incluindo as baias e nem o coworking público, não sendo permitida apresentação musical fora do auditório, bem como não é permitido servir alimentos/bebidas dentro do auditório, de modo que qualquer violação destas será cobrada uma multa no valor de 10% do valor de locação.'
-  );
+  const paragrafoEspacos = `${espacoPlural ? 'Os espaços físicos disponíveis são' : 'O espaço físico disponível é'} ${localEspaco}, localizado${espacoPlural ? 's' : ''} no ${imovelNome}, não incluindo as baias e nem o coworking público, não sendo permitida apresentação musical fora do auditório, bem como não é permitido servir alimentos/bebidas dentro do auditório, de modo que qualquer violação destas será cobrada uma multa no valor de 10% do valor de locação.`;
+  paragrafo(doc, `Parágrafo Único - ${paragrafoEspacos}`);
 
   // CLÁUSULA 5 – Permissionária
   // CORREÇÃO: Adicionadas vírgulas entre os itens do array.

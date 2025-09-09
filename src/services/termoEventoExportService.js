@@ -59,6 +59,29 @@ const sanitizeForFilename = (s) => String(s || '')
   .replace(/_{2,}/g, '_')                          // compacta
   .replace(/^_+|_+$/g, '');                        // trim _
 
+function parseEspacos(v) {
+  if (!v) return [];
+  if (Array.isArray(v)) return v;
+  if (typeof v === 'string') {
+    const txt = v.trim();
+    if (!txt) return [];
+    try {
+      if (txt.startsWith('[')) {
+        const arr = JSON.parse(txt);
+        if (Array.isArray(arr)) return arr;
+      }
+    } catch { /* ignore */ }
+    return txt.split(',').map(s => s.trim()).filter(Boolean);
+  }
+  return [];
+}
+
+function formatEspacos(arr) {
+  if (!Array.isArray(arr) || arr.length === 0) return '';
+  if (arr.length === 1) return arr[0];
+  return `${arr.slice(0, -1).join(', ')} e ${arr[arr.length - 1]}`;
+}
+
 // --------- MIGRAÇÃO DA TABELA `documentos` (auto) ---------
 async function ensureDocumentosSchema() {
   await dbRun(`CREATE TABLE IF NOT EXISTS documentos (
@@ -168,6 +191,10 @@ async function buildPayloadFromEvento(eventoId) {
 
   const vigenciaFim = parseLocalDateFlexible(ev.data_vigencia_final);
 
+  const espacosArr = parseEspacos(ev.espaco_utilizado);
+  const localEspaco = formatEspacos(espacosArr) || 'AUDITÓRIO';
+  const espacosPlural = espacosArr.length > 1;
+
   // Payload p/ o template
   const payload = {
     // Cabeçalho do órgão
@@ -196,15 +223,8 @@ async function buildPayloadFromEvento(eventoId) {
 
     // Evento
     evento_titulo: ev.nome_evento || '',
-    local_espaco: (() => {
-      let esp = ev.espaco_utilizado;
-      if (typeof esp === 'string') {
-        try { esp = JSON.parse(esp); }
-        catch { esp = esp.split(',').map(s=>s.trim()).filter(Boolean); }
-      }
-      if (Array.isArray(esp)) esp = esp.join(', ');
-      return esp || 'AUDITÓRIO';
-    })(),
+    local_espaco: localEspaco,
+    espacos_plural: espacosPlural,
     imovel_nome: imovelNome,
 
     data_evento: mkPeriodo(ev.datas_evento),
