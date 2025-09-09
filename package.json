@@ -3,12 +3,12 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "test": "node test/TermoService.test.js"
+    "test": "node test/termoEventoPdfkitService.test.js"
   },
   "dependencies": {
     "bwip-js": "^4.7.0",
     "date-fns": "^2.30.0",
-    "puppeteer": "^22.15.0",
+    "pdfkit": "^0.17.2",
     "qrcode": "^1.5.4",
     "react": "^18.2.0",
     "react-big-calendar": "^1.8.0",
