@@ -179,8 +179,8 @@
                 <label class="form-check-label" for="espaco-anfiteatro">Anfiteatro</label>
               </div>
               <div class="form-check">
-                <input class="form-check-input" type="checkbox" name="espacos" value="Coworking" id="espaco-coworking">
-                <label class="form-check-label" for="espaco-coworking">Coworking</label>
+                <input class="form-check-input" type="checkbox" name="espacos" value="Coworking do Espaço de Fomento" id="espaco-coworking">
+                <label class="form-check-label" for="espaco-coworking">Coworking do Espaço de Fomento</label>
               </div>
               <div class="form-check">
                 <input class="form-check-input" type="checkbox" name="espacos" value="Espaço em Frente ao Auditório" id="espaco-frente-auditorio">
@@ -538,7 +538,7 @@ window.onload = () => {
   const ESPACOS_INFO = {
     'Auditório': { area: 429.68, capacidade: 313 },
     'Anfiteatro': { area: 200, capacidade: 150 },
-    'Coworking': { area: 100, capacidade: 50 },
+    'Coworking do Espaço de Fomento': { area: 100, capacidade: 50 },
     'Espaço em Frente ao Auditório': { area: 500, capacidade: 500 },
     'Laboratório do OxeTech': { area: 0, capacidade: 0 },
     'Sala de Reuniões': { area: 0, capacidade: 0 }
@@ -1134,7 +1134,7 @@ function normalizarEvento(payload){
         const textoUpper = espacos_utilizados_texto.toUpperCase();
         if (textoUpper.includes('AUDITÓRIO')) espacos_utilizados_lista.push('Auditório');
         if (textoUpper.includes('ANFITEATRO')) espacos_utilizados_lista.push('Anfiteatro');
-        if (textoUpper.includes('COWORKING')) espacos_utilizados_lista.push('Coworking');
+        if (textoUpper.includes('COWORKING')) espacos_utilizados_lista.push('Coworking do Espaço de Fomento');
         if (textoUpper.includes('ESPAÇO EM FRENTE AO AUDITÓRIO') || textoUpper.includes('ESPAÇO ABERTO')) espacos_utilizados_lista.push('Espaço em Frente ao Auditório');
     }
 
