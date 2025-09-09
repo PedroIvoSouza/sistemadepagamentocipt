@@ -37,7 +37,7 @@ async function ensureDocumentosSchema() {
   await dbRun(`CREATE TABLE IF NOT EXISTS documentos (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     tipo TEXT NOT NULL,
-    token TEXT UNIQUE
+    token TEXT
   )`, [], 'doc/schema-base');
 
   const cols = await new Promise((resolve, reject) => {

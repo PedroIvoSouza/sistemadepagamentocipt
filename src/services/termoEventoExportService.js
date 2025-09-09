@@ -64,7 +64,7 @@ async function ensureDocumentosSchema() {
   await dbRun(`CREATE TABLE IF NOT EXISTS documentos (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     tipo TEXT NOT NULL,
-    token TEXT UNIQUE,
+    token TEXT,
     permissionario_id INTEGER,
     evento_id INTEGER,
     pdf_url TEXT,

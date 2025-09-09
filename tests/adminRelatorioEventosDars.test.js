@@ -31,7 +31,7 @@ test('relatorio de dars de eventos filtra por data', async () => {
   await run(`CREATE TABLE DARs_Eventos (id_dar INTEGER, id_evento INTEGER);`);
   await run(`CREATE TABLE Eventos (id INTEGER PRIMARY KEY, nome_evento TEXT, id_cliente INTEGER);`);
   await run(`CREATE TABLE Clientes_Eventos (id INTEGER PRIMARY KEY, nome_razao_social TEXT);`);
-  await run(`CREATE TABLE documentos (id INTEGER PRIMARY KEY, tipo TEXT, caminho TEXT, token TEXT UNIQUE);`);
+  await run(`CREATE TABLE documentos (id INTEGER PRIMARY KEY, tipo TEXT, caminho TEXT, token TEXT);`);
 
   await run(`INSERT INTO Clientes_Eventos (id, nome_razao_social) VALUES (1,'Cliente X');`);
   await run(`INSERT INTO Eventos (id, nome_evento, id_cliente) VALUES (1,'Evento Y',1);`);

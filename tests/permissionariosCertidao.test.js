@@ -19,7 +19,7 @@ async function setup(dataVencimento) {
 
   await run(`CREATE TABLE permissionarios (id INTEGER PRIMARY KEY, nome_empresa TEXT, cnpj TEXT, email TEXT, tipo TEXT);`);
   await run(`CREATE TABLE dars (id INTEGER PRIMARY KEY, permissionario_id INTEGER, data_vencimento TEXT, status TEXT);`);
-  await run(`CREATE TABLE documentos (id INTEGER PRIMARY KEY, tipo TEXT, caminho TEXT, token TEXT UNIQUE);`);
+  await run(`CREATE TABLE documentos (id INTEGER PRIMARY KEY, tipo TEXT, caminho TEXT, token TEXT);`);
 
   await run(`INSERT INTO permissionarios (id, nome_empresa, cnpj, email) VALUES (1, 'Perm', '12345678000199', 'perm@example.com');`);
   await run(`INSERT INTO dars (id, permissionario_id, data_vencimento, status) VALUES (1, 1, ?, 'Pendente');`, [dataVencimento]);

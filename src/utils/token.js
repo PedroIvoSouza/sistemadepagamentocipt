@@ -19,7 +19,7 @@ function ensureTable(db) {
         db.run(
           `CREATE TABLE IF NOT EXISTS documentos (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            token TEXT NOT NULL UNIQUE,
+            token TEXT NOT NULL,
             tipo TEXT NOT NULL,
             caminho TEXT,
             permissionario_id INTEGER,
@@ -27,30 +27,24 @@ function ensureTable(db) {
           )`,
           err => {
             if (err) return reject(err);
-            db.run(
-              `CREATE UNIQUE INDEX IF NOT EXISTS idx_documentos_token ON documentos(token)`,
-              idxErr => {
-                if (idxErr) return reject(idxErr);
-                db.all(`PRAGMA table_info(documentos)`, async (e, rows) => {
-                  if (e) return reject(e);
-                  const cols = rows.map(r => r.name);
-                  try {
-                    if (!cols.includes('caminho')) {
-                      await runAsync(db, `ALTER TABLE documentos ADD COLUMN caminho TEXT`);
-                    }
-                    if (!cols.includes('permissionario_id')) {
-                      await runAsync(
-                        db,
-                        `ALTER TABLE documentos ADD COLUMN permissionario_id INTEGER`
-                      );
-                    }
-                    resolve();
-                  } catch (alterErr) {
-                    reject(alterErr);
-                  }
-                });
+            db.all(`PRAGMA table_info(documentos)`, async (e, rows) => {
+              if (e) return reject(e);
+              const cols = rows.map(r => r.name);
+              try {
+                if (!cols.includes('caminho')) {
+                  await runAsync(db, `ALTER TABLE documentos ADD COLUMN caminho TEXT`);
+                }
+                if (!cols.includes('permissionario_id')) {
+                  await runAsync(
+                    db,
+                    `ALTER TABLE documentos ADD COLUMN permissionario_id INTEGER`
+                  );
+                }
+                resolve();
+              } catch (alterErr) {
+                reject(alterErr);
               }
-            );
+            });
           }
         );
       });

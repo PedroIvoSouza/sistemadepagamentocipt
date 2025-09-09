@@ -586,8 +586,7 @@ router.get(
       });
 
       await dbRun(
-        `INSERT INTO documentos (tipo, caminho, token) VALUES (?, ?, ?)
-         ON CONFLICT(token) DO UPDATE SET caminho = excluded.caminho`,
+        `INSERT INTO documentos (tipo, caminho, token) VALUES (?, ?, ?)`,
         ['RELATORIO_DEVEDORES', filePath, tokenDoc]
       );
 
@@ -684,8 +683,7 @@ router.get(
       });
 
       await dbRun(
-        `INSERT INTO documentos (tipo, caminho, token) VALUES (?, ?, ?)
-         ON CONFLICT(token) DO UPDATE SET caminho = excluded.caminho`,
+        `INSERT INTO documentos (tipo, caminho, token) VALUES (?, ?, ?)`,
         ['RELATORIO_DARS', filePath, tokenDoc]
       );
 
@@ -807,8 +805,7 @@ router.get(
       });
 
       await dbRun(
-        `INSERT INTO documentos (tipo, caminho, token) VALUES (?, ?, ?)
-         ON CONFLICT(token) DO UPDATE SET caminho = excluded.caminho`,
+        `INSERT INTO documentos (tipo, caminho, token) VALUES (?, ?, ?)`,
         ['RELATORIO_COMPROVANTES', filePath, tokenDoc]
       );
 
@@ -886,8 +883,7 @@ router.get(
       });
 
       await dbRun(
-        `INSERT INTO documentos (tipo, caminho, token) VALUES (?, ?, ?)
-         ON CONFLICT(token) DO UPDATE SET caminho = excluded.caminho`,
+        `INSERT INTO documentos (tipo, caminho, token) VALUES (?, ?, ?)`,
         ['RELATORIO_EVENTOS_DARS', filePath, tokenDoc]
       );
 
