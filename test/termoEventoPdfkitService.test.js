@@ -1,4 +1,5 @@
 import assert from 'assert';
+import pdfParse from 'pdf-parse/lib/pdf-parse.js';
 import { composeDataFromEvent, generateTermoPdf, getEspacoInfo } from '../src/services/termoEventoPdfkitService.js';
 import { ESPACOS_INFO } from '../src/config/espacos.js';
 
@@ -26,12 +27,20 @@ assert.deepStrictEqual(dados.dars, evento.dars);
 assert.deepStrictEqual(getEspacoInfo('default'), ESPACOS_INFO.default);
 
 (async () => {
-  const pdf = await generateTermoPdf(dados);
+  const token = 'TOKEN123';
+  const pdf = await generateTermoPdf(dados, token);
   assert.ok(Buffer.isBuffer(pdf) && pdf.length > 0);
+
+  const parsed = await pdfParse(pdf);
+  const pdfText = parsed.text;
+  const ocorrenciasToken = (pdfText.match(new RegExp(token, 'g')) || []).length;
+  assert.strictEqual(ocorrenciasToken, 1, 'Token deve aparecer apenas uma vez');
+  assert.ok(pdfText.includes('documento assinado eletronicamente'));
+  assert.ok(pdfText.includes('PERMISSIONÁRIO'));
 
   let erroCapturado = false;
   try {
-    await generateTermoPdf({ ...dados, saldoPagamento: 0 });
+    await generateTermoPdf({ ...dados, saldoPagamento: 0 }, token);
   } catch (err) {
     erroCapturado = true;
   }

@@ -38,7 +38,7 @@ function buildDescription(data) {
   return `Evento em ${formatDate(data.data)} com valor de ${formatCurrency(data.valor)}. Vigência: ${formatDate(data.vigencia.inicio)} a ${formatDate(data.vigencia.fim)}. Saldo: ${formatCurrency(data.saldoPagamento)}. Cláusulas: ${clausulas}.`;
 }
 
-export async function generateTermoPdf(data) {
+export async function generateTermoPdf(data, token = '') {
   if (typeof data.saldoPagamento !== 'number' || data.saldoPagamento <= 0) {
     throw new Error('Saldo de pagamento insuficiente.');
   }
@@ -50,14 +50,28 @@ export async function generateTermoPdf(data) {
   }
 
   const descricao = buildDescription(data);
-  const doc = new PDFDocument({ size: 'A4', margin: 50 });
+  const doc = new PDFDocument({ size: 'A4', margin: 50, compress: false });
   return new Promise((resolve, reject) => {
     const buffers = [];
     doc.on('data', buffers.push.bind(buffers));
     doc.on('end', () => resolve(Buffer.concat(buffers)));
     doc.on('error', reject);
 
+    // Conteúdo principal
     doc.font('Helvetica').fontSize(12).text(descricao, { align: 'left' });
+
+    // Página final com assinaturas
+    doc.addPage();
+    const center = { align: 'center' };
+    doc.font('Helvetica').fontSize(12).text('documento assinado eletronicamente', center);
+    doc.text('SECRETARIA DE ESTADO DA CIÊNCIA, DA TECNOLOGIA E DA INOVAÇÃO DE ALAGOAS', center);
+    doc.moveDown();
+    doc.text('PERMISSIONÁRIO', center);
+    if (token) {
+      const cm = 28.3465; // pontos por centímetro
+      const yToken = doc.y + 2 * cm;
+      doc.text(token, 0, yToken, center);
+    }
 
     doc.end();
   });
