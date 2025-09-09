@@ -357,7 +357,7 @@ async function gerarTermoEventoPdfkitEIndexar(eventoId) {
 
   const permissionarioId = ev.id_cliente;
   const token = await gerarTokenDocumento('termo_evento', permissionarioId, db);
-  let tokenY;
+  let tokenYFromBottom;
 
   // 2) Parcelas (pega, por parcela, a DAR mais recente e válida, via dar_id DESC)
 const parcelas = await dbAll(
@@ -471,6 +471,7 @@ const saldoISO = parcelas.length > 1
   const filePath = path.join(publicDir, fileName);
 
   // 5) PDF: sem bufferPages (sem paginação pós-processamento)
+  // A margem inferior reserva 2 cm extras para o bloco de autenticação do token.
   const doc = new PDFDocument({ size: 'A4', margins: abntMargins(0.5, 0.5, 2) });
   const ws = fs.createWriteStream(filePath);
   doc.pipe(ws);
@@ -671,7 +672,8 @@ const saldoISO = parcelas.length > 1
     doc.moveDown(0.2);
     doc.text(r, leftAss, doc.y, { width: larguraAss, align: 'center' });
     if (r.startsWith('PERMISSIONÁRIO')) {
-      tokenY = doc.page.height - doc.y;
+      const afterPermissionarioY = doc.y;
+      tokenYFromBottom = doc.page.height - afterPermissionarioY - cm(2);
     }
   });
 
@@ -694,7 +696,7 @@ const saldoISO = parcelas.length > 1
   // Imprime token no PDF
   try {
     const base64 = fs.readFileSync(filePath).toString('base64');
-    const comToken = await imprimirTokenEmPdf(base64, token, { onlyLastPage: true, y: tokenY });
+    const comToken = await imprimirTokenEmPdf(base64, token, { onlyLastPage: true, y: tokenYFromBottom });
     fs.writeFileSync(filePath, Buffer.from(comToken, 'base64'));
   } catch (err) {
     console.error('[TERMO][SERVICE] Falha ao imprimir token no PDF', err);
