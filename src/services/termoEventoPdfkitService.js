@@ -653,29 +653,16 @@ const saldoISO = parcelas.length > 1
   paragrafo(doc, 'Para firmeza e validade do que foi pactuado, lavra-se o presente instrumento em 3 (três) vias de igual teor e forma, para que surtam um só efeito, as quais, depois de lidas, são assinadas pelos representantes das partes, PERMITENTE e PERMISSIONÁRIO(A) e pelas testemunhas abaixo.');
   paragrafo(doc, `${cidadeUfDefault}, ${fmtDataExtenso(isoLocalToday())}.`);
 
-  // Assinaturas (mantém o bloco junto) e captura posição para o token
-  const rotulosAss = ['PERMITENTE', 'PERMISSIONÁRIO', 'TESTEMUNHA – CPF Nº', 'TESTEMUNHA – CPF Nº'];
-  const larguraAss = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-  const leftAss = doc.page.margins.left;
-  const hRotAss = doc.heightOfString('X', { width: larguraAss, align: 'center' });
-  const hCadaAss = 40 + 4 + hRotAss + 10;
-  const alturaTotalAss = hCadaAss * rotulosAss.length;
-  const yMaxAss = doc.page.height - doc.page.margins.bottom;
-  if (doc.y + alturaTotalAss > yMaxAss) {
-    doc.addPage();
-  }
+  // Bloco de encerramento e cálculo da posição do token
+  const larguraBloco = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+  doc.moveDown(2);
   doc.font('Times-Roman').fontSize(11);
-  rotulosAss.forEach(r => {
-    doc.moveDown(3);
-    const y0 = doc.y;
-    doc.moveTo(leftAss, y0).lineTo(leftAss + larguraAss, y0).stroke('#000');
-    doc.moveDown(0.2);
-    doc.text(r, leftAss, doc.y, { width: larguraAss, align: 'center' });
-    if (r.startsWith('PERMISSIONÁRIO')) {
-      const afterPermissionarioY = doc.y;
-      tokenYFromBottom = doc.page.height - afterPermissionarioY - cm(2);
-    }
-  });
+  doc.text('documento assinado eletronicamente', doc.page.margins.left, doc.y, { width: larguraBloco, align: 'center' });
+  doc.text('SECRETARIA DE ESTADO DA CIÊNCIA, DA TECNOLOGIA E DA INOVAÇÃO DE ALAGOAS', doc.page.margins.left, doc.y, { width: larguraBloco, align: 'center' });
+  doc.text(' ', doc.page.margins.left, doc.y, { width: larguraBloco, align: 'center' });
+  doc.text('PERMISSIONÁRIO', doc.page.margins.left, doc.y, { width: larguraBloco, align: 'center' });
+  const afterPermissionarioY = doc.y;
+  tokenYFromBottom = doc.page.height - afterPermissionarioY - cm(2);
 
   // Finaliza
   const finishPromise = new Promise((resolve, reject) => {
