@@ -84,7 +84,7 @@ async function gerarAdvertenciaPdfEIndexar({ advertenciaId = null, evento = {}, 
   const ws = fs.createWriteStream(filePath);
   doc.pipe(ws);
 
-  applyLetterhead(doc, {});
+  const renderLetterhead = applyLetterhead(doc, {});
   doc.font('Times-Bold').fontSize(14).text('TERMO DE ADVERTÊNCIA', { align: 'center' });
   doc.moveDown();
 
@@ -117,6 +117,7 @@ async function gerarAdvertenciaPdfEIndexar({ advertenciaId = null, evento = {}, 
     ws.on('finish', resolve);
     ws.on('error', reject);
   });
+  renderLetterhead();
   doc.end();
   await finishPromise;
 

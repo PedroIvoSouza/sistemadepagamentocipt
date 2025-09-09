@@ -499,7 +499,7 @@ const saldoISO = parcelas.length > 1
   if (!fs.existsSync(letterheadPath)) {
     letterheadPath = path.join(__dirname, '..', 'assets', 'papel-timbrado-secti.png');
   }
-  applyLetterhead(doc, { imagePath: letterheadPath });
+  const renderLetterhead = applyLetterhead(doc, { imagePath: letterheadPath });
 
   // Cursor inicial
   doc.font('Times-Roman').fontSize(12);
@@ -679,6 +679,7 @@ const saldoISO = parcelas.length > 1
     ws.on('finish', resolve);
     ws.on('error', reject);
   });
+  renderLetterhead();
   doc.end();
   await finishPromise;
   console.log('[TERMO][SERVICE] PDF gravado em', filePath);

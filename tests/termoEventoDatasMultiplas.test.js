@@ -26,7 +26,7 @@ function setupPdf(events) {
 
   const letterheadPath = path.resolve(__dirname, '../src/utils/pdfLetterhead.js');
   require.cache[letterheadPath] = {
-    exports: { applyLetterhead: () => {}, abntMargins: () => ({ top:50, bottom:50, left:50, right:50 }) }
+    exports: { applyLetterhead: () => () => {}, abntMargins: () => ({ top:50, bottom:50, left:50, right:50 }) }
   };
 
   delete require.cache[require.resolve('../src/services/termoEventoPdfkitService.js')];

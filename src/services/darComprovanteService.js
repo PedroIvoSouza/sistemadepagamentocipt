@@ -118,7 +118,7 @@ async function gerarComprovante(darId, db, { reuseExisting = true } = {}) {
   const tokenDoc = await gerarTokenDocumento('DAR_COMPROVANTE', dar.permissionario_id, db);
 
   const doc = new PDFDocument({ size: 'A4', margins: abntMargins(0.5, 0.5, 2) });
-  applyLetterhead(doc);
+  const renderLetterhead = applyLetterhead(doc);
 
   const chunks = [];
   let tokenYFromBottom = 0;
@@ -190,6 +190,7 @@ async function gerarComprovante(darId, db, { reuseExisting = true } = {}) {
 
   tokenYFromBottom = doc.page.height - ((boxTop + 100) + 100 + cm(2));
 
+  renderLetterhead();
   doc.end();
 
   return endPromise;

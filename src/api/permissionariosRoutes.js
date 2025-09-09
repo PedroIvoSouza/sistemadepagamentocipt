@@ -178,7 +178,7 @@ router.get('/:id/certidao', authMiddleware, async (req, res) => {
 
     // === Renderização ===
     // Papel timbrado em todas as páginas
-    applyLetterhead(doc, { imagePath: path.join(__dirname, '..', 'assets', 'papel-timbrado-secti.png') });
+    const renderLetterhead = applyLetterhead(doc, { imagePath: path.join(__dirname, '..', 'assets', 'papel-timbrado-secti.png') });
 
     // Cursor inicial na área útil + token por página
     doc.x = doc.page.margins.left;
@@ -271,6 +271,7 @@ router.get('/:id/certidao', authMiddleware, async (req, res) => {
     }
 
   // Finaliza
+  renderLetterhead();
   doc.end();
 } catch (err) {
     console.error('[permissionarios/certidao] erro:', err.stack || err);

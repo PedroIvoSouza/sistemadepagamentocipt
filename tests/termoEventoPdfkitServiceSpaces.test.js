@@ -25,7 +25,7 @@ function setup(events) {
   require.cache[sqlitePath] = { exports: sqlite3Stub };
 
   const letterheadPath = path.resolve(__dirname, '../src/utils/pdfLetterhead.js');
-  require.cache[letterheadPath] = { exports: { applyLetterhead: () => {}, abntMargins: () => ({ top:50, bottom:50, left:50, right:50 }) } };
+  require.cache[letterheadPath] = { exports: { applyLetterhead: () => () => {}, abntMargins: () => ({ top:50, bottom:50, left:50, right:50 }) } };
 
   delete require.cache[require.resolve('../src/services/termoEventoPdfkitService.js')];
   return require('../src/services/termoEventoPdfkitService.js');

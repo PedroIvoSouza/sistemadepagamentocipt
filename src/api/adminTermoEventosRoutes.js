@@ -358,7 +358,7 @@ router.get(
       doc.on('data', (c) => chunks.push(c));
 
       // Timbrado (todas as páginas)
-      applyLetterhead(doc, { imagePath: letterheadPath });
+      const renderLetterhead = applyLetterhead(doc, { imagePath: letterheadPath });
 
       // Cursor inicial e token a cada página
       doc.x = doc.page.margins.left;
@@ -504,6 +504,7 @@ router.get(
       });
 
       // Finaliza
+      renderLetterhead();
       doc.end();
 
     } catch (err) {

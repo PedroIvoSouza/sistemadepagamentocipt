@@ -351,7 +351,7 @@ router.get(
       doc.pipe(fileStream);
 
       // Timbrado (usa SEU helper do ofício) - caminho que você informou:
-      applyLetterhead(doc, { imagePath: path.join(process.cwd(), 'public', 'images', 'papel-timbrado-secti.png') });
+      const renderLetterhead = applyLetterhead(doc, { imagePath: path.join(process.cwd(), 'public', 'images', 'papel-timbrado-secti.png') });
 
       // Primeira página: cursor na área útil + token
       doc.x = doc.page.margins.left;
@@ -527,6 +527,7 @@ router.get(
       printPageNumbers(doc);
 
       // Finaliza doc: fecha stream e só então indexa + devolve
+      renderLetterhead();
       doc.end();
 
       fileStream.on('finish', async () => {
