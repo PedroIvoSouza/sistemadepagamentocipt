@@ -50,7 +50,9 @@ async function ensureDocumentosSchema(){
   await add('created_at', 'TEXT');
   await dbRun(`CREATE UNIQUE INDEX IF NOT EXISTS ux_documentos_evento_tipo ON documentos(evento_id, tipo)`);
 }
-ensureDocumentosSchema().catch(()=>{});
+ensureDocumentosSchema().catch(err => {
+  console.error('Schema init failed', err);
+});
 
 // ===== Utils =====
 const PUBLIC_DIR = path.join(process.cwd(), 'public');
