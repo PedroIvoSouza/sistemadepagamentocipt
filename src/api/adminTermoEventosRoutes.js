@@ -241,6 +241,12 @@ router.get(
    GET /api/admin/eventos/:eventoId/termo
    Gera o TERMO (PDFKit) com timbrado, cabeçalho e rodapé em todas as páginas.
    =========================================================== */
+// Rota legada "termo-pdf" redireciona para o endpoint oficial
+router.get('/eventos/:eventoId/termo-pdf', (req, res) => {
+  const { eventoId } = req.params;
+  return res.redirect(302, `/api/admin/eventos/${eventoId}/termo`);
+});
+
 router.get(
   '/eventos/:eventoId/termo',
   [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN'])],

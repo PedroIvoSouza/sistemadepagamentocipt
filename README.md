@@ -103,6 +103,15 @@ Para registrar uma advertência:
 
 Após o envio, as sanções previstas para as cláusulas selecionadas serão aplicadas, incluindo a cobrança da multa e a inaptidão a partir da data informada.
 
+## Termo do Evento
+
+O termo de permissão de uso é obtido pela rota oficial:
+
+`GET /api/admin/eventos/:id/termo`
+
+Este endpoint gera ou retorna o PDF do termo utilizando o serviço atualizado com token e bloco de assinatura eletrônica.
+A rota legada `/api/admin/eventos/:id/termo-pdf` foi descontinuada e redireciona para o caminho acima.
+
 ## Backfill de endereços de clientes
 
 Preenche automaticamente os campos de endereço nas tabelas `Clientes_Eventos` e `Clientes` a partir do CEP.

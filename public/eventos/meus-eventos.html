@@ -167,6 +167,7 @@
       const assinafyIframe = document.getElementById('assinafyIframe');
       const assinafyModal = new bootstrap.Modal(modalEl);
       const infoModal = new bootstrap.Modal(document.getElementById('infoModal'));
+      const TERMO_ENDPOINT = (id) => `/api/admin/eventos/${id}/termo`;
 
       modalEl.addEventListener('hidden.bs.modal', () => { assinafyIframe.src = ''; });
 
@@ -287,7 +288,7 @@
           const btnBaixar  = e.target.closest('button[data-baixar-termo]');
           if (btnBaixar) {
             const eventoId = btnBaixar.dataset.baixarTermo;
-            window.open(`/api/admin/eventos/${eventoId}/termo`, '_blank', 'noopener');
+            window.open(TERMO_ENDPOINT(eventoId), '_blank', 'noopener');
           }
 
           const btnAssinar = e.target.closest('button[data-assinar-termo]');
