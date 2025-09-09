@@ -1,6 +1,15 @@
 import PDFDocument from 'pdfkit';
 import { ESPACOS_INFO } from '../config/espacos.js';
 
+export const CLAUSULAS_TERMO = {
+  '5.19': 'Cláusula 5.19 - O permissionário deverá utilizar os espaços somente para os fins autorizados, responsabilizando-se pela integridade dos bens públicos.',
+  '5.20': 'Cláusula 5.20 - Após o término do evento, o permissionário compromete-se a devolver os espaços nas mesmas condições em que os recebeu, respondendo por eventuais danos.'
+};
+
+function resolveClausulas(clausulas = []) {
+  return Array.isArray(clausulas) ? clausulas.map(c => CLAUSULAS_TERMO[c] || c) : [];
+}
+
 function formatCurrency(value) {
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
@@ -29,7 +38,7 @@ export function composeDataFromEvent(evento) {
       fim: vigenciaFim.toISOString()
     },
     saldoPagamento: evento.saldoPagamento,
-    clausulas: evento.clausulas,
+    clausulas: resolveClausulas(evento.clausulas),
     dars: Array.isArray(evento.dars) ? evento.dars.map(d => ({ ...d })) : []
   };
 }
@@ -51,17 +60,19 @@ function buildDescription(data) {
 }
 
 export async function generateTermoPdf(data, token = '') {
-  if (typeof data.saldoPagamento !== 'number' || data.saldoPagamento <= 0) {
+  const dados = { ...data, clausulas: resolveClausulas(data.clausulas) };
+
+  if (typeof dados.saldoPagamento !== 'number' || dados.saldoPagamento <= 0) {
     throw new Error('Saldo de pagamento insuficiente.');
   }
-  if (!data.vigencia || !data.vigencia.inicio || !data.vigencia.fim) {
+  if (!dados.vigencia || !dados.vigencia.inicio || !dados.vigencia.fim) {
     throw new Error('Período de vigência inválido.');
   }
-  if (!Array.isArray(data.clausulas) || data.clausulas.length === 0) {
+  if (!Array.isArray(dados.clausulas) || dados.clausulas.length === 0) {
     throw new Error('Cláusulas específicas não informadas.');
   }
 
-  const descricao = buildDescription(data);
+  const descricao = buildDescription(dados);
   const doc = new PDFDocument({ size: 'A4', margin: 50, compress: false });
   return new Promise((resolve, reject) => {
     const buffers = [];
