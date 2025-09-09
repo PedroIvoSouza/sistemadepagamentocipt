@@ -210,15 +210,15 @@ function printToken(doc, token, qrBuffer) {
   const avisoWidth = qrX - x - 10;
   doc.fontSize(7).fillColor('#222');
   const avisoHeight = doc.heightOfString(aviso, { width: avisoWidth });
-  const avisoY = baseY + 2;
+  const avisoY = baseY - avisoHeight - 10;   // 10pt de margem
   const tokenY = avisoY + avisoHeight + 2;
   doc.text(aviso, x, avisoY, { width: avisoWidth });
 
   const text = `Token: ${token}`;
   doc.fontSize(8).text(text, x, tokenY, { lineBreak:false });
-  doc.image(qrBuffer, qrX, tokenY - (qrSize - 8), {
-    fit: [qrSize, qrSize],
-  });
+
+  const qrY = tokenY - qrSize + 8;
+  doc.image(qrBuffer, qrX, qrY, { fit: [qrSize, qrSize] });
   doc.restore();
   doc.x = prevX; doc.y = prevY;
 }
