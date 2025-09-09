@@ -696,9 +696,10 @@ const saldoISO = parcelas.length > 1
   await dbRun(
     `INSERT INTO documentos (tipo, token, permissionario_id, evento_id, pdf_url, pdf_public_url, status, created_at)
      VALUES ('termo_evento', ?, ?, ?, ?, ?, 'gerado', ?)
-     ON CONFLICT(token) DO UPDATE SET
+     ON CONFLICT(evento_id, tipo) DO UPDATE SET
        permissionario_id = excluded.permissionario_id,
        evento_id = excluded.evento_id,
+       token = excluded.token,
        pdf_url = excluded.pdf_url,
        pdf_public_url = excluded.pdf_public_url,
        status = 'gerado',
