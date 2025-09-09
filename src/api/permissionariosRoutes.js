@@ -160,8 +160,7 @@ router.get('/:id/certidao', authMiddleware, async (req, res) => {
         // Também registra em "documentos" para validação pública
         await runAsync(
           `INSERT INTO documentos (tipo, caminho, token)
-             VALUES (?, ?, ?)
-           ON CONFLICT(token) DO UPDATE SET caminho = excluded.caminho`,
+             VALUES (?, ?, ?)`,
           ['CERTIDAO_QUITACAO', filePath, tokenDoc]
         );
 

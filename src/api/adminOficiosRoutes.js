@@ -279,8 +279,7 @@ router.get(
 
       // (opcional) gravar referência no banco
       await dbRun(
-        `INSERT INTO documentos (tipo, caminho, token) VALUES (?, ?, ?)
-           ON CONFLICT(token) DO UPDATE SET caminho = excluded.caminho`,
+        `INSERT INTO documentos (tipo, caminho, token) VALUES (?, ?, ?)`,
         // caminho vazio pois foi stream direto; se quiser salvar arquivo, mude o pipe para fs
         ['OFICIO', '', tokenDoc]
       );
