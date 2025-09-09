@@ -1,5 +1,6 @@
 import assert from 'assert';
-import { composeDataFromEvent, generateTermoPdf, getEspacoInfo, buildClausula4Paragrafo } from '../src/services/termoEventoPdfkitService.js';
+import pdfParse from 'pdf-parse/lib/pdf-parse.js';
+import { composeDataFromEvent, generateTermoPdf, getEspacoInfo, buildClausula4Paragrafo, CLAUSULAS_TERMO } from '../src/services/termoEventoPdfkitService.js';
 import { ESPACOS_INFO } from '../src/config/espacos.js';
 
 const eventoBase = {
@@ -9,7 +10,7 @@ const eventoBase = {
   dataMontagem: '2025-08-10T03:00:00Z',
   dataDesmontagem: '2025-08-13T03:00:00Z',
   saldoPagamento: 3000,
-  clausulas: ['Cláusula 1', 'Cláusula 2'],
+  clausulas: ['5.19', '5.20'],
   dars: [
     { dataVencimento: '2025-08-01T03:00:00Z' },
     { dataVencimento: '2025-08-20T03:00:00Z' }
@@ -37,6 +38,8 @@ assert.strictEqual(ESPACOS_INFO.coworking.capacidade, 30);
   for (const [index, combo] of combinacoes.entries()) {
     const dados = composeDataFromEvent({ ...eventoBase, espacos: combo.espacos });
     assert.deepStrictEqual(dados.espacos, combo.espacos);
+    assert.ok(dados.clausulas.includes(CLAUSULAS_TERMO['5.19']));
+    assert.ok(dados.clausulas.includes(CLAUSULAS_TERMO['5.20']));
 
     if (index === 0) {
       assert.strictEqual(dados.vigencia.inicio, eventoBase.dataMontagem);
@@ -48,6 +51,10 @@ assert.strictEqual(ESPACOS_INFO.coworking.capacidade, 30);
 
     const pdf = await generateTermoPdf(dados, token);
     assert.ok(Buffer.isBuffer(pdf) && pdf.length > 0);
+    const parsed = await pdfParse(pdf);
+    const texto = parsed.text.replace(/\s+/g, ' ');
+    assert.ok(texto.includes(CLAUSULAS_TERMO['5.19']));
+    assert.ok(texto.includes(CLAUSULAS_TERMO['5.20']));
 
     const clausula = buildClausula4Paragrafo(dados.espacos);
     assert.strictEqual(clausula, combo.clausula);
