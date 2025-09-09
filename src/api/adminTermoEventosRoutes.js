@@ -255,6 +255,17 @@ router.get(
       await ensureDocumentosSchema();
       const { eventoId } = req.params;
 
+      const resp = await dbGet(
+        `SELECT c.documento_responsavel
+           FROM Eventos e
+           JOIN Clientes_Eventos c ON c.id = e.id_cliente
+          WHERE e.id = ?`,
+        [eventoId]
+      );
+      if (!resp?.documento_responsavel) {
+        return res.status(400).json({ error: 'CPF do responsável não informado' });
+      }
+
       const docAssinado = await dbGet(
         `SELECT id, token, signed_pdf_public_url FROM documentos WHERE evento_id = ? AND tipo = 'termo_evento' ORDER BY id DESC LIMIT 1`,
         [eventoId]

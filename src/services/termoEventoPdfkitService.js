@@ -361,6 +361,7 @@ async function gerarTermoEventoPdfkitEIndexar(eventoId) {
     'termo/get-evento'
   );
   if (!ev) throw new Error('Evento não encontrado');
+  if (!ev.documento_responsavel) throw new Error('CPF do responsável não informado');
 
   const permissionarioId = ev.id_cliente;
   const token = await gerarTokenDocumento('termo_evento', permissionarioId, db);
