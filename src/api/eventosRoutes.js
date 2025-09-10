@@ -96,9 +96,15 @@ router.post('/', async (req, res) => {
     }
 
     // Ordena as datas para garantir que a primeira é a correta
-    const datasOrdenadas = datasEvento.sort((a, b) => new Date(a) - new Date(b));
-    const dataVigenciaFinal = new Date(datasOrdenadas.at(-1));
-    dataVigenciaFinal.setDate(dataVigenciaFinal.getDate() + 1);
+    const datasOrdenadas = [...datasEvento].sort((a, b) => new Date(a) - new Date(b));
+    let dataVigenciaFinal = req.body.dataVigenciaFinal || req.body.data_vigencia_final || null;
+    if (!dataVigenciaFinal && datasOrdenadas.length) {
+        const tmp = new Date(datasOrdenadas.at(-1));
+        tmp.setDate(tmp.getDate() + 1);
+        dataVigenciaFinal = tmp.toISOString().slice(0,10);
+    } else if (dataVigenciaFinal) {
+        dataVigenciaFinal = new Date(dataVigenciaFinal).toISOString().slice(0,10);
+    }
     const primeiraDataEvento = new Date(datasOrdenadas[0]);
     
     const ultimaDataVencimento = new Date(parcelas.sort((a, b) => new Date(b.vencimento) - new Date(a.vencimento))[0].vencimento);
@@ -136,7 +142,7 @@ router.post('/', async (req, res) => {
                 JSON.stringify(espacosUtilizados || []),
                 areaM2 || null,
                 datasEvento.join(','),
-                dataVigenciaFinal.toISOString().slice(0,10),
+                dataVigenciaFinal,
                 totalDiarias,
                 valorBruto,
                 tipoDescontoAuto,

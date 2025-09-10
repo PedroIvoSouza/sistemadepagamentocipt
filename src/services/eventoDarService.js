@@ -125,10 +125,16 @@ async function criarEventoComDars(db, data, helpers) {
     }
   }
 
-  const datasOrdenadas = Array.isArray(datasEvento) ? [...datasEvento].sort((a,b)=> new Date(a)-new Date(b)) : [];
-  const dataVigenciaFinal = datasOrdenadas.length ? new Date(datasOrdenadas.at(-1)) : null;
-  if (dataVigenciaFinal) {
-    dataVigenciaFinal.setDate(dataVigenciaFinal.getDate() + 1);
+  const datasOrdenadas = Array.isArray(datasEvento)
+    ? [...datasEvento].sort((a, b) => new Date(a) - new Date(b))
+    : [];
+  let dataVigenciaFinal = data.dataVigenciaFinal || data.data_vigencia_final || null;
+  if (!dataVigenciaFinal && datasOrdenadas.length) {
+    const tmp = new Date(datasOrdenadas.at(-1));
+    tmp.setDate(tmp.getDate() + 1);
+    dataVigenciaFinal = tmp.toISOString().slice(0, 10);
+  } else if (dataVigenciaFinal) {
+    dataVigenciaFinal = new Date(dataVigenciaFinal).toISOString().slice(0, 10);
   }
 
   const MAX_ATTEMPTS = 5;
@@ -170,7 +176,7 @@ async function criarEventoComDars(db, data, helpers) {
         areaM2 != null ? Number(areaM2) : null,
         datasEventoStr,
         datasEventoStr,
-        dataVigenciaFinal ? dataVigenciaFinal.toISOString().slice(0,10) : null,
+        dataVigenciaFinal || null,
         Number(totalDiarias || 0),
         Number(valorBruto || 0),
         String(tipoDescontoAuto || 'Geral'),
@@ -354,10 +360,16 @@ async function atualizarEventoComDars(db, id, data, helpers) {
       throw new Error(`A soma das parcelas (R$ ${somaParcelas.toFixed(2)}) não corresponde ao Valor Final (R$ ${Number(valorFinal||0).toFixed(2)}).`);
     }
   }
-  const datasOrdenadas = Array.isArray(datasEvento) ? [...datasEvento].sort((a,b)=> new Date(a)-new Date(b)) : [];
-  const dataVigenciaFinal = datasOrdenadas.length ? new Date(datasOrdenadas.at(-1)) : null;
-  if (dataVigenciaFinal) {
-    dataVigenciaFinal.setDate(dataVigenciaFinal.getDate() + 1);
+  const datasOrdenadas = Array.isArray(datasEvento)
+    ? [...datasEvento].sort((a, b) => new Date(a) - new Date(b))
+    : [];
+  let dataVigenciaFinal = data.dataVigenciaFinal || data.data_vigencia_final || null;
+  if (!dataVigenciaFinal && datasOrdenadas.length) {
+    const tmp = new Date(datasOrdenadas.at(-1));
+    tmp.setDate(tmp.getDate() + 1);
+    dataVigenciaFinal = tmp.toISOString().slice(0, 10);
+  } else if (dataVigenciaFinal) {
+    dataVigenciaFinal = new Date(dataVigenciaFinal).toISOString().slice(0, 10);
   }
 
   await dbRun(db, 'BEGIN TRANSACTION');
@@ -396,7 +408,7 @@ async function atualizarEventoComDars(db, id, data, helpers) {
         JSON.stringify(espacosUtilizados || []),
         areaM2 != null ? Number(areaM2) : null,
         JSON.stringify(datasEvento || []),
-        dataVigenciaFinal ? dataVigenciaFinal.toISOString().slice(0,10) : null,
+        dataVigenciaFinal || null,
         Number(totalDiarias || 0),
         Number(valorBruto || 0),
         String(tipoDescontoAuto || 'Geral'),

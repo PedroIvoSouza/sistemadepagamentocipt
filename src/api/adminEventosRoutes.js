@@ -408,7 +408,7 @@ router.get('/', async (req, res) => {
     await dbRun(
       `UPDATE Eventos
           SET status = 'Realizado'
-        WHERE DATE(data_vigencia_final) < DATE('now')
+        WHERE DATE(substr(data_vigencia_final,1,10)) < DATE('now')
           AND status IN ('Pendente','Emitido','Reemitido','Pago','Parcialmente Pago')`,
       [],
       'realizar-eventos-passados'
