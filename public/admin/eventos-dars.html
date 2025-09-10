@@ -974,10 +974,15 @@ async function carregarClientes(){
       const evNormalizado = normalizarEvento(ev);
       const id = evIdOf(ev);
       const status = ev.status || 'Pendente';
-      const badge = status === 'Pago' ? 'bg-success'
-                  : ['Emitido','Reemitido'].includes(status) ? 'bg-primary'
-                  : status === 'Realizado' ? 'bg-secondary'
-                  : 'bg-warning text-dark';
+      const badge = status === 'Pago'
+                  ? 'bg-success'
+                  : status === 'Parcialmente Pago'
+                    ? 'bg-warning text-dark'
+                    : ['Emitido','Reemitido'].includes(status)
+                      ? 'bg-primary'
+                      : status === 'Realizado'
+                        ? 'bg-secondary'
+                        : 'bg-warning text-dark';
       const rowClass = ev.remarcado ? 'table-warning' : '';
       
       let mostraBtnEnviar = true;
@@ -1112,10 +1117,15 @@ function atualizarStatusNaTabelaEventos(eventoId, status){
       if (badge){
         badge.textContent = status;
         badge.className = 'badge ' + (
-          status==='Pago'
+          status === 'Pago'
             ? 'bg-success'
-            : (['Emitido','Reemitido'].includes(status) ? 'bg-primary'
-               : (status === 'Realizado' ? 'bg-secondary' : 'bg-warning text-dark'))
+            : status === 'Parcialmente Pago'
+              ? 'bg-warning text-dark'
+              : (['Emitido','Reemitido'].includes(status)
+                  ? 'bg-primary'
+                  : (status === 'Realizado'
+                      ? 'bg-secondary'
+                      : 'bg-warning text-dark'))
         );
       }
     }
@@ -1415,9 +1425,27 @@ function normalizarEvento(payload){
         </div>`;
 
       // Atualiza o status consolidado do evento na tabela principal
-      const temPago    = dars.some(x => (x.status||x.dar_status)==='Pago');
-      const temEmitido = dars.some(x => ['Emitido','Reemitido'].includes(x.status||x.dar_status) || (x.dar_pdf && isPdfBase64(x.dar_pdf)));
-      atualizarStatusNaTabelaEventos(eventoId, temPago ? 'Pago' : (temEmitido ? 'Emitido' : 'Pendente'));
+      const totalDARs   = dars.length;
+      const pagas       = dars.filter(x => (x.status || x.dar_status) === 'Pago').length;
+      const temEmitido  = dars.some(x => ['Emitido', 'Reemitido'].includes(x.status || x.dar_status) || (x.dar_pdf && isPdfBase64(x.dar_pdf)));
+      let consolidatedStatus;
+      if (pagas === totalDARs && totalDARs > 0) {
+        consolidatedStatus = 'Pago';
+      } else if (pagas > 0) {
+        consolidatedStatus = 'Parcialmente Pago';
+      } else {
+        consolidatedStatus = temEmitido ? 'Emitido' : 'Pendente';
+      }
+      atualizarStatusNaTabelaEventos(eventoId, consolidatedStatus);
+      try {
+        await fetch(`/api/admin/eventos/${eventoId}/status`, {
+          method: 'PATCH',
+          headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: consolidatedStatus })
+        });
+      } catch (err) {
+        console.error('Falha ao atualizar status do evento', err);
+      }
     }catch(e){
       console.error(e);
       darsList.innerHTML = `<div class="alert alert-danger">Erro ao carregar as DARs.</div>`;
