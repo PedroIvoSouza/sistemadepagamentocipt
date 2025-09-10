@@ -46,9 +46,12 @@ async function calcularEncargosAtraso(dar) {
     // Se a nova data de vencimento for anterior ou igual à original, não há encargos
     if (diasAtraso <= 0) {
         return {
-            valorOriginal: dar.valor, multa: 0, juros: 0, diasAtraso: 0,
+            valorOriginal: dar.valor,
+            multa: 0,
+            juros: 0,
+            diasAtraso: 0,
             valorAtualizado: dar.valor,
-            novaDataVencimento: novaDataVencimento.toISOString().split('T')[0]
+            novaDataVencimento: dar.data_vencimento
         };
     }
 
