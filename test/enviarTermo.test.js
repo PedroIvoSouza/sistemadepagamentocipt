@@ -14,7 +14,7 @@ const eventoBase = {
     { dataVencimento: '2025-08-01T03:00:00Z' },
     { dataVencimento: '2025-08-20T03:00:00Z' }
   ],
-  espacos: ['default']
+  espacos: ['default'],
 };
 
 (async () => {
@@ -25,17 +25,16 @@ const eventoBase = {
   const nomeEvento = 'Festa de Teste';
   const email = 'joao@example.com';
 
-  const original = NotificationService.sendTermoEnviado;
+  const original = NotificationService._postMessage;
   const mensagens = [];
-  NotificationService.sendTermoEnviado = async (...args) => {
-    const msg = await original(...args);
+  NotificationService._postMessage = async (msg) => {
     mensagens.push(msg);
-    return msg;
+    return true;
   };
 
   const pdf = await enviarTermoParaAssinatura(dados, token, nomeCliente, numeroTermo, nomeEvento, email);
 
-  NotificationService.sendTermoEnviado = original;
+  NotificationService._postMessage = original;
 
   assert.ok(Buffer.isBuffer(pdf) && pdf.length > 0, 'Deve gerar um PDF');
   assert.strictEqual(mensagens.length, 1, 'Deve enviar uma notificação');
