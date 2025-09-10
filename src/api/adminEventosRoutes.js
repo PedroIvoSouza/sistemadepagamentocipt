@@ -151,7 +151,8 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
     // Etapa 0: Obter dados do signatário
     const sql = `
       SELECT c.nome_responsavel, c.nome_razao_social, c.email, c.telefone,
-             c.documento_responsavel, c.documento
+             c.documento_responsavel, c.documento,
+             e.nome_evento, e.numero_termo
         FROM Eventos e
         JOIN Clientes_Eventos c ON c.id = e.id_cliente
        WHERE e.id = ?`;
@@ -195,7 +196,10 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
       try {
         const digitsPhone = onlyDigits(signerPhone);
         const msisdn = digitsPhone.startsWith('55') ? digitsPhone : `55${digitsPhone}`;
-        const texto = `O termo foi enviado para assinatura. Verifique o e-mail ${signerEmail}.`;
+        const texto = `Olá ${signerName},\n\n` +
+          `O Termo de Permissão de Uso ${row.numero_termo} para o evento ${row.nome_evento} ` +
+          `foi enviado para o e-mail ${signerEmail}. Assine o quanto antes para garantir a ` +
+          `realização do seu evento no Centro de Inovação do Jaraguá.\n\nEquipe do CIPT.`;
         await sendMessage(msisdn, texto);
       } catch (e) {
         console.error('[WHATSAPP] falha ao notificar signatário:', e.message || e);
