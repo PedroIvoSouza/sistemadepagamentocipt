@@ -976,6 +976,7 @@ async function carregarClientes(){
       const status = ev.status || 'Pendente';
       const badge = status === 'Pago' ? 'bg-success'
                   : ['Emitido','Reemitido'].includes(status) ? 'bg-primary'
+                  : status === 'Realizado' ? 'bg-secondary'
                   : 'bg-warning text-dark';
       const rowClass = ev.remarcado ? 'table-warning' : '';
       
@@ -1113,7 +1114,8 @@ function atualizarStatusNaTabelaEventos(eventoId, status){
         badge.className = 'badge ' + (
           status==='Pago'
             ? 'bg-success'
-            : (['Emitido','Reemitido'].includes(status) ? 'bg-primary' : 'bg-warning text-dark')
+            : (['Emitido','Reemitido'].includes(status) ? 'bg-primary'
+               : (status === 'Realizado' ? 'bg-secondary' : 'bg-warning text-dark'))
         );
       }
     }
@@ -1397,6 +1399,7 @@ function normalizarEvento(payload){
                          </div>`);
                 const badge = status==='Pago' ? 'bg-success'
                              : ['Emitido','Reemitido'].includes(status) ? 'bg-primary'
+                             : status==='Realizado' ? 'bg-secondary'
                              : status==='Vencido' ? 'bg-danger'
                              : 'bg-warning text-dark';
                 return `<tr>

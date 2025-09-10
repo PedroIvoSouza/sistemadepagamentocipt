@@ -416,6 +416,15 @@ router.get('/', async (req, res) => {
     const limitNum = parseInt(limit, 10) || 10;
     const offset = (pageNum - 1) * limitNum;
 
+    await dbRun(
+      `UPDATE Eventos
+          SET status = 'Realizado'
+        WHERE DATE(data_vigencia_final) < DATE('now')
+          AND status IN ('Pendente','Emitido','Reemitido','Pago','Parcialmente Pago')`,
+      [],
+      'realizar-eventos-passados'
+    );
+
     let whereClause = '';
     const params = [];
     if (search) {
