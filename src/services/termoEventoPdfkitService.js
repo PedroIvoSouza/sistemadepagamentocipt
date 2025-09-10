@@ -1,5 +1,6 @@
 import PDFDocument from 'pdfkit';
 import { ESPACOS_INFO } from '../config/espacos.js';
+import NotificationService from './NotificationService.js';
 
 export const CLAUSULAS_TERMO = {
   '5.19': 'Cláusula 5.19 - O permissionário deverá utilizar os espaços somente para os fins autorizados, responsabilizando-se pela integridade dos bens públicos.',
@@ -98,6 +99,12 @@ export async function generateTermoPdf(data, token = '') {
 
     doc.end();
   });
+}
+
+export async function enviarTermoParaAssinatura(dados, token, nomeCliente, numeroTermo, nomeEvento, email) {
+  const pdf = await generateTermoPdf(dados, token);
+  await NotificationService.sendTermoEnviado(nomeCliente, numeroTermo, nomeEvento, email);
+  return pdf;
 }
 
 export function getEspacoInfo(nome) {
