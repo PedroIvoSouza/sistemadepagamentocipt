@@ -582,12 +582,13 @@ router.get('/:eventoId/dars', async (req, res) => {
     const sql = `
       SELECT
         d.id                                AS id,
-        de.numero_parcela,
+        de.numero_parcela                   AS parcela_num,
         COALESCE(de.valor_parcela, d.valor) AS valor,
         d.id                                AS dar_id,
-        d.data_vencimento                   AS venc,
+        de.data_vencimento                  AS vencimento,
         d.status                            AS status,
-        d.pdf_url                           AS pdf_url
+        d.pdf_url                           AS pdf_url,
+        d.numero_documento                  AS dar_numero
       FROM DARs_Eventos de
       JOIN dars d ON d.id = de.id_dar
       WHERE de.id_evento = ?
