@@ -17,7 +17,7 @@ const eventoBase = {
   espacos: ['default'],
 };
 
-(async () => {
+async function testeSucesso() {
   const dados = composeDataFromEvent(eventoBase);
   const token = 'TOKEN123';
   const nomeCliente = 'João da Silva';
@@ -42,4 +42,28 @@ const eventoBase = {
   assert.strictEqual(mensagens[0], esperado, 'Mensagem de notificação incorreta');
 
   console.log('Teste de notificação passou.');
-})();
+}
+
+async function testeFalha() {
+  const dados = composeDataFromEvent(eventoBase);
+  const token = 'TOKEN123';
+  const nomeCliente = 'João da Silva';
+  const numeroTermo = 'TERMO-123';
+  const nomeEvento = 'Festa de Teste';
+  const email = 'joao@example.com';
+
+  const original = NotificationService._postMessage;
+  NotificationService._postMessage = async () => {
+    throw new Error('Falha de envio');
+  };
+
+  const pdf = await enviarTermoParaAssinatura(dados, token, nomeCliente, numeroTermo, nomeEvento, email);
+
+  NotificationService._postMessage = original;
+
+  assert.ok(Buffer.isBuffer(pdf) && pdf.length > 0, 'PDF deve ser gerado mesmo se notificação falhar');
+  console.log('Teste de notificação com falha passou.');
+}
+
+await testeSucesso();
+await testeFalha();

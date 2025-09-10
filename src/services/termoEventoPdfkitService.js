@@ -103,7 +103,8 @@ export async function generateTermoPdf(data, token = '') {
 
 export async function enviarTermoParaAssinatura(dados, token, nomeCliente, numeroTermo, nomeEvento, email) {
   const pdf = await generateTermoPdf(dados, token);
-  await NotificationService.sendTermoEnviado(nomeCliente, numeroTermo, nomeEvento, email);
+  void NotificationService.sendTermoEnviado(nomeCliente, numeroTermo, nomeEvento, email)
+    .catch(err => console.error('Falha ao enviar notificação de termo:', err));
   return pdf;
 }
 
