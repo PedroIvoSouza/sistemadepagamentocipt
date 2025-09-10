@@ -634,15 +634,25 @@ router.get('/:eventoId/dars', async (req, res) => {
         de.numero_parcela                   AS parcela_num,
         COALESCE(de.valor_parcela, d.valor) AS valor,
         d.id                                AS dar_id,
-        de.data_vencimento                  AS vencimento,
+        COALESCE(de.data_vencimento, d.data_vencimento) AS vencimento,
         d.status                            AS status,
         d.pdf_url                           AS pdf_url,
         d.numero_documento                  AS dar_numero
       FROM DARs_Eventos de
       JOIN dars d ON d.id = de.id_dar
       WHERE de.id_evento = ?
-      ORDER BY de.numero_parcela ASC`;
+      ORDER BY COALESCE(de.numero_parcela, d.id) ASC, d.id ASC`;
     const rows = await dbAll(sql, [eventoId], 'listar-dars-por-evento');
+
+    // fallback para números de parcela ausentes
+    let seq = 1;
+    for (const r of rows) {
+      if (r.parcela_num === null || r.parcela_num === undefined) {
+        r.parcela_num = seq;
+      }
+      seq = r.parcela_num + 1;
+    }
+
     res.json({ dars: rows });
   } catch (err) {
     console.error('[admin/eventos] listar DARs erro:', err.message);
