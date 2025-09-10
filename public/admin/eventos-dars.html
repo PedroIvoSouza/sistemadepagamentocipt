@@ -35,9 +35,9 @@
     .topbar { background-color: #ffffff; padding: 1rem 2rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); display: flex; justify-content: flex-end; align-items: center; }
     .content { padding: 2rem; }
     .card { border: none; border-radius: var(--raio-borda); box-shadow: 0 2px 5px rgba(0,0,0,0.05); margin-bottom: 2rem; }
-    .modal { display: none; position: fixed; z-index: 1050; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.5); }
-    .modal-content { background-color: #fefefe; margin: 2% auto; padding: 25px; border: 1px solid #888; width: 90%; max-width: 800px; border-radius: var(--raio-borda); }
-    .modal-content.small { max-width: 500px; }
+    .custom-modal { display: none; position: fixed; z-index: 1050; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.5); }
+    .custom-modal .modal-content { background-color: #fefefe; margin: 2% auto; padding: 25px; border: 1px solid #888; width: 90%; max-width: 800px; border-radius: var(--raio-borda); }
+    .custom-modal .modal-content.small { max-width: 500px; }
     .modal-content fieldset { border: 1px solid #ddd; padding: 1rem; margin-bottom: 1rem; border-radius: .5rem; }
     .modal-content legend { font-size: 1rem; font-weight: 700; color: var(--cor-primaria); padding: 0 .5rem; width: auto; }
     .summary-row { display: flex; justify-content: space-between; font-size: 1.1rem; padding: .5rem 0; }
@@ -148,7 +148,7 @@
       </main>
     </div>
   </div>
-  <div id="evento-modal" class="modal">
+  <div id="evento-modal" class="custom-modal">
     <div class="modal-content">
       <header class="d-flex justify-content-between align-items-center mb-3">
         <h5 id="modal-title">Criar Novo Evento e Gerar DARs</h5>
@@ -308,7 +308,7 @@
     </div>
   </div>
 
-  <div id="datas-helper-modal" class="modal">
+  <div id="datas-helper-modal" class="custom-modal">
     <div class="modal-content small">
       <header class="d-flex justify-content-between align-items-center mb-3">
         <h5>Assistente de Datas</h5>
@@ -350,7 +350,7 @@
     </div>
   </div>
 
-  <div id="dars-modal" class="modal">
+  <div id="dars-modal" class="custom-modal">
     <div class="modal-content small">
       <header class="d-flex justify-content-between align-items-center mb-3">
         <h5>DARs do Evento</h5>
@@ -361,7 +361,7 @@
   </div>
 
   <!-- Modal para confirmação/edição dos dados do signatário -->
-  <div id="assinafy-modal" class="modal" tabindex="-1">
+  <div id="assinafy-modal" class="modal fade" tabindex="-1">
     <div class="modal-dialog">
       <div class="modal-content small">
         <header class="d-flex justify-content-between align-items-center mb-3">
@@ -393,7 +393,7 @@
     </div>
   </div>
   <!-- Modal para solicitar CPF do responsável -->
-  <div id="cpf-modal" class="modal">
+  <div id="cpf-modal" class="custom-modal">
     <div class="modal-content small">
       <header class="d-flex justify-content-between align-items-center mb-3">
         <h5>CPF do Responsável</h5>
