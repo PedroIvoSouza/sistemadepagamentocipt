@@ -14,6 +14,7 @@ const db = require('../database/db');
 const fs = require('fs');
 const path = require('path');
 const { gerarComprovante } = require('../services/darComprovanteService');
+const { imprimirTokenEmPdf } = require('../utils/token');
 
 const router = express.Router();
 
