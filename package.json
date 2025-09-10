@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "test": "node test/termoEventoPdfkitService.test.js && node test/enviarTermo.test.js"
+    "test": "node test/termoEventoPdfkitService.test.js && node test/enviarTermo.test.js && node test/NotificationService.test.js"
   },
   "dependencies": {
     "bwip-js": "^4.7.0",
@@ -15,5 +15,9 @@
     "react-big-calendar": "^1.8.0",
     "react-dom": "^18.2.0",
     "react-icons": "^4.12.0"
+  },
+  "devDependencies": {
+    "fetch-mock": "9",
+    "node-fetch": "3"
   }
 }
