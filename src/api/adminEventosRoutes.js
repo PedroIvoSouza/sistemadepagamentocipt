@@ -484,6 +484,44 @@ router.get('/', async (req, res) => {
         }
       }
       evento.evento_gratuito = !!evento.evento_gratuito;
+
+      // ===== Agrega status das DARs associadas =====
+      try {
+        const darStatusRows = await dbAll(
+          `SELECT d.status
+             FROM DARs_Eventos de
+             JOIN dars d ON d.id = de.id_dar
+            WHERE de.id_evento = ?`,
+          [evento.id],
+          'listar-status-dars'
+        );
+
+        if (darStatusRows.length) {
+          const statuses = darStatusRows.map(r => r.status);
+          const allPaid = statuses.every(s => s === 'Pago');
+          const anyPaid = statuses.some(s => s === 'Pago');
+          let consolidatedStatus = evento.status;
+          if (allPaid) consolidatedStatus = 'Pago';
+          else if (anyPaid) consolidatedStatus = 'Parcialmente Pago';
+
+          if (consolidatedStatus !== evento.status) {
+            evento.status = consolidatedStatus;
+            try {
+              await dbRun(
+                `UPDATE Eventos SET status = ? WHERE id = ?`,
+                [consolidatedStatus, evento.id],
+                'atualizar-status-evento'
+              );
+            } catch (e) {
+              console.error('[admin/eventos] falha ao persistir status agregado', e.message);
+            }
+          } else {
+            evento.status = consolidatedStatus;
+          }
+        }
+      } catch (e) {
+        console.error('[admin/eventos] falha ao agregar status das DARs', e.message);
+      }
     }
 
     res.json({ eventos: rows, totalPages, currentPage: pageNum });
