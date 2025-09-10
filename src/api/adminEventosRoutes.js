@@ -403,9 +403,20 @@ function calcularValorFinal(vb, tipo, dm = 0) {
    =========================================================== */
 router.get('/', async (req, res) => {
   try {
-    const { 
-      search = '', 
-      page = 1, 
+    // Antes de qualquer consulta, atualizamos o status dos eventos com
+    // data de vigência final já expirada para "Realizado".
+    await dbRun(
+      `UPDATE Eventos
+          SET status = 'Realizado'
+        WHERE DATE(data_vigencia_final) < DATE('now')
+          AND status IN ('Pendente','Emitido','Reemitido','Pago','Parcialmente Pago')`,
+      [],
+      'realizar-eventos-passados'
+    );
+
+    const {
+      search = '',
+      page = 1,
       limit = 10,
       sort = 'data_vigencia_final', // Padrão: ordenar por data
       order = 'asc',                 // Padrão: do mais antigo para o mais novo
@@ -415,15 +426,6 @@ router.get('/', async (req, res) => {
     const pageNum = parseInt(page, 10) || 1;
     const limitNum = parseInt(limit, 10) || 10;
     const offset = (pageNum - 1) * limitNum;
-
-    await dbRun(
-      `UPDATE Eventos
-          SET status = 'Realizado'
-        WHERE DATE(data_vigencia_final) < DATE('now')
-          AND status IN ('Pendente','Emitido','Reemitido','Pago','Parcialmente Pago')`,
-      [],
-      'realizar-eventos-passados'
-    );
 
     let whereClause = '';
     const params = [];
