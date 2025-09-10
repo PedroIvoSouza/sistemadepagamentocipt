@@ -22,6 +22,8 @@ const {
   onlyDigits,
 } = require('../services/assinafyService');
 
+const { sendMessage } = require('../services/whatsappService');
+
 const { gerarTermoEventoPdfkitEIndexar } = require('../services/termoEventoPdfkitService');
 
 const router = express.Router();
@@ -164,6 +166,20 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
 
     // Etapa 5: Solicitar a assinatura (Assignment). É isso que dispara o e-mail.
     await requestSignatures(assinafyDocId, [signerId], { message, expires_at: expiresAt });
+
+    // Etapa 5b: Notificar via WhatsApp (não bloqueia o fluxo se falhar)
+    if (signerPhone) {
+      try {
+        const digitsPhone = onlyDigits(signerPhone);
+        const msisdn = digitsPhone.startsWith('55') ? digitsPhone : `55${digitsPhone}`;
+        const texto = `O termo foi enviado para assinatura. Verifique o e-mail ${signerEmail}.`;
+        await sendMessage(msisdn, texto);
+      } catch (e) {
+        console.error('[WHATSAPP] falha ao notificar signatário:', e.message || e);
+      }
+    } else {
+      console.log('[WHATSAPP] telefone do signatário ausente; notificação não enviada.');
+    }
 
     // Etapa 6: Salvar no banco de dados. Note que 'assinaturaUrl' é explicitamente nulo.
     await dbRun(
