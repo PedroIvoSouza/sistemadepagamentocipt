@@ -88,7 +88,7 @@ async function criarEventoComDars(db, data, helpers) {
     horaDesmontagem,
     numeroProcesso,
     numeroTermo,
-    eventoGratuito = false,
+    eventoGratuito,
     justificativaGratuito,
     emprestimoTvs = false,
     emprestimoCaixasSom = false,
@@ -108,9 +108,11 @@ async function criarEventoComDars(db, data, helpers) {
 
   const clienteIsento =
     cliente.tipo_cliente === 'Isento' || Number(cliente.valor_aluguel) === 0;
-  let eventoGratuitoFlag = eventoGratuito || clienteIsento;
+  let eventoGratuitoFlag =
+    eventoGratuito !== undefined ? eventoGratuito : clienteIsento;
   let justificativa = justificativaGratuito;
-  if (clienteIsento && !justificativa) justificativa = 'Isento';
+  if (clienteIsento && eventoGratuitoFlag && !justificativa)
+    justificativa = 'Isento';
 
   if (!eventoGratuitoFlag && (!Array.isArray(parcelas) || parcelas.length === 0)) {
     throw new Error('Campos obrigatórios estão faltando.');
@@ -316,7 +318,7 @@ async function atualizarEventoComDars(db, id, data, helpers) {
     horaDesmontagem,
     numeroProcesso,
     numeroTermo,
-    eventoGratuito = false,
+    eventoGratuito,
     justificativaGratuito,
     emprestimoTvs = false,
     emprestimoCaixasSom = false,
@@ -337,9 +339,11 @@ async function atualizarEventoComDars(db, id, data, helpers) {
 
   const clienteIsento =
     cliente.tipo_cliente === 'Isento' || Number(cliente.valor_aluguel) === 0;
-  let eventoGratuitoFlag = eventoGratuito || clienteIsento;
+  let eventoGratuitoFlag =
+    eventoGratuito !== undefined ? eventoGratuito : clienteIsento;
   let justificativa = justificativaGratuito;
-  if (clienteIsento && !justificativa) justificativa = 'Isento';
+  if (clienteIsento && eventoGratuitoFlag && !justificativa)
+    justificativa = 'Isento';
 
   if (!eventoGratuitoFlag && (!Array.isArray(parcelas) || parcelas.length === 0)) {
     throw new Error('Campos obrigatórios estão faltando.');
