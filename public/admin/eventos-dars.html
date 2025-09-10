@@ -1341,7 +1341,10 @@ function normalizarEvento(payload){
         const r = await fetch(u, { headers: AUTH_HEADERS });
         if (!r.ok) continue;
         const j = await r.json();
-        const arr = j?.dars || j?.DARs || j || [];
+        const arr =
+          j?.dars || j?.DARs ||
+          j?.data?.dars || j?.data?.DARs ||
+          j?.data || j || [];
         if (Array.isArray(arr)) return arr;
       }catch{}
     }
@@ -1378,18 +1381,20 @@ function normalizarEvento(payload){
                 const pdfStr = (d.dar_pdf || '').toString().replace(/\s/g,'');
                 const hasB64 = isPdfBase64(pdfStr);
                 const darId = d.id || d.dar_id || d.parcela_id || d.referencia || d.parcela_num || '';
-                const btn = hasB64
-                  ? `<button class="btn btn-sm btn-success" data-dar-b64="${pdfStr}" data-evento="${eventoId}" data-parc="${d.parcela_num||''}">
-                      <i class="bi bi-download"></i> Baixar
-                     </button>`
-                  : `<div class="btn-group">
-                       <button class="btn btn-sm btn-outline-primary btn-reemitir-dar" data-dar-id="${darId}" data-evento-id="${eventoId}">
-                         <i class="bi bi-printer"></i> Reemitir
-                       </button>
-                       <button class="btn btn-sm btn-outline-secondary btn-baixar-endpoint" data-dar-id="${darId}" data-evento-id="${eventoId}">
-                         <i class="bi bi-file-earmark-arrow-down"></i> Baixar
-                       </button>
-                     </div>`;
+                const btn = status === 'Pago'
+                  ? `<span class="text-success"><i class="bi bi-check-circle-fill"></i> Pago</span>`
+                  : (hasB64
+                      ? `<button class="btn btn-sm btn-success" data-dar-b64="${pdfStr}" data-evento="${eventoId}" data-parc="${d.parcela_num||''}">
+                          <i class="bi bi-download"></i> Baixar
+                         </button>`
+                      : `<div class="btn-group">
+                           <button class="btn btn-sm btn-outline-primary btn-reemitir-dar" data-dar-id="${darId}" data-evento-id="${eventoId}">
+                             <i class="bi bi-printer"></i> Reemitir
+                           </button>
+                           <button class="btn btn-sm btn-outline-secondary btn-baixar-endpoint" data-dar-id="${darId}" data-evento-id="${eventoId}">
+                             <i class="bi bi-file-earmark-arrow-down"></i> Baixar
+                           </button>
+                         </div>`);
                 const badge = status==='Pago' ? 'bg-success'
                              : ['Emitido','Reemitido'].includes(status) ? 'bg-primary'
                              : status==='Vencido' ? 'bg-danger'
