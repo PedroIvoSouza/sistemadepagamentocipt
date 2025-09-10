@@ -99,8 +99,8 @@ async function hasCol(table, col) {
       [EVENTO_ID, dar2, 2, PARCELA_VAL, VENC_RESTANTE]
     );
 
-    // 4) Atualiza status do evento para "Pago Parcialmente"
-    await run(`UPDATE Eventos SET status='Pago Parcialmente' WHERE id=?`, [EVENTO_ID]);
+    // 4) Atualiza status do evento para "Parcialmente Pago"
+    await run(`UPDATE Eventos SET status='Parcialmente Pago' WHERE id=?`, [EVENTO_ID]);
 
     await run('COMMIT');
 

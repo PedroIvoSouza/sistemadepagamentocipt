@@ -42,7 +42,7 @@ db.serialize(() => {
         tipo_desconto_auto TEXT DEFAULT 'Nenhum',
         percentual_desconto_manual REAL DEFAULT 0,
         valor_final REAL NOT NULL,
-        status TEXT NOT NULL DEFAULT 'Pendente' CHECK(status IN ('Pendente', 'Pago Parcialmente', 'Pago', 'Cancelado')),
+        status TEXT NOT NULL DEFAULT 'Pendente' CHECK(status IN ('Pendente', 'Emitido', 'Reemitido', 'Parcialmente Pago', 'Pago', 'Realizado', 'Cancelado')),
         FOREIGN KEY (id_cliente) REFERENCES Clientes_Eventos (id)
     );`;
 
