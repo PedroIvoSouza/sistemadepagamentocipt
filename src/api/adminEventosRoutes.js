@@ -117,6 +117,29 @@ router.put('/:id', async (req, res) => {
 });
 
 /* ===========================================================
+   PATCH /api/admin/eventos/:id/status
+   Atualiza o status do evento
+   =========================================================== */
+router.patch('/:id/status', async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body || {};
+  const allowed = ['Pendente', 'Emitido', 'Reemitido', 'Parcialmente Pago', 'Pago', 'Realizado', 'Cancelado'];
+  try {
+    if (!allowed.includes(status)) {
+      return res.status(400).json({ error: 'Status inválido.' });
+    }
+    const result = await dbRun(`UPDATE Eventos SET status = ? WHERE id = ?`, [status, id], 'patch-status-evento');
+    if (result.changes === 0) {
+      return res.status(404).json({ error: 'Evento não encontrado.' });
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[ERRO] atualizar status do evento:', err.message);
+    res.status(500).json({ error: 'Não foi possível atualizar o status.' });
+  }
+});
+
+/* ===========================================================
    POST /api/admin/eventos/:id/termo/enviar-assinatura
    Gera termo → upload → aguarda → ensureSigner → assignment → salva assinatura_url (se houver)
    =========================================================== */
