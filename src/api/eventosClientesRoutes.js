@@ -222,7 +222,13 @@ clientRouter.post('/dars/:id/reemitir', async (req, res) => {
     const enc = await calcularEncargosAtraso(dar).catch(() => null);
     if (enc) {
       if (enc.valorAtualizado != null) dar.valor = enc.valorAtualizado;
-      if (enc.novaDataVencimento) dar.data_vencimento = enc.novaDataVencimento;
+      if (enc.novaDataVencimento) {
+        const nova = new Date(enc.novaDataVencimento);
+        const original = new Date(row.data_vencimento);
+        if (nova > original) {
+          dar.data_vencimento = enc.novaDataVencimento;
+        }
+      }
     }
 
     const docCliente = onlyDigits(row.documento);

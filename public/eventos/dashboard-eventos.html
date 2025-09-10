@@ -254,7 +254,11 @@
           const r = await fetch(u, { headers });
           if (!r.ok) continue;
           const j = await r.json().catch(()=> ({}));
-          const lista = j?.dars || j?.data || (Array.isArray(j) ? j : []);
+          const lista =
+            j?.dars ||
+            j?.data?.dars ||
+            j?.data ||
+            (Array.isArray(j) ? j : []);
           if (Array.isArray(lista) && lista.length) return lista;
         }catch{}
       }
@@ -314,9 +318,11 @@
                 const status  = normalizaStatus(d.status ?? d.dar_status ?? 'Pendente');
                 const isEmit  = !!(d.dar_pdf && String(d.dar_pdf).replace(/\s/g,'').length>30);
                 const darId   = d.id || d.dar_id || d.parcela_id || d.referencia || d.parcela_num || '';
-                const btn = isEmit
-                  ? `<button class="btn btn-sm btn-success" data-dar-download="${d.dar_pdf}" data-evento="${eventoId}" data-parc="${d.parcela_num||''}"><i class="bi bi-download"></i> Baixar</button>`
-                  : `<button class="btn btn-sm btn-outline-primary" data-dar-reemitir="${darId}" data-evento="${eventoId}"><i class="bi bi-printer"></i> Emitir 2ª Via</button>`;
+                const btn = status === 'Pago'
+                  ? `<span class="text-success"><i class="bi bi-check-circle-fill"></i> Pago</span>`
+                  : (isEmit
+                      ? `<button class="btn btn-sm btn-success" data-dar-download="${d.dar_pdf}" data-evento="${eventoId}" data-parc="${d.parcela_num||''}"><i class="bi bi-download"></i> Baixar</button>`
+                      : `<button class="btn btn-sm btn-outline-primary" data-dar-reemitir="${darId}" data-evento="${eventoId}"><i class="bi bi-printer"></i> Emitir 2ª Via</button>`);
                 const badge = status==='Pago' ? 'bg-success' : (['Emitido','Reemitido'].includes(status) ? 'bg-primary' : (status==='Vencido' ? 'bg-danger':'bg-warning text-dark'));
                 return `<tr>
                   <td>${d.parcela_num || d.referencia || '-'}</td>
