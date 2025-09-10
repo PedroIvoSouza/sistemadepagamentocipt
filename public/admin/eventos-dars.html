@@ -1441,15 +1441,18 @@ function normalizarEvento(payload){
       } else {
         consolidatedStatus = temEmitido ? 'Emitido' : 'Pendente';
       }
-      atualizarStatusNaTabelaEventos(eventoId, consolidatedStatus);
       try {
-        await fetch(`/api/admin/eventos/${eventoId}/status`, {
+        const r = await fetch(`/api/admin/eventos/${eventoId}/status`, {
           method: 'PATCH',
           headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
           body: JSON.stringify({ status: consolidatedStatus })
         });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok || !j.ok) throw new Error(j.error || `Erro ${r.status}`);
+        atualizarStatusNaTabelaEventos(eventoId, consolidatedStatus);
       } catch (err) {
         console.error('Falha ao atualizar status do evento', err);
+        alert(`Falha ao atualizar status do evento: ${err.message || err}`);
       }
     }catch(e){
       console.error(e);

@@ -49,3 +49,33 @@ test('PUT /:id retorna 404 quando serviço indica não encontrado', async () => 
   const res = await supertest(app).put('/999').send({}).expect(404);
   assert.equal(res.body.error, 'Evento não encontrado.');
 });
+
+test('PATCH /:id/status atualiza status do evento', async () => {
+  const { app, dbStub } = setupRouter(async () => {});
+  let called = false;
+  dbStub.run = (sql, params, cb) => {
+    called = true;
+    assert.match(sql, /UPDATE Eventos SET status = \? WHERE id = \?/);
+    assert.deepEqual(params, ['Pago', '5']);
+    cb.call({ lastID: 0, changes: 1 }, null);
+  };
+  const res = await supertest(app).patch('/5/status').send({ status: 'Pago' }).expect(200);
+  assert.ok(res.body.ok);
+  assert.ok(called);
+});
+
+test('PATCH /:id/status rejeita status inválido', async () => {
+  const { app, dbStub } = setupRouter(async () => {});
+  dbStub.run = () => { throw new Error('não deveria executar'); };
+  const res = await supertest(app).patch('/1/status').send({ status: 'Foo' }).expect(400);
+  assert.equal(res.body.error, 'Status inválido.');
+});
+
+test('PATCH /:id/status retorna 404 quando evento não existe', async () => {
+  const { app, dbStub } = setupRouter(async () => {});
+  dbStub.run = (sql, params, cb) => {
+    cb.call({ lastID: 0, changes: 0 }, null);
+  };
+  const res = await supertest(app).patch('/2/status').send({ status: 'Pago' }).expect(404);
+  assert.equal(res.body.error, 'Evento não encontrado.');
+});
