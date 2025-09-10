@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "test": "node test/termoEventoPdfkitService.test.js"
+    "test": "node test/termoEventoPdfkitService.test.js && node test/enviarTermo.test.js"
   },
   "dependencies": {
     "bwip-js": "^4.7.0",
