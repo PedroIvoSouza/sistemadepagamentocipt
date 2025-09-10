@@ -273,7 +273,7 @@ async function recomputeEventoStatus(db, id_evento) {
 
   let st = 'Pendente';
   if (pagos === 0) st = 'Pendente';
-  else if (pagos < total) st = 'Pago Parcialmente';
+  else if (pagos < total) st = 'Parcialmente Pago';
   else st = 'Pago';
 
   if (!DRY) {
