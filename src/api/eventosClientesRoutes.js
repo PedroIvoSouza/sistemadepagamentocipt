@@ -91,10 +91,18 @@ clientRouter.get('/:id/termo/meta', async (req, res) => {
     }
 
     const bestAssinado = doc.signed_pdf_public_url || (assinafy ? pickBestArtifactUrl(assinafy) : null);
+
+    // Se ainda não temos URL assinada, salva no banco e marca como assinado
     if (!doc.signed_pdf_public_url && bestAssinado) {
+      const now = new Date().toISOString();
       try {
-        await dbRun(`UPDATE documentos SET signed_pdf_public_url = ? WHERE id = ?`, [bestAssinado, doc.id]);
+        await dbRun(
+          `UPDATE documentos SET signed_pdf_public_url = ?, status = 'assinado', signed_at = COALESCE(signed_at, ?) WHERE id = ?`,
+          [bestAssinado, now, doc.id]
+        );
         doc.signed_pdf_public_url = bestAssinado;
+        doc.status = 'assinado';
+        if (!doc.signed_at) doc.signed_at = now;
       } catch (err) {
         console.error('Erro ao atualizar signed_pdf_public_url:', err);
       }
