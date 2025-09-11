@@ -6,6 +6,9 @@ const path = require('path');
 const adminAuthMiddleware = require('../middleware/adminAuthMiddleware');
 const db = require('../database/db');
 
+const { getDocumentStatus } = require('../services/assinafyClient');
+
+
 const { emitirGuiaSefaz } = require('../services/sefazService');
 const { gerarTokenDocumento, imprimirTokenEmPdf } = require('../utils/token');
 const { criarEventoComDars, atualizarEventoComDars } = require('../services/eventoDarService');
