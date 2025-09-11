@@ -5,6 +5,8 @@ const express = require('express');
 const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
 
+const { normalizeAssinafyStatus } = require('../services/assinafyUtils');
+
 const {
   getDocument,
   getSigningUrl,
@@ -52,12 +54,14 @@ portalEventosAssinaturaRouter.get('/:eventoId/termo/meta', async (req, res) => {
 
     const url_visualizacao = row.pdf_public_url || null;
     const bestAssinado = row.signed_pdf_public_url || (assinafy ? pickBestArtifactUrl(assinafy) : null);
+    const raw = row.status || assinafy?.status;
+    const status = normalizeAssinafyStatus(raw, !!bestAssinado);
 
     return res.json({
       ok: true,
       documento_id: row.id,
       evento_id: row.evento_id,
-      status: row.status || (assinafy?.status) || 'gerado',
+      status,
       pdf_url: row.pdf_url || null,
       pdf_public_url: row.pdf_public_url || null,
       url_visualizacao,

@@ -24,6 +24,7 @@ const { uploadPdf } = require('../services/assinafyClient');
 const { calcularEncargosAtraso } = require('../services/cobrancaService');
 const { emitirGuiaSefaz } = require('../services/sefazService');
 const { imprimirTokenEmPdf } = require('../utils/token');
+const { normalizeAssinafyStatus } = require('../services/assinafyUtils');
 
 const adminRouter  = express.Router();
 const publicRouter = express.Router();
@@ -80,10 +81,11 @@ clientRouter.get('/:id/termo/meta', async (req, res) => {
 
     // preferir a pública (que já apontamos para /public/documentos/...)
     const url = doc.pdf_public_url || null;
+    const status = normalizeAssinafyStatus(doc.status, !!doc.signed_pdf_public_url);
     return res.json({
       ok: true,
       evento_id: eventoId,
-      status: doc.status || 'gerado',
+      status,
       pdf_public_url: url,
       assinafy_id: doc.assinafy_id || null,
       signed_pdf_public_url: doc.signed_pdf_public_url || null,
