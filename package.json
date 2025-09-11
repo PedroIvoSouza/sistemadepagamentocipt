@@ -40,6 +40,7 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "jsdom": "^26.1.0",
     "sequelize-cli": "^6.6.3",
     "supertest": "^6.3.4"
   }
