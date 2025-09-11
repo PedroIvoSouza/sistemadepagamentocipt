@@ -362,44 +362,60 @@ router.post('/:id/termo/assinafy/link', async (req, res) => {
    GET /api/admin/eventos/:id/termo/assinafy-status
    VERSÃO CORRIGIDA: Não salva mais a URL pública insegura
    =========================================================== */
+// GET /api/admin/eventos/:id/termo/assinafy-status  (única versão)
 router.get('/:id/termo/assinafy-status', async (req, res) => {
-  const { id } = req.params;
+  const id = Number(req.params.id);
+  const normalize = (s='') => {
+    const st = s.toLowerCase();
+    if (['signed','completed','certified','certificated','assinado'].includes(st)) return 'assinado';
+    if (!st || st === 'not_found') return 'nao_enviado';
+    return st;
+  };
+
   try {
-    const row = await dbGet(
-      `SELECT assinafy_id FROM documentos WHERE evento_id = ? AND tipo = 'termo_evento' ORDER BY id DESC LIMIT 1`,
+    // pega o termo do evento
+    const doc = await dbGet(
+      `SELECT id, evento_id, tipo, token, assinafy_id, signed_pdf_public_url
+         FROM documentos
+        WHERE evento_id=? AND tipo='termo_evento'
+        ORDER BY created_at DESC, id DESC LIMIT 1`,
       [id]
     );
-    if (!row?.assinafy_id) {
-      // Se não foi enviado, retorna um status local claro
-      return res.json({ ok: true, assinafy: { status: 'nao_enviado' } });
+
+    if (!doc) {
+      return res.json({ ok: true, status: 'sem_documento' });
     }
 
-    // Busca o status mais recente na Assinafy
-    const doc = await getDocument(row.assinafy_id);
-    const info = doc?.data || doc;
-    const statusReal = info?.status;
-
-    // Se o documento foi assinado/certificado, atualizamos nosso status no banco.
-    // Note que NÃO salvamos mais a URL da Assinafy aqui.
-    if (statusReal === 'certified' || statusReal === 'certificated') {
-      await dbRun(
-        `UPDATE documentos
-           SET status = 'assinado',
-               signed_at = COALESCE(signed_at, datetime('now'))
-         WHERE evento_id = ? AND tipo = 'termo_evento' AND status != 'assinado'`,
-        [id]
-      );
+    // se já tem PDF assinado local, não precisa consultar a Assinafy
+    if (doc.signed_pdf_public_url) {
+      return res.json({ ok: true, status: 'assinado' });
     }
 
-    return res.json({ 
-      ok: true, 
-      assinafy: info // Retorna o status real para o admin
-    });
+    // sem identificador na Assinafy
+    const assId = doc.assinafy_id || doc.token;
+    if (!assId) {
+      return res.json({ ok: true, status: 'pendente' });
+    }
+
+    // consulta Assinafy com tolerância a falhas
+    try {
+      const r = await getDocumentStatus(assId);
+      return res.json({ ok: true, status: normalize(r?.status) });
+    } catch (e) {
+      const code = e?.response?.status || e?.status;
+      if (code === 404) {
+        // documento não existe na Assinafy → não quebre o admin
+        return res.json({ ok: true, status: 'nao_enviado' });
+      }
+      console.error(`[assinafy-status] erro para evento ${id}:`, e?.response?.data || e?.message || e);
+      return res.json({ ok: true, status: 'erro', detail: e?.message || 'erro' }); // não 500
+    }
   } catch (err) {
     console.error(`[assinafy-status] erro para evento ${id}:`, err.message);
-    return res.status(500).json({ ok: false, error: 'Falha ao consultar status no Assinafy.' });
+    return res.json({ ok: true, status: 'erro_interno' }); // não 500
   }
 });
+
 
 
 /* ===========================================================
@@ -817,49 +833,6 @@ router.delete('/:eventoId', async (req, res) => {
     res.status(500).json({ error: 'Falha ao apagar o evento.' });
   }
 });
-/* ===========================================================
-   GET /api/admin/eventos/:id/termo/assinafy-status
-   ROTA CORRIGIDA E ADICIONADA
-   =========================================================== */
-router.get('/:id/termo/assinafy-status', async (req, res) => {
-  const { id } = req.params;
-  try {
-    const row = await dbGet(
-      `SELECT assinafy_id, assinatura_url, signed_pdf_public_url FROM documentos WHERE evento_id = ? AND tipo = 'termo_evento' ORDER BY id DESC LIMIT 1`,
-      [id]
-    );
-    if (!row?.assinafy_id) {
-      return res.json({ ok: true, local: { status: 'nao_enviado' } });
-    }
 
-    const doc = await getDocument(row.assinafy_id);
-    const info = doc?.data || doc;
-
-    // Se o documento já foi certificado, atualizamos nosso banco de dados
-    const statusReal = info?.status;
-    if (statusReal === 'certified' || statusReal === 'certificated') {
-      const bestUrl = pickBestArtifactUrl(info);
-      // O ideal é não salvar a URL direta, mas por enquanto vamos manter para consistência
-      await dbRun(
-        `UPDATE documentos
-           SET status = 'assinado',
-               signed_pdf_public_url = COALESCE(signed_pdf_public_url, ?),
-               signed_at = COALESCE(signed_at, datetime('now'))
-         WHERE evento_id = ? AND tipo = 'termo_evento'`,
-        [bestUrl || null, id]
-      );
-    }
-
-    return res.json({ 
-      ok: true, 
-      assinafy: info, 
-      assinatura_url: row.assinatura_url || null,
-      signed_pdf_public_url: row.signed_pdf_public_url
-    });
-  } catch (err) {
-    console.error(`[assinafy-status] erro para evento ${id}:`, err.message);
-    return res.status(500).json({ ok: false, error: 'Falha ao consultar status no Assinafy.' });
-  }
-});
 
 module.exports = router;
