@@ -364,14 +364,16 @@
   </div>
 
   <!-- Modal para confirmação/edição dos dados do signatário -->
-  <div id="assinafy-modal" class="modal fade" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
-      <div class="modal-content small">
-        <header class="d-flex justify-content-between align-items-center mb-3">
-          <h5>Dados do Signatário</h5>
-          <button id="close-assinafy-modal-btn" class="btn-close" aria-label="Fechar"></button>
-        </header>
-        <div class="modal-body">
+<div id="assinafy-modal" class="modal fade" tabindex="-1" aria-labelledby="assinafy-modal-title" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content small">
+      <header class="position-relative mb-3">
+        <h5 id="assinafy-modal-title" class="m-0 w-100 text-center">Dados do Signatário</h5>
+          <button id="close-assinafy-modal-btn"
+                class="btn-close position-absolute top-0 end-0"
+                aria-label="Fechar"></button>
+          </header>
+            <div class="modal-body">
           <form id="assinafy-form">
             <div class="mb-3">
               <label for="assinafy-signer-name" class="form-label">Nome</label>
