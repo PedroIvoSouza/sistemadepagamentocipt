@@ -53,4 +53,13 @@ function scanForSigningUrl(obj, depth = 0) {
   return null;
 }
 
-module.exports = { scanForSigningUrl };
+function normalizeAssinafyStatus(status, hasSignedPdf) {
+  const st = String(status || '').toLowerCase();
+  if (hasSignedPdf) return 'assinado';
+  if (['signed', 'completed', 'certified', 'certificated'].includes(st)) {
+    return 'assinado';
+  }
+  return status || 'gerado';
+}
+
+module.exports = { scanForSigningUrl, normalizeAssinafyStatus };
