@@ -396,8 +396,9 @@ router.get('/:id/termo/assinafy-status', async (req, res) => {
     return st; // fallback: devolve o texto que veio
   };
 
+  let doc;
   try {
-    const doc = await dbGet(
+    doc = await dbGet(
       `SELECT id, evento_id, tipo, token, assinafy_id, signed_pdf_public_url
          FROM documentos
         WHERE evento_id=? AND tipo='termo_evento'
@@ -405,27 +406,60 @@ router.get('/:id/termo/assinafy-status', async (req, res) => {
       [id]
     );
 
-    if (!doc) return res.json({ ok: true, status: 'sem_documento' });
+    if (!doc)
+      return res.json({ ok: true, status: 'sem_documento', assinafy_id: null });
 
     // Se já tem PDF assinado local, não consulta Assinafy
-    if (doc.signed_pdf_public_url) return res.json({ ok: true, status: 'assinado' });
+    if (doc.signed_pdf_public_url)
+      return res.json({
+        ok: true,
+        status: 'assinado',
+        assinafy_id: doc.assinafy_id,
+        signed_pdf_public_url: doc.signed_pdf_public_url,
+      });
 
     const assId = doc.assinafy_id || doc.token;
-    if (!assId) return res.json({ ok: true, status: 'pendente' });
+    if (!assId)
+      return res.json({
+        ok: true,
+        status: 'pendente',
+        assinafy_id: doc.assinafy_id,
+      });
 
     try {
       const resp = await getDocumentStatus(assId);
       const statusRaw = pickStatus(resp);
-      return res.json({ ok: true, status: normalize(statusRaw) });
+      return res.json({
+        ok: true,
+        status: normalize(statusRaw),
+        assinafy_id: doc.assinafy_id,
+      });
     } catch (e) {
       const code = e?.response?.status || e?.status;
-      if (code === 404) return res.json({ ok: true, status: 'nao_enviado' });
-      console.error(`[assinafy-status] erro para evento ${id}:`, e?.response?.data || e?.message || e);
-      return res.json({ ok: true, status: 'erro', detail: e?.message || 'erro' });
+      if (code === 404)
+        return res.json({
+          ok: true,
+          status: 'nao_enviado',
+          assinafy_id: doc.assinafy_id,
+        });
+      console.error(
+        `[assinafy-status] erro para evento ${id}:`,
+        e?.response?.data || e?.message || e
+      );
+      return res.json({
+        ok: true,
+        status: 'erro',
+        assinafy_id: doc.assinafy_id,
+        detail: e?.message || 'erro',
+      });
     }
   } catch (err) {
     console.error(`[assinafy-status] erro para evento ${id}:`, err.message);
-    return res.json({ ok: true, status: 'erro_interno' });
+    return res.json({
+      ok: true,
+      status: 'erro_interno',
+      assinafy_id: doc?.assinafy_id ?? null,
+    });
   }
 });
 
