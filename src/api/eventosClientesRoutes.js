@@ -25,6 +25,7 @@ const { calcularEncargosAtraso } = require('../services/cobrancaService');
 const { emitirGuiaSefaz } = require('../services/sefazService');
 const { imprimirTokenEmPdf } = require('../utils/token');
 const { normalizeAssinafyStatus } = require('../services/assinafyUtils');
+const { getDocument, pickBestArtifactUrl } = require('../services/assinafyService');
 
 const adminRouter  = express.Router();
 const publicRouter = express.Router();
@@ -81,14 +82,25 @@ clientRouter.get('/:id/termo/meta', async (req, res) => {
 
     // preferir a pública (que já apontamos para /public/documentos/...)
     const url = doc.pdf_public_url || null;
-    const status = normalizeAssinafyStatus(doc.status, !!doc.signed_pdf_public_url);
+
+    let assinafy = null;
+    if (doc.assinafy_id) {
+      try {
+        assinafy = await getDocument(doc.assinafy_id);
+      } catch {}
+    }
+
+    const bestAssinado = doc.signed_pdf_public_url || (assinafy ? pickBestArtifactUrl(assinafy) : null);
+    const raw = assinafy?.data?.status || assinafy?.status || doc.status;
+    const status = normalizeAssinafyStatus(raw, !!bestAssinado);
+
     return res.json({
       ok: true,
       evento_id: eventoId,
       status,
       pdf_public_url: url,
       assinafy_id: doc.assinafy_id || null,
-      signed_pdf_public_url: doc.signed_pdf_public_url || null,
+      signed_pdf_public_url: bestAssinado || null,
       signed_at: doc.signed_at || null
     });
   } catch (e) {
