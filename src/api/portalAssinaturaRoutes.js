@@ -35,7 +35,7 @@ portalEventosAssinaturaRouter.get('/:eventoId/termo/meta', async (req, res) => {
               assinafy_id, assinatura_url, status
          FROM documentos
         WHERE evento_id = ? AND tipo = 'termo_evento'
-     ORDER BY id DESC LIMIT 1`,
+     ORDER BY created_at DESC, id DESC LIMIT 1`,
       [eventoId]
     );
 
@@ -82,7 +82,7 @@ portalEventosAssinaturaRouter.post('/:eventoId/termo/assinafy/link', async (req,
       `SELECT assinafy_id, assinatura_url, status
          FROM documentos
         WHERE evento_id = ? AND tipo = 'termo_evento'
-     ORDER BY id DESC LIMIT 1`,
+     ORDER BY created_at DESC, id DESC LIMIT 1`,
       [eventoId]
     );
     if (!row) return res.status(404).json({ ok:false, error:'Termo não encontrado.' });
@@ -116,7 +116,7 @@ portalEventosAssinaturaRouter.get('/:eventoId/termo/assinafy/link', async (req, 
       `SELECT assinafy_id, assinatura_url, status
          FROM documentos
         WHERE evento_id = ? AND tipo = 'termo_evento' -- << CORREÇÃO APLICADA AQUI (era eventoId)
-     ORDER BY id DESC LIMIT 1`,
+     ORDER BY created_at DESC, id DESC LIMIT 1`,
       [eventoId]
     );
 

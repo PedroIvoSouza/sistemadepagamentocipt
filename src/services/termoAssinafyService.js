@@ -50,19 +50,19 @@ async function getEventoComCliente(eventoId) {
 async function upsertDocumentoPreparado({ eventoId, documentId, assinaturaUrl }) {
   const db = openDb();
   try {
-    await run(db, `
-      INSERT INTO documentos (tipo, token, permissionario_id, evento_id, pdf_url, pdf_public_url, status, created_at)
-      VALUES ('termo_evento', ?, NULL, ?, NULL, NULL, 'pendente_assinatura', ?)
-      ON CONFLICT(evento_id, tipo) DO UPDATE SET
-        token = excluded.token,
-        status = 'pendente_assinatura',
-        created_at = excluded.created_at;`,
-      [documentId, String(eventoId), new Date().toISOString()]);
-    try {
-      await run(db, `ALTER TABLE documentos ADD COLUMN assinatura_url TEXT;`);
-    } catch (_) {}
-    await run(db, `UPDATE documentos SET assinatura_url = ? WHERE evento_id = ? AND tipo = 'termo_evento';`,
-      [assinaturaUrl || null, String(eventoId)]);
+    const createdAt = new Date().toISOString();
+    const existing = await get(db, `SELECT id, token, status, created_at FROM documentos WHERE evento_id = ? AND tipo = 'termo_evento'`, [String(eventoId)]);
+
+    if (existing) {
+      // guarda histórico do documento anterior
+      try {
+        await run(db, `INSERT INTO documentos_historico (documento_id, token, evento_id, status, created_at) VALUES (?, ?, ?, ?, ?);`, [existing.id, existing.token, String(eventoId), existing.status || null, existing.created_at || null]);
+      } catch (_) {}
+
+      await run(db, `UPDATE documentos SET token = ?, status = 'pendente_assinatura', assinatura_url = ?, created_at = ? WHERE id = ?;`, [documentId, assinaturaUrl || null, createdAt, existing.id]);
+    } else {
+      await run(db, `INSERT INTO documentos (tipo, token, permissionario_id, evento_id, pdf_url, pdf_public_url, status, assinatura_url, created_at) VALUES ('termo_evento', ?, NULL, ?, NULL, NULL, 'pendente_assinatura', ?, ?);`, [documentId, String(eventoId), assinaturaUrl || null, createdAt]);
+    }
   } finally { db.close(); }
 }
 
