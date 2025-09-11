@@ -9,7 +9,8 @@
   "scripts": {
     "start": "node src/index.js",
     "test": "node --test",
-    "backfill-clientes-enderecos": "node scripts/backfillClienteEnderecos.js"
+    "backfill-clientes-enderecos": "node scripts/backfillClienteEnderecos.js",
+    "verificar-tokens-assinados": "node verificar_tokens_assinados.js"
   },
   "dependencies": {
     "@google-cloud/storage": "^7.16.0",
