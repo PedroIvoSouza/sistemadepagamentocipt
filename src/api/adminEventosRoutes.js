@@ -365,18 +365,38 @@ router.post('/:id/termo/assinafy/link', async (req, res) => {
    GET /api/admin/eventos/:id/termo/assinafy-status
    VERSÃO CORRIGIDA: Não salva mais a URL pública insegura
    =========================================================== */
-// GET /api/admin/eventos/:id/termo/assinafy-status  (versão única e resiliente)
 router.get('/:id/termo/assinafy-status', async (req, res) => {
   const id = Number(req.params.id);
-  const normalize = (s='') => {
-    const st = s.toLowerCase();
-    if (['signed','completed','certified','certificated','assinado'].includes(st)) return 'assinado';
-    if (!st || st === 'not_found') return 'nao_enviado';
-    return st;
+
+  // Coleta o status de respostas variadas da Assinafy, de forma tolerante
+  const pickStatus = (resp) => {
+    if (!resp) return '';
+    const cands = [
+      resp.status,
+      resp.data?.status,
+      resp.document?.status,
+      resp.Status,
+      resp?.status?.name,
+      resp?.data?.status?.name,
+    ];
+    for (const c of cands) {
+      if (typeof c === 'string') return c;
+      if (c && typeof c === 'object' && typeof c.name === 'string') return c.name;
+    }
+    return '';
+  };
+
+  // Normaliza qualquer valor para uma palavra-chave estável pro front
+  const normalize = (s) => {
+    const st = String(s ?? '').toLowerCase().trim();
+    if (!st) return 'nao_enviado';
+    if (['signed','completed','certified','certificated','assinado','concluido','concluído','finalizado'].includes(st)) return 'assinado';
+    if (['pending','processing','aguardando','pendente','em_progresso','in_progress'].includes(st)) return 'pendente';
+    if (['not_found','nao_enviado','não_enviado','naoenviado'].includes(st)) return 'nao_enviado';
+    return st; // fallback: devolve o texto que veio
   };
 
   try {
-    // pega o termo do evento
     const doc = await dbGet(
       `SELECT id, evento_id, tipo, token, assinafy_id, signed_pdf_public_url
          FROM documentos
@@ -385,38 +405,29 @@ router.get('/:id/termo/assinafy-status', async (req, res) => {
       [id]
     );
 
-    if (!doc) {
-      return res.json({ ok: true, status: 'sem_documento' });
-    }
+    if (!doc) return res.json({ ok: true, status: 'sem_documento' });
 
-    // se já tem PDF assinado local, não consulta a Assinafy
-    if (doc.signed_pdf_public_url) {
-      return res.json({ ok: true, status: 'assinado' });
-    }
+    // Se já tem PDF assinado local, não consulta Assinafy
+    if (doc.signed_pdf_public_url) return res.json({ ok: true, status: 'assinado' });
 
     const assId = doc.assinafy_id || doc.token;
-    if (!assId) {
-      return res.json({ ok: true, status: 'pendente' });
-    }
+    if (!assId) return res.json({ ok: true, status: 'pendente' });
 
     try {
-      const r = await getDocumentStatus(assId);
-      return res.json({ ok: true, status: normalize(r?.status) });
+      const resp = await getDocumentStatus(assId);
+      const statusRaw = pickStatus(resp);
+      return res.json({ ok: true, status: normalize(statusRaw) });
     } catch (e) {
       const code = e?.response?.status || e?.status;
-      if (code === 404) {
-        return res.json({ ok: true, status: 'nao_enviado' }); // não 500
-      }
+      if (code === 404) return res.json({ ok: true, status: 'nao_enviado' });
       console.error(`[assinafy-status] erro para evento ${id}:`, e?.response?.data || e?.message || e);
-      return res.json({ ok: true, status: 'erro', detail: e?.message || 'erro' }); // não 500
+      return res.json({ ok: true, status: 'erro', detail: e?.message || 'erro' });
     }
   } catch (err) {
     console.error(`[assinafy-status] erro para evento ${id}:`, err.message);
-    return res.json({ ok: true, status: 'erro_interno' }); // não 500
+    return res.json({ ok: true, status: 'erro_interno' });
   }
 });
-
-
 
 
 /* ===========================================================
