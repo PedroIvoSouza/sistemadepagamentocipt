@@ -71,10 +71,10 @@ clientRouter.get('/:id/termo/meta', async (req, res) => {
   try {
     const eventoId = req.params.id;
     // garante que existe registro em `documentos` (gera se necessário)
-    let doc = await dbGet(`SELECT * FROM documentos WHERE evento_id = ? AND tipo = 'termo_evento'`, [eventoId]);
+    let doc = await dbGet(`SELECT * FROM documentos WHERE evento_id = ? AND tipo = 'termo_evento' ORDER BY created_at DESC, id DESC LIMIT 1`, [eventoId]);
     if (!doc || !doc.pdf_url || !fs.existsSync(doc.pdf_url)) {
       await gerarTermoEventoPdfkitEIndexar(eventoId);
-      doc = await dbGet(`SELECT * FROM documentos WHERE evento_id = ? AND tipo = 'termo_evento'`, [eventoId]);
+      doc = await dbGet(`SELECT * FROM documentos WHERE evento_id = ? AND tipo = 'termo_evento' ORDER BY created_at DESC, id DESC LIMIT 1`, [eventoId]);
     }
     if (!doc || !doc.pdf_url) return res.status(404).json({ error: 'Termo não encontrado.' });
 
@@ -106,12 +106,12 @@ clientRouter.post('/:id/termo/assinafy/link', async (req, res) => {
 
     // Garante PDF do termo
     let doc = await dbGet(
-      `SELECT * FROM documentos WHERE evento_id = ? AND tipo = 'termo_evento'`,
+      `SELECT * FROM documentos WHERE evento_id = ? AND tipo = 'termo_evento' ORDER BY created_at DESC, id DESC LIMIT 1`,
       [eventoId]
     );
     if (!doc || !doc.pdf_url || !fs.existsSync(doc.pdf_url)) {
       await gerarTermoEventoPdfkitEIndexar(eventoId);
-      doc = await dbGet(`SELECT * FROM documentos WHERE evento_id = ? AND tipo = 'termo_evento'`, [eventoId]);
+      doc = await dbGet(`SELECT * FROM documentos WHERE evento_id = ? AND tipo = 'termo_evento' ORDER BY created_at DESC, id DESC LIMIT 1`, [eventoId]);
     }
     if (!doc || !doc.pdf_url || !fs.existsSync(doc.pdf_url)) {
       return res.status(409).json({ error: 'PDF do termo não encontrado.' });
