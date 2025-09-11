@@ -26,6 +26,7 @@ test('GET /api/portal/eventos/:id/termo/meta caches signed url', async () => {
         assinafy_id: 'ASS1',
         signed_pdf_public_url: null,
         status: 'pendente',
+        signed_at: null,
       };
     }
     get(_sql, _params, cb) { cb(null, this.doc); }
@@ -33,6 +34,8 @@ test('GET /api/portal/eventos/:id/termo/meta caches signed url', async () => {
     run(sql, params, cb) {
       if (sql.includes('signed_pdf_public_url')) {
         this.doc.signed_pdf_public_url = params[0];
+        this.doc.status = 'assinado';
+        this.doc.signed_at = this.doc.signed_at || params[1];
       }
       cb && cb.call({ changes: 1 }, null);
     }
@@ -88,6 +91,8 @@ test('GET /api/portal/eventos/:id/termo/meta caches signed url', async () => {
     .expect(200)
     .expect(res => {
       assert.equal(res.body.signed_pdf_public_url, 'https://signed.example.com/file.pdf');
+      assert.equal(res.body.status, 'assinado');
+      assert.ok(res.body.signed_at);
     });
   assert.equal(calls, 1);
 
@@ -97,6 +102,8 @@ test('GET /api/portal/eventos/:id/termo/meta caches signed url', async () => {
     .expect(200)
     .expect(res => {
       assert.equal(res.body.signed_pdf_public_url, 'https://signed.example.com/file.pdf');
+      assert.equal(res.body.status, 'assinado');
+      assert.ok(res.body.signed_at);
     });
   assert.equal(calls, 1);
 
