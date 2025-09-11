@@ -54,7 +54,7 @@ portalEventosAssinaturaRouter.get('/:eventoId/termo/meta', async (req, res) => {
 
     const url_visualizacao = row.pdf_public_url || null;
     const bestAssinado = row.signed_pdf_public_url || (assinafy ? pickBestArtifactUrl(assinafy) : null);
-    const raw = row.status || assinafy?.status;
+    const raw = assinafy?.data?.status || assinafy?.status || row.status;
     const status = normalizeAssinafyStatus(raw, !!bestAssinado);
 
     return res.json({
