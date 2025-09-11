@@ -996,10 +996,15 @@ async function carregarClientes(){
       
       let mostraBtnEnviar = true;
       let assinafyIdDoMeta = '';
+      let linkAssinado = '';
       if (meta && meta.ok) {
-          assinafyIdDoMeta = meta?.assinafy?.id;
-          const statusReal = meta?.assinafy?.status;
-          if (statusReal === 'assinado' || statusReal === 'signed' || statusReal === 'certificated') {
+          assinafyIdDoMeta = meta?.assinafy_id;
+          linkAssinado = `/api/documentos/assinafy/${assinafyIdDoMeta}/download-signed`;
+          if (meta?.signed_pdf_public_url) {
+              linkAssinado = meta.signed_pdf_public_url;
+          }
+          const statusReal = meta?.status;
+          if (statusReal === 'assinado') {
               mostraBtnEnviar = false;
           }
       }
@@ -1038,7 +1043,7 @@ async function carregarClientes(){
           ? `<button class="btn btn-sm btn-primary btn-enviar-assinafy" title="Enviar para Assinatura" data-evento-id="${id}" data-cliente-id="${ev.id_cliente}">
                <i class="bi bi-pen"></i>
              </button>`
-          : `<a class="btn btn-sm btn-success" href="/api/documentos/assinafy/${assinafyIdDoMeta}/download-signed" target="_blank" rel="noopener" title="Baixar Termo Assinado">
+          : `<a class="btn btn-sm btn-success" href="${linkAssinado}" target="_blank" rel="noopener" title="Baixar Termo Assinado">
                <i class="bi bi-download"></i>
              </a>`
         }
