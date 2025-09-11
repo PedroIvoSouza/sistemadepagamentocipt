@@ -362,7 +362,7 @@ router.post('/:id/termo/assinafy/link', async (req, res) => {
    GET /api/admin/eventos/:id/termo/assinafy-status
    VERSÃO CORRIGIDA: Não salva mais a URL pública insegura
    =========================================================== */
-// GET /api/admin/eventos/:id/termo/assinafy-status  (única versão)
+// GET /api/admin/eventos/:id/termo/assinafy-status  (versão única e resiliente)
 router.get('/:id/termo/assinafy-status', async (req, res) => {
   const id = Number(req.params.id);
   const normalize = (s='') => {
@@ -386,26 +386,23 @@ router.get('/:id/termo/assinafy-status', async (req, res) => {
       return res.json({ ok: true, status: 'sem_documento' });
     }
 
-    // se já tem PDF assinado local, não precisa consultar a Assinafy
+    // se já tem PDF assinado local, não consulta a Assinafy
     if (doc.signed_pdf_public_url) {
       return res.json({ ok: true, status: 'assinado' });
     }
 
-    // sem identificador na Assinafy
     const assId = doc.assinafy_id || doc.token;
     if (!assId) {
       return res.json({ ok: true, status: 'pendente' });
     }
 
-    // consulta Assinafy com tolerância a falhas
     try {
       const r = await getDocumentStatus(assId);
       return res.json({ ok: true, status: normalize(r?.status) });
     } catch (e) {
       const code = e?.response?.status || e?.status;
       if (code === 404) {
-        // documento não existe na Assinafy → não quebre o admin
-        return res.json({ ok: true, status: 'nao_enviado' });
+        return res.json({ ok: true, status: 'nao_enviado' }); // não 500
       }
       console.error(`[assinafy-status] erro para evento ${id}:`, e?.response?.data || e?.message || e);
       return res.json({ ok: true, status: 'erro', detail: e?.message || 'erro' }); // não 500
@@ -415,6 +412,7 @@ router.get('/:id/termo/assinafy-status', async (req, res) => {
     return res.json({ ok: true, status: 'erro_interno' }); // não 500
   }
 });
+
 
 
 
