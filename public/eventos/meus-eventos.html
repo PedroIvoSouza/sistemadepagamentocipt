@@ -182,8 +182,10 @@
           const estaAssinado = meta.status === 'assinado';
           const foiEnviado = meta.assinafy_id && meta.status !== 'nao_enviado';
 
-          // Constrói a URL de download SEGURA, que aponta para o SEU servidor
-          const urlDownloadSegura = `/api/documentos/assinafy/${meta.assinafy_id}/download-signed`;
+          // Constrói a URL de download de forma segura
+          const urlDownloadSegura = meta.assinafy_id
+            ? `/api/documentos/assinafy/${meta.assinafy_id}/download-signed`
+            : meta.signed_pdf_public_url;
 
           let botoesTermoHtml = `
             <button class="btn btn-sm btn-outline-secondary" data-baixar-termo="${eventoId}">
