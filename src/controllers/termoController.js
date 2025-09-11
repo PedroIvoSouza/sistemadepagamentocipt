@@ -28,13 +28,15 @@ async function prepararSemCamposController(req, res) {
   try {
     const eventoId = req.params.id;
     const { pdfPath, filename } = await findPdfForEvento(eventoId);
-    const { full_name, email, government_id, phone } = req.body || {};
+    const { full_name, email, government_id, phone, force } = req.body || {};
+    const forceFlag = Boolean(force || req.query.force);
 
     const r = await prepararTermoEventoSemCampos({
       eventoId,
       pdfPath,
       pdfFilename: filename,
       signer: { full_name, email, government_id, phone },
+      force: forceFlag,
     });
 
     res.json({ ok: true, message: 'Documento preparado para assinatura (virtual).', data: r });
