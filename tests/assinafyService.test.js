@@ -3,6 +3,9 @@ const assert = require('node:assert/strict');
 const path = require('path');
 const Module = require('module');
 
+// Garantir variáveis de ambiente necessárias para execução do módulo.
+process.env.SEFAZ_APP_TOKEN = process.env.SEFAZ_APP_TOKEN || 'test-token';
+
 const servicePath = path.resolve(__dirname, '../src/services/assinafyService.js');
 
 function loadService(getImpl) {
