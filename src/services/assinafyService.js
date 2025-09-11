@@ -296,8 +296,30 @@ async function getSigningUrl(documentId) {
 /* -------------------------------- Artifacts -------------------------------- */
 function pickBestArtifactUrl(documentData) {
   const d = documentData?.data || documentData;
-  const artifacts = d?.artifacts || {};
-  return artifacts.certified || artifacts.certificated || artifacts.original || null;
+  const artifacts = d?.artifacts;
+
+  // Quando artifacts for um array, procura pelo primeiro item cuja
+  // propriedade `type` ou `kind` seja "certified" ou "certificated".
+  if (Array.isArray(artifacts)) {
+    for (const it of artifacts) {
+      const t = String(it?.type || it?.kind || '').toLowerCase();
+      if (t === 'certified' || t === 'certificated') {
+        return (
+          it?.url ||
+          it?.link ||
+          it?.href ||
+          it?.download_url ||
+          it?.downloadUrl ||
+          null
+        );
+      }
+    }
+    return null;
+  }
+
+  // Fallback para objetos com chaves nomeadas.
+  const obj = artifacts || {};
+  return obj.certified || obj.certificated || obj.original || null;
 }
 
 module.exports = {
