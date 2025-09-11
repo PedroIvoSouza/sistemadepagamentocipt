@@ -3,6 +3,22 @@ const assert = require('node:assert');
 
 const { scanForSigningUrl, normalizeAssinafyStatus } = require('../src/services/assinafyUtils');
 
+// Evita dependências não instaladas ao importar o serviço completo.
+const Module = require('module');
+const originalLoad = Module._load;
+Module._load = function (request, parent, isMain) {
+  if (request === 'sqlite3') {
+    return { verbose: () => ({ Database: function () {} }) };
+  }
+  if (request === 'axios') {
+    return { create: () => ({ get() {}, post() {}, put() {} }) };
+  }
+  if (request === 'form-data') return function FormData() {};
+  return originalLoad(request, parent, isMain);
+};
+const { pickBestArtifactUrl } = require('../src/services/assinafyService');
+Module._load = originalLoad;
+
 test('retorna URL direta', () => {
   const obj = { signer_url: 'https://example.com/a' };
   assert.strictEqual(scanForSigningUrl(obj), 'https://example.com/a');
@@ -43,4 +59,19 @@ test('normalizeAssinafyStatus lida com PDF assinado', () => {
 test('normalizeAssinafyStatus devolve status lower-case ou "gerado"', () => {
   assert.strictEqual(normalizeAssinafyStatus('PendEntE_Assinatura', false), 'pendente_assinatura');
   assert.strictEqual(normalizeAssinafyStatus(undefined, false), 'gerado');
+});
+
+test('pickBestArtifactUrl lida com artifacts em objeto', () => {
+  const doc = { artifacts: { certificated: 'https://example.com/cert', original: 'https://example.com/orig' } };
+  assert.strictEqual(pickBestArtifactUrl(doc), 'https://example.com/cert');
+});
+
+test('pickBestArtifactUrl lida com artifacts em array', () => {
+  const doc = {
+    artifacts: [
+      { type: 'other', url: 'https://example.com/other' },
+      { kind: 'certified', url: 'https://example.com/cert' },
+    ],
+  };
+  assert.strictEqual(pickBestArtifactUrl(doc), 'https://example.com/cert');
 });
