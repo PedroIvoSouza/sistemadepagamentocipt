@@ -60,6 +60,7 @@ function normalizeAssinafyStatus(status, hasSignedPdf) {
     return 'assinado';
   }
   return st || 'gerado';
+
 }
 
 module.exports = { scanForSigningUrl, normalizeAssinafyStatus };
