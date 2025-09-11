@@ -84,13 +84,22 @@ clientRouter.get('/:id/termo/meta', async (req, res) => {
     const url = doc.pdf_public_url || null;
 
     let assinafy = null;
-    if (doc.assinafy_id) {
+    if (doc.assinafy_id && !doc.signed_pdf_public_url) {
       try {
         assinafy = await getDocument(doc.assinafy_id);
       } catch {}
     }
 
     const bestAssinado = doc.signed_pdf_public_url || (assinafy ? pickBestArtifactUrl(assinafy) : null);
+    if (!doc.signed_pdf_public_url && bestAssinado) {
+      try {
+        await dbRun(`UPDATE documentos SET signed_pdf_public_url = ? WHERE id = ?`, [bestAssinado, doc.id]);
+        doc.signed_pdf_public_url = bestAssinado;
+      } catch (err) {
+        console.error('Erro ao atualizar signed_pdf_public_url:', err);
+      }
+    }
+
     const raw = assinafy?.data?.status || assinafy?.status || doc.status;
     const status = normalizeAssinafyStatus(raw, !!bestAssinado);
 
