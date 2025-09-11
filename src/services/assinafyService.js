@@ -301,18 +301,19 @@ function pickBestArtifactUrl(documentData) {
   // Quando artifacts for um array, procura pelo primeiro item cuja
   // propriedade `type` ou `kind` seja "certified" ou "certificated".
   if (Array.isArray(artifacts)) {
-    for (const it of artifacts) {
+    const found = artifacts.find(it => {
       const t = String(it?.type || it?.kind || '').toLowerCase();
-      if (t === 'certified' || t === 'certificated') {
-        return (
-          it?.url ||
-          it?.link ||
-          it?.href ||
-          it?.download_url ||
-          it?.downloadUrl ||
-          null
-        );
-      }
+      return t === 'certified' || t === 'certificated';
+    });
+    if (found) {
+      return (
+        found?.url ||
+        found?.link ||
+        found?.href ||
+        found?.download_url ||
+        found?.downloadUrl ||
+        null
+      );
     }
     return null;
   }
