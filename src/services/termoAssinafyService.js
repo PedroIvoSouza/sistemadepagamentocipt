@@ -19,6 +19,15 @@ const all = (db, sql, p=[]) => new Promise((res, rej) => db.all(sql, p, (e, r) =
 const get = (db, sql, p=[]) => new Promise((res, rej) => db.get(sql, p, (e, r) => e ? rej(e) : res(r)));
 const run = (db, sql, p=[]) => new Promise((res, rej) => db.run(sql, p, function (e) { e ? rej(e) : res(this); }));
 
+const PENDING_SIGNATURE_STATES = new Set(['pending_signature','waiting_for_signature','waiting_for_signatures']);
+
+async function getDocumentoExistente(eventoId) {
+  const db = openDb();
+  try {
+    return await get(db, `SELECT token, assinatura_url FROM documentos WHERE evento_id = ? AND tipo = 'termo_evento' ORDER BY id DESC LIMIT 1`, [String(eventoId)]);
+  } finally { db.close(); }
+}
+
 async function getEventoComCliente(eventoId) {
   const db = openDb();
   try {
@@ -61,9 +70,7 @@ async function upsertDocumentoPreparado({ eventoId, documentId, assinaturaUrl })
  * Prepara (SEM CAMPOS) o Termo do Evento para assinatura virtual.
  * Permite sobrescrever o signatário com { full_name, email, government_id, phone }.
  */
-async function prepararTermoEventoSemCampos({ eventoId, pdfPath, pdfFilename, signer }) {
-  if (!fs.existsSync(pdfPath)) throw new Error(`PDF não encontrado em ${pdfPath}`);
-
+async function prepararTermoEventoSemCampos({ eventoId, pdfPath, pdfFilename, signer, force=false }) {
   // 1) Dados do signatário
   const { evento } = await getEventoComCliente(eventoId);
   const full_name     = signer?.full_name || evento?.nome_responsavel || evento?.nome_razao_social || 'Responsável';
@@ -71,6 +78,32 @@ async function prepararTermoEventoSemCampos({ eventoId, pdfPath, pdfFilename, si
   const government_id = signer?.government_id || evento?.documento_responsavel || evento?.documento || null;
   const phone         = signer?.phone || evento?.telefone_responsavel || null;
   if (!email) throw new Error('Email do signatário não informado.');
+
+  if (!force) {
+    const existente = await getDocumentoExistente(eventoId);
+    if (existente?.token) {
+      try {
+        const stInfo = await getDocumentStatus(existente.token);
+        const st = stInfo?.data?.status || stInfo?.status;
+        if (DEBUG) console.log('[PREPARAR] Documento existente', existente.token, 'status:', st);
+        if (st && PENDING_SIGNATURE_STATES.has(String(st).toLowerCase())) {
+          let assinaturaUrl = existente.assinatura_url;
+          if (!assinaturaUrl) {
+            assinaturaUrl = await getBestSigningUrl(existente.token).catch(()=>null);
+            if (assinaturaUrl) {
+              const db = openDb();
+              try { await run(db, `UPDATE documentos SET assinatura_url = ? WHERE evento_id = ? AND tipo = 'termo_evento'`, [assinaturaUrl, String(eventoId)]); } finally { db.close(); }
+            }
+          }
+          return { documentId: existente.token, signerId: null, assinaturaUrl, status: st, full_name, email };
+        }
+      } catch (err) {
+        if (DEBUG) console.warn('[PREPARAR] Falha ao verificar documento existente:', err.message);
+      }
+    }
+  }
+
+  if (!fs.existsSync(pdfPath)) throw new Error(`PDF não encontrado em ${pdfPath}`);
 
   // 2) Upload do PDF
   const pdfBuffer = fs.readFileSync(pdfPath);
