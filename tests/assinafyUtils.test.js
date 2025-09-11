@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 
-const { scanForSigningUrl } = require('../src/services/assinafyUtils');
+const { scanForSigningUrl, normalizeAssinafyStatus } = require('../src/services/assinafyUtils');
 
 test('retorna URL direta', () => {
   const obj = { signer_url: 'https://example.com/a' };
@@ -28,4 +28,19 @@ test('varre propriedades aninhadas com sign/assign', () => {
 
 test('retorna null quando ausente', () => {
   assert.strictEqual(scanForSigningUrl({ foo: 'bar' }), null);
+});
+
+test('normalizeAssinafyStatus unifica valores assinados', () => {
+  assert.strictEqual(normalizeAssinafyStatus('SIGNED', false), 'assinado');
+  assert.strictEqual(normalizeAssinafyStatus('assinado', false), 'assinado');
+  assert.strictEqual(normalizeAssinafyStatus('completed', false), 'assinado');
+});
+
+test('normalizeAssinafyStatus lida com PDF assinado', () => {
+  assert.strictEqual(normalizeAssinafyStatus('qualquer', true), 'assinado');
+});
+
+test('normalizeAssinafyStatus devolve status lower-case ou "gerado"', () => {
+  assert.strictEqual(normalizeAssinafyStatus('PendEntE_Assinatura', false), 'pendente_assinatura');
+  assert.strictEqual(normalizeAssinafyStatus(undefined, false), 'gerado');
 });
