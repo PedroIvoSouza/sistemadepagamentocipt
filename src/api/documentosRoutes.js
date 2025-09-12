@@ -88,24 +88,13 @@ router.get('/verify/:token', async (req, res) => {
     const row = await dbGet(`SELECT * FROM documentos WHERE token=?`, [req.params.token]);
     if (!row) return res.status(404).json({ valid: false, message: 'Documento não encontrado.' });
 
-    const { tipo, created_at, status, pdf_public_url } = row;
-    const relativePath = pdf_public_url ? pdf_public_url.replace(/^\//, '') : '';
-    const abs = path.join(PUBLIC_DIR, relativePath);
-    const authentic = pdf_public_url ? fs.existsSync(abs) : false;
-    let message;
-    if (!authentic) {
-      logger.warn(`[documentos] Arquivo ausente para token ${req.params.token}: ${pdf_public_url}`);
-      message = 'Documento encontrado, porém o arquivo PDF não está disponível';
-    }
+    const { tipo, created_at, status } = row;
     return res.json({
       valid: true,
       tipo,
       tipo_titulo: TIPO_TITULO[tipo] || tipo,
       created_at,
       status,
-      pdf_public_url,
-      authentic,
-      ...(message ? { message } : {}),
     });
   } catch (e) {
     console.error('[documentos]/verify erro:', e.message);
