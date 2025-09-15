@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no">
+    <title>Status dos Serviços - Painel de Gestão</title>
+
+    <link rel="icon" type="image/png" href="/images/logo-cipt.png">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/app-shell.css">
+    <link rel="stylesheet" href="/css/mobile-tweaks.css">
+
+    <style>
+        :root {
+            --cor-primaria: #0056a0;
+            --cor-sidebar: #004480;
+            --cor-sidebar-texto: rgba(255, 255, 255, 0.8);
+            --cor-sidebar-texto-hover: #ffffff;
+            --cor-sidebar-fundo-ativo: var(--cor-primaria);
+            --raio-borda: 0.5rem;
+        }
+
+        body {
+            font-family: 'Montserrat', sans-serif;
+            background-color: #f4f7f6;
+        }
+
+        .wrapper {
+            display: flex;
+            width: 100%;
+            min-height: 100vh;
+        }
+
+        .sidebar {
+            width: 260px;
+            background-color: var(--cor-sidebar);
+            color: var(--cor-sidebar-texto);
+            transition: all 0.3s;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sidebar-header {
+            padding: 1.5rem;
+            text-align: center;
+            background-color: rgba(0, 0, 0, 0.1);
+        }
+
+        .sidebar-header img {
+            max-width: 180px;
+            height: auto;
+        }
+
+        .sidebar-nav {
+            padding: 1rem 0;
+            flex-grow: 1;
+        }
+
+        .sidebar-nav .nav-link {
+            color: var(--cor-sidebar-texto);
+            padding: 0.8rem 1.5rem;
+            display: flex;
+            align-items: center;
+            font-weight: 500;
+            text-decoration: none;
+        }
+
+        .sidebar-nav .nav-link .bi {
+            margin-right: 1rem;
+            font-size: 1.2rem;
+        }
+
+        .sidebar-nav .nav-link:hover {
+            color: var(--cor-sidebar-texto-hover);
+            background-color: rgba(255, 255, 255, 0.05);
+        }
+
+        .sidebar-nav .nav-link.active {
+            color: white;
+            background-color: var(--cor-sidebar-fundo-ativo);
+        }
+
+        .sidebar-footer {
+            padding: 1.5rem;
+            text-align: center;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .sidebar-footer img {
+            max-height: 100px;
+            width: auto;
+        }
+
+        .main-content {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .topbar {
+            background-color: #ffffff;
+            padding: 1rem 2rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+        }
+
+        .content {
+            padding: 2rem;
+        }
+
+        .status-wrapper {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .status-header {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .last-update {
+            font-size: 0.9rem;
+            color: #6c757d;
+        }
+
+        .status-cards {
+            display: grid;
+            gap: 1.5rem;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        }
+
+        .status-card {
+            border: none;
+            border-radius: var(--raio-borda);
+            color: #ffffff;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.08);
+            position: relative;
+            overflow: hidden;
+            min-height: 150px;
+        }
+
+        .status-card::after {
+            content: '';
+            position: absolute;
+            width: 160px;
+            height: 160px;
+            border-radius: 50%;
+            top: -60px;
+            right: -60px;
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .status-card.status-up {
+            background: linear-gradient(135deg, #2e8b57, #1e7c45);
+        }
+
+        .status-card.status-down {
+            background: linear-gradient(135deg, #c53030, #a91f1f);
+        }
+
+        .status-card .card-body {
+            position: relative;
+            z-index: 2;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .status-card .card-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 0;
+        }
+
+        .status-card .status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-weight: 600;
+            padding: 0.35rem 0.75rem;
+            border-radius: 999px;
+            background-color: rgba(255, 255, 255, 0.2);
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            letter-spacing: 0.05em;
+        }
+
+        .status-card .status-description {
+            font-size: 0.9rem;
+            color: rgba(255, 255, 255, 0.85);
+        }
+
+        .status-card .status-timestamp {
+            font-size: 0.75rem;
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 3rem 1rem;
+            border: 1px dashed #ced4da;
+            border-radius: var(--raio-borda);
+            color: #6c757d;
+            background-color: rgba(255, 255, 255, 0.8);
+        }
+
+        .status-alert {
+            display: none;
+        }
+
+        @media (max-width: 576px) {
+            .topbar {
+                padding: 0.75rem 1rem;
+            }
+
+            .content {
+                padding: 1.5rem 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="wrapper">
+        <div id="sidebar-container"></div>
+        <div class="main-content">
+            <header class="topbar">
+                <div id="userInfo" class="text-end">
+                    <strong id="adminName">Carregando...</strong>
+                </div>
+            </header>
+
+            <main class="content">
+                <div class="status-wrapper" id="statusContent">
+                    <div class="status-header">
+                        <h1 class="h2 mb-0">Status dos Serviços</h1>
+                        <p id="lastUpdated" class="last-update">—</p>
+                    </div>
+                    <div id="statusAlert" class="alert alert-warning status-alert" role="alert"></div>
+                    <div id="statusCards" class="status-cards"></div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script src="/js/admin-sidebar.js"></script>
+    <script src="/js/admin-guard.js"></script>
+    <script defer src="/js/mobile-adapter.js"></script>
+    <script defer src="/js/ui-kit.js"></script>
+    <script defer src="/js/mobile-tweaks.js"></script>
+
+    <script>
+    window.addEventListener('load', async () => {
+        const statusCards = document.getElementById('statusCards');
+        const statusAlert = document.getElementById('statusAlert');
+        const statusContent = document.getElementById('statusContent');
+        const lastUpdatedEl = document.getElementById('lastUpdated');
+        const adminNameEl = document.getElementById('adminName');
+
+        const REFRESH_INTERVAL = 30000; // 30s
+        let refreshTimer = null;
+
+        const showAlert = (message, type = 'warning') => {
+            statusAlert.textContent = message;
+            statusAlert.className = `alert alert-${type} status-alert`;
+            statusAlert.style.display = 'block';
+        };
+
+        const hideAlert = () => {
+            statusAlert.textContent = '';
+            statusAlert.style.display = 'none';
+        };
+
+        const updateLastUpdated = (date = new Date()) => {
+            if (!lastUpdatedEl) return;
+            const formatter = new Intl.DateTimeFormat('pt-BR', {
+                dateStyle: 'short',
+                timeStyle: 'medium'
+            });
+            lastUpdatedEl.textContent = `Atualizado em ${formatter.format(date)}`;
+        };
+
+        const interpretStatus = (status) => {
+            if (typeof status === 'boolean') {
+                return { isUp: status, label: status ? 'Operacional' : 'Indisponível' };
+            }
+
+            if (typeof status === 'number') {
+                const isUp = status === 1;
+                return { isUp, label: isUp ? 'Operacional' : 'Indisponível' };
+            }
+
+            const normalized = String(status ?? '').trim().toLowerCase();
+            if (!normalized) {
+                return { isUp: false, label: 'Desconhecido' };
+            }
+
+            const upValues = ['up', 'ok', 'online', 'available', 'disponivel', 'disponível', 'ativo', 'operacional', 'success', 'healthy', 'true'];
+            const downValues = ['down', 'offline', 'indisponivel', 'indisponível', 'inativo', 'erro', 'error', 'critical', 'maintenance', 'false'];
+
+            if (upValues.includes(normalized)) {
+                return { isUp: true, label: 'Operacional' };
+            }
+
+            if (downValues.includes(normalized)) {
+                return { isUp: false, label: 'Indisponível' };
+            }
+
+            return { isUp: false, label: normalized.charAt(0).toUpperCase() + normalized.slice(1) };
+        };
+
+        const normalizeServices = (raw) => {
+            if (!raw) return [];
+            if (Array.isArray(raw)) return raw;
+
+            if (Array.isArray(raw.services)) return raw.services;
+            if (Array.isArray(raw.data)) return raw.data;
+
+            if (typeof raw === 'object') {
+                return Object.entries(raw).map(([name, value]) => {
+                    if (value && typeof value === 'object' && !Array.isArray(value)) {
+                        return { name, ...value };
+                    }
+                    return { name, status: value };
+                });
+            }
+
+            return [];
+        };
+
+        const createCard = (service, index) => {
+            const {
+                name,
+                title,
+                service: serviceName,
+                descricao,
+                description,
+                details,
+                message,
+                info,
+                lastChecked,
+                checkedAt,
+                updatedAt,
+                updated_at,
+                status,
+                available,
+                isOnline,
+                up,
+                ok,
+                healthy,
+                state
+            } = service || {};
+
+            const displayName = [name, title, serviceName].find(Boolean) || `Serviço ${index + 1}`;
+            const resolvedStatus = status ?? available ?? isOnline ?? up ?? ok ?? healthy ?? state;
+            const { isUp, label } = interpretStatus(resolvedStatus);
+            const descriptionText = message || details || description || descricao || info || '';
+            const timestamp = lastChecked || checkedAt || updatedAt || updated_at || service?.timestamp;
+
+            const card = document.createElement('div');
+            card.className = `card status-card ${isUp ? 'status-up' : 'status-down'}`;
+
+            const body = document.createElement('div');
+            body.className = 'card-body';
+
+            const headerRow = document.createElement('div');
+            headerRow.className = 'd-flex justify-content-between align-items-start gap-2';
+
+            const titleEl = document.createElement('h2');
+            titleEl.className = 'card-title';
+            titleEl.textContent = displayName;
+
+            const pill = document.createElement('span');
+            pill.className = 'status-pill';
+            pill.innerHTML = `<i class="bi ${isUp ? 'bi-check-circle-fill' : 'bi-exclamation-triangle-fill'}"></i> ${label}`;
+
+            headerRow.appendChild(titleEl);
+            headerRow.appendChild(pill);
+            body.appendChild(headerRow);
+
+            const statusDescription = document.createElement('p');
+            statusDescription.className = 'status-description mb-0';
+            statusDescription.textContent = descriptionText || (isUp ? 'Sistema operando normalmente.' : 'Equipe já foi notificada.');
+            body.appendChild(statusDescription);
+
+            if (timestamp) {
+                const ts = document.createElement('p');
+                ts.className = 'status-timestamp mb-0';
+                ts.textContent = `Última verificação: ${new Date(timestamp).toLocaleString('pt-BR')}`;
+                body.appendChild(ts);
+            }
+
+            card.appendChild(body);
+            return card;
+        };
+
+        const renderServices = (services) => {
+            statusCards.innerHTML = '';
+
+            if (!services.length) {
+                const empty = document.createElement('div');
+                empty.className = 'empty-state';
+                empty.innerHTML = '<i class="bi bi-activity"></i><p class="mt-3 mb-0">Nenhuma informação de status disponível.</p>';
+                statusCards.appendChild(empty);
+                return;
+            }
+
+            services.forEach((service, index) => {
+                const column = document.createElement('div');
+                column.appendChild(createCard(service, index));
+                statusCards.appendChild(column);
+            });
+        };
+
+        const fetchStatus = async () => {
+            try {
+                hideAlert();
+                statusContent.classList.remove('loading-error');
+                const response = await (window.apiFetch ? window.apiFetch('/api/admin/service-status') : fetch('/api/admin/service-status'));
+                if (!response.ok) {
+                    throw new Error(`Falha ao carregar status (${response.status})`);
+                }
+                const payload = await response.json();
+                const services = normalizeServices(payload).map((service, index) => ({
+                    ...service,
+                    name: service?.name || service?.title || service?.service || service?.system || service?.identifier || `Serviço ${index + 1}`
+                }));
+                renderServices(services);
+                updateLastUpdated();
+            } catch (error) {
+                console.error('Erro ao buscar status dos serviços:', error);
+                showAlert('Não foi possível atualizar o status dos serviços. Tentaremos novamente em instantes.', 'danger');
+                if (!statusCards.children.length) {
+                    const empty = document.createElement('div');
+                    empty.className = 'empty-state';
+                    empty.innerHTML = '<i class="bi bi-plug"></i><p class="mt-3 mb-0">Sem dados disponíveis no momento.</p>';
+                    statusCards.appendChild(empty);
+                }
+            }
+        };
+
+        const startPolling = () => {
+            if (refreshTimer) {
+                clearInterval(refreshTimer);
+            }
+            refreshTimer = setInterval(fetchStatus, REFRESH_INTERVAL);
+        };
+
+        const stopPolling = () => {
+            if (refreshTimer) {
+                clearInterval(refreshTimer);
+                refreshTimer = null;
+            }
+        };
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                stopPolling();
+            } else {
+                fetchStatus();
+                startPolling();
+            }
+        });
+
+        window.addEventListener('beforeunload', () => {
+            stopPolling();
+        });
+
+        let token = localStorage.getItem('adminToken') || localStorage.getItem('adminAuthToken');
+        if (!token) {
+            window.location.href = '/admin/login.html';
+            return;
+        }
+
+        localStorage.setItem('adminToken', token);
+        localStorage.removeItem('adminAuthToken');
+
+        let role = '';
+        try {
+            const base64url = token.split('.')[1] || '';
+            const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(base64url.length / 4) * 4, '=');
+            const payload = JSON.parse(atob(base64));
+            adminNameEl.textContent = payload?.nome || 'Administrador';
+            role = payload?.role || '';
+        } catch (error) {
+            console.error('Erro ao decodificar token:', error);
+        }
+
+        if (role !== 'SUPER_ADMIN') {
+            statusContent.innerHTML = '<div class="alert alert-warning" role="alert">Esta área é restrita aos administradores com perfil SUPER_ADMIN.</div>';
+            return;
+        }
+
+        await fetchStatus();
+        startPolling();
+    });
+    </script>
+</body>
+</html>
