@@ -5,6 +5,43 @@ const fs = require('fs');
 const logger = require('../utils/logger');
 require('dotenv').config({ path: path.resolve(__dirname, '../..', '.env') });
 
+let activeTransport = null;
+let activeTransportSignature = null;
+
+function buildTransportSignature(cfg = {}) {
+  return [cfg.host, cfg.port, cfg.secure, cfg.user]
+    .map((v) => (v === undefined || v === null ? '' : String(v)))
+    .join('|');
+}
+
+function createTransportFromConfig(cfg, debugEnabled) {
+  return nodemailer.createTransport({
+    host: cfg.host,
+    port: cfg.port,
+    secure: cfg.secure, // true = 465 (TLS direto); false = 587 (STARTTLS)
+    auth: { user: cfg.user, pass: cfg.pass },
+    requireTLS: !cfg.secure,
+    pool: true,
+    maxConnections: 3,
+    maxMessages: 50,
+    connectionTimeout: 15000,
+    greetingTimeout: 10000,
+    logger: debugEnabled,
+    debug: debugEnabled,
+  });
+}
+
+function ensureActiveTransport(cfg, debugEnabled) {
+  const signature = buildTransportSignature(cfg);
+  if (activeTransport && activeTransportSignature === signature) {
+    return activeTransport;
+  }
+  const transport = createTransportFromConfig(cfg, debugEnabled);
+  activeTransport = transport;
+  activeTransportSignature = signature;
+  return transport;
+}
+
 // ---------- Config & Helpers ----------
 function readSmtpConfig() {
   // Aceita SMTP_* ou, se ausentes, EMAIL_*
@@ -26,6 +63,8 @@ function buildTransport() {
 
   if (cfg.disabled) {
     console.warn('[MAIL] DISABLE_EMAIL=true → modo DRY-RUN (nenhum e-mail será enviado).');
+    activeTransport = null;
+    activeTransportSignature = null;
     return { sendMail: async (opts) => {
       console.log('[MAIL][DRY-RUN]', { to: opts.to, subject: opts.subject });
       return { messageId: 'dry-run' };
@@ -34,26 +73,15 @@ function buildTransport() {
 
   if (!cfg.host || !cfg.user || !cfg.pass) {
     console.warn('[MAIL] SMTP não configurado (host/user/pass ausentes) → modo DRY-RUN.');
+    activeTransport = null;
+    activeTransportSignature = null;
     return { sendMail: async (opts) => {
       console.log('[MAIL][DRY-RUN]', { to: opts.to, subject: opts.subject });
       return { messageId: 'dry-run' };
     }, from: cfg.from };
   }
 
-  const transport = nodemailer.createTransport({
-    host: cfg.host,
-    port: cfg.port,
-    secure: cfg.secure,           // true = 465 (TLS direto); false = 587 (STARTTLS)
-    auth: { user: cfg.user, pass: cfg.pass },
-    requireTLS: !cfg.secure,
-    pool: true,
-    maxConnections: 3,
-    maxMessages: 50,
-    connectionTimeout: 15000,
-    greetingTimeout: 10000,
-    logger: debugEnabled,
-    debug: debugEnabled,
-  });
+  const transport = ensureActiveTransport(cfg, debugEnabled);
 
   // Teste de conexão (não derruba a app)
   transport.verify((err) => {
@@ -66,6 +94,25 @@ function buildTransport() {
     sendMail: (opts) => transport.sendMail({ from: cfg.from, ...opts }),
     from: cfg.from,
   };
+}
+
+async function verifySmtpConnection() {
+  const cfg = readSmtpConfig();
+  if (cfg.disabled) {
+    throw new Error('Env DISABLE_EMAIL=true — envio de e-mails desabilitado.');
+  }
+  if (!cfg.host || !cfg.user || !cfg.pass) {
+    throw new Error('Configuração SMTP incompleta (host/user/pass ausentes).');
+  }
+
+  const debugEnabled = process.env.SMTP_DEBUG === 'true';
+  const transport = ensureActiveTransport(cfg, debugEnabled);
+
+  await new Promise((resolve, reject) => {
+    transport.verify((err) => (err ? reject(err) : resolve(true)));
+  });
+
+  return true;
 }
 
 const mailer = buildTransport();
@@ -292,4 +339,5 @@ module.exports = {
   enviarEmailAdvertencia,
   enviarEmailNotificacaoDar,
   enviarEmailDefinirSenha,
+  verifySmtpConnection,
 };

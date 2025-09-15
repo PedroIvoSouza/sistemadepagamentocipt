@@ -36,6 +36,7 @@ const {
   RECEITA_CODIGO_EVENTO,
   RECEITA_CODIGO_EVENTO_PF,
   RECEITA_CODIGO_EVENTO_PJ,
+  SEFAZ_HEALTHCHECK_RECEITA_CODIGO,
   DOC_ORIGEM_COD,                 // opcional (se a receita exigir documento de origem)
   SEFAZ_TIMEOUT_MS = '120000',    // 120s
   SEFAZ_RETRIES = '5',            // 1 tentativa + 5 retries
@@ -565,6 +566,34 @@ async function listarPagamentosPorDataInclusao(dataInicioDateTime, dataFimDateTi
   return lista.map(mapPagamento);
 }
 
+async function checkSefazHealth() {
+  const candidatos = [
+    SEFAZ_HEALTHCHECK_RECEITA_CODIGO,
+    RECEITA_CODIGO_PERMISSIONARIO,
+    RECEITA_CODIGO_EVENTO,
+    RECEITA_CODIGO_EVENTO_PF,
+    RECEITA_CODIGO_EVENTO_PJ,
+  ]
+    .map((cod) => onlyDigits(cod))
+    .filter((cod) => !!cod);
+
+  if (!candidatos.length) {
+    throw new Error('Nenhum código de receita configurado para health-check da SEFAZ.');
+  }
+
+  const codigo = candidatos[0];
+  const { data } = await reqWithRetry(
+    () => sefaz.get('/api/public/receita/consultar', { params: { codigo } }),
+    'health-check'
+  );
+
+  if (!data) {
+    throw new Error('Resposta vazia da SEFAZ no health-check.');
+  }
+
+  return true;
+}
+
 /* ==========================
    Exports
    ========================== */
@@ -582,4 +611,5 @@ module.exports = {
   consultarPagamentoPorCodigoBarras,
   listarPagamentosPorDataArrecadacao,
   listarPagamentosPorDataInclusao,
+  checkSefazHealth,
 };

@@ -38,6 +38,7 @@ const adminRoutes           = require('./api/adminRoutes');
 const adminManagementRoutes = require('./api/adminManagementRoutes');
 const adminDarsRoutes       = require('./api/adminDarsRoutes');
 const adminOficiosRoutes    = require('./api/adminOficiosRoutes');
+const adminStatusRoutes     = require('./api/adminStatusRoutes');
 const adminTermoEventosRoutes = require('./api/adminTermoEventosRoutes');
 const permissionariosRoutes = require('./api/permissionariosRoutes');
 const botRoutes             = require('./api/botRoutes');
@@ -103,6 +104,7 @@ mount('/api/admin/auth',        'adminAuthRoutes',       adminAuthRoutes,       
 mount('/api/admin/dars',        'adminDarsRoutes',       adminDarsRoutes,       app);
 mount('/api/admins',            'adminManagementRoutes', adminManagementRoutes, app);
 mount('/api/admin',             'adminRoutes',           adminRoutes,           app);
+mount('/api/admin',             'adminStatusRoutes',     adminStatusRoutes,     app);
 mount('/api/admin',             'adminOficiosRoutes',    adminOficiosRoutes,    app);
 mount('/api/admin',             'adminAdvertenciasRoutes', adminAdvertenciasRoutes, app);
 mount('/api/admin',             'adminTermoEventosRoutes', adminTermoEventosRoutes, app);
