@@ -22,6 +22,7 @@ function readSmtpConfig() {
 
 function buildTransport() {
   const cfg = readSmtpConfig();
+  const debugEnabled = process.env.SMTP_DEBUG === 'true';
 
   if (cfg.disabled) {
     console.warn('[MAIL] DISABLE_EMAIL=true → modo DRY-RUN (nenhum e-mail será enviado).');
@@ -50,6 +51,8 @@ function buildTransport() {
     maxMessages: 50,
     connectionTimeout: 15000,
     greetingTimeout: 10000,
+    logger: debugEnabled,
+    debug: debugEnabled,
   });
 
   // Teste de conexão (não derruba a app)
