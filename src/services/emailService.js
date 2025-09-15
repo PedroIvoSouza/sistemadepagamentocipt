@@ -2,6 +2,7 @@
 const nodemailer = require('nodemailer');
 const path = require('path');
 const fs = require('fs');
+const logger = require('../utils/logger');
 require('dotenv').config({ path: path.resolve(__dirname, '../..', '.env') });
 
 // ---------- Config & Helpers ----------
@@ -72,6 +73,11 @@ const BRL = (n) => {
   return num.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
+const formatError = (err) => {
+  if (!err) return err;
+  return err.stack || err.message || err;
+};
+
 const mesesPT = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 
 function fmtDataISOParaBR(iso) {
@@ -104,11 +110,12 @@ async function enviarEmailNovaDar(emailDestino, dadosDoDar) {
   `;
 
   try {
-    await mailer.sendMail({ to: emailDestino, subject: `DAR Disponível: Competência ${competencia}`, html });
-    console.log(`[MAIL] NOVO DAR → ${emailDestino}`);
+    logger.info(`[MAIL][START] Tipo → ${emailDestino}`);
+    const info = await mailer.sendMail({ to: emailDestino, subject: `DAR Disponível: Competência ${competencia}`, html });
+    logger.info(`[MAIL][SUCCESS] Tipo → ${emailDestino}, id: ${info.messageId}`);
     return true;
   } catch (e) {
-    console.error(`[MAIL][ERRO] NOVO DAR → ${emailDestino}:`, e.message || e);
+    logger.error(`[MAIL][ERRO] NOVO DAR → ${emailDestino}: ${formatError(e)}`);
     return false;
   }
 }
@@ -125,11 +132,12 @@ async function enviarEmailRedefinicao(emailDestino, codigo) {
     </div>
   `;
   try {
-    await mailer.sendMail({ to: emailDestino, subject: 'Código de Verificação - Portal do Permissionário', html });
-    console.log(`[MAIL] REDEFINIÇÃO → ${emailDestino}`);
+    logger.info(`[MAIL][START] Tipo → ${emailDestino}`);
+    const info = await mailer.sendMail({ to: emailDestino, subject: 'Código de Verificação - Portal do Permissionário', html });
+    logger.info(`[MAIL][SUCCESS] Tipo → ${emailDestino}, id: ${info.messageId}`);
     return true;
   } catch (e) {
-    console.error(`[MAIL][ERRO] REDEFINIÇÃO → ${emailDestino}:`, e.message || e);
+    logger.error(`[MAIL][ERRO] REDEFINIÇÃO → ${emailDestino}: ${formatError(e)}`);
     return false;
   }
 }
@@ -148,11 +156,12 @@ async function enviarEmailPrimeiroAcesso(emailDestino, token) {
   `;
 
   try {
-    await mailer.sendMail({ to: emailDestino, subject: 'Crie sua Senha de Acesso - Sistema de Gestão CIPT', html });
-    console.log(`[MAIL] PRIMEIRO ACESSO → ${emailDestino}`);
+    logger.info(`[MAIL][START] Tipo → ${emailDestino}`);
+    const info = await mailer.sendMail({ to: emailDestino, subject: 'Crie sua Senha de Acesso - Sistema de Gestão CIPT', html });
+    logger.info(`[MAIL][SUCCESS] Tipo → ${emailDestino}, id: ${info.messageId}`);
     return true;
   } catch (e) {
-    console.error(`[MAIL][ERRO] PRIMEIRO ACESSO → ${emailDestino}:`, e.message || e);
+    logger.error(`[MAIL][ERRO] PRIMEIRO ACESSO → ${emailDestino}: ${formatError(e)}`);
     return false;
   }
 }
@@ -215,11 +224,12 @@ async function enviarEmailAdvertencia(emailDestino, dados = {}) {
     </div>`;
 
   try {
-    await mailer.sendMail({ to: emailDestino, subject: 'Advertência - Centro de Inovação', html, attachments });
-    console.log(`[MAIL] ADVERTENCIA → ${emailDestino}`);
+    logger.info(`[MAIL][START] Tipo → ${emailDestino}`);
+    const info = await mailer.sendMail({ to: emailDestino, subject: 'Advertência - Centro de Inovação', html, attachments });
+    logger.info(`[MAIL][SUCCESS] Tipo → ${emailDestino}, id: ${info.messageId}`);
     return true;
   } catch (e) {
-    console.error(`[MAIL][ERRO] ADVERTENCIA → ${emailDestino}:`, e.message || e);
+    logger.error(`[MAIL][ERRO] ADVERTENCIA → ${emailDestino}: ${formatError(e)}`);
     return false;
   }
 }
@@ -238,11 +248,12 @@ async function enviarEmailNotificacaoDar(emailDestino, dadosDar) {
     <br><p>Equipe do Centro de Inovação do Jaraguá</p>
   `;
   try {
-    await mailer.sendMail({ to: emailDestino, subject: `Notificação de DAR: Competência ${dadosDar.competencia}`, html });
-    console.log(`[MAIL] NOTIF DAR → ${emailDestino}`);
+    logger.info(`[MAIL][START] Tipo → ${emailDestino}`);
+    const info = await mailer.sendMail({ to: emailDestino, subject: `Notificação de DAR: Competência ${dadosDar.competencia}`, html });
+    logger.info(`[MAIL][SUCCESS] Tipo → ${emailDestino}, id: ${info.messageId}`);
     return true;
   } catch (e) {
-    console.error(`[MAIL][ERRO] NOTIF DAR → ${emailDestino}:`, e.message || e);
+    logger.error(`[MAIL][ERRO] NOTIF DAR → ${emailDestino}: ${formatError(e)}`);
     return false;
   }
 }
@@ -258,12 +269,14 @@ async function enviarEmailDefinirSenha(destinatario, nomeCliente, token) {
     <p>Se você não solicitou, ignore este e-mail.</p>
     <p><strong>Equipe do Centro de Inovação do Jaraguá</strong></p>
   `;
+  const emailDestino = destinatario;
   try {
-    await mailer.sendMail({ to: destinatario, subject: 'Crie sua Senha de Acesso - Evento no CIPT', html });
-    console.log(`[MAIL] DEFINIR SENHA EVENTO → ${destinatario}`);
+    logger.info(`[MAIL][START] Tipo → ${emailDestino}`);
+    const info = await mailer.sendMail({ to: emailDestino, subject: 'Crie sua Senha de Acesso - Evento no CIPT', html });
+    logger.info(`[MAIL][SUCCESS] Tipo → ${emailDestino}, id: ${info.messageId}`);
     return true;
   } catch (e) {
-    console.error(`[MAIL][ERRO] DEFINIR SENHA EVENTO → ${destinatario}:`, e.message || e);
+    logger.error(`[MAIL][ERRO] DEFINIR SENHA EVENTO → ${emailDestino}: ${formatError(e)}`);
     return false;
   }
 }
