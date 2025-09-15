@@ -27,4 +27,50 @@ async function sendMessage(msisdn, text) {
   }
 }
 
-module.exports = { sendMessage };
+async function checkHealth() {
+  const healthUrl = (process.env.WHATSAPP_HEALTHCHECK_URL || '').trim();
+  const timeout = Number(process.env.WHATSAPP_HEALTHCHECK_TIMEOUT_MS || 5000);
+
+  if (healthUrl) {
+    try {
+      const method = (process.env.WHATSAPP_HEALTHCHECK_METHOD || 'GET').toUpperCase();
+      const headers = { 'Content-Type': 'application/json' };
+      if (TOKEN) headers.Authorization = `Bearer ${TOKEN}`;
+
+      const requestConfig = {
+        method,
+        url: healthUrl,
+        timeout,
+        headers,
+        validateStatus: () => true,
+      };
+
+      if (method === 'POST') {
+        requestConfig.data = { ping: true };
+      }
+
+      const resp = await axios(requestConfig);
+      if (resp.status >= 200 && resp.status < 400) {
+        return true;
+      }
+      throw new Error(`Health-check HTTP ${resp.status}`);
+    } catch (err) {
+      throw new Error(err?.message || 'Falha ao consultar health-check do WhatsApp.');
+    }
+  }
+
+  const msisdn = (process.env.WHATSAPP_HEALTHCHECK_MSISDN || process.env.WHATSAPP_TEST_MSISDN || '').trim();
+  if (!msisdn) {
+    throw new Error('WHATSAPP_HEALTHCHECK_MSISDN não configurado.');
+  }
+
+  const message = process.env.WHATSAPP_HEALTHCHECK_MESSAGE || 'ping';
+  const ok = await sendMessage(msisdn, message);
+  if (!ok) {
+    throw new Error('Falha ao enviar mensagem de teste para o WhatsApp.');
+  }
+
+  return true;
+}
+
+module.exports = { sendMessage, checkHealth };
