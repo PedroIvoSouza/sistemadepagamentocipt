@@ -3,10 +3,14 @@ require('dotenv').config();
 
 let transporter;
 if (process.env.EMAIL_HOST) {
+  const port = Number(process.env.EMAIL_PORT);
+  const secure = port === 465;
+
   transporter = nodemailer.createTransport({
     host: process.env.EMAIL_HOST,
-    port: process.env.EMAIL_PORT,
-    secure: true,
+    port: Number.isNaN(port) ? undefined : port,
+    secure,
+    requireTLS: secure === false,
     auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
   });
 }
