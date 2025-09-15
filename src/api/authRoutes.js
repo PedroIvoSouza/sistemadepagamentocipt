@@ -64,6 +64,15 @@ router.post('/solicitar-acesso', (req, res) => {
       }
     }
 
+    if (!selectedUser?.email) {
+      console.warn(
+        `[solicitar-acesso] permissionário sem e-mail cadastrado (id=${selectedUser?.id ?? 'desconhecido'})`
+      );
+      return res
+        .status(400)
+        .json({ error: 'E-mail do permissionário não cadastrado.' });
+    }
+
     const expires = Date.now() + 10 * 60 * 1000; // 10 minutos
 
     try {
@@ -81,9 +90,26 @@ router.post('/solicitar-acesso', (req, res) => {
       );
 
       try {
-        await enviarEmailRedefinicao(selectedUser.email, codigo);
+        const emailEnviado = await enviarEmailRedefinicao(
+          selectedUser.email,
+          codigo
+        );
+        if (emailEnviado === false) {
+          console.error(
+            `[solicitar-acesso] envio de e-mail retornou false (id=${selectedUser.id}, email=${selectedUser.email})`
+          );
+          return res.status(500).json({
+            error: 'Falha ao enviar o código. Tente novamente mais tarde.'
+          });
+        }
       } catch (mailErr) {
-        console.error('[solicitar-acesso] email error:', mailErr);
+        console.error(
+          `[solicitar-acesso] email error (id=${selectedUser.id}, email=${selectedUser.email}):`,
+          mailErr
+        );
+        return res.status(500).json({
+          error: 'Falha ao enviar o código. Tente novamente mais tarde.'
+        });
       }
 
       return res.status(200).json({
