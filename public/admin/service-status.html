@@ -460,22 +460,22 @@
             }
         };
 
-        document.addEventListener('visibilitychange', () => {
-            if (document.hidden) {
-                stopPolling();
+        const redirectToLogin = () => {
+            if (typeof window.logoutAdmin === 'function') {
+                window.logoutAdmin();
             } else {
-                fetchStatus();
-                startPolling();
+                localStorage.removeItem('adminToken');
+                localStorage.removeItem('adminAuthToken');
+                window.location.replace('/admin/login.html');
             }
-        });
+        };
 
-        window.addEventListener('beforeunload', () => {
-            stopPolling();
-        });
+        let token = (typeof window.getAdminToken === 'function' && window.getAdminToken())
+            || localStorage.getItem('adminToken')
+            || localStorage.getItem('adminAuthToken');
 
-        let token = localStorage.getItem('adminToken') || localStorage.getItem('adminAuthToken');
         if (!token) {
-            window.location.href = '/admin/login.html';
+            redirectToLogin();
             return;
         }
 
@@ -491,12 +491,27 @@
             role = payload?.role || '';
         } catch (error) {
             console.error('Erro ao decodificar token:', error);
+            redirectToLogin();
+            return;
         }
 
         if (role !== 'SUPER_ADMIN') {
-            statusContent.innerHTML = '<div class="alert alert-warning" role="alert">Esta área é restrita aos administradores com perfil SUPER_ADMIN.</div>';
+            redirectToLogin();
             return;
         }
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                stopPolling();
+            } else {
+                fetchStatus();
+                startPolling();
+            }
+        });
+
+        window.addEventListener('beforeunload', () => {
+            stopPolling();
+        });
 
         await fetchStatus();
         startPolling();
