@@ -76,9 +76,29 @@
         </footer>
     </div>
 
+    <div class="modal fade" id="successModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header border-0">
+                    <h5 class="modal-title w-100 text-center">
+                        <i class="bi bi-check-circle-fill text-success" style="font-size: 3rem;"></i>
+                    </h5>
+                </div>
+                <div class="modal-body text-center">
+                    <h5 class="mb-3">Link enviado!</h5>
+                    <p class="mb-0">Verifique seu e-mail e também a caixa de spam.</p>
+                </div>
+                <div class="modal-footer border-0 justify-content-center">
+                    <button type="button" class="btn btn-success" data-bs-dismiss="modal">Fechar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script defer src="/js/mobile-adapter.js"></script>
-  <script defer src="/js/ui-kit.js"></script>
-  <script defer src="/js/mobile-tweaks.js"></script>   
+    <script defer src="/js/ui-kit.js"></script>
+    <script defer src="/js/mobile-tweaks.js"></script>
     <script>
         document.getElementById('redefinir-form').addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -87,19 +107,17 @@
             const button = e.target.querySelector('button');
             button.disabled = true;
 
-            messageDiv.style.display = 'block';
             messageDiv.className = 'alert alert-info';
             messageDiv.innerText = 'Processando sua solicitação...';
+            messageDiv.style.display = 'block';
 
-            // **NOTA: É preciso criar esta rota na API: /api/eventos/clientes/solicitar-redefinicao**
-            // Ela receberá o 'login', encontrará o cliente, gerará um novo token e enviará o e-mail.
-            // Por enquanto, vamos simular o comportamento de sucesso.
-            
+            // Simulação de sucesso; substituir por chamada à API real
             setTimeout(() => {
-                messageDiv.className = 'alert alert-success';
-                messageDiv.innerText = 'Se o identificador informado estiver em nossa base de dados, um link de redefinição foi enviado para o e-mail associado. Por favor, verifique sua caixa de entrada e spam.';
+                messageDiv.style.display = 'none';
                 document.getElementById('redefinir-form').reset();
                 button.disabled = false;
+                const modal = new bootstrap.Modal(document.getElementById('successModal'));
+                modal.show();
             }, 2000);
         });
     </script>

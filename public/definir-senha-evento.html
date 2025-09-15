@@ -78,6 +78,26 @@
             </div>
         </footer>
     </div>
+    <div class="modal fade" id="successModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header border-0">
+                    <h5 class="modal-title w-100 text-center">
+                        <i class="bi bi-check-circle-fill text-success" style="font-size: 3rem;"></i>
+                    </h5>
+                </div>
+                <div class="modal-body text-center">
+                    <h5 class="mb-3">Senha definida!</h5>
+                    <p class="mb-0">Você será redirecionado para o login.</p>
+                </div>
+                <div class="modal-footer border-0 justify-content-center">
+                    <button type="button" class="btn btn-success" data-bs-dismiss="modal">Fechar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script defer src="/js/mobile-adapter.js"></script>
     <script defer src="/js/ui-kit.js"></script>
     <script defer src="/js/mobile-tweaks.js"></script>
@@ -88,6 +108,7 @@
 
         const form = document.getElementById('passwordForm');
         const messageDiv = document.getElementById('message');
+        const successModalEl = document.getElementById('successModal');
         const welcomeMsg = document.getElementById('welcomeMessage');
         const token = new URLSearchParams(window.location.search).get('token');
 
@@ -151,11 +172,9 @@
                 const data = await resp.json();
                 if (!resp.ok) throw new Error(data.error || 'Falha ao definir a senha.');
 
-                messageDiv.className = 'alert alert-success';
-                messageDiv.textContent = 'Senha definida com sucesso! Redirecionando para o login em 3 segundos...';
-                messageDiv.style.display = 'block';
                 form.style.display = 'none';
-                
+                const modal = new bootstrap.Modal(successModalEl);
+                modal.show();
                 setTimeout(() => window.location.href = '/eventos/login-eventos.html', 3000);
 
             } catch (err) {
