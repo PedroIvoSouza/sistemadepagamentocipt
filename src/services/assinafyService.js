@@ -323,6 +323,64 @@ function pickBestArtifactUrl(documentData) {
   return obj.certified || obj.certificated || obj.original || null;
 }
 
+async function checkAssinafyHealth() {
+  const overrideUrl = (process.env.ASSINAFY_HEALTHCHECK_URL || '').trim();
+  const method = (process.env.ASSINAFY_HEALTHCHECK_METHOD || 'GET').toUpperCase();
+
+  if (overrideUrl) {
+    const config = {
+      method,
+      url: overrideUrl,
+      timeout: TIMEOUT,
+      headers: { Accept: 'application/json', ...authHeaders() },
+      validateStatus: () => true,
+    };
+
+    if (method === 'POST') {
+      config.data = { ping: true };
+    }
+
+    const resp = await axios(config);
+    if (resp.status >= 200 && resp.status < 400) {
+      return {
+        via: 'override',
+        method,
+        statusCode: resp.status,
+        url: overrideUrl,
+      };
+    }
+
+    const err = new Error(`Health-check HTTP ${resp.status}`);
+    err.response = resp;
+    throw err;
+  }
+
+  if (!ACCOUNT_ID) {
+    throw new Error('ASSINAFY_ACCOUNT_ID não configurado para health-check.');
+  }
+
+  const resp = await http.get(`/accounts/${encodeURIComponent(ACCOUNT_ID)}/signers`, {
+    params: { per_page: 1, page: 1, limit: 1 },
+  });
+
+  if (resp.status >= 200 && resp.status < 300) {
+    let sampleCount = null;
+    const payload = resp.data;
+    if (Array.isArray(payload)) sampleCount = payload.length;
+    else if (payload && Array.isArray(payload.data)) sampleCount = payload.data.length;
+
+    return {
+      via: 'api',
+      statusCode: resp.status,
+      sampleCount,
+    };
+  }
+
+  const err = new Error(`Health-check HTTP ${resp.status}`);
+  err.response = resp;
+  throw err;
+}
+
 module.exports = {
   uploadDocumentFromFile,
   getDocument,
@@ -347,4 +405,5 @@ module.exports = {
   // utils
   pickBestArtifactUrl,
   onlyDigits,
+  checkAssinafyHealth,
 };
