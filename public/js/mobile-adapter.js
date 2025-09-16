@@ -52,6 +52,11 @@
     });
   }
 
+  document.addEventListener('sidebar:ready', () => {
+    if (!document.body.classList.contains('mobile')) return;
+    setTimeout(ensureHamburger, 0);
+  });
+
   // ---- 4) Reflow de tabelas -> cards (agora pega QUALQUER <table>) ----
 function reflowTable(tbl) {
   if (!tbl || tbl.hasAttribute('data-no-mobile-cards')) return;
@@ -159,19 +164,33 @@ function disableZoom() {
     if (!cont || cont.__ptrApplied) return;
     cont.__ptrApplied = true;
 
+    const mainContent = document.querySelector('.main-content');
+
+    const getDocScroll = () => {
+      const docEl = document.documentElement;
+      const body = document.body;
+      return Math.max(window.pageYOffset || 0, docEl?.scrollTop || 0, body?.scrollTop || 0);
+    };
+
+    const getScrollTop = (el) => {
+      if (!el || typeof el.scrollTop !== 'number') return 0;
+      return el.scrollTop;
+    };
+
+    const isAtTop = () => {
+      const docTop = getDocScroll();
+      const contTop = getScrollTop(cont);
+      const mainTop = getScrollTop(mainContent);
+      return docTop <= 0 && contTop <= 0 && mainTop <= 0;
+    };
+
     let startY = 0;
     let pulling = false;
     const THRESHOLD = 70;
 
-    const canStart = () => {
-      // apenas se estiver no topo do scroll
-      const el = document.scrollingElement || document.documentElement;
-      return (el.scrollTop || 0) <= 0;
-    };
-
     cont.addEventListener('touchstart', (e) => {
       if (!isMobile()) return;
-      if (!canStart()) { pulling = false; return; }
+      if (!isAtTop()) { pulling = false; return; }
       if (e.target.closest('input,textarea,select')) { pulling = false; return; }
       startY = e.touches[0].clientY;
       pulling = true;
@@ -179,10 +198,14 @@ function disableZoom() {
 
     cont.addEventListener('touchmove', (e) => {
       if (!pulling) return;
+      if (!isAtTop()) { pulling = false; return; }
       const dy = e.touches[0].clientY - startY;
       if (dy > 0) {
-        // evita bounce do navegador
-        e.preventDefault();
+        if (e.cancelable) {
+          e.preventDefault();
+        }
+      } else {
+        pulling = false;
       }
     }, { passive: false });
 
@@ -190,13 +213,12 @@ function disableZoom() {
       if (!pulling) return;
       const dy = (e.changedTouches?.[0]?.clientY || 0) - startY;
       pulling = false;
-      if (dy >= THRESHOLD && canStart()) {
-        // feedback rápido (opcional)
+      if (dy >= THRESHOLD && isAtTop()) {
         const ov = document.createElement('div');
         ov.className = 'ui-loading show';
         ov.innerHTML = '<div class="ui-spinner"></div>';
         document.body.appendChild(ov);
-        setTimeout(() => location.reload(), 80);
+        setTimeout(() => location.reload(), 120);
       }
     });
   }
