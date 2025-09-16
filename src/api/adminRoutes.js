@@ -182,52 +182,6 @@ router.get(
 );
 
 /* ===========================================================
-   GET /api/admin/service-status
-   =========================================================== */
-router.get(
-  '/service-status',
-  [authMiddleware, authorizeRole(['SUPER_ADMIN'])],
-  async (_req, res) => {
-    const now = new Date();
-    const isoNow = now.toISOString();
-
-    const services = [];
-
-    try {
-      await dbGet('SELECT 1 AS ok');
-      services.push({
-        name: 'Banco de Dados (SQLite)',
-        status: 'up',
-        description: 'Conexão com o banco de dados estabelecida com sucesso.',
-        checkedAt: isoNow,
-      });
-    } catch (error) {
-      console.error('[service-status] Falha ao consultar o banco de dados:', error);
-      services.push({
-        name: 'Banco de Dados (SQLite)',
-        status: 'down',
-        description: 'Não foi possível executar uma consulta simples no banco de dados.',
-        checkedAt: isoNow,
-        details: error.message,
-      });
-    }
-
-    services.push({
-      name: 'Servidor de Aplicação',
-      status: 'up',
-      description: `Processo ${process.pid} em execução (${process.env.NODE_ENV || 'development'})`,
-      checkedAt: isoNow,
-      uptimeSeconds: Math.round(process.uptime()),
-    });
-
-    res.json({
-      generatedAt: isoNow,
-      services,
-    });
-  }
-);
-
-/* ===========================================================
    Rotas de Permissionários
    =========================================================== */
 
