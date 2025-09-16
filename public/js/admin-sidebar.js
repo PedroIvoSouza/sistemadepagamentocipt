@@ -22,11 +22,13 @@ document.addEventListener('DOMContentLoaded', () => {
             .then(() => {
                 applyRoleToSidebar(role);
                 initSidebarBehaviour();
+                document.dispatchEvent(new CustomEvent('sidebar:ready', { detail: { role } }));
             })
             .catch(err => console.error('Erro ao injetar sidebar:', err));
     } else {
         applyRoleToSidebar(role);
         initSidebarBehaviour(); // Sidebar já está no HTML
+        document.dispatchEvent(new CustomEvent('sidebar:ready', { detail: { role } }));
     }
 });
 
