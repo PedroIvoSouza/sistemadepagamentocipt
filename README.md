@@ -14,6 +14,7 @@ Adicione no arquivo `.env` ou nas variáveis do servidor:
 - `ASSINAFY_API_KEY`: token de acesso gerado no painel.
 - `ASSINAFY_API_URL` (opcional): URL base da API. Padrão `https://api.assinafy.com`.
 - `ASSINAFY_CALLBACK_URL`: URL pública para o retorno após a assinatura, ex.: `https://seusistema/api/documentos/assinafy/callback`.
+- `VPN_HEALTHCHECK_TLS_INSECURE` (opcional): defina como `true` para permitir certificados TLS autoassinados no health-check HTTP da VPN/infovia. Mantenha ausente ou `false` para validar os certificados normalmente.
 
 Certifique-se de reiniciar o servidor após alterar as variáveis.
 
