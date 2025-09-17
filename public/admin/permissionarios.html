@@ -472,7 +472,7 @@
 
             try {
                 AppUI.loading.show();
-                const response = await fetch(`/api/admin/permissionarios/${payload.permissionarioId}/dars`, {
+                const response = await fetch(`/api/admin/dars`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
