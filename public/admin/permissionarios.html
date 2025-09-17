@@ -457,17 +457,16 @@
             };
 
             if (tipo === 'Mensalidade') {
-                const competencia = mensalidadeCompetencia?.value || '';
-                const [ano, mes] = competencia.split('-');
-                payload.anoReferencia = ano ? Number(ano) : null;
-                payload.mesReferencia = mes ? Number(mes) : null;
-                payload.valor = selectedPermissionario && Number(selectedPermissionario.valor_aluguel)
-                    ? Number(selectedPermissionario.valor_aluguel)
-                    : null;
+                const competencia = mensalidadeCompetencia?.value?.trim() || '';
+                if (competencia) {
+                    payload.competencia = competencia;
+                }
+                const aluguelBase = Number(selectedPermissionario?.valor_aluguel);
+                payload.valor = Number.isFinite(aluguelBase) ? aluguelBase : null;
             } else {
                 payload.valor = advertenciaValor?.value ? Number(advertenciaValor.value) : null;
                 payload.dataPagamento = advertenciaDataPagamento?.value || null;
-                payload.descricao = advertenciaDescricao?.value?.trim() || '';
+                payload.fatos = advertenciaDescricao?.value?.trim() || '';
             }
 
             try {
