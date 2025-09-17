@@ -1,7 +1,8 @@
 // /public/service-worker.js
 const V = 'cipt-app-shell-v1.0.0';
 const APP_SHELL = [
-  '/', '/css/app-shell.css', '/js/ui-kit.js', '/js/mobile-adapter.js',
+  '/', '/css/app-shell.css', '/css/assistant-widget.css',
+  '/js/ui-kit.js', '/js/mobile-adapter.js', '/js/assistant-widget.js',
   'https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css',
   'https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js',
   'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css'
