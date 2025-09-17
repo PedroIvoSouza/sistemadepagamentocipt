@@ -124,10 +124,13 @@ async function findSignerByGovernmentId(government_id) {
   const arr = Array.isArray(ok) ? ok : ok?.data;
   return Array.isArray(arr) && arr.length ? arr[0] : null;
 }
-async function updateSignerEmail(id, email) {
+async function updateSignerEmail(id, email, phone) {
   const url = `/accounts/${ACCOUNT_ID}/signers/${encodeURIComponent(id)}`;
-  if (DEBUG) console.log('[ASSINAFY][PUT]', BASE + url, { email });
-  const resp = await http.put(url, { email });
+  const payload = {};
+  if (email !== undefined) payload.email = email;
+  if (phone) payload.telephone = phone;
+  if (DEBUG) console.log('[ASSINAFY][PUT]', BASE + url, payload);
+  const resp = await http.put(url, payload);
   return ensureOk(resp, 'updateSignerEmail');
 }
 async function ensureSigner({ full_name, email, government_id, phone }) {
@@ -142,14 +145,40 @@ async function ensureSigner({ full_name, email, government_id, phone }) {
       }
       if (found) {
         const domain = found.email?.split('@')[1]?.toLowerCase();
-        if (email && domain === 'importado.placeholder' && found.id) {
+        const normalizedEmail = (email || '').trim();
+        const normalizedPhone = (phone || '').trim();
+        const foundEmail = (found.email || '').trim();
+        const emailsDiffer = normalizedEmail && normalizedEmail.toLowerCase() !== foundEmail.toLowerCase();
+        const shouldSyncEmail = Boolean(found.id && normalizedEmail && (emailsDiffer || domain === 'importado.placeholder'));
+
+        if (shouldSyncEmail) {
           try {
-            await updateSignerEmail(found.id, email);
-            found.email = email;
+            const updated = await updateSignerEmail(found.id, normalizedEmail, normalizedPhone || undefined);
+            const updatedData = updated?.data || updated;
+            if (updatedData && typeof updatedData === 'object') {
+              found = { ...found, ...updatedData };
+            }
           } catch (err) {
             if (DEBUG) console.warn('[ASSINAFY] updateSignerEmail falhou:', err.response?.status || err.message);
           }
+          if (normalizedEmail) found.email = normalizedEmail;
+          if (normalizedPhone) {
+            if ('telephone' in found) found.telephone = normalizedPhone;
+            else if ('phone' in found) found.phone = normalizedPhone;
+            else found.telephone = normalizedPhone;
+          }
         }
+
+        if (!normalizedEmail && emailsDiffer) {
+          // Se o novo e-mail estiver vazio, preserva o valor atual.
+          return found;
+        }
+
+        if (emailsDiffer && normalizedEmail && !shouldSyncEmail) {
+          // Sem ID não é possível sincronizar, mas refletimos o e-mail informado.
+          found = { ...found, email: normalizedEmail };
+        }
+
         return found;
       }
     }

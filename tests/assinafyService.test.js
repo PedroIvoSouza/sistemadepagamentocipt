@@ -8,11 +8,15 @@ process.env.SEFAZ_APP_TOKEN = process.env.SEFAZ_APP_TOKEN || 'test-token';
 
 const servicePath = path.resolve(__dirname, '../src/services/assinafyService.js');
 
-function loadService(getImpl) {
+function loadService(axiosHandlers) {
   const originalLoad = Module._load;
   Module._load = function (request, parent, isMain) {
     if (request === 'axios') {
-      return { create: () => ({ get: getImpl }) };
+      const handlers =
+        typeof axiosHandlers === 'function'
+          ? { get: axiosHandlers }
+          : axiosHandlers || {};
+      return { create: () => handlers };
     }
     if (request === 'form-data') {
       return function FormData() {};
@@ -59,5 +63,64 @@ test('pickBestArtifactUrl seleciona URL em arrays', () => {
     ],
   };
   assert.strictEqual(svc.pickBestArtifactUrl(doc), 'https://example.com/cert');
+});
+
+test('ensureSigner sincroniza e-mail quando signatário existente está desatualizado', async () => {
+  const calls = [];
+  const svc = loadService({
+    post: async (url, body) => {
+      calls.push({ method: 'post', url, body });
+      return { status: 400, data: { message: 'já existe um signatário com este e-mail.' } };
+    },
+    get: async (url, opts) => {
+      calls.push({ method: 'get', url, params: opts?.params });
+      return { status: 200, data: [{ id: 'sign-1', email: 'old@example.com', telephone: '+5511888888888' }] };
+    },
+    put: async (url, body) => {
+      calls.push({ method: 'put', url, body });
+      return { status: 200, data: { id: 'sign-1', email: body.email, telephone: body.telephone } };
+    },
+  });
+
+  const signer = await svc.ensureSigner({
+    full_name: 'Responsável',
+    email: 'novo@example.com',
+    government_id: '12345678900',
+    phone: '+5511999999999',
+  });
+
+  assert.equal(signer.email, 'novo@example.com');
+  assert.equal(signer.telephone, '+5511999999999');
+  const putCalls = calls.filter((c) => c.method === 'put');
+  assert.equal(putCalls.length, 1);
+  assert.ok(putCalls[0].url.endsWith('/signers/sign-1'));
+  assert.deepEqual(putCalls[0].body, { email: 'novo@example.com', telephone: '+5511999999999' });
+});
+
+test('ensureSigner mantém e-mail existente quando novo valor está vazio', async () => {
+  const calls = [];
+  const svc = loadService({
+    post: async (url, body) => {
+      calls.push({ method: 'post', url, body });
+      return { status: 400, data: { message: 'já existe um signatário com este e-mail.' } };
+    },
+    get: async (url, opts) => {
+      calls.push({ method: 'get', url, params: opts?.params });
+      if (opts?.params?.email !== undefined) {
+        return { status: 200, data: [{ id: 'sign-2', email: 'old@example.com' }] };
+      }
+      return { status: 200, data: [] };
+    },
+  });
+
+  const signer = await svc.ensureSigner({
+    full_name: 'Responsável',
+    email: '',
+    government_id: '99988877766',
+    phone: '+5511988887777',
+  });
+
+  assert.equal(signer.email, 'old@example.com');
+  assert.equal(calls.filter((c) => c.method === 'put').length, 0);
 });
 
