@@ -138,6 +138,10 @@
             align-items: stretch;
         }
 
+        .status-cards.is-hidden {
+            display: none;
+        }
+
         .status-card {
             border: none;
             border-radius: var(--raio-borda);
@@ -221,6 +225,30 @@
             display: none;
         }
 
+        .status-loading {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            gap: 1rem;
+            padding: 3rem 1rem;
+            background-color: rgba(255, 255, 255, 0.9);
+            border-radius: var(--raio-borda);
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.08);
+            text-align: center;
+            color: var(--cor-primaria);
+            min-height: 200px;
+        }
+
+        .status-loading .spinner-border {
+            width: 3rem;
+            height: 3rem;
+        }
+
+        .status-loading.active {
+            display: flex;
+        }
+
         @media (max-width: 576px) {
             .topbar {
                 padding: 0.75rem 1rem;
@@ -249,6 +277,10 @@
                         <p id="lastUpdated" class="last-update">—</p>
                     </div>
                     <div id="statusAlert" class="alert alert-warning status-alert" role="alert"></div>
+                    <div id="statusLoading" class="status-loading" role="status" aria-live="polite">
+                        <div class="spinner-border text-primary" role="presentation" aria-hidden="true"></div>
+                        <p class="mb-0 fw-semibold">Testando serviços…</p>
+                    </div>
                     <div id="statusCards" class="status-cards"></div>
                 </div>
             </main>
@@ -268,6 +300,7 @@
         const statusContent = document.getElementById('statusContent');
         const lastUpdatedEl = document.getElementById('lastUpdated');
         const adminNameEl = document.getElementById('adminName');
+        const statusLoading = document.getElementById('statusLoading');
 
         const REFRESH_INTERVAL = 30000; // 30s
         let refreshTimer = null;
@@ -291,6 +324,18 @@
             });
             lastUpdatedEl.textContent = `Atualizado em ${formatter.format(date)}`;
         };
+
+        const showLoading = () => {
+            statusLoading?.classList.add('active');
+            statusCards?.classList.add('is-hidden');
+        };
+
+        const hideLoading = () => {
+            statusLoading?.classList.remove('active');
+            statusCards?.classList.remove('is-hidden');
+        };
+
+        showLoading();
 
         const interpretStatus = (status) => {
             if (typeof status === 'boolean') {
@@ -423,6 +468,7 @@
         };
 
         const fetchStatus = async () => {
+            showLoading();
             try {
                 hideAlert();
                 statusContent.classList.remove('loading-error');
@@ -446,6 +492,8 @@
                     empty.innerHTML = '<i class="bi bi-plug"></i><p class="mt-3 mb-0">Sem dados disponíveis no momento.</p>';
                     statusCards.appendChild(empty);
                 }
+            } finally {
+                hideLoading();
             }
         };
 
