@@ -121,6 +121,9 @@ async function checkVpnConnectivity() {
   );
 
   if (url) {
+    const insecureContext = allowInsecureTls
+      ? { insecureTls: true, method: 'http', url }
+      : null;
     try {
       const httpsAgent = allowInsecureTls
         ? new https.Agent({ rejectUnauthorized: false })
@@ -143,6 +146,7 @@ async function checkVpnConnectivity() {
       }
       const err = new Error(`Health-check HTTP ${response.status}`);
       err.response = response;
+      if (insecureContext) err.meta = { ...insecureContext };
       throw err;
     } catch (error) {
       const message = error?.message || error;
@@ -151,6 +155,11 @@ async function checkVpnConnectivity() {
           ? new Error(message)
           : new Error('Falha no health-check HTTP da VPN.');
       wrapped.cause = error;
+      if (error?.meta) {
+        wrapped.meta = { ...error.meta };
+      } else if (insecureContext) {
+        wrapped.meta = { ...insecureContext };
+      }
       throw wrapped;
     }
   }
@@ -398,10 +407,23 @@ async function runServiceHealthChecks() {
       onSuccess: (result) => ({
         meta: result || {},
       }),
-      onError: (_error, { message }) => {
+      onError: (error, { message }) => {
+        const context = error?.meta || error?.cause?.meta;
+        if (context?.insecureTls) {
+          const url = context.url || 'endpoint HTTP';
+          return {
+            description: `Falha na verificação da VPN/infovia (TLS inseguro habilitado para ${url}).`,
+            meta: { ...context },
+          };
+        }
         if (/não configurad/i.test(message)) {
           return {
             description: 'Configuração do health-check da VPN ausente.',
+          };
+        }
+        if (context) {
+          return {
+            meta: { ...context },
           };
         }
         return null;
