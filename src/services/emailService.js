@@ -308,6 +308,47 @@ async function enviarEmailNotificacaoDar(emailDestino, dadosDar) {
   }
 }
 
+async function enviarEmailDarAdvertencia(emailDestino, dados) {
+  const base = (process.env.BASE_URL || '').replace(/\/+$/,'');
+  const linkPortal = `${base}/dars.html`;
+  const dataVenc = fmtDataISOParaBR(dados.data_vencimento);
+  const valorBRL = BRL(dados.valor);
+  const fatosList = Array.isArray(dados.fatos)
+    ? dados.fatos.map((f) => String(f || '').trim()).filter(Boolean)
+    : [];
+  const fatosHtml = fatosList.length
+    ? `<ul>${fatosList.map((f) => `<li>${f}</li>`).join('')}</ul>`
+    : '<p>Entre em contato com a administração para mais detalhes sobre os fatos apurados.</p>';
+
+  const html = `
+    <div style="font-family:sans-serif;padding:20px;color:#333;">
+      <h1 style="color:#8B0000;">Advertência - Documento de Arrecadação</h1>
+      <p>Olá, <strong>${dados.nome_empresa}</strong>,</p>
+      <p>Foi gerado um DAR referente à advertência comunicada pela administração do CIPT.</p>
+      <div style="background:#fff3cd;border:1px solid #ffeeba;border-radius:8px;padding:16px;margin:16px 0;">
+        <p><strong>Valor:</strong> R$ ${valorBRL}</p>
+        <p><strong>Vencimento:</strong> ${dataVenc}</p>
+      </div>
+      <p><strong>Fatos registrados:</strong></p>
+      ${fatosHtml}
+      <p style="margin-top:16px;">Caso haja discordância, encaminhe sua manifestação formal respondendo este e-mail ou pelo canal oficial informado na advertência dentro do prazo estabelecido.</p>
+      <p>O DAR pode ser consultado e emitido no portal do permissionário:</p>
+      <p><a href="${linkPortal}" style="background:#0056a0;color:#fff;padding:12px 20px;border-radius:6px;text-decoration:none;">Acessar Portal</a></p>
+      <p style="margin-top:24px;font-size:12px;color:#6c757d;">Mensagem automática — não responda se já estiver tratando com o setor responsável.</p>
+    </div>
+  `;
+
+  try {
+    logger.info(`[MAIL][START] Tipo → ${emailDestino}`);
+    const info = await mailer.sendMail({ to: emailDestino, subject: 'Advertência - DAR disponível', html });
+    logger.info(`[MAIL][SUCCESS] Tipo → ${emailDestino}, id: ${info.messageId}`);
+    return true;
+  } catch (e) {
+    logger.error(`[MAIL][ERRO] DAR ADVERTENCIA → ${emailDestino}: ${formatError(e)}`);
+    return false;
+  }
+}
+
 async function enviarEmailDefinirSenha(destinatario, nomeCliente, token) {
   const base = (process.env.EVENTOS_BASE_URL || process.env.BASE_URL || '').replace(/\/+$/,'');
   const linkDefinirSenha = `${base}/definir-senha-evento.html?token=${encodeURIComponent(token)}`;
@@ -338,6 +379,7 @@ module.exports = {
   enviarEmailPrimeiroAcesso,
   enviarEmailAdvertencia,
   enviarEmailNotificacaoDar,
+  enviarEmailDarAdvertencia,
   enviarEmailDefinirSenha,
   verifySmtpConnection,
 };

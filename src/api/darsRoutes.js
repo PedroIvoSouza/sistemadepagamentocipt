@@ -83,6 +83,7 @@ async function ensureSchema() {
   await ensureColumn('dars', 'linha_digitavel', 'TEXT');
   await ensureColumn('dars', 'data_emissao', 'TEXT');
   await ensureColumn('dars', 'emitido_por_id', 'INTEGER');
+  await ensureColumn('dars', 'advertencia_fatos', 'TEXT');
   await ensureColumn('permissionarios', 'numero_documento', 'TEXT');
   await ensureColumn('permissionarios', 'telefone_cobranca', 'TEXT');
   await ensureColumn('permissionarios', 'tipo', 'TEXT');

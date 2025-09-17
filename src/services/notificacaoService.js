@@ -1,5 +1,5 @@
 // src/services/notificacaoService.js
-const { enviarEmailNotificacaoDar, enviarEmailNovaDar } = require('./emailService');
+const { enviarEmailNotificacaoDar, enviarEmailNovaDar, enviarEmailDarAdvertencia } = require('./emailService');
 const { escolherEmailDestino } = require('../utils/emailDestino');
 
 /**
@@ -25,6 +25,17 @@ async function notificarDarGerado(perm, dar, opts = { tipo: 'notificar' }) {
 
   if (opts.tipo === 'novo') {
     await enviarEmailNovaDar(emailParaEnvio, dadosDoDar);
+  } else if (opts.tipo === 'advertencia') {
+    const fatosList = Array.isArray(opts.fatos)
+      ? opts.fatos.filter((f) => String(f || '').trim()).map((f) => String(f).trim())
+      : [];
+    const advertenciaDados = {
+      nome_empresa: perm.nome_empresa,
+      data_vencimento: dar.data_vencimento,
+      valor: Number(dar.valor || 0),
+      fatos: fatosList.length ? fatosList : (String(dar.advertencia_fatos || '').split(/\r?\n/).map((f) => f.trim()).filter(Boolean))
+    };
+    await enviarEmailDarAdvertencia(emailParaEnvio, advertenciaDados);
   } else {
     // monta payload esperado por enviarEmailNotificacaoDar
     const dadosEmail = {
