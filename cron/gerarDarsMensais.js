@@ -17,39 +17,7 @@ const TEST_PERMISSIONARIO_ID = process.env.TEST_PERMISSIONARIO_ID
   : null;
 
 // ================== Datas (AL, BR) ==================
-function isFeriado(data) {
-  const dia = String(data.getDate()).padStart(2, '0');
-  const mes = String(data.getMonth() + 1).padStart(2, '0');
-  const dataStr = `${dia}/${mes}`;
-
-  const feriadosFixos = [
-    '01/01', // Confraternização Universal
-    '21/04', // Tiradentes
-    '01/05', // Dia do Trabalho
-    '24/06', // São João (AL)
-    '07/09', // Independência
-    '16/09', // Emancipação Política de Alagoas
-    '12/10', // N. Sra Aparecida
-    '02/11', // Finados
-    '15/11', // Proclamação da República
-    '25/12', // Natal
-  ];
-  return feriadosFixos.includes(dataStr);
-}
-
-function isDiaUtil(data) {
-  const w = data.getDay(); // 0 dom, 6 sáb
-  if (w === 0 || w === 6) return false;
-  if (isFeriado(data)) return false;
-  return true;
-}
-
-function getUltimoDiaUtil(ano, mes) {
-  // new Date(ano, mes, 0) => último dia do mês (mes é 1-12 aqui)
-  let d = new Date(ano, mes, 0);
-  while (!isDiaUtil(d)) d.setDate(d.getDate() - 1);
-  return d;
-}
+const { getLastBusinessDay } = require('../src/utils/businessDays');
 
 // ================== Helpers DB ==================
 function dbAll(db, sql, params = []) {
@@ -80,7 +48,7 @@ async function gerarDarsEEnviarNotificacoes() {
     const agora = new Date();
     const mesReferencia = agora.getMonth() + 1;
     const anoReferencia = agora.getFullYear();
-    const venc = getUltimoDiaUtil(anoReferencia, mesReferencia);
+    const venc = getLastBusinessDay(anoReferencia, mesReferencia);
     const vencISO = new Date(venc.getTime() - venc.getTimezoneOffset() * 60000)
       .toISOString()
       .slice(0, 10);

@@ -15,6 +15,9 @@ const fs = require('fs');
 const path = require('path');
 const { gerarComprovante } = require('../services/darComprovanteService');
 const { imprimirTokenEmPdf } = require('../utils/token');
+const { getLastBusinessDayISO, isBusinessDay, parseDateInput, formatISODate } = require('../utils/businessDays');
+const { normalizeMsisdn } = require('../utils/phone');
+const whatsappService = require('../services/whatsappService');
 
 const router = express.Router();
 
@@ -25,6 +28,77 @@ const dbAllAsync = (sql, params = []) =>
   new Promise((resolve, reject) => db.all(sql, params, (err, rows) => (err ? reject(err) : resolve(rows))));
 const dbRunAsync = (sql, params = []) =>
   new Promise((resolve, reject) => db.run(sql, params, function (err) { return err ? reject(err) : resolve(this); }));
+
+let ensuredAdvertenciaColumn = false;
+async function ensureAdvertenciaColumn() {
+  if (ensuredAdvertenciaColumn) return;
+  const cols = await dbAllAsync('PRAGMA table_info(dars)');
+  if (!cols.some((c) => String(c.name).toLowerCase() === 'advertencia_fatos')) {
+    await dbRunAsync('ALTER TABLE dars ADD COLUMN advertencia_fatos TEXT');
+  }
+  ensuredAdvertenciaColumn = true;
+}
+
+function parseCompetencia(valor) {
+  if (!valor && valor !== 0) return null;
+  const raw = String(valor).trim();
+  if (!raw) return null;
+
+  let mes;
+  let ano;
+
+  if (/^\d{4}[-\/]\d{2}$/.test(raw)) {
+    const [a, m] = raw.replace('/', '-').split('-');
+    ano = Number(a);
+    mes = Number(m);
+  } else if (/^\d{2}[-\/]\d{4}$/.test(raw)) {
+    const [m, a] = raw.replace('/', '-').split('-');
+    ano = Number(a);
+    mes = Number(m);
+  } else {
+    return null;
+  }
+
+  if (!ano || !mes || mes < 1 || mes > 12) return null;
+  return { mes, ano };
+}
+
+function normalizeValor(value, fallback) {
+  if (value === undefined || value === null || value === '') {
+    return fallback;
+  }
+  const parsed = Number(String(value).replace(',', '.'));
+  if (!Number.isFinite(parsed)) return NaN;
+  return parsed;
+}
+
+function normalizeFatosList(fatos) {
+  if (Array.isArray(fatos)) {
+    return fatos
+      .map((f) => String(f || '').trim())
+      .filter(Boolean);
+  }
+  if (fatos === undefined || fatos === null) return [];
+  return String(fatos)
+    .split(/\r?\n|;|\|/)
+    .map((f) => f.trim())
+    .filter(Boolean);
+}
+
+function competenciaString({ mes, ano }) {
+  if (!mes || !ano) return '';
+  return `${String(mes).padStart(2, '0')}/${ano}`;
+}
+
+function buildWhatsappMsisdn(perm) {
+  const raw =
+    (perm?.telefone_cobranca && String(perm.telefone_cobranca).trim()) ||
+    (perm?.telefone && String(perm.telefone).trim()) ||
+    '';
+  const normalized = normalizeMsisdn(raw);
+  if (!normalized) return null;
+  return normalized.startsWith('55') ? normalized : `55${normalized}`;
+}
 // helper: pega contribuinte conforme DAR ser de permissionário OU de evento
 async function getContribuinteEmitenteForDar(darId) {
   // 1) Busca a DAR
@@ -187,6 +261,175 @@ router.get(
     } catch (err) {
       console.error('[AdminDARs] ERRO GET /api/admin/dars:', err);
       return res.status(500).json({ error: 'Erro ao buscar os DARs.' });
+    }
+  }
+);
+
+router.post(
+  '/',
+  [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN'])],
+  async (req, res) => {
+    try {
+      const { permissionarioId, tipo, competencia, dataPagamento, valor, fatos } = req.body || {};
+      const permId = Number(permissionarioId);
+      if (!Number.isInteger(permId) || permId <= 0) {
+        return res.status(400).json({ error: 'permissionarioId inválido.' });
+      }
+
+      const tipoLower = String(tipo || '').trim().toLowerCase();
+      if (!tipoLower || !['mensalidade', 'advertencia'].includes(tipoLower)) {
+        return res.status(400).json({ error: 'Tipo inválido. Utilize Mensalidade ou Advertencia.' });
+      }
+
+      const perm = await dbGetAsync('SELECT * FROM permissionarios WHERE id = ?', [permId]);
+      if (!perm) {
+        return res.status(404).json({ error: 'Permissionário não encontrado.' });
+      }
+
+      await ensureAdvertenciaColumn();
+
+      const competenciaInfo = competencia ? parseCompetencia(competencia) : null;
+      const fatosList = normalizeFatosList(fatos);
+      let mesReferencia = competenciaInfo?.mes || null;
+      let anoReferencia = competenciaInfo?.ano || null;
+      let dataVencimentoISO = null;
+      let valorDar = null;
+      let tipoPermissionario = 'Permissionario';
+      let advertenciaFatosPersist = null;
+      const columns = ['permissionario_id', 'tipo_permissionario', 'valor', 'data_vencimento', 'status'];
+      const values = [permId, null, null, null, 'Pendente'];
+
+      if (tipoLower === 'mensalidade') {
+        if (!competenciaInfo) {
+          return res.status(400).json({ error: 'Competência inválida. Utilize YYYY-MM ou MM/YYYY.' });
+        }
+        const tipoPerm = String(perm.tipo || '').trim().toLowerCase();
+        if (tipoPerm === 'isento') {
+          return res.status(400).json({ error: 'Permissionário isento não pode receber mensalidade.' });
+        }
+        const aluguel = Number(perm.valor_aluguel || 0);
+        if (!(aluguel > 0)) {
+          return res.status(400).json({ error: 'Permissionário sem valor de aluguel configurado.' });
+        }
+
+        valorDar = normalizeValor(valor, aluguel);
+        if (!Number.isFinite(valorDar) || !(valorDar > 0)) {
+          return res.status(400).json({ error: 'Valor inválido para a mensalidade.' });
+        }
+
+        dataVencimentoISO = getLastBusinessDayISO(competenciaInfo.ano, competenciaInfo.mes);
+        tipoPermissionario = 'Permissionario';
+
+        const existente = await dbGetAsync(
+          `SELECT id FROM dars WHERE permissionario_id = ? AND mes_referencia = ? AND ano_referencia = ? AND COALESCE(tipo_permissionario,'Permissionario') != 'Advertencia'`,
+          [permId, competenciaInfo.mes, competenciaInfo.ano]
+        );
+        if (existente) {
+          return res.status(409).json({ error: 'DAR da competência informada já existe.' });
+        }
+
+        mesReferencia = competenciaInfo.mes;
+        anoReferencia = competenciaInfo.ano;
+      } else if (tipoLower === 'advertencia') {
+        valorDar = normalizeValor(valor, null);
+        if (!Number.isFinite(valorDar) || !(valorDar > 0)) {
+          return res.status(400).json({ error: 'Valor é obrigatório para advertência.' });
+        }
+        if (!fatosList.length) {
+          return res.status(400).json({ error: 'Fatos são obrigatórios para advertência.' });
+        }
+
+        const dataIndicada = dataPagamento ? parseDateInput(dataPagamento) : null;
+        if (!dataIndicada) {
+          return res.status(400).json({ error: 'Data de pagamento inválida.' });
+        }
+        if (!isBusinessDay(dataIndicada)) {
+          return res.status(400).json({ error: 'Data informada não é dia útil.' });
+        }
+
+        dataVencimentoISO = formatISODate(dataIndicada);
+        tipoPermissionario = 'Advertencia';
+        advertenciaFatosPersist = fatosList.join('\n');
+
+        if (!mesReferencia || !anoReferencia) {
+          mesReferencia = dataIndicada.getMonth() + 1;
+          anoReferencia = dataIndicada.getFullYear();
+        }
+      }
+
+      values[1] = tipoPermissionario;
+      values[2] = valorDar;
+      values[3] = dataVencimentoISO;
+
+      if (mesReferencia) {
+        columns.push('mes_referencia');
+        values.push(mesReferencia);
+      }
+      if (anoReferencia) {
+        columns.push('ano_referencia');
+        values.push(anoReferencia);
+      }
+      if (advertenciaFatosPersist) {
+        columns.push('advertencia_fatos');
+        values.push(advertenciaFatosPersist);
+      }
+
+      const placeholders = columns.map(() => '?').join(',');
+      const stmt = await dbRunAsync(
+        `INSERT INTO dars (${columns.join(',')}) VALUES (${placeholders})`,
+        values
+      );
+
+      const novoDar = await dbGetAsync('SELECT * FROM dars WHERE id = ?', [stmt.lastID]);
+
+      if (novoDar) {
+        const tipoNotificacao = tipoLower === 'advertencia' ? 'advertencia' : 'novo';
+        await notificarDarGerado(perm, novoDar, { tipo: tipoNotificacao, fatos: fatosList });
+
+        const msisdn = buildWhatsappMsisdn(perm);
+        if (msisdn) {
+          try {
+            const valorBRL = Number(novoDar.valor || 0).toLocaleString('pt-BR', {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2
+            });
+            const vencFmt = (() => {
+              try {
+                return new Date(`${novoDar.data_vencimento}T00:00:00Z`).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+              } catch {
+                return novoDar.data_vencimento;
+              }
+            })();
+            const competenciaStr = mesReferencia && anoReferencia ? competenciaString({ mes: mesReferencia, ano: anoReferencia }) : '';
+            let texto;
+            if (tipoLower === 'advertencia') {
+              texto = `CIPT - Advertência: emitimos um DAR no valor de R$ ${valorBRL} com vencimento em ${vencFmt}. Consulte o portal do permissionário para detalhes e resposta.`;
+            } else {
+              texto = `CIPT - Mensalidade: DAR da competência ${competenciaStr} disponível. Valor R$ ${valorBRL} com vencimento em ${vencFmt}. Acesse o portal para emitir o documento.`;
+            }
+            await whatsappService.sendMessage(msisdn, texto);
+          } catch (err) {
+            console.error('[AdminDARs] Falha ao enviar WhatsApp:', err?.message || err);
+          }
+        }
+      }
+
+      return res.status(201).json({
+        dar: {
+          id: stmt.lastID,
+          permissionario_id: permId,
+          tipo_permissionario: tipoPermissionario,
+          valor: valorDar,
+          data_vencimento: dataVencimentoISO,
+          status: 'Pendente',
+          mes_referencia: mesReferencia || null,
+          ano_referencia: anoReferencia || null,
+          advertencia_fatos: advertenciaFatosPersist
+        }
+      });
+    } catch (err) {
+      console.error('[AdminDARs] ERRO POST /api/admin/dars:', err);
+      return res.status(500).json({ error: 'Falha ao criar DAR.' });
     }
   }
 );
