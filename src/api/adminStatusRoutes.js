@@ -1,6 +1,7 @@
 // src/api/adminStatusRoutes.js
 const express = require('express');
 const axios = require('axios');
+const https = require('https');
 const { exec } = require('child_process');
 const { promisify } = require('util');
 
@@ -115,17 +116,30 @@ async function checkVpnConnectivity() {
   const timeout = Number(process.env.VPN_HEALTHCHECK_TIMEOUT_MS || 5000);
   const method = (process.env.VPN_HEALTHCHECK_METHOD || 'GET').toUpperCase();
 
+  const allowInsecureTls = /^true|1$/i.test(
+    (process.env.VPN_HEALTHCHECK_TLS_INSECURE || '').trim()
+  );
+
   if (url) {
     try {
+      const httpsAgent = allowInsecureTls
+        ? new https.Agent({ rejectUnauthorized: false })
+        : undefined;
       const response = await axios({
         method,
         url,
         timeout,
         validateStatus: () => true,
+        ...(httpsAgent ? { httpsAgent } : {}),
         ...(method === 'POST' ? { data: { ping: true } } : {}),
       });
       if (response.status >= 200 && response.status < 400) {
-        return { method: 'http', url, statusCode: response.status };
+        return {
+          method: 'http',
+          url,
+          statusCode: response.status,
+          insecureTls: allowInsecureTls,
+        };
       }
       const err = new Error(`Health-check HTTP ${response.status}`);
       err.response = response;
@@ -373,7 +387,10 @@ async function runServiceHealthChecks() {
       check: checkVpnConnectivity,
       successDescription: (result) => {
         if (result?.method === 'http') {
-          return `Endpoint ${result.url} respondeu com HTTP ${result.statusCode}.`;
+          const insecureNote = result?.insecureTls
+            ? ' (TLS inseguro habilitado)'
+            : '';
+          return `Endpoint ${result.url} respondeu com HTTP ${result.statusCode}${insecureNote}.`;
         }
         return `Host ${result?.host || 'VPN'} respondeu ao ping.`;
       },
