@@ -155,8 +155,9 @@ async function checkVpnConnectivity() {
           ? new Error(message)
           : new Error('Falha no health-check HTTP da VPN.');
       wrapped.cause = error;
-      if (error?.meta) {
-        wrapped.meta = { ...error.meta };
+      const meta = error?.meta || error?.cause?.meta;
+      if (meta) {
+        wrapped.meta = { ...meta };
       } else if (insecureContext) {
         wrapped.meta = { ...insecureContext };
       }
@@ -188,6 +189,47 @@ async function checkVpnConnectivity() {
     throw wrapped;
   }
 }
+
+const vpnServiceCheck = {
+  name: 'Conectividade VPN/Infovia',
+  identifier: 'vpn',
+  check: checkVpnConnectivity,
+  successDescription: (result) => {
+    if (result?.method === 'http') {
+      const insecureNote = result?.insecureTls
+        ? ' (TLS inseguro habilitado)'
+        : '';
+      return `Endpoint ${result.url} respondeu com HTTP ${result.statusCode}${insecureNote}.`;
+    }
+    return `Host ${result?.host || 'VPN'} respondeu ao ping.`;
+  },
+  failureDescription: 'Falha na verificação da VPN/infovia.',
+  onSuccess: (result) => ({
+    meta: result || {},
+  }),
+  onError: (error, { message }) => {
+    const context = error?.meta || error?.cause?.meta;
+    if (context?.insecureTls) {
+      const url = context.url || 'endpoint HTTP';
+      const insecureNote = 'TLS inseguro habilitado';
+      return {
+        description: `Falha na verificação da VPN/infovia (${insecureNote} para ${url}).`,
+        meta: { ...context },
+      };
+    }
+    if (/não configurad/i.test(message)) {
+      return {
+        description: 'Configuração do health-check da VPN ausente.',
+      };
+    }
+    if (context) {
+      return {
+        meta: { ...context },
+      };
+    }
+    return null;
+  },
+};
 
 async function checkWhatsAppService() {
   await checkWhatsAppHealth();
@@ -390,45 +432,7 @@ async function runServiceHealthChecks() {
         },
       }),
     },
-    {
-      name: 'Conectividade VPN/Infovia',
-      identifier: 'vpn',
-      check: checkVpnConnectivity,
-      successDescription: (result) => {
-        if (result?.method === 'http') {
-          const insecureNote = result?.insecureTls
-            ? ' (TLS inseguro habilitado)'
-            : '';
-          return `Endpoint ${result.url} respondeu com HTTP ${result.statusCode}${insecureNote}.`;
-        }
-        return `Host ${result?.host || 'VPN'} respondeu ao ping.`;
-      },
-      failureDescription: 'Falha na verificação da VPN/infovia.',
-      onSuccess: (result) => ({
-        meta: result || {},
-      }),
-      onError: (error, { message }) => {
-        const context = error?.meta || error?.cause?.meta;
-        if (context?.insecureTls) {
-          const url = context.url || 'endpoint HTTP';
-          return {
-            description: `Falha na verificação da VPN/infovia (TLS inseguro habilitado para ${url}).`,
-            meta: { ...context },
-          };
-        }
-        if (/não configurad/i.test(message)) {
-          return {
-            description: 'Configuração do health-check da VPN ausente.',
-          };
-        }
-        if (context) {
-          return {
-            meta: { ...context },
-          };
-        }
-        return null;
-      },
-    },
+    vpnServiceCheck,
     {
       name: 'Bot de WhatsApp',
       identifier: 'whatsapp-bot',
@@ -534,3 +538,7 @@ router.get(
 );
 
 module.exports = router;
+module.exports._private = {
+  checkVpnConnectivity,
+  vpnServiceCheck,
+};
