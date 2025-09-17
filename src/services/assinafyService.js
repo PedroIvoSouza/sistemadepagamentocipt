@@ -34,6 +34,7 @@ const http = axios.create({
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 const onlyDigits = (v='') => String(v).replace(/\D/g,'');
+const normalizeFullName = (value = '') => String(value).replace(/\s+/g, ' ').trim();
 
 function ensureOk(resp, what='request') {
   if (resp.status >= 200 && resp.status < 300) return resp.data;
@@ -124,42 +125,62 @@ async function findSignerByGovernmentId(government_id) {
   const arr = Array.isArray(ok) ? ok : ok?.data;
   return Array.isArray(arr) && arr.length ? arr[0] : null;
 }
-async function updateSignerEmail(id, email, phone) {
+async function updateSignerInfo(id, { email, phone, full_name } = {}) {
   const url = `/accounts/${ACCOUNT_ID}/signers/${encodeURIComponent(id)}`;
   const payload = {};
   if (email !== undefined) payload.email = email;
   if (phone) payload.telephone = phone;
+  const normalizedName = normalizeFullName(full_name);
+  if (normalizedName) payload.full_name = normalizedName;
   if (DEBUG) console.log('[ASSINAFY][PUT]', BASE + url, payload);
   const resp = await http.put(url, payload);
-  return ensureOk(resp, 'updateSignerEmail');
+  return ensureOk(resp, 'updateSignerInfo');
 }
 async function ensureSigner({ full_name, email, government_id, phone }) {
+  const normalizedFullName = normalizeFullName(full_name);
+  const normalizedEmail = (email || '').trim();
+  const normalizedPhone = (phone || '').trim();
   try {
-    return await createSigner({ full_name, email, government_id, phone });
+    return await createSigner({
+      full_name: normalizedFullName || full_name,
+      email: normalizedEmail || email,
+      government_id,
+      phone: normalizedPhone || phone,
+    });
   } catch (e) {
     const msg = e?.response?.data?.message || e?.message || '';
     if (/já existe/i.test(msg) || /already exists/i.test(msg) || e?.response?.status === 400) {
-      let found = await findSignerByEmail(email);
+      let found = await findSignerByEmail(normalizedEmail || email);
       if (!found && government_id) {
         found = await findSignerByGovernmentId(government_id);
       }
       if (found) {
         const domain = found.email?.split('@')[1]?.toLowerCase();
-        const normalizedEmail = (email || '').trim();
-        const normalizedPhone = (phone || '').trim();
         const foundEmail = (found.email || '').trim();
         const emailsDiffer = normalizedEmail && normalizedEmail.toLowerCase() !== foundEmail.toLowerCase();
         const shouldSyncEmail = Boolean(found.id && normalizedEmail && (emailsDiffer || domain === 'importado.placeholder'));
+        const foundNameRaw = found.full_name || found.fullName || found.name || '';
+        const normalizedFoundName = normalizeFullName(foundNameRaw);
+        const namesDiffer = Boolean(
+          normalizedFullName && normalizedFullName.toLowerCase() !== normalizedFoundName.toLowerCase()
+        );
+        const shouldSyncFullName = Boolean(found.id && normalizedFullName && (namesDiffer || !normalizedFoundName));
 
-        if (shouldSyncEmail) {
+        const shouldSync = shouldSyncEmail || shouldSyncFullName;
+
+        if (shouldSync) {
           try {
-            const updated = await updateSignerEmail(found.id, normalizedEmail, normalizedPhone || undefined);
+            const updated = await updateSignerInfo(found.id, {
+              email: shouldSyncEmail ? normalizedEmail : undefined,
+              phone: normalizedPhone || undefined,
+              full_name: shouldSyncFullName ? normalizedFullName : undefined,
+            });
             const updatedData = updated?.data || updated;
             if (updatedData && typeof updatedData === 'object') {
               found = { ...found, ...updatedData };
             }
           } catch (err) {
-            if (DEBUG) console.warn('[ASSINAFY] updateSignerEmail falhou:', err.response?.status || err.message);
+            if (DEBUG) console.warn('[ASSINAFY] updateSignerInfo falhou:', err.response?.status || err.message);
           }
           if (normalizedEmail) found.email = normalizedEmail;
           if (normalizedPhone) {
@@ -167,6 +188,18 @@ async function ensureSigner({ full_name, email, government_id, phone }) {
             else if ('phone' in found) found.phone = normalizedPhone;
             else found.telephone = normalizedPhone;
           }
+          if (normalizedFullName) {
+            if ('full_name' in found || !('fullName' in found)) found.full_name = normalizedFullName;
+            if ('fullName' in found) found.fullName = normalizedFullName;
+          }
+        }
+
+        if (normalizedFullName) {
+          found = {
+            ...found,
+            full_name: normalizedFullName,
+            ...(found.fullName !== undefined ? { fullName: normalizedFullName } : {}),
+          };
         }
 
         if (!normalizedEmail && emailsDiffer) {
@@ -423,7 +456,7 @@ module.exports = {
   createSigner,
   findSignerByEmail,
   findSignerByGovernmentId,
-  updateSignerEmail,
+  updateSignerInfo,
   ensureSigner,
 
   // assignments
