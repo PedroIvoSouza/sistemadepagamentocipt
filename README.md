@@ -81,6 +81,38 @@ Para habilitar o módulo de salas:
    - **Portal do Permissionário** (`/salas.html`): requer autenticação de um permissionário. O token `authToken` é obtido via `/login.html`.
    - **Painel de Gestão** (`/admin/salas.html`): restrito a administradores. Utilize as credenciais criadas pelo script `criar_admin.js` (padrão `supcti@secti.al.gov.br` / `Supcti@2025#`).
 
+## Assistente virtual (chat com IA)
+
+O portal agora exibe um botão de ajuda no canto inferior direito. Ao clicar, abre-se o assistente virtual com roteiros
+pré-configurados e capacidade de consultar o código do repositório quando a dúvida não estiver na base.
+
+### Como preparar o ambiente
+
+1. Defina as variáveis de ambiente:
+   - `OPENAI_API_KEY`: chave da API do modelo GPT.
+   - (Opcional) `OPENAI_MODEL` e `OPENAI_EMBEDDING_MODEL` para personalizar os modelos.
+   - (Opcional) `ASSISTANT_VECTOR_STORE` para salvar o índice vetorial em outro caminho.
+2. Gere o índice do repositório para o assistente:
+
+   ```bash
+   npm run assistant:index
+   ```
+
+   > Utilize `npm run assistant:index:dry-run` para testar o processo sem gravar arquivos.
+
+3. Reinicie o servidor para habilitar os endpoints do chat.
+
+### Endpoints
+
+- `GET /api/assistant/portal/bootstrap` e `POST /api/assistant/portal/message` — portal do permissionário.
+- `GET /api/assistant/admin/bootstrap` e `POST /api/assistant/admin/message` — painel administrativo.
+- `GET /api/assistant/eventos/bootstrap` e `POST /api/assistant/eventos/message` — portal do cliente de evento.
+- `GET /api/assistant/public/bootstrap` e `POST /api/assistant/public/message` — consultas sem autenticação.
+
+Quando a pergunta precisa acessar o código, o assistente avisa o usuário (“estou consultando o código da plataforma”) e busca a
+resposta com o índice vetorial. Se mesmo assim não for possível resolver, o chat exibe automaticamente o e-mail `supcti@secti.al.gov.br`
+para escalonamento.
+
 ## Relatório de DARs de Eventos
 
 Endpoint disponível para administradores:

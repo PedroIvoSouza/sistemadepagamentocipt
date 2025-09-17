@@ -46,6 +46,7 @@ const adminSalasRoutes      = require('./api/adminSalasRoutes');
 const advertenciasRoutes    = require('./api/advertenciasRoutes');
 const adminAdvertenciasRoutes = require('./api/adminAdvertenciasRoutes');
 const portalAdvertenciasRoutes = require('./api/portalAdvertenciasRoutes');
+const assistantRoutes        = require('./api/assistantRoutes');
 
 // Routers de assinatura do portal (exporta 2 routers)
 const portalAssin = require('./api/portalAssinaturaRoutes');
@@ -126,6 +127,9 @@ mount('/api/eventos',   'eventosRoutes',   eventosRoutes,   app);
 mount('/api/documentos','documentosRoutes',documentosRoutes,app);
 mount('/api/salas',     'salasRoutes',     salasRoutes,     app);
 mount('/api/advertencias','advertenciasRoutes',advertenciasRoutes,app);
+
+// Assistente virtual
+mount('/api/assistant', 'assistantRoutes', assistantRoutes, app);
 
 // Bot
 mount('/api/bot', 'botRoutes', botRoutes, app);

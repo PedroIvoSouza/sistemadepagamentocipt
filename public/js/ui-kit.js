@@ -132,4 +132,13 @@
   window.AppUI = { toast, loading, sheet, attachPullToRefresh, withLongTask, setupPasswordToggle };
   window.setupPasswordToggle = setupPasswordToggle;
   document.addEventListener('DOMContentLoaded', netBanner);
+
+  document.addEventListener('DOMContentLoaded', () => {
+    if (document.querySelector('script[data-assistant-widget]')) return;
+    const script = document.createElement('script');
+    script.src = '/js/assistant-widget.js';
+    script.defer = true;
+    script.dataset.assistantWidget = 'true';
+    document.body.appendChild(script);
+  });
 })();
