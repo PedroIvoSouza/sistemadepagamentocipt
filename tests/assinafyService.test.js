@@ -91,10 +91,15 @@ test('ensureSigner sincroniza e-mail quando signatário existente está desatual
 
   assert.equal(signer.email, 'novo@example.com');
   assert.equal(signer.telephone, '+5511999999999');
+  assert.equal(signer.full_name, 'Responsável');
   const putCalls = calls.filter((c) => c.method === 'put');
   assert.equal(putCalls.length, 1);
   assert.ok(putCalls[0].url.endsWith('/signers/sign-1'));
-  assert.deepEqual(putCalls[0].body, { email: 'novo@example.com', telephone: '+5511999999999' });
+  assert.deepEqual(putCalls[0].body, {
+    email: 'novo@example.com',
+    telephone: '+5511999999999',
+    full_name: 'Responsável',
+  });
 });
 
 test('ensureSigner mantém e-mail existente quando novo valor está vazio', async () => {
@@ -121,6 +126,48 @@ test('ensureSigner mantém e-mail existente quando novo valor está vazio', asyn
   });
 
   assert.equal(signer.email, 'old@example.com');
+  assert.equal(signer.full_name, 'Responsável');
   assert.equal(calls.filter((c) => c.method === 'put').length, 0);
+});
+
+test('ensureSigner sincroniza nome quando signatário existe mas nome diverge', async () => {
+  const calls = [];
+  const svc = loadService({
+    post: async (url, body) => {
+      calls.push({ method: 'post', url, body });
+      return { status: 400, data: { message: 'já existe um signatário com este e-mail.' } };
+    },
+    get: async (url, opts) => {
+      calls.push({ method: 'get', url, params: opts?.params });
+      return {
+        status: 200,
+        data: [
+          { id: 'sign-3', email: 'mesmo@example.com', telephone: '+5511777777777', full_name: 'Nome Antigo' },
+        ],
+      };
+    },
+    put: async (url, body) => {
+      calls.push({ method: 'put', url, body });
+      return { status: 200, data: { id: 'sign-3', ...body } };
+    },
+  });
+
+  const signer = await svc.ensureSigner({
+    full_name: '  Nome Novo  ',
+    email: 'mesmo@example.com',
+    government_id: '11122233344',
+    phone: '+5511666666666',
+  });
+
+  assert.equal(signer.full_name, 'Nome Novo');
+  assert.equal(signer.email, 'mesmo@example.com');
+  assert.equal(signer.telephone, '+5511666666666');
+  const putCalls = calls.filter((c) => c.method === 'put');
+  assert.equal(putCalls.length, 1);
+  assert.ok(putCalls[0].url.endsWith('/signers/sign-3'));
+  assert.deepEqual(putCalls[0].body, {
+    telephone: '+5511666666666',
+    full_name: 'Nome Novo',
+  });
 });
 
