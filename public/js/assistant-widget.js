@@ -275,20 +275,79 @@
   function renderSuggestions() {
     const wrap = document.getElementById(SELECTORS.suggestions);
     if (!wrap) return;
+    if (wrap._assistantResizeHandler) {
+      window.removeEventListener('resize', wrap._assistantResizeHandler);
+      delete wrap._assistantResizeHandler;
+    }
+
     wrap.innerHTML = '';
     if (!Array.isArray(state.suggestions) || !state.suggestions.length) {
-      wrap.style.display = 'none';
+      wrap.setAttribute('hidden', 'hidden');
       return;
     }
-    wrap.style.display = 'flex';
-    state.suggestions.forEach((suggestion) => {
+
+    wrap.removeAttribute('hidden');
+
+    const track = document.createElement('div');
+    track.className = 'assistant-suggestions-track';
+    track.setAttribute('role', 'list');
+
+    const createSuggestionButton = (suggestion) => {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.textContent = suggestion.question || suggestion.title;
+      btn.setAttribute('role', 'listitem');
       btn.addEventListener('click', () => {
         sendUserMessage(suggestion.question || suggestion.title);
       });
-      wrap.appendChild(btn);
+      track.appendChild(btn);
+    };
+
+    state.suggestions.forEach(createSuggestionButton);
+
+    const prevBtn = document.createElement('button');
+    prevBtn.type = 'button';
+    prevBtn.className = 'assistant-suggestions-nav prev';
+    prevBtn.setAttribute('aria-label', 'Ver sugestões anteriores');
+    prevBtn.innerHTML = '<span aria-hidden="true">‹</span>';
+
+    const nextBtn = document.createElement('button');
+    nextBtn.type = 'button';
+    nextBtn.className = 'assistant-suggestions-nav next';
+    nextBtn.setAttribute('aria-label', 'Ver próximas sugestões');
+    nextBtn.innerHTML = '<span aria-hidden="true">›</span>';
+
+    const scrollByAmount = (direction) => {
+      const amount = Math.max(track.clientWidth * 0.8, 160);
+      track.scrollBy({ left: direction * amount, behavior: 'smooth' });
+    };
+
+    prevBtn.addEventListener('click', () => scrollByAmount(-1));
+    nextBtn.addEventListener('click', () => scrollByAmount(1));
+
+    const updateNavState = () => {
+      const maxScrollLeft = Math.max(track.scrollWidth - track.clientWidth, 0);
+      const hasOverflow = maxScrollLeft > 0;
+      prevBtn.hidden = nextBtn.hidden = !hasOverflow;
+      if (!hasOverflow) return;
+      const current = track.scrollLeft;
+      const threshold = 4;
+      prevBtn.disabled = current <= threshold;
+      nextBtn.disabled = current >= maxScrollLeft - threshold;
+    };
+
+    track.addEventListener('scroll', () => updateNavState(), { passive: true });
+
+    wrap._assistantResizeHandler = () => updateNavState();
+    window.addEventListener('resize', wrap._assistantResizeHandler);
+
+    wrap.appendChild(prevBtn);
+    wrap.appendChild(track);
+    wrap.appendChild(nextBtn);
+
+    requestAnimationFrame(() => {
+      track.scrollLeft = 0;
+      updateNavState();
     });
   }
 
