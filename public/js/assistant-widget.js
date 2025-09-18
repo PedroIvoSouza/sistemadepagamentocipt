@@ -153,16 +153,30 @@
     }
   }
 
+  function createMessageElement(msg = {}) {
+    const el = document.createElement('div');
+    const classes = ['assistant-message', msg.role === 'user' ? 'user' : 'bot'];
+    if (msg.type) classes.push(msg.type);
+    el.className = classes.filter(Boolean).join(' ');
+
+    const text = msg.text;
+    if (typeof text === 'string') {
+      el.textContent = text;
+    } else if (text != null) {
+      el.textContent = String(text);
+    } else {
+      el.textContent = '';
+    }
+
+    return el;
+  }
+
   function renderMessages() {
     const container = document.getElementById(SELECTORS.messages);
     if (!container) return;
-    container.innerHTML = '';
-    state.messages?.forEach((msg) => {
-      const el = document.createElement('div');
-      el.className = `assistant-message ${msg.role === 'user' ? 'user' : 'bot'} ${msg.type || ''}`.trim();
-      el.innerHTML = msg.text;
-      container.appendChild(el);
-    });
+
+    const nodes = (state.messages || []).map(createMessageElement);
+    container.replaceChildren(...nodes);
     container.scrollTop = container.scrollHeight;
   }
 
