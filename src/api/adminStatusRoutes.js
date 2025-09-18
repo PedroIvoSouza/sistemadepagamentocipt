@@ -116,7 +116,7 @@ async function checkVpnConnectivity() {
   const timeout = Number(process.env.VPN_HEALTHCHECK_TIMEOUT_MS || 5000);
   const method = (process.env.VPN_HEALTHCHECK_METHOD || 'GET').toUpperCase();
 
-  const allowInsecureTls = /^true|1$/i.test(
+  const allowInsecureTls = /^(true|1)$/i.test(
     (process.env.VPN_HEALTHCHECK_TLS_INSECURE || '').trim()
   );
 
