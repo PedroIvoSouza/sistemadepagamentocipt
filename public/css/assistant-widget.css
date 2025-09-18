@@ -93,7 +93,30 @@
   line-height: 1.45;
   font-size: 0.92rem;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-  white-space: pre-line;
+  white-space: normal;
+}
+
+.assistant-message p {
+  margin: 0 0 0.6em;
+}
+
+.assistant-message p:last-child {
+  margin-bottom: 0;
+}
+
+.assistant-message ul,
+.assistant-message ol {
+  margin: 0.25em 0 0.6em 1.25em;
+  padding: 0;
+}
+
+.assistant-message ul:last-child,
+.assistant-message ol:last-child {
+  margin-bottom: 0;
+}
+
+.assistant-message li {
+  margin: 0.2em 0;
 }
 
 .assistant-message.user {

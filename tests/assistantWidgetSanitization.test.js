@@ -37,18 +37,20 @@ test('assistant widget sanitizes rendered messages', async () => {
   global.localStorage = window.localStorage;
   global.navigator = window.navigator;
 
-  window.fetch = createMockFetch(
-    [
-      {
-        audience: 'permissionario',
-        context: {},
-        suggestions: [],
-      },
-      {
-        reply: 'Resposta com <script>alert(1)</script> & <b>negrito</b>.',
-      },
-    ],
-  );
+  window.fetch = createMockFetch([
+    {
+      audience: 'permissionario',
+      context: {},
+      suggestions: [
+        { question: 'Baixar uma DAR pendente' },
+        { question: 'Emitir certidão' },
+      ],
+    },
+    {
+      reply:
+        'Aqui vai um resumo com **destaques**:\n1. Abrir o menu principal\n2. Escolher a opção correta\n\nCuidado com <script>alert(1)</script> & outras tags.',
+    },
+  ]);
   global.fetch = window.fetch;
 
   const scriptPath = path.resolve(__dirname, '../public/js/assistant-widget.js');
@@ -72,11 +74,10 @@ test('assistant widget sanitizes rendered messages', async () => {
   await flush(window, 5);
 
   const messages = [...window.document.querySelectorAll('.assistant-message')];
-  assert.ok(messages.length >= 2, 'expected at least two messages');
+  assert.ok(messages.length >= 3, 'expected greeting, user and assistant messages');
 
   messages.forEach((el) => {
     assert.ok(!el.innerHTML.includes('<script'), 'raw <script> should not appear in HTML');
-    assert.ok(!el.innerHTML.includes('<b>negrito</b>'), 'raw HTML markup should not be preserved');
   });
 
   const scriptsInMessages = window.document.querySelectorAll('.assistant-message script');
@@ -90,11 +91,22 @@ test('assistant widget sanitizes rendered messages', async () => {
   );
 
   const assistantReply = messages.find(
-    (el) => el.classList.contains('bot') && el.textContent.includes('Resposta com'),
+    (el) => el.classList.contains('bot') && el.textContent.includes('Aqui vai um resumo'),
   );
   assert.ok(assistantReply, 'assistant reply should exist');
   assert.ok(
-    assistantReply.textContent.includes('Resposta com <script>alert(1)</script> & <b>negrito</b>.'),
+    assistantReply.textContent.includes('Cuidado com <script>alert(1)</script> & outras tags.'),
     'assistant reply should render as text without executing HTML',
+  );
+
+  const bold = assistantReply.querySelector('strong');
+  assert.ok(bold, 'assistant reply should render strong elements from markdown');
+  assert.strictEqual(bold.textContent, 'destaques');
+
+  const orderedListItems = assistantReply.querySelectorAll('ol li');
+  assert.strictEqual(orderedListItems.length, 2, 'assistant reply should render ordered list items');
+  assert.ok(
+    orderedListItems[0].textContent.startsWith('Abrir o menu principal'),
+    'first list item should contain the first step',
   );
 });
