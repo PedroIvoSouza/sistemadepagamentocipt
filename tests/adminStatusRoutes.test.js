@@ -116,6 +116,52 @@ test('checkVpnConnectivity reports insecure TLS on success responses', async () 
   delete require.cache[modulePath];
 });
 
+test('checkVpnConnectivity strictly matches TLS insecure flag values', async () => {
+  const axiosStub = async () => ({ status: 204 });
+  const { mod, modulePath } = loadAdminStatusRoutesWithAxiosStub(axiosStub);
+  const { checkVpnConnectivity } = mod._private;
+
+  const baseEnv = {
+    VPN_HEALTHCHECK_URL: 'https://vpn.example/ping',
+    VPN_HEALTHCHECK_METHOD: 'get',
+    VPN_HEALTHCHECK_TIMEOUT_MS: '1000',
+  };
+
+  const truthyCases = ['true', 'TRUE', '  true  ', ' 1 '];
+  for (const value of truthyCases) {
+    // eslint-disable-next-line no-await-in-loop
+    await withVpnEnv(
+      { ...baseEnv, VPN_HEALTHCHECK_TLS_INSECURE: value },
+      async () => {
+        const result = await checkVpnConnectivity();
+        assert.equal(
+          result.insecureTls,
+          true,
+          `Expected "${value}" to enable insecure TLS`,
+        );
+      },
+    );
+  }
+
+  const falsyCases = ['false', 'false1', '01', ' 0 ', '', 'true1'];
+  for (const value of falsyCases) {
+    // eslint-disable-next-line no-await-in-loop
+    await withVpnEnv(
+      { ...baseEnv, VPN_HEALTHCHECK_TLS_INSECURE: value },
+      async () => {
+        const result = await checkVpnConnectivity();
+        assert.equal(
+          result.insecureTls,
+          false,
+          `Expected "${value}" to keep insecure TLS disabled`,
+        );
+      },
+    );
+  }
+
+  delete require.cache[modulePath];
+});
+
 test('checkVpnConnectivity propagates insecure TLS context on failures', async () => {
   const axiosStub = async () => ({ status: 503 });
   const { mod, modulePath } = loadAdminStatusRoutesWithAxiosStub(axiosStub);
