@@ -574,14 +574,14 @@ async function checkSefazHealth() {
     RECEITA_CODIGO_EVENTO_PF,
     RECEITA_CODIGO_EVENTO_PJ,
   ]
-    .map((cod) => onlyDigits(cod))
-    .filter((cod) => !!cod);
+    .map((cod) => normalizeCodigoReceita(cod))
+    .filter((cod) => Number.isFinite(cod) && cod > 0);
 
   if (!candidatos.length) {
     throw new Error('Nenhum código de receita configurado para health-check da SEFAZ.');
   }
 
-  const codigo = candidatos[0];
+  const codigo = Number(candidatos[0]);
   const { data } = await reqWithRetry(
     () => sefaz.get('/api/public/receita/consultar', { params: { codigo } }),
     'health-check'
