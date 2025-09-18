@@ -153,6 +153,97 @@
     }
   }
 
+  function renderInlineMarkdown(text) {
+    const fragment = document.createDocumentFragment();
+    const source = typeof text === 'string' ? text : String(text || '');
+    const regex = /\*\*(.+?)\*\*/g;
+    let lastIndex = 0;
+    let match;
+
+    while ((match = regex.exec(source))) {
+      if (match.index > lastIndex) {
+        fragment.appendChild(document.createTextNode(source.slice(lastIndex, match.index)));
+      }
+      const strong = document.createElement('strong');
+      strong.textContent = match[1];
+      fragment.appendChild(strong);
+      lastIndex = regex.lastIndex;
+    }
+
+    if (lastIndex < source.length) {
+      fragment.appendChild(document.createTextNode(source.slice(lastIndex)));
+    }
+
+    if (!fragment.childNodes.length) {
+      fragment.appendChild(document.createTextNode(''));
+    }
+
+    return fragment;
+  }
+
+  function createMarkdownFragment(markdown) {
+    const fragment = document.createDocumentFragment();
+    if (markdown == null) {
+      fragment.appendChild(document.createTextNode(''));
+      return fragment;
+    }
+
+    const source = typeof markdown === 'string' ? markdown : String(markdown);
+    const lines = source.replace(/\r\n?/g, '\n').split('\n');
+    let listEl = null;
+    let listType = null;
+
+    function flushList() {
+      if (listEl) {
+        fragment.appendChild(listEl);
+        listEl = null;
+        listType = null;
+      }
+    }
+
+    lines.forEach((rawLine) => {
+      const line = rawLine.trimEnd();
+      const bulletMatch = line.match(/^\s*[-*]\s+(.*)$/);
+      const orderedMatch = line.match(/^\s*(\d+)\.\s+(.*)$/);
+
+      if (bulletMatch || orderedMatch) {
+        const type = bulletMatch ? 'ul' : 'ol';
+        const content = bulletMatch ? bulletMatch[1] : orderedMatch[2];
+        if (!listEl || listType !== type) {
+          flushList();
+          listEl = document.createElement(type);
+          listType = type;
+        }
+        const li = document.createElement('li');
+        li.appendChild(renderInlineMarkdown(content));
+        listEl.appendChild(li);
+        return;
+      }
+
+      flushList();
+
+      if (!line.trim()) {
+        const last = fragment.lastChild;
+        if (last && last.nodeName === 'BR') return;
+        if (!fragment.childNodes.length) return;
+        fragment.appendChild(document.createElement('br'));
+        return;
+      }
+
+      const paragraph = document.createElement('p');
+      paragraph.appendChild(renderInlineMarkdown(line));
+      fragment.appendChild(paragraph);
+    });
+
+    flushList();
+
+    if (!fragment.childNodes.length) {
+      fragment.appendChild(document.createTextNode(''));
+    }
+
+    return fragment;
+  }
+
   function createMessageElement(msg = {}) {
     const el = document.createElement('div');
     const classes = ['assistant-message', msg.role === 'user' ? 'user' : 'bot'];
@@ -160,13 +251,8 @@
     el.className = classes.filter(Boolean).join(' ');
 
     const text = msg.text;
-    if (typeof text === 'string') {
-      el.textContent = text;
-    } else if (text != null) {
-      el.textContent = String(text);
-    } else {
-      el.textContent = '';
-    }
+    const contentFragment = createMarkdownFragment(text);
+    el.replaceChildren(contentFragment);
 
     return el;
   }
