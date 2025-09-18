@@ -344,9 +344,10 @@
     createPanel();
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
+  const { readyState } = document;
+  if (readyState === 'interactive' || readyState === 'complete') {
     init();
+  } else {
+    document.addEventListener('DOMContentLoaded', init, { once: true });
   }
 })();
