@@ -16,6 +16,7 @@ const EXCLUDE_DIRS = new Set([
   '.github',
   '.idea',
   '.vscode',
+  '.yarn',
   'config/assistant',
   'sistemadepagamentocipt',
   'extrator-termos-drive',
