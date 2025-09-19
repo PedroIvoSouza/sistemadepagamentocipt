@@ -274,7 +274,13 @@
                 <div class="status-wrapper" id="statusContent">
                     <div class="status-header">
                         <h1 class="h2 mb-0">Status dos Serviços</h1>
-                        <p id="lastUpdated" class="last-update">—</p>
+                        <div class="d-flex flex-wrap align-items-center justify-content-end gap-2">
+                            <p id="lastUpdated" class="last-update mb-0">—</p>
+                            <button id="refreshStatusButton" type="button" class="btn btn-outline-primary btn-sm">
+                                <i class="bi bi-arrow-clockwise"></i>
+                                Atualizar status
+                            </button>
+                        </div>
                     </div>
                     <div id="statusAlert" class="alert alert-warning status-alert" role="alert"></div>
                     <div id="statusLoading" class="status-loading" role="status" aria-live="polite">
@@ -301,9 +307,10 @@
         const lastUpdatedEl = document.getElementById('lastUpdated');
         const adminNameEl = document.getElementById('adminName');
         const statusLoading = document.getElementById('statusLoading');
+        const refreshButton = document.getElementById('refreshStatusButton');
 
-        const REFRESH_INTERVAL = 30000; // 30s
-        let refreshTimer = null;
+        const SNAPSHOT_STORAGE_KEY = 'adminServiceStatus:lastSnapshot';
+        let hasRenderedOnce = false;
 
         const showAlert = (message, type = 'warning') => {
             statusAlert.textContent = message;
@@ -327,12 +334,16 @@
 
         const showLoading = () => {
             statusLoading?.classList.add('active');
-            statusCards?.classList.add('is-hidden');
+            if (!hasRenderedOnce) {
+                statusCards?.classList.add('is-hidden');
+            }
+            refreshButton?.setAttribute('disabled', 'disabled');
         };
 
         const hideLoading = () => {
             statusLoading?.classList.remove('active');
             statusCards?.classList.remove('is-hidden');
+            refreshButton?.removeAttribute('disabled');
         };
 
         showLoading();
@@ -467,6 +478,35 @@
             });
         };
 
+        const persistSnapshot = (services) => {
+            try {
+                const payload = {
+                    services,
+                    updatedAt: new Date().toISOString()
+                };
+                localStorage.setItem(SNAPSHOT_STORAGE_KEY, JSON.stringify(payload));
+            } catch (error) {
+                console.warn('Não foi possível armazenar o status localmente.', error);
+            }
+        };
+
+        const restoreSnapshot = () => {
+            try {
+                const cached = localStorage.getItem(SNAPSHOT_STORAGE_KEY);
+                if (!cached) return;
+                const snapshot = JSON.parse(cached);
+                if (!snapshot?.services?.length) return;
+                renderServices(snapshot.services);
+                if (snapshot.updatedAt) {
+                    updateLastUpdated(new Date(snapshot.updatedAt));
+                }
+                hasRenderedOnce = true;
+                hideLoading();
+            } catch (error) {
+                console.warn('Não foi possível restaurar o status salvo.', error);
+            }
+        };
+
         const fetchStatus = async () => {
             showLoading();
             try {
@@ -483,6 +523,8 @@
                 }));
                 renderServices(services);
                 updateLastUpdated();
+                hasRenderedOnce = true;
+                persistSnapshot(services);
             } catch (error) {
                 console.error('Erro ao buscar status dos serviços:', error);
                 showAlert('Não foi possível atualizar o status dos serviços. Tentaremos novamente em instantes.', 'danger');
@@ -494,20 +536,6 @@
                 }
             } finally {
                 hideLoading();
-            }
-        };
-
-        const startPolling = () => {
-            if (refreshTimer) {
-                clearInterval(refreshTimer);
-            }
-            refreshTimer = setInterval(fetchStatus, REFRESH_INTERVAL);
-        };
-
-        const stopPolling = () => {
-            if (refreshTimer) {
-                clearInterval(refreshTimer);
-                refreshTimer = null;
             }
         };
 
@@ -551,21 +579,13 @@
             return;
         }
 
-        document.addEventListener('visibilitychange', () => {
-            if (document.hidden) {
-                stopPolling();
-            } else {
-                fetchStatus();
-                startPolling();
-            }
-        });
+        restoreSnapshot();
 
-        window.addEventListener('beforeunload', () => {
-            stopPolling();
+        refreshButton?.addEventListener('click', () => {
+            fetchStatus();
         });
 
         await fetchStatus();
-        startPolling();
     });
     </script>
 </body>
