@@ -15,7 +15,7 @@ function stubModule(modulePath, exports) {
   };
 }
 
-function loadAdminStatusRoutesWithAxiosStub(stub) {
+function loadAdminStatusRoutesWithAxiosStub(stub, options = {}) {
   const modulePath = require.resolve('../src/api/adminStatusRoutes.js');
   delete require.cache[modulePath];
 
@@ -46,6 +46,10 @@ function loadAdminStatusRoutesWithAxiosStub(stub) {
       fetchCepAddress: async () => ({}),
     }),
   ];
+
+  if (options.childProcess) {
+    restoreStubs.push(stubModule('child_process', options.childProcess));
+  }
 
   const axiosPath = require.resolve('axios');
   const originalAxiosModule = require.cache[axiosPath];
@@ -189,6 +193,85 @@ test('checkVpnConnectivity propagates insecure TLS context on failures', async (
       const extra = vpnServiceCheck.onError({ meta: context }, { message: captured.message });
       assert.match(extra.description, /TLS inseguro habilitado/);
       assert.deepEqual(extra.meta, context);
+    },
+  );
+
+  delete require.cache[modulePath];
+});
+
+test('checkVpnConnectivity faz fallback para ping quando HTTP falha', async () => {
+  const axiosStub = async () => ({ status: 503 });
+  const execStub = {
+    exec: (command, options, callback) => {
+      const cb = typeof options === 'function' ? options : callback;
+      setImmediate(() => cb(null, { stdout: 'ok', stderr: '' }));
+      return { command };
+    },
+  };
+  const { mod, modulePath } = loadAdminStatusRoutesWithAxiosStub(axiosStub, {
+    childProcess: execStub,
+  });
+  const { checkVpnConnectivity, vpnServiceCheck } = mod._private;
+
+  await withVpnEnv(
+    {
+      VPN_HEALTHCHECK_URL: 'https://vpn.example/health',
+      VPN_HEALTHCHECK_METHOD: 'get',
+      VPN_HEALTHCHECK_TIMEOUT_MS: '1000',
+      VPN_HEALTHCHECK_HOST: 'vpn.local',
+    },
+    async () => {
+      const result = await checkVpnConnectivity();
+      assert.equal(result.method, 'ping');
+      assert.equal(result.fallbackFrom, 'http');
+      assert.match(result.previousHttpError, /Health-check HTTP 503/);
+
+      const description = vpnServiceCheck.successDescription(result);
+      assert.match(description, /falha do endpoint HTTP/);
+
+      const meta = vpnServiceCheck.onSuccess(result).meta;
+      assert.equal(meta.method, 'ping');
+      assert.equal(meta.host, 'vpn.local');
+      assert.equal(meta.fallbackFrom, 'http');
+      assert.match(meta.previousHttpError, /HTTP 503/);
+    },
+  );
+
+  delete require.cache[modulePath];
+});
+
+test('checkVpnConnectivity relata falha combinada quando HTTP e ping falham', async () => {
+  const axiosStub = async () => {
+    throw new Error('Erro HTTP simulado');
+  };
+  const execStub = {
+    exec: (command, options, callback) => {
+      const cb = typeof options === 'function' ? options : callback;
+      setImmediate(() => cb(new Error('Falha no ping simulado')));
+      return { command };
+    },
+  };
+  const { mod, modulePath } = loadAdminStatusRoutesWithAxiosStub(axiosStub, {
+    childProcess: execStub,
+  });
+  const { checkVpnConnectivity } = mod._private;
+
+  await withVpnEnv(
+    {
+      VPN_HEALTHCHECK_URL: 'https://vpn.example/health',
+      VPN_HEALTHCHECK_METHOD: 'get',
+      VPN_HEALTHCHECK_TIMEOUT_MS: '1000',
+      VPN_HEALTHCHECK_HOST: 'vpn.local',
+    },
+    async () => {
+      await assert.rejects(checkVpnConnectivity, (err) => {
+        assert.match(err.message, /health-check HTTP \(Erro HTTP simulado\)/);
+        assert.match(err.message, /ping \(Falha no ping simulado\)/);
+        assert.equal(err.meta.host, 'vpn.local');
+        assert.ok(err.cause.http instanceof Error);
+        assert.ok(err.cause.ping instanceof Error);
+        return true;
+      });
     },
   );
 
