@@ -17,15 +17,32 @@ async function getIndexDefinitions(sequelize, tableName) {
   return rows || [];
 }
 
+function normalizeIdentifier(identifier) {
+  return String(identifier || '').toLowerCase().replace(/[\"'`\[\]]/g, '');
+}
+
 function buildCreateTableSql(baseSql, newTableName, referencedTableName) {
   const withTableName = baseSql.replace(
     /CREATE\s+TABLE\s+(IF\s+NOT\s+EXISTS\s+)?(["'`]?)(DARs_Eventos)\2/i,
     (_, ifNotExists = '', quote = '') => `CREATE TABLE ${ifNotExists || ''}${quote}${newTableName}${quote}`
   );
 
-  return withTableName
-    .replace(/REFERENCES\s+(["'`]?)(Eventos_old)\1/gi, `REFERENCES ${referencedTableName}`)
-    .replace(/REFERENCES\s+(["'`]?)(Eventos)\1/gi, `REFERENCES ${referencedTableName}`);
+  return withTableName.replace(/REFERENCES\s+([^\s(]+)/gi, (match, target) => {
+    const segments = target.split('.');
+    const lastSegment = segments[segments.length - 1];
+    const normalized = normalizeIdentifier(lastSegment);
+
+    if (normalized === 'eventos_old' || normalized === 'eventos') {
+      const quoteChar = ['"', '\'', '`', '['].includes(lastSegment[0]) ? lastSegment[0] : '';
+      const closingQuote = quoteChar === '[' ? ']' : quoteChar;
+      const replacement = quoteChar
+        ? `${quoteChar}${referencedTableName}${closingQuote}`
+        : referencedTableName;
+      return `REFERENCES ${replacement}`;
+    }
+
+    return match;
+  });
 }
 
 function normalizeIndexSql(sql, tableName) {
@@ -41,7 +58,7 @@ module.exports = {
     try {
       const [fkRows] = await sequelize.query(`PRAGMA foreign_key_list('DARs_Eventos');`);
       const needsRewrite = Array.isArray(fkRows)
-        && fkRows.some(row => String(row.table || '').toLowerCase() === 'eventos_old');
+        && fkRows.some(row => normalizeIdentifier(row.table).endsWith('eventos_old'));
 
       if (!needsRewrite) {
         return;
@@ -81,7 +98,7 @@ module.exports = {
     try {
       const [fkRows] = await sequelize.query(`PRAGMA foreign_key_list('DARs_Eventos');`);
       const needsRollback = Array.isArray(fkRows)
-        && fkRows.some(row => String(row.table || '').toLowerCase() === 'eventos');
+        && fkRows.some(row => normalizeIdentifier(row.table).endsWith('eventos'));
 
       if (!needsRollback) {
         return;
