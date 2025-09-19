@@ -47,6 +47,7 @@ test('checkSefazHealth aceita código com dígito verificador', async () => {
     'RECEITA_CODIGO_EVENTO',
     'RECEITA_CODIGO_EVENTO_PF',
     'RECEITA_CODIGO_EVENTO_PJ',
+    'SEFAZ_MIN_CONSULTA_INTERVAL_MS',
   ];
   const previousEnv = {};
   for (const key of envKeys) {
@@ -59,6 +60,7 @@ test('checkSefazHealth aceita código com dígito verificador', async () => {
   process.env.RECEITA_CODIGO_EVENTO = '';
   process.env.RECEITA_CODIGO_EVENTO_PF = '';
   process.env.RECEITA_CODIGO_EVENTO_PJ = '';
+  process.env.SEFAZ_MIN_CONSULTA_INTERVAL_MS = '0';
 
   const calls = [];
   const { checkSefazHealth, restore } = withAxiosMock(async (url, options) => {
