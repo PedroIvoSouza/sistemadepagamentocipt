@@ -120,6 +120,8 @@ async function checkVpnConnectivity() {
     (process.env.VPN_HEALTHCHECK_TLS_INSECURE || '').trim()
   );
 
+  let httpError;
+
   if (url) {
     const insecureContext = allowInsecureTls
       ? { insecureTls: true, method: 'http', url }
@@ -161,13 +163,25 @@ async function checkVpnConnectivity() {
       } else if (insecureContext) {
         wrapped.meta = { ...insecureContext };
       }
-      throw wrapped;
+      httpError = wrapped;
     }
   }
 
   const host = (process.env.VPN_HEALTHCHECK_HOST || '').trim();
-  if (!host) {
+  if (!url && !host) {
     throw new Error('VPN_HEALTHCHECK_URL ou VPN_HEALTHCHECK_HOST não configurados.');
+  }
+
+  if (!host) {
+    if (httpError) {
+      const err = new Error('Falha no health-check HTTP da VPN e ping não configurado.');
+      err.cause = httpError;
+      if (httpError.meta) {
+        err.meta = { ...httpError.meta };
+      }
+      throw err;
+    }
+    throw new Error('VPN_HEALTHCHECK_HOST não configurado.');
   }
 
   const seconds = Math.max(1, Math.ceil(timeout / 1000));
@@ -178,7 +192,15 @@ async function checkVpnConnectivity() {
 
   try {
     await execAsync(command, { timeout: timeout + 1000 });
-    return { method: 'ping', host };
+    const result = { method: 'ping', host };
+    if (httpError) {
+      result.fallbackFrom = 'http';
+      result.previousHttpError = httpError.message || 'Falha desconhecida no HTTP.';
+      if (httpError.meta) {
+        result.previousHttpMeta = { ...httpError.meta };
+      }
+    }
+    return result;
   } catch (error) {
     const message = error?.message || error;
     const wrapped =
@@ -186,6 +208,22 @@ async function checkVpnConnectivity() {
         ? new Error(message)
         : new Error('Falha no ping da VPN.');
     wrapped.cause = error;
+
+    if (httpError) {
+      const httpMessage = httpError.message || 'falha desconhecida';
+      const pingMessage = wrapped.message || 'falha desconhecida';
+      const combinedMessage = `Falha no health-check HTTP (${httpMessage}) e no ping (${pingMessage}).`;
+      const combined = new Error(combinedMessage);
+      combined.cause = { http: httpError, ping: wrapped };
+      const meta = { host };
+      if (httpError.meta) {
+        Object.assign(meta, httpError.meta);
+      }
+      combined.meta = meta;
+      throw combined;
+    }
+
+    wrapped.meta = { host };
     throw wrapped;
   }
 }
@@ -201,7 +239,11 @@ const vpnServiceCheck = {
         : '';
       return `Endpoint ${result.url} respondeu com HTTP ${result.statusCode}${insecureNote}.`;
     }
-    return `Host ${result?.host || 'VPN'} respondeu ao ping.`;
+    const fallbackNote =
+      result?.fallbackFrom === 'http'
+        ? ' após falha do endpoint HTTP'
+        : '';
+    return `Host ${result?.host || 'VPN'} respondeu ao ping${fallbackNote}.`;
   },
   failureDescription: 'Falha na verificação da VPN/infovia.',
   onSuccess: (result) => ({
