@@ -97,6 +97,36 @@ sefaz.interceptors.request.use((request) => {
    ========================== */
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+const MIN_CONSULTA_INTERVAL_MS = (() => {
+  const parsed = Number(process.env.SEFAZ_MIN_CONSULTA_INTERVAL_MS ?? 180000);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 180000;
+})();
+
+let nextConsultaDisponivel = 0;
+let consultaFila = Promise.resolve();
+
+async function agendarConsulta(fn, label = 'consulta-sefaz') {
+  const executar = async () => {
+    while (true) {
+      const agora = Date.now();
+      const espera = nextConsultaDisponivel - agora;
+      if (espera <= 0) break;
+      console.log(`[SEFAZ][${label}] aguardando ${espera}ms para respeitar intervalo mínimo.`);
+      await sleep(espera);
+    }
+
+    try {
+      return await fn();
+    } finally {
+      nextConsultaDisponivel = Date.now() + MIN_CONSULTA_INTERVAL_MS;
+    }
+  };
+
+  const promessa = consultaFila.then(executar);
+  consultaFila = promessa.catch(() => {});
+  return promessa;
+}
+
 function cleanHeaderValue(s) {
   return (s ?? '').toString().replace(/[\r\n]/g, '').trim();
 }
@@ -486,8 +516,11 @@ async function emitirGuiaSefaz(...args) {
 async function consultarReceita(codigo) {
   const cod = normalizeCodigoReceita(codigo);
   try {
-    const { data } = await reqWithRetry(
-      () => sefaz.get('/api/public/receita/consultar', { params: { codigo: cod } }),
+    const { data } = await agendarConsulta(
+      () => reqWithRetry(
+        () => sefaz.get('/api/public/receita/consultar', { params: { codigo: cod } }),
+        'receita/consultar'
+      ),
       'receita/consultar'
     );
     return data;
@@ -526,8 +559,11 @@ async function listarPagamentosPorDataArrecadacao(dataInicioISO, dataFimISO, cod
   const payload = { dataInicioArrecadacao: dataInicioISO, dataFimArrecadacao: dataFimISO };
   if (codigoReceita) payload.codigoReceita = normalizeCodigoReceita(codigoReceita);
 
-  const { data } = await reqWithRetry(
-    () => sefaz.post('/api/public/v2/guia/pagamento/por-data-arrecadacao', payload),
+  const { data } = await agendarConsulta(
+    () => reqWithRetry(
+      () => sefaz.post('/api/public/v2/guia/pagamento/por-data-arrecadacao', payload),
+      'pagamento/por-data-arrecadacao'
+    ),
     'pagamento/por-data-arrecadacao'
   );
 
@@ -541,8 +577,11 @@ async function consultarPagamentoPorCodigoBarras(numeroGuia, linhaDigitavel) {
   if (linhaDigitavel) payload.linhaDigitavel = onlyDigits(linhaDigitavel);
   if (!payload.numeroGuia && !payload.linhaDigitavel) return null;
 
-  const { data } = await reqWithRetry(
-    () => sefaz.post('/api/public/v2/guia/pagamento/por-barras', payload),
+  const { data } = await agendarConsulta(
+    () => reqWithRetry(
+      () => sefaz.post('/api/public/v2/guia/pagamento/por-barras', payload),
+      'pagamento/por-barras'
+    ),
     'pagamento/por-barras'
   );
 
@@ -557,8 +596,11 @@ async function listarPagamentosPorDataInclusao(dataInicioDateTime, dataFimDateTi
   };
   if (codigoReceita) payload.codigoReceita = normalizeCodigoReceita(codigoReceita);
 
-  const { data } = await reqWithRetry(
-    () => sefaz.post('/api/public/v2/guia/pagamento/por-data-inclusao', payload),
+  const { data } = await agendarConsulta(
+    () => reqWithRetry(
+      () => sefaz.post('/api/public/v2/guia/pagamento/por-data-inclusao', payload),
+      'pagamento/por-data-inclusao'
+    ),
     'pagamento/por-data-inclusao'
   );
 
@@ -582,8 +624,11 @@ async function checkSefazHealth() {
   }
 
   const codigo = Number(candidatos[0]);
-  const { data } = await reqWithRetry(
-    () => sefaz.get('/api/public/receita/consultar', { params: { codigo } }),
+  const { data } = await agendarConsulta(
+    () => reqWithRetry(
+      () => sefaz.get('/api/public/receita/consultar', { params: { codigo } }),
+      'health-check'
+    ),
     'health-check'
   );
 
