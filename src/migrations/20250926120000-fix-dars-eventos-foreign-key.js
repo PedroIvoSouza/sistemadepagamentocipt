@@ -17,6 +17,13 @@ async function getIndexDefinitions(sequelize, tableName) {
   return rows || [];
 }
 
+async function getTriggerDefinitions(sequelize, tableName) {
+  const [rows] = await sequelize.query(
+    `SELECT name, sql FROM sqlite_master WHERE type='trigger' AND tbl_name='${tableName}' AND sql IS NOT NULL`
+  );
+  return rows || [];
+}
+
 function normalizeIdentifier(identifier) {
   return String(identifier || '').toLowerCase().replace(/[\"'`\[\]]/g, '');
 }
@@ -56,9 +63,9 @@ module.exports = {
     await sequelize.query('PRAGMA foreign_keys = OFF;');
 
     try {
-      const [fkRows] = await sequelize.query(`PRAGMA foreign_key_list('DARs_Eventos');`);
-      const needsRewrite = Array.isArray(fkRows)
-        && fkRows.some(row => normalizeIdentifier(row.table).endsWith('eventos_old'));
+      const [fkRows] = await sequelize.query(`SELECT * FROM pragma_foreign_key_list('DARs_Eventos');`);
+      const fkList = Array.isArray(fkRows) ? fkRows : fkRows ? [fkRows] : [];
+      const needsRewrite = fkList.some(row => normalizeIdentifier(row.table).endsWith('eventos_old'));
 
       if (!needsRewrite) {
         return;
@@ -70,6 +77,7 @@ module.exports = {
       await sequelize.query(tmpCreateSql);
 
       const indexes = await getIndexDefinitions(sequelize, 'DARs_Eventos');
+      const triggers = await getTriggerDefinitions(sequelize, 'DARs_Eventos');
 
       const [columns] = await sequelize.query(`PRAGMA table_info('DARs_Eventos');`);
       const columnList = columns.map(col => `"${col.name}"`).join(', ');
@@ -85,6 +93,11 @@ module.exports = {
         const indexSql = normalizeIndexSql(index.sql, 'DARs_Eventos');
         await sequelize.query(indexSql);
       }
+
+      for (const trigger of triggers) {
+        if (!trigger.sql) continue;
+        await sequelize.query(trigger.sql);
+      }
     } finally {
       await sequelize.query('PRAGMA foreign_keys = ON;');
     }
@@ -96,9 +109,9 @@ module.exports = {
     await sequelize.query('PRAGMA foreign_keys = OFF;');
 
     try {
-      const [fkRows] = await sequelize.query(`PRAGMA foreign_key_list('DARs_Eventos');`);
-      const needsRollback = Array.isArray(fkRows)
-        && fkRows.some(row => normalizeIdentifier(row.table).endsWith('eventos'));
+      const [fkRows] = await sequelize.query(`SELECT * FROM pragma_foreign_key_list('DARs_Eventos');`);
+      const fkList = Array.isArray(fkRows) ? fkRows : fkRows ? [fkRows] : [];
+      const needsRollback = fkList.some(row => normalizeIdentifier(row.table).endsWith('eventos'));
 
       if (!needsRollback) {
         return;
@@ -107,6 +120,7 @@ module.exports = {
       const currentCreateSql = await getCreateTableSql(sequelize, 'DARs_Eventos');
       const rollbackCreateSql = buildCreateTableSql(currentCreateSql, 'DARs_Eventos', 'Eventos_old');
       const indexes = await getIndexDefinitions(sequelize, 'DARs_Eventos');
+      const triggers = await getTriggerDefinitions(sequelize, 'DARs_Eventos');
 
       await sequelize.query('ALTER TABLE DARs_Eventos RENAME TO DARs_Eventos_fix;');
       await sequelize.query(rollbackCreateSql);
@@ -127,6 +141,11 @@ module.exports = {
         if (!index.sql) continue;
         const indexSql = normalizeIndexSql(index.sql, 'DARs_Eventos');
         await sequelize.query(indexSql);
+      }
+
+      for (const trigger of triggers) {
+        if (!trigger.sql) continue;
+        await sequelize.query(trigger.sql);
       }
     } finally {
       await sequelize.query('PRAGMA foreign_keys = ON;');
