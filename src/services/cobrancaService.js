@@ -2,6 +2,9 @@
 const axios = require('axios');
 const https = require('https');
 
+const TIMEZONE = 'America/Maceio';
+const MS_PER_DAY = 1000 * 60 * 60 * 24;
+
 // --- Funções de Data (sem alterações) ---
 function isFeriado(data) {
     const dia = String(data.getDate()).padStart(2, '0');
@@ -26,22 +29,71 @@ function getProximoDiaUtil(data) {
     }
     return proximoDia;
 }
-// -----------------------------------------------------------
 
-async function calcularEncargosAtraso(dar) {
-    // ... (lógica de data e multa continua a mesma) ...
-    const hoje = new Date();
-    
-    let novaDataVencimento = new Date(hoje);
-    if (hoje.getHours() >= 15 || !isDiaUtil(hoje)) {
-        novaDataVencimento = getProximoDiaUtil(hoje);
+function getLocalDateParts(date, timeZone = TIMEZONE) {
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+        timeZone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+    });
+
+    const parts = formatter.formatToParts(date).reduce((acc, part) => {
+        if (part.type !== 'literal') {
+            acc[part.type] = part.value;
+        }
+        return acc;
+    }, {});
+
+    return {
+        year: Number(parts.year),
+        month: Number(parts.month),
+        day: Number(parts.day),
+        hour: Number(parts.hour),
+        minute: Number(parts.minute),
+        second: Number(parts.second || 0)
+    };
+}
+
+function dateFromParts({ year, month, day }) {
+    return new Date(Date.UTC(year, month - 1, day));
+}
+
+function parseDateOnly(value) {
+    if (typeof value !== 'string') {
+        return new Date(value);
     }
 
-    const dataVencimentoOriginal = new Date(dar.data_vencimento);
+    const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) {
+        return new Date(value);
+    }
+
+    const [, year, month, day] = match.map(Number);
+    return new Date(Date.UTC(year, month - 1, day));
+}
+// -----------------------------------------------------------
+
+async function calcularEncargosAtraso(dar, referencia = new Date()) {
+    // ... (lógica de data e multa continua a mesma) ...
+    const hoje = new Date(referencia);
+    const partesAtuais = getLocalDateParts(hoje);
+    const hojeLocal = dateFromParts(partesAtuais);
+
+    let novaDataVencimento = hojeLocal;
+    if (partesAtuais.hour >= 15 || !isDiaUtil(hojeLocal)) {
+        novaDataVencimento = getProximoDiaUtil(hojeLocal);
+    }
+
+    const dataVencimentoOriginal = parseDateOnly(dar.data_vencimento);
 
     // Calcula a diferença de tempo preservando o sinal para identificar atrasos reais
-    const diffTempo = novaDataVencimento - dataVencimentoOriginal;
-    const diasAtraso = Math.ceil(diffTempo / (1000 * 60 * 60 * 24));
+    const diffTempo = novaDataVencimento.getTime() - dataVencimentoOriginal.getTime();
+    const diasAtraso = diffTempo > 0 ? Math.ceil(diffTempo / MS_PER_DAY) : 0;
 
     // Se a nova data de vencimento for anterior ou igual à original, não há encargos
     if (diasAtraso <= 0) {
