@@ -45,7 +45,8 @@ test('emitirDarAdvertencia cria dar e vincula à advertencia', async () => {
     pdf_url TEXT,
     linha_digitavel TEXT,
     codigo_barras TEXT,
-    data_emissao TEXT
+    data_emissao TEXT,
+    sem_juros INTEGER DEFAULT 0
   );`);
   await run(db, `CREATE TABLE Advertencias (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

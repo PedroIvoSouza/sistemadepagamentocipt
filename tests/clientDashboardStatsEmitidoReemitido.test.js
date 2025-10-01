@@ -12,7 +12,7 @@ test('client dashboard-stats counts Emitido/Reemitido correctly', async () => {
   const run = (sql, params=[]) => new Promise((res, rej) => db.run(sql, params, err => err ? rej(err) : res()));
 
   await run('CREATE TABLE Eventos (id INTEGER PRIMARY KEY, id_cliente INTEGER);');
-  await run('CREATE TABLE dars (id INTEGER PRIMARY KEY, valor REAL, data_vencimento TEXT, status TEXT);');
+  await run('CREATE TABLE dars (id INTEGER PRIMARY KEY, valor REAL, data_vencimento TEXT, status TEXT, sem_juros INTEGER DEFAULT 0);');
   await run('CREATE TABLE DARs_Eventos (id INTEGER PRIMARY KEY, id_dar INTEGER, id_evento INTEGER);');
 
   await run('INSERT INTO Eventos (id, id_cliente) VALUES (1, 1);');

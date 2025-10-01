@@ -29,7 +29,7 @@ test('relatorio de dars inclui guias emitidas mesmo sem emitido_por_id ou permis
   await run(`CREATE TABLE permissionarios (id INTEGER PRIMARY KEY, nome_empresa TEXT, cnpj TEXT, tipo TEXT, valor_aluguel REAL)`);
   await run(`CREATE TABLE dars (id INTEGER PRIMARY KEY, permissionario_id INTEGER, data_vencimento TEXT, mes_referencia INTEGER,
  ano_referencia INTEGER, valor REAL, status TEXT, numero_documento TEXT, pdf_url TEXT, linha_digitavel TEXT, data_emissao TEXT,
- emitido_por_id INTEGER)`);
+ emitido_por_id INTEGER, sem_juros INTEGER DEFAULT 0)`);
   await run(`CREATE TABLE documentos (id INTEGER PRIMARY KEY, tipo TEXT, caminho TEXT, token TEXT)`);
   await run(`CREATE TABLE DARs_Eventos (id_dar INTEGER, id_evento INTEGER)`);
   await run(`CREATE TABLE Eventos (id INTEGER PRIMARY KEY, id_cliente INTEGER)`);
@@ -86,7 +86,7 @@ test('retorna 204 quando nao existem dars emitidas', async () => {
 
   await run(`CREATE TABLE dars (id INTEGER PRIMARY KEY, permissionario_id INTEGER, data_vencimento TEXT, mes_referencia INTEGER,
  ano_referencia INTEGER, valor REAL, status TEXT, numero_documento TEXT, pdf_url TEXT, linha_digitavel TEXT, data_emissao TEXT,
- emitido_por_id INTEGER)`);
+ emitido_por_id INTEGER, sem_juros INTEGER DEFAULT 0)`);
   await run(`CREATE TABLE documentos (id INTEGER PRIMARY KEY, tipo TEXT, caminho TEXT, token TEXT)`);
   await run(`CREATE TABLE DARs_Eventos (id_dar INTEGER, id_evento INTEGER)`);
   await run(`CREATE TABLE Eventos (id INTEGER PRIMARY KEY, id_cliente INTEGER)`);
