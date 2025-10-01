@@ -243,6 +243,48 @@ test('POST /api/admin/dars cria mensalidade sem juros com vencimento hoje', asyn
   }
 });
 
+test('POST /api/admin/dars sobrescreve mensalidade existente sem juros', async () => {
+  const ctx = await setupContext('mensal-sobrescreve', [
+    {
+      id: 10,
+      nome_empresa: 'Empresa Override',
+      valor_aluguel: 220,
+      tipo: null,
+      telefone: '82922223333'
+    }
+  ]);
+
+  try {
+    const primeiraResposta = await ctx.request
+      .post('/api/admin/dars')
+      .send({ permissionarioId: 10, tipo: 'Mensalidade', competencia: '2024-06' })
+      .expect(201);
+
+    const darIdOriginal = primeiraResposta.body?.dar?.id;
+    assert.ok(darIdOriginal, 'DAR inicial não criado');
+
+    const segundaResposta = await ctx.request
+      .post('/api/admin/dars')
+      .send({ permissionarioId: 10, tipo: 'Mensalidade', competencia: '2024-06', semJuros: true })
+      .expect(200);
+
+    const hoje = isoHojeLocal();
+    assert.equal(segundaResposta.body?.dar?.id, darIdOriginal);
+    assert.equal(segundaResposta.body?.dar?.data_vencimento, hoje);
+    assert.equal(segundaResposta.body?.dar?.sem_juros, 1);
+
+    const row = await ctx.get('SELECT * FROM dars WHERE id = ?', [darIdOriginal]);
+    assert.equal(row.data_vencimento, hoje);
+    assert.equal(row.sem_juros, 1);
+    assert.equal(row.status, 'Pendente');
+
+    const count = await ctx.get('SELECT COUNT(*) AS total FROM dars');
+    assert.equal(count.total, 1);
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
 test('POST /api/admin/dars rejeita mensalidade para permissionário isento ou sem aluguel', async () => {
   const ctx = await setupContext('mensal-invalido', [
     {

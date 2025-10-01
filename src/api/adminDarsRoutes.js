@@ -305,6 +305,8 @@ router.post(
       let advertenciaFatosPersist = null;
       const columns = ['permissionario_id', 'tipo_permissionario', 'valor', 'data_vencimento', 'status'];
       const values = [permId, null, null, null, 'Pendente'];
+      let darIdFinal = null;
+      let atualizouExistente = false;
 
       if (tipoLower === 'mensalidade') {
         if (!competenciaInfo) {
@@ -332,7 +334,11 @@ router.post(
           [permId, competenciaInfo.mes, competenciaInfo.ano]
         );
         if (existente) {
-          return res.status(409).json({ error: 'DAR da competência informada já existe.' });
+          if (!semJuros) {
+            return res.status(409).json({ error: 'DAR da competência informada já existe.' });
+          }
+          darIdFinal = existente.id;
+          atualizouExistente = true;
         }
 
         mesReferencia = competenciaInfo.mes;
@@ -388,13 +394,43 @@ router.post(
       columns.push('sem_juros');
       values.push(semJuros ? 1 : 0);
 
-      const placeholders = columns.map(() => '?').join(',');
-      const stmt = await dbRunAsync(
-        `INSERT INTO dars (${columns.join(',')}) VALUES (${placeholders})`,
-        values
-      );
-
-      const novoDar = await dbGetAsync('SELECT * FROM dars WHERE id = ?', [stmt.lastID]);
+      let novoDar;
+      if (atualizouExistente) {
+        await dbRunAsync(
+          `UPDATE dars
+              SET tipo_permissionario = ?,
+                  valor = ?,
+                  data_vencimento = ?,
+                  status = 'Pendente',
+                  mes_referencia = ?,
+                  ano_referencia = ?,
+                  sem_juros = 1,
+                  numero_documento = NULL,
+                  pdf_url = NULL,
+                  linha_digitavel = NULL,
+                  codigo_barras = NULL,
+                  data_emissao = NULL,
+                  emitido_por_id = NULL
+            WHERE id = ?`,
+          [
+            tipoPermissionario,
+            valorDar,
+            dataVencimentoISO,
+            mesReferencia || null,
+            anoReferencia || null,
+            darIdFinal
+          ]
+        );
+        novoDar = await dbGetAsync('SELECT * FROM dars WHERE id = ?', [darIdFinal]);
+      } else {
+        const placeholders = columns.map(() => '?').join(',');
+        const stmt = await dbRunAsync(
+          `INSERT INTO dars (${columns.join(',')}) VALUES (${placeholders})`,
+          values
+        );
+        darIdFinal = stmt.lastID;
+        novoDar = await dbGetAsync('SELECT * FROM dars WHERE id = ?', [darIdFinal]);
+      }
 
       if (novoDar) {
         const tipoNotificacao = tipoLower === 'advertencia' ? 'advertencia' : 'novo';
@@ -428,18 +464,18 @@ router.post(
         }
       }
 
-      return res.status(201).json({
+      return res.status(atualizouExistente ? 200 : 201).json({
         dar: {
-          id: stmt.lastID,
-          permissionario_id: permId,
-          tipo_permissionario: tipoPermissionario,
-          valor: valorDar,
-          data_vencimento: dataVencimentoISO,
-          status: 'Pendente',
-          mes_referencia: mesReferencia || null,
-          ano_referencia: anoReferencia || null,
-          advertencia_fatos: advertenciaFatosPersist,
-          sem_juros: semJuros ? 1 : 0
+          id: novoDar?.id || darIdFinal,
+          permissionario_id: novoDar?.permissionario_id ?? permId,
+          tipo_permissionario: novoDar?.tipo_permissionario ?? tipoPermissionario,
+          valor: novoDar?.valor ?? valorDar,
+          data_vencimento: novoDar?.data_vencimento ?? dataVencimentoISO,
+          status: novoDar?.status ?? 'Pendente',
+          mes_referencia: novoDar?.mes_referencia ?? (mesReferencia || null),
+          ano_referencia: novoDar?.ano_referencia ?? (anoReferencia || null),
+          advertencia_fatos: novoDar?.advertencia_fatos ?? advertenciaFatosPersist,
+          sem_juros: novoDar?.sem_juros ?? (semJuros ? 1 : 0)
         }
       });
     } catch (err) {
