@@ -10,7 +10,7 @@ test('dashboard and pagamentos ignore isentos ou valor zero', async () => {
   const run = (sql, params=[]) => new Promise((res, rej) => db.run(sql, params, err => err?rej(err):res()));
 
   await run(`CREATE TABLE permissionarios (id INTEGER PRIMARY KEY, nome_empresa TEXT, cnpj TEXT, tipo TEXT, valor_aluguel REAL);`);
-  await run(`CREATE TABLE dars (id INTEGER PRIMARY KEY, permissionario_id INTEGER, tipo_permissionario TEXT, valor REAL, data_vencimento TEXT, status TEXT, mes_referencia INTEGER, ano_referencia INTEGER);`);
+  await run(`CREATE TABLE dars (id INTEGER PRIMARY KEY, permissionario_id INTEGER, tipo_permissionario TEXT, valor REAL, data_vencimento TEXT, status TEXT, mes_referencia INTEGER, ano_referencia INTEGER, sem_juros INTEGER DEFAULT 0);`);
 
   await run(`INSERT INTO permissionarios (id,nome_empresa,cnpj,tipo,valor_aluguel) VALUES (1,'Normal','1','Normal',100);`);
   await run(`INSERT INTO permissionarios (id,nome_empresa,cnpj,tipo,valor_aluguel) VALUES (2,'Isento','2','Isento',100);`);

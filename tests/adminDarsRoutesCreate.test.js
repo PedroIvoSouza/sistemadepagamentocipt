@@ -5,8 +5,10 @@ const path = require('path');
 const fs = require('fs');
 const express = require('express');
 const supertest = require('supertest');
+const { isoHojeLocal } = require('../src/utils/sefazPayload');
 
-async function setupContext(name, permissionarios = []) {
+async function setupContext(name, permissionarios = [], options = {}) {
+  const opts = options || {};
   const dbFile = path.resolve(__dirname, `test-admin-dars-create-${name}.db`);
   try { fs.unlinkSync(dbFile); } catch {}
   const previousDbPath = process.env.SQLITE_STORAGE;
@@ -49,13 +51,44 @@ async function setupContext(name, permissionarios = []) {
 
   const sefazPath = path.resolve(__dirname, '../src/services/sefazService.js');
   delete require.cache[sefazPath];
+  const emitirGuiaSefazMock =
+    opts.emitirGuiaSefaz ||
+    (async () => {
+      throw new Error('SEFAZ não deve ser chamado nos testes de criação de DAR.');
+    });
   require.cache[sefazPath] = {
     exports: {
-      emitirGuiaSefaz: async () => {
-        throw new Error('SEFAZ não deve ser chamado nos testes de criação de DAR.');
-      },
+      emitirGuiaSefaz: emitirGuiaSefazMock,
       consultarPagamentoPorCodigoBarras: async () => null,
       listarPagamentosPorDataArrecadacao: async () => []
+    }
+  };
+
+  const cobrancaPath = path.resolve(__dirname, '../src/services/cobrancaService.js');
+  delete require.cache[cobrancaPath];
+  const cobrancaCalls = [];
+  const calcularEncargosDelegate = opts.calcularEncargosAtraso;
+  require.cache[cobrancaPath] = {
+    exports: {
+      calcularEncargosAtraso: async (...args) => {
+        cobrancaCalls.push(args);
+        if (typeof calcularEncargosDelegate === 'function') {
+          return calcularEncargosDelegate(...args);
+        }
+        return null;
+      }
+    }
+  };
+
+  const tokenPath = path.resolve(__dirname, '../src/utils/token.js');
+  delete require.cache[tokenPath];
+  const tokenCalls = [];
+  require.cache[tokenPath] = {
+    exports: {
+      imprimirTokenEmPdf: async (pdfBase64, token) => {
+        tokenCalls.push([pdfBase64, token]);
+        return pdfBase64;
+      }
     }
   };
 
@@ -66,6 +99,8 @@ async function setupContext(name, permissionarios = []) {
   await run(`CREATE TABLE permissionarios (
     id INTEGER PRIMARY KEY,
     nome_empresa TEXT,
+    cnpj TEXT,
+    cpf TEXT,
     valor_aluguel REAL,
     tipo TEXT,
     telefone TEXT,
@@ -84,7 +119,14 @@ async function setupContext(name, permissionarios = []) {
     status TEXT,
     mes_referencia INTEGER,
     ano_referencia INTEGER,
-    advertencia_fatos TEXT
+    numero_documento TEXT,
+    pdf_url TEXT,
+    linha_digitavel TEXT,
+    codigo_barras TEXT,
+    data_emissao TEXT,
+    emitido_por_id INTEGER,
+    advertencia_fatos TEXT,
+    sem_juros INTEGER DEFAULT 0
   )`);
 
   for (const perm of permissionarios) {
@@ -114,6 +156,8 @@ async function setupContext(name, permissionarios = []) {
     delete require.cache[rolePath];
     delete require.cache[dbModulePath];
     delete require.cache[sefazPath];
+    delete require.cache[cobrancaPath];
+    delete require.cache[tokenPath];
     if (previousDbPath === undefined) {
       delete process.env.SQLITE_STORAGE;
     } else {
@@ -122,7 +166,7 @@ async function setupContext(name, permissionarios = []) {
     try { fs.unlinkSync(dbFile); } catch {}
   }
 
-  return { request, get, run, cleanup, notifCalls, whatsappCalls };
+  return { request, get, run, cleanup, notifCalls, whatsappCalls, cobrancaCalls, tokenCalls };
 }
 
 test('POST /api/admin/dars cria mensalidade com último dia útil', async () => {
@@ -151,6 +195,7 @@ test('POST /api/admin/dars cria mensalidade com último dia útil', async () => 
     assert.equal(res.body.dar.status, 'Pendente');
     assert.equal(res.body.dar.mes_referencia, 2);
     assert.equal(res.body.dar.ano_referencia, 2024);
+    assert.equal(res.body.dar.sem_juros, 0);
 
     const row = await ctx.get('SELECT * FROM dars WHERE id = ?', [res.body.dar.id]);
     assert.equal(row.tipo_permissionario, 'Permissionario');
@@ -159,10 +204,40 @@ test('POST /api/admin/dars cria mensalidade com último dia útil', async () => 
     assert.equal(row.mes_referencia, 2);
     assert.equal(row.ano_referencia, 2024);
     assert.equal(row.advertencia_fatos, null);
+    assert.equal(row.sem_juros, 0);
 
     assert.equal(ctx.notifCalls.length, 1);
     assert.equal(ctx.notifCalls[0][2]?.tipo, 'novo');
     assert.equal(ctx.whatsappCalls.length, 1);
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
+test('POST /api/admin/dars cria mensalidade sem juros com vencimento hoje', async () => {
+  const ctx = await setupContext('mensal-sem-juros', [
+    {
+      id: 1,
+      nome_empresa: 'Empresa Sem Juros',
+      valor_aluguel: 180,
+      tipo: null,
+      telefone: '82911112223'
+    }
+  ]);
+
+  try {
+    const res = await ctx.request
+      .post('/api/admin/dars')
+      .send({ permissionarioId: 1, tipo: 'Mensalidade', competencia: '2024-05', semJuros: true })
+      .expect(201);
+
+    const hoje = isoHojeLocal();
+    assert.equal(res.body.dar.data_vencimento, hoje);
+    assert.equal(res.body.dar.sem_juros, 1);
+
+    const row = await ctx.get('SELECT * FROM dars WHERE id = ?', [res.body.dar.id]);
+    assert.equal(row.data_vencimento, hoje);
+    assert.equal(row.sem_juros, 1);
   } finally {
     await ctx.cleanup();
   }
@@ -233,6 +308,57 @@ test('POST /api/admin/dars cria DAR de advertência validando dia útil', async 
     assert.equal(ctx.notifCalls[0][2]?.tipo, 'advertencia');
     assert.deepEqual(ctx.notifCalls[0][2]?.fatos, ['Descumprimento de normas', 'Uso indevido do espaço']);
     assert.equal(ctx.whatsappCalls.length, 1);
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
+test('POST /api/admin/dars/:id/emitir respeita sem juros e ajusta vencimento para hoje', async () => {
+  const ctx = await setupContext(
+    'emitir-sem-juros',
+    [
+      {
+        id: 9,
+        nome_empresa: 'Empresa Emitir',
+        valor_aluguel: 200,
+        tipo: null,
+        telefone: '82911114444',
+        cnpj: '12345678000199'
+      }
+    ],
+    {
+      emitirGuiaSefaz: async () => ({
+        numeroGuia: '202400123',
+        pdfBase64: Buffer.from('PDF').toString('base64'),
+        linhaDigitavel: '001',
+        codigoBarras: '002'
+      }),
+      calcularEncargosAtraso: async () => {
+        throw new Error('calcularEncargosAtraso não deve ser chamado');
+      }
+    }
+  );
+
+  try {
+    await ctx.run(
+      `INSERT INTO dars (id, permissionario_id, tipo_permissionario, valor, data_vencimento, status, mes_referencia, ano_referencia, advertencia_fatos, sem_juros)
+       VALUES (42, 9, 'Permissionario', 200, '2024-01-10', 'Pendente', 1, 2024, NULL, 1)`
+    );
+
+    const res = await ctx.request.post('/api/admin/dars/42/emitir').send({}).expect(200);
+
+    const hoje = isoHojeLocal();
+    assert.equal(res.body.ok, true);
+    assert.equal(res.body.numero, '202400123');
+    assert.equal(ctx.cobrancaCalls.length, 0);
+
+    const row = await ctx.get('SELECT * FROM dars WHERE id = ?', [42]);
+    assert.equal(row.data_vencimento, hoje);
+    assert.equal(row.sem_juros, 1);
+    assert.equal(row.mes_referencia, 1);
+    assert.equal(row.ano_referencia, 2024);
+    assert.ok(ctx.tokenCalls.length > 0);
+    assert.deepEqual(ctx.tokenCalls[0], [Buffer.from('PDF').toString('base64'), 'DAR-202400123']);
   } finally {
     await ctx.cleanup();
   }

@@ -81,7 +81,8 @@ async function setupSchema(db) {
     pdf_url TEXT,
     linha_digitavel TEXT,
     codigo_barras TEXT,
-    data_emissao TEXT DEFAULT CURRENT_TIMESTAMP
+    data_emissao TEXT DEFAULT CURRENT_TIMESTAMP,
+    sem_juros INTEGER DEFAULT 0
   );`);
   await run(db, `CREATE TABLE DARs_Eventos (
     id_evento INTEGER,

@@ -26,7 +26,7 @@ test('relatorio devedores gera PDF contendo permissionario', async () => {
   const run = (sql, params = []) => new Promise((res, rej) => db.run(sql, params, err => err ? rej(err) : res()));
 
   await run(`CREATE TABLE permissionarios (id INTEGER PRIMARY KEY, nome_empresa TEXT, cnpj TEXT, tipo TEXT, valor_aluguel REAL)`);
-  await run(`CREATE TABLE dars (id INTEGER PRIMARY KEY, permissionario_id INTEGER, data_vencimento TEXT, valor REAL, status TEXT)`);
+  await run(`CREATE TABLE dars (id INTEGER PRIMARY KEY, permissionario_id INTEGER, data_vencimento TEXT, valor REAL, status TEXT, sem_juros INTEGER DEFAULT 0)`);
   await run(`CREATE TABLE documentos (id INTEGER PRIMARY KEY, tipo TEXT, caminho TEXT, token TEXT)`);
 
   await run(`INSERT INTO permissionarios (id, nome_empresa, cnpj, tipo, valor_aluguel) VALUES (1, 'Perm', '12345678000199', 'Normal', 100)`);

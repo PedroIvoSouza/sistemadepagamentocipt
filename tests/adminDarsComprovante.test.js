@@ -30,7 +30,8 @@ test('comprovante persiste data de pagamento encontrada', async () => {
     pdf_url TEXT,
     codigo_barras TEXT,
     linha_digitavel TEXT,
-    comprovante_token TEXT
+    comprovante_token TEXT,
+    sem_juros INTEGER DEFAULT 0
   )`);
   await run(`CREATE TABLE documentos (id INTEGER PRIMARY KEY AUTOINCREMENT, token TEXT, caminho TEXT, permissionario_id INTEGER, created_at TEXT)`);
   await run(`INSERT INTO permissionarios (id, nome_empresa, cnpj) VALUES (1, 'Perm', '12345678000199')`);
@@ -145,7 +146,8 @@ test('comprovante busca pagamentos anteriores ao vencimento', async () => {
     pdf_url TEXT,
     codigo_barras TEXT,
     linha_digitavel TEXT,
-    comprovante_token TEXT
+    comprovante_token TEXT,
+    sem_juros INTEGER DEFAULT 0
   )`);
   await run(`CREATE TABLE documentos (id INTEGER PRIMARY KEY AUTOINCREMENT, token TEXT, caminho TEXT, permissionario_id INTEGER, created_at TEXT)`);
   await run(`INSERT INTO permissionarios (id, nome_empresa, cnpj) VALUES (1, 'Perm', '12345678000199')`);
@@ -260,7 +262,8 @@ test('comprovante reutiliza PDF existente quando token e arquivo presentes', asy
     pdf_url TEXT,
     codigo_barras TEXT,
     linha_digitavel TEXT,
-    comprovante_token TEXT
+    comprovante_token TEXT,
+    sem_juros INTEGER DEFAULT 0
   )`);
   await run(`CREATE TABLE documentos (id INTEGER PRIMARY KEY AUTOINCREMENT, token TEXT, caminho TEXT, permissionario_id INTEGER, created_at TEXT)`);
   await run(`INSERT INTO permissionarios (id, nome_empresa, cnpj) VALUES (1, 'Perm', '12345678000199')`);

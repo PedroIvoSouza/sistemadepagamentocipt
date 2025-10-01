@@ -12,7 +12,7 @@ const setupDb = async (dbPath) => {
   const db = require('../src/database/db');
   const run = (sql, params = []) => new Promise((res, rej) => db.run(sql, params, err => err ? rej(err) : res()));
   await run(`CREATE TABLE permissionarios (id INTEGER PRIMARY KEY, nome_empresa TEXT, cnpj TEXT, numero_documento TEXT, telefone_cobranca TEXT, tipo TEXT)`);
-  await run(`CREATE TABLE dars (id INTEGER PRIMARY KEY, permissionario_id INTEGER, data_vencimento TEXT, mes_referencia INTEGER, ano_referencia INTEGER, valor REAL, status TEXT, numero_documento TEXT, pdf_url TEXT, linha_digitavel TEXT, codigo_barras TEXT, link_pdf TEXT, data_emissao TEXT DEFAULT CURRENT_TIMESTAMP)`);
+  await run(`CREATE TABLE dars (id INTEGER PRIMARY KEY, permissionario_id INTEGER, data_vencimento TEXT, mes_referencia INTEGER, ano_referencia INTEGER, valor REAL, status TEXT, numero_documento TEXT, pdf_url TEXT, linha_digitavel TEXT, codigo_barras TEXT, link_pdf TEXT, data_emissao TEXT DEFAULT CURRENT_TIMESTAMP, sem_juros INTEGER DEFAULT 0)`);
   await run(`INSERT INTO permissionarios (id, nome_empresa, cnpj) VALUES (1, 'Perm', '12345678000199')`);
   await run(`INSERT INTO dars (id, permissionario_id, data_vencimento, mes_referencia, ano_referencia, valor, status) VALUES (30, 1, '2024-01-01', 1, 2024, 200, 'Vencido')`);
 };

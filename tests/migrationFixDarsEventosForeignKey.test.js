@@ -72,7 +72,8 @@ test('migration keeps DARs_Eventos triggers and emitir route works', async () =>
       link_pdf TEXT,
       emitido_por_id INTEGER,
       data_emissao TEXT,
-      advertencia_fatos TEXT
+      advertencia_fatos TEXT,
+      sem_juros INTEGER DEFAULT 0
     );`
   );
 

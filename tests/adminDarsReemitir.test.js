@@ -16,7 +16,7 @@ test('reemitir DAR vencido atualiza valor e vencimento', async () => {
   const get = (sql, params=[]) => new Promise((res, rej) => db.get(sql, params, (err, row) => err ? rej(err) : res(row)));
 
   await run(`CREATE TABLE permissionarios (id INTEGER PRIMARY KEY, nome_empresa TEXT, cnpj TEXT, cpf TEXT, tipo TEXT)`);
-  await run(`CREATE TABLE dars (id INTEGER PRIMARY KEY, permissionario_id INTEGER, data_vencimento TEXT, mes_referencia INTEGER, ano_referencia INTEGER, valor REAL, status TEXT, numero_documento TEXT, pdf_url TEXT, codigo_barras TEXT, link_pdf TEXT, data_emissao TEXT, emitido_por_id INTEGER)`);
+  await run(`CREATE TABLE dars (id INTEGER PRIMARY KEY, permissionario_id INTEGER, data_vencimento TEXT, mes_referencia INTEGER, ano_referencia INTEGER, valor REAL, status TEXT, numero_documento TEXT, pdf_url TEXT, codigo_barras TEXT, link_pdf TEXT, data_emissao TEXT, emitido_por_id INTEGER, sem_juros INTEGER DEFAULT 0)`);
   await run(`INSERT INTO permissionarios (id, nome_empresa, cnpj) VALUES (1, 'Perm', '12345678000199')`);
   await run(`INSERT INTO dars (id, permissionario_id, data_vencimento, mes_referencia, ano_referencia, valor, status) VALUES (99, 1, '2024-01-01', 1, 2024, 100, 'Vencido')`);
 

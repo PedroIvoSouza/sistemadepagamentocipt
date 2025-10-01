@@ -271,6 +271,13 @@ router.post(
   async (req, res) => {
     try {
       const { permissionarioId, tipo, competencia, dataPagamento, valor, fatos } = req.body || {};
+      const rawSemJuros =
+        req.body?.semJuros ?? req.body?.sem_juros ?? req.body?.semjuros ?? req.body?.semJuro ?? false;
+      const semJuros =
+        rawSemJuros === true ||
+        rawSemJuros === 1 ||
+        rawSemJuros === '1' ||
+        (typeof rawSemJuros === 'string' && rawSemJuros.toLowerCase() === 'true');
       const permId = Number(permissionarioId);
       if (!Number.isInteger(permId) || permId <= 0) {
         return res.status(400).json({ error: 'permissionarioId inválido.' });
@@ -357,6 +364,10 @@ router.post(
         }
       }
 
+      if (semJuros) {
+        dataVencimentoISO = isoHojeLocal();
+      }
+
       values[1] = tipoPermissionario;
       values[2] = valorDar;
       values[3] = dataVencimentoISO;
@@ -373,6 +384,9 @@ router.post(
         columns.push('advertencia_fatos');
         values.push(advertenciaFatosPersist);
       }
+
+      columns.push('sem_juros');
+      values.push(semJuros ? 1 : 0);
 
       const placeholders = columns.map(() => '?').join(',');
       const stmt = await dbRunAsync(
@@ -424,7 +438,8 @@ router.post(
           status: 'Pendente',
           mes_referencia: mesReferencia || null,
           ano_referencia: anoReferencia || null,
-          advertencia_fatos: advertenciaFatosPersist
+          advertencia_fatos: advertenciaFatosPersist,
+          sem_juros: semJuros ? 1 : 0
         }
       });
     } catch (err) {
@@ -475,15 +490,33 @@ router.post(
       const { codigoTipoInscricao, numeroInscricao, nome, codigoIbgeMunicipio, dar } =
         await getContribuinteEmitenteForDar(darId);
 
-      // Se o DAR estiver vencido, recalcula multa/juros e ajusta vencimento/valor
       const hoje = isoHojeLocal();
+      const semJuros = Number(dar.sem_juros || 0) === 1;
       const vencOriginal = toISO(dar.data_vencimento);
-      if (vencOriginal && vencOriginal < hoje) {
+      const vencAntes = vencOriginal;
+
+      if (!semJuros && vencOriginal && vencOriginal < hoje) {
         const enc = await calcularEncargosAtraso(dar).catch(() => null);
         if (enc) {
-          if (enc.valorAtualizado != null) dar.valor = enc.valorAtualizado;
-          if (enc.novaDataVencimento) dar.data_vencimento = enc.novaDataVencimento;
+          if (enc.valorAtualizado != null) {
+            dar.valor = enc.valorAtualizado;
+          }
+          if (enc.novaDataVencimento) {
+            dar.data_vencimento = enc.novaDataVencimento;
+          }
         }
+      }
+
+      if (semJuros) {
+        dar.data_vencimento = hoje;
+      }
+
+      const vencAtual = toISO(dar.data_vencimento) || hoje;
+      if (vencAtual !== vencAntes) {
+        await dbRunAsync(`UPDATE dars SET data_vencimento = ? WHERE id = ?`, [vencAtual, darId]);
+        dar.data_vencimento = vencAtual;
+      } else if (!dar.data_vencimento) {
+        dar.data_vencimento = vencAtual;
       }
 
       // Doc & tipo saneados

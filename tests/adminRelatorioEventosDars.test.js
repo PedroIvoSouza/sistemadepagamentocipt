@@ -26,7 +26,7 @@ test('relatorio de dars de eventos filtra por data', async () => {
   const run = (sql, params = []) => new Promise((res, rej) => db.run(sql, params, err => err ? rej(err) : res()));
 
   await run(
-    `CREATE TABLE dars (id INTEGER PRIMARY KEY, status TEXT, numero_documento TEXT, data_vencimento TEXT, valor REAL);`
+    `CREATE TABLE dars (id INTEGER PRIMARY KEY, status TEXT, numero_documento TEXT, data_vencimento TEXT, valor REAL, sem_juros INTEGER DEFAULT 0);`
   );
   await run(`CREATE TABLE DARs_Eventos (id_dar INTEGER, id_evento INTEGER);`);
   await run(`CREATE TABLE Eventos (id INTEGER PRIMARY KEY, nome_evento TEXT, id_cliente INTEGER);`);

@@ -12,7 +12,7 @@ test('dashboard-stats includes Emitido/Reemitido', async () => {
   const run = (sql, params=[]) => new Promise((res, rej) => db.run(sql, params, err => err ? rej(err) : res()));
 
   await run(`CREATE TABLE permissionarios (id INTEGER PRIMARY KEY, nome_empresa TEXT);`);
-  await run(`CREATE TABLE dars (id INTEGER PRIMARY KEY, permissionario_id INTEGER, data_vencimento TEXT, valor REAL, status TEXT);`);
+  await run(`CREATE TABLE dars (id INTEGER PRIMARY KEY, permissionario_id INTEGER, data_vencimento TEXT, valor REAL, status TEXT, sem_juros INTEGER DEFAULT 0);`);
   await run(`INSERT INTO permissionarios (id, nome_empresa) VALUES (1, 'Perm');`);
 
   const today = new Date();
