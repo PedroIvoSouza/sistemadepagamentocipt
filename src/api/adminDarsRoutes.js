@@ -13,13 +13,15 @@ const { isoHojeLocal, toISO } = require('../utils/sefazPayload');
 const db = require('../database/db');
 const fs = require('fs');
 const path = require('path');
+const multer = require('multer');
 const { gerarComprovante } = require('../services/darComprovanteService');
-const { imprimirTokenEmPdf } = require('../utils/token');
+const { gerarTokenDocumento, imprimirTokenEmPdf } = require('../utils/token');
 const { getLastBusinessDayISO, isBusinessDay, parseDateInput, formatISODate } = require('../utils/businessDays');
 const { normalizeMsisdn } = require('../utils/phone');
 const whatsappService = require('../services/whatsappService');
 
 const router = express.Router();
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 // Helpers async
 const dbGetAsync = (sql, params = []) =>
@@ -481,6 +483,139 @@ router.post(
     } catch (err) {
       console.error('[AdminDARs] ERRO POST /api/admin/dars:', err);
       return res.status(500).json({ error: 'Falha ao criar DAR.' });
+    }
+  }
+);
+
+router.post(
+  '/:id/baixa-manual',
+  [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN']), upload.single('comprovante')],
+  async (req, res) => {
+    let tempFilePath = null;
+    try {
+      const darId = Number(req.params.id);
+      if (!Number.isInteger(darId) || darId <= 0) {
+        return res.status(400).json({ error: 'Identificador de DAR inválido.' });
+      }
+
+      const dar = await dbGetAsync('SELECT * FROM dars WHERE id = ?', [darId]);
+      if (!dar) {
+        return res.status(404).json({ error: 'DAR não encontrado.' });
+      }
+
+      const rawDataPagamento =
+        req.body?.dataPagamento ??
+        req.body?.data_pagamento ??
+        req.body?.paymentDate ??
+        req.body?.data ??
+        null;
+
+      const parsedDataPagamento = parseDateInput(rawDataPagamento);
+      if (!parsedDataPagamento) {
+        return res.status(400).json({ error: 'Data de pagamento inválida. Utilize o formato AAAA-MM-DD ou DD/MM/AAAA.' });
+      }
+      const dataPagamentoISO = formatISODate(parsedDataPagamento);
+
+      const file = req.file;
+      if (!file || !file.buffer || !file.buffer.length) {
+        return res.status(400).json({ error: 'Envie o arquivo de comprovante do pagamento.' });
+      }
+
+      const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
+      if (file.size > MAX_SIZE) {
+        return res.status(400).json({ error: 'O comprovante excede o limite de 10 MB.' });
+      }
+
+      const allowedMime = new Set(['application/pdf', 'application/x-pdf', 'image/jpeg', 'image/png']);
+      const allowedExt = new Set(['.pdf', '.jpg', '.jpeg', '.png']);
+      const originalExt = (path.extname(file.originalname || '') || '').toLowerCase();
+      const mime = String(file.mimetype || '').toLowerCase();
+
+      let finalExt = allowedExt.has(originalExt) ? originalExt : '';
+      if (!finalExt) {
+        if (mime === 'application/pdf' || mime === 'application/x-pdf') finalExt = '.pdf';
+        else if (mime === 'image/jpeg') finalExt = '.jpg';
+        else if (mime === 'image/png') finalExt = '.png';
+      }
+
+      if (!finalExt || (!allowedExt.has(finalExt) && !allowedMime.has(mime))) {
+        return res.status(400).json({ error: 'Formato de arquivo inválido. Utilize PDF, JPG ou PNG.' });
+      }
+
+      const docsDir = path.join(process.cwd(), 'public', 'documentos');
+      fs.mkdirSync(docsDir, { recursive: true });
+      const safeBase = `comprovante_dar_${darId}_${Date.now()}`;
+      const fileName = `${safeBase}${finalExt}`;
+      const filePath = path.join(docsDir, fileName);
+      fs.writeFileSync(filePath, file.buffer);
+      tempFilePath = filePath;
+      const publicUrl = `/documentos/${fileName}`;
+
+      let tokenDoc = dar.comprovante_token || null;
+      let existingDoc = null;
+      if (tokenDoc) {
+        existingDoc = await dbGetAsync('SELECT id, caminho FROM documentos WHERE token = ?', [tokenDoc]).catch(() => null);
+        if (!existingDoc) tokenDoc = null;
+      }
+
+      if (!tokenDoc) {
+        tokenDoc = await gerarTokenDocumento('DAR_COMPROVANTE_MANUAL', dar.permissionario_id, db);
+      }
+
+      const previousPath = existingDoc?.caminho && String(existingDoc.caminho).trim() ? existingDoc.caminho : null;
+
+      await dbRunAsync(
+        `UPDATE documentos
+            SET tipo = ?,
+                caminho = ?,
+                pdf_url = ?,
+                pdf_public_url = ?,
+                status = 'upload_manual',
+                permissionario_id = ?,
+                evento_id = NULL,
+                created_at = datetime('now')
+          WHERE token = ?`,
+        [
+          'DAR_COMPROVANTE_MANUAL',
+          filePath,
+          filePath,
+          publicUrl,
+          dar.permissionario_id || null,
+          tokenDoc,
+        ]
+      );
+
+      await dbRunAsync(
+        `UPDATE dars
+            SET status = 'Pago',
+                data_pagamento = ?,
+                comprovante_token = ?
+          WHERE id = ?`,
+        [dataPagamentoISO, tokenDoc, darId]
+      );
+
+      if (previousPath && previousPath !== filePath) {
+        try {
+          if (fs.existsSync(previousPath)) fs.unlinkSync(previousPath);
+        } catch (cleanupErr) {
+          console.warn('[AdminDARs] Falha ao remover comprovante antigo:', cleanupErr?.message || cleanupErr);
+        }
+      }
+
+      return res.status(200).json({
+        ok: true,
+        token: tokenDoc,
+        data_pagamento: dataPagamentoISO,
+        comprovante_url: publicUrl,
+      });
+    } catch (err) {
+      if (tempFilePath) {
+        try {
+          if (fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath);
+        } catch {}
+      }
+      console.error('[AdminDARs] ERRO POST /:id/baixa-manual:', err);
+      return res.status(500).json({ error: 'Falha ao registrar baixa manual.' });
     }
   }
 );
