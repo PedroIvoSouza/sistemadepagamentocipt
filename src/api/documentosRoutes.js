@@ -17,6 +17,8 @@ const TIPO_TITULO = {
   CERTIDAO_QUITACAO: 'Certidão de Quitação',
   advertencia: 'Advertência',
   termo_evento: 'Termo do Evento',
+  DAR_COMPROVANTE: 'Comprovante de DAR',
+  DAR_COMPROVANTE_MANUAL: 'Comprovante de DAR (baixa manual)',
 };
 
 // ===== DB setup =====

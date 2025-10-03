@@ -105,7 +105,7 @@ async function rankAndTry(rows, tolList, ctxLabel, dtPgto, guiaNum, pagoCents) {
     dlog(`${ctxLabel}: tol=${tol}¢ → ${candTol.length} candidato(s)`);
     if (candTol.length === 1) {
       const r = await dbRun(
-        `UPDATE dars SET status='Pago', data_pagamento=COALESCE(?, data_pagamento) WHERE id=?`,
+        `UPDATE dars SET status='Pago', data_pagamento=COALESCE(?, data_pagamento) WHERE id=? AND status!='Pago'`,
         [dtPgto || null, candTol[0].id]
       );
       if (r?.changes > 0) return { done:true };
@@ -113,7 +113,7 @@ async function rankAndTry(rows, tolList, ctxLabel, dtPgto, guiaNum, pagoCents) {
       const picked = await applyTiebreakers(candTol, guiaNum, dtPgto);
       if (picked) {
         const r = await dbRun(
-          `UPDATE dars SET status='Pago', data_pagamento=COALESCE(?, data_pagamento) WHERE id=?`,
+          `UPDATE dars SET status='Pago', data_pagamento=COALESCE(?, data_pagamento) WHERE id=? AND status!='Pago'`,
           [dtPgto || null, picked.id]
         );
         if (r?.changes > 0) {
@@ -329,13 +329,13 @@ async function tentarVincularPagamento(pagamento) {
   );
   dlog(`janela±60d: candidatos = ${candJan.length}`);
   if (candJan.length === 1) {
-    const r = await dbRun(`UPDATE dars SET status='Pago', data_pagamento=COALESCE(?, data_pagamento) WHERE id=?`,
+    const r = await dbRun(`UPDATE dars SET status='Pago', data_pagamento=COALESCE(?, data_pagamento) WHERE id=? AND status!='Pago'`,
       [dataPagamento || null, candJan[0].id]);
     if (r?.changes > 0) return true;
   } else if (candJan.length > 1) {
     const picked = await applyTiebreakers(candJan, guiaNum, dataPagamento);
     if (picked) {
-      const r = await dbRun(`UPDATE dars SET status='Pago', data_pagamento=COALESCE(?, data_pagamento) WHERE id=?`,
+      const r = await dbRun(`UPDATE dars SET status='Pago', data_pagamento=COALESCE(?, data_pagamento) WHERE id=? AND status!='Pago'`,
         [dataPagamento || null, picked.id]);
       if (r?.changes > 0) return true;
     }

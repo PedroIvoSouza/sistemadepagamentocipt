@@ -83,7 +83,8 @@ async function conciliarEListarPagos() {
         `UPDATE dars
              SET status = 'Pago',
                  data_pagamento = COALESCE(?, data_pagamento)
-           WHERE numero_documento = ?`,
+           WHERE numero_documento = ?
+             AND status != 'Pago'`,
         [it.dataPagamento || null, numero]
       );
       if (r1?.changes > 0) {
@@ -96,7 +97,8 @@ async function conciliarEListarPagos() {
                  data_pagamento = COALESCE(?, data_pagamento),
                  numero_documento = COALESCE(numero_documento, codigo_barras)
            WHERE codigo_barras = ?
-             AND (numero_documento IS NULL OR numero_documento = '')`,
+             AND (numero_documento IS NULL OR numero_documento = '')
+             AND status != 'Pago'`,
         [it.dataPagamento || null, numero]
       );
       if (r2?.changes > 0) {
@@ -107,7 +109,8 @@ async function conciliarEListarPagos() {
         `UPDATE dars
              SET status = 'Pago',
                  data_pagamento = COALESCE(?, data_pagamento)
-           WHERE linha_digitavel = ?`,
+           WHERE linha_digitavel = ?
+             AND status != 'Pago'`,
         [it.dataPagamento || null, numero]
       );
       if (r3?.changes > 0) pagos.push(numero);
