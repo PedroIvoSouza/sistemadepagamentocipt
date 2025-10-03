@@ -2,6 +2,7 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const multer = require('multer');
 
 const adminAuthMiddleware = require('../middleware/adminAuthMiddleware');
 const db = require('../database/db');
@@ -11,7 +12,7 @@ const { getDocumentStatus } = require('../services/assinafyClient');
 
 const { emitirGuiaSefaz } = require('../services/sefazService');
 const { gerarTokenDocumento, imprimirTokenEmPdf } = require('../utils/token');
-const { criarEventoComDars, atualizarEventoComDars } = require('../services/eventoDarService');
+const { criarEventoComDars, atualizarEventoComDars, criarDarManualEvento } = require('../services/eventoDarService');
 
 const {
   uploadDocumentFromFile,
@@ -30,6 +31,7 @@ const { sendMessage } = require('../services/whatsappService');
 const { gerarTermoEventoPdfkitEIndexar } = require('../services/termoEventoPdfkitService');
 
 const router = express.Router();
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
 
 /* ========= Helpers ========= */
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -717,6 +719,9 @@ router.put('/:id/remarcar', async (req, res) => {
 router.get('/:eventoId/dars', async (req, res) => {
   const { eventoId } = req.params;
   try {
+    const pragmaRows = await dbAll('PRAGMA table_info(dars)', [], 'listar-dars-pragma');
+    const hasManual = Array.isArray(pragmaRows) && pragmaRows.some(col => col.name === 'manual');
+    const manualSelect = hasManual ? ', d.manual AS manual' : '';
     const sql = `
       SELECT
         d.id                                AS id,
@@ -726,7 +731,7 @@ router.get('/:eventoId/dars', async (req, res) => {
         COALESCE(de.data_vencimento, d.data_vencimento) AS vencimento,
         d.status                            AS status,
         d.pdf_url                           AS pdf_url,
-        d.numero_documento                  AS dar_numero
+        d.numero_documento                  AS dar_numero${manualSelect}
       FROM DARs_Eventos de
       JOIN dars d ON d.id = de.id_dar
       WHERE de.id_evento = ?
@@ -742,10 +747,50 @@ router.get('/:eventoId/dars', async (req, res) => {
       seq = r.parcela_num + 1;
     }
 
+    for (const r of rows) {
+      const flag = hasManual ? Number(r.manual || 0) : 0;
+      r.manual = flag;
+    }
+
     res.json({ dars: rows });
   } catch (err) {
     console.error('[admin/eventos] listar DARs erro:', err.message);
     res.status(500).json({ error: 'Erro ao listar as DARs do evento.' });
+  }
+});
+
+router.post('/:id/dars/manual', upload.single('pdf'), async (req, res) => {
+  const { id } = req.params;
+  try {
+    const { valor, vencimento, status, numero_documento, linha_digitavel, codigo_barras, numero_parcela } = req.body || {};
+    const pdfInline = req.body?.pdf_base64 || req.body?.pdf_url || req.body?.pdfUrl;
+    const pdfFile = req.file;
+
+    if (pdfFile && pdfFile.mimetype && pdfFile.mimetype !== 'application/pdf') {
+      return res.status(400).json({ error: 'O arquivo enviado deve estar em formato PDF.' });
+    }
+
+    const dar = await criarDarManualEvento(
+      db,
+      id,
+      {
+        valor,
+        vencimento,
+        status,
+        numero_documento,
+        linha_digitavel,
+        codigo_barras,
+        numero_parcela,
+        pdf_url: pdfInline,
+        pdfBuffer: pdfFile?.buffer,
+      },
+      { gerarTokenDocumento, imprimirTokenEmPdf }
+    );
+
+    res.status(201).json({ ok: true, dar });
+  } catch (err) {
+    console.error('[admin/eventos] criar DAR manual erro:', err);
+    res.status(err.status || 400).json({ error: err.message || 'Não foi possível criar a DAR manual.' });
   }
 });
 
@@ -773,6 +818,8 @@ router.get('/:id', async (req, res) => {
       }
     } catch { /* noop */ }
 
+    const pragmaRows = await dbAll('PRAGMA table_info(dars)', [], 'evento/dars-pragma');
+    const hasManual = Array.isArray(pragmaRows) && pragmaRows.some(col => col.name === 'manual');
     const parcelasSql = `
         SELECT
             de.numero_parcela,
@@ -781,12 +828,18 @@ router.get('/:id', async (req, res) => {
             d.id                        AS dar_id,
             d.status                    AS dar_status,
             d.pdf_url                   AS dar_pdf,
-            d.numero_documento          AS dar_numero
+            d.numero_documento          AS dar_numero${hasManual ? ', d.manual AS manual' : ''}
            FROM DARs_Eventos de
            JOIN dars d ON d.id = de.id_dar
           WHERE de.id_evento = ?
           ORDER BY de.numero_parcela ASC`;
     const parcelas = await dbAll(parcelasSql, [id], 'evento/get-parcelas');
+
+    if (Array.isArray(parcelas)) {
+      for (const p of parcelas) {
+        p.manual = hasManual ? Number(p.manual || 0) : 0;
+      }
+    }
 
     const payload = {
       evento: {

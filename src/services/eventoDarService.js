@@ -35,6 +35,68 @@ async function getNextNumeroTermo(db, year = new Date().getFullYear()) {
   return `${next}/${year}`;
 }
 
+async function describeDarTable(db) {
+  const columns = await dbAll(db, 'PRAGMA table_info(dars)');
+  const names = new Set(columns.map(c => c.name));
+  return {
+    columns,
+    hasDataEmissao: names.has('data_emissao'),
+    hasManual: names.has('manual'),
+    hasNumeroDocumento: names.has('numero_documento'),
+    hasLinhaDigitavel: names.has('linha_digitavel'),
+    hasCodigoBarras: names.has('codigo_barras'),
+    hasPdfUrl: names.has('pdf_url'),
+  };
+}
+
+function sanitizePdfBase64(pdf) {
+  if (!pdf) return null;
+  const str = String(pdf).trim();
+  if (!str) return null;
+  const [, b64] = str.split('base64,');
+  return b64 ? b64 : str;
+}
+
+async function gerarPdfManualBasico({ eventoNome, clienteNome, valor, vencimentoISO }) {
+  const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
+  const pdfDoc = await PDFDocument.create();
+  const page = pdfDoc.addPage();
+  const fontTitle = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+  const fontBody = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const { width } = page.getSize();
+
+  let cursorY = page.getHeight() - 72;
+  const margin = 60;
+  const drawLine = (text, opts = {}) => {
+    const { font = fontBody, size = 12, color = rgb(0, 0, 0) } = opts;
+    page.drawText(text, { x: margin, y: cursorY, size, font, color, maxWidth: width - margin * 2 });
+    cursorY -= size + 8;
+  };
+
+  drawLine('Documento de Arrecadação Manual', { font: fontTitle, size: 18 });
+  cursorY -= 8;
+  drawLine('Centro de Inovação do Polo Tecnológico (CIPT)', { font: fontBody, size: 11 });
+  cursorY -= 12;
+  drawLine(`Evento: ${eventoNome || '-'}`);
+  drawLine(`Permissionário/Cliente: ${clienteNome || '-'}`);
+
+  const valorFmt = Number(valor || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  const vencimentoFmt = vencimentoISO
+    ? new Date(`${vencimentoISO}T12:00:00`).toLocaleDateString('pt-BR')
+    : '-';
+  drawLine(`Valor: ${valorFmt}`);
+  drawLine(`Vencimento: ${vencimentoFmt}`);
+
+  cursorY -= 12;
+  drawLine(
+    'Este documento foi inserido manualmente no sistema e não terá conciliação automática com a SEFAZ.',
+    { size: 10, color: rgb(0.25, 0.25, 0.25) }
+  );
+
+  const pdfBytes = await pdfDoc.save();
+  return Buffer.from(pdfBytes).toString('base64');
+}
+
 const feriadosFixos = [
   '01/01', '21/04', '01/05', '24/06', '07/09',
   '16/09', '12/10', '02/11', '15/11', '25/12'
@@ -203,8 +265,8 @@ async function criarEventoComDars(db, data, helpers) {
 
     const eventoId = eventoStmt.lastID;
 
-    const cols = await dbAll(db, 'PRAGMA table_info(dars)');
-    const hasDataEmissao = cols.some(c => c.name === 'data_emissao');
+    const darSchema = await describeDarTable(db);
+    const { hasDataEmissao, hasManual } = darSchema;
 
     if (!eventoGratuitoFlag) {
       const documentoLimpo = onlyDigits(cliente.documento);
@@ -227,6 +289,10 @@ async function criarEventoComDars(db, data, helpers) {
         if (hasDataEmissao && p.data_emissao) {
           darCols.push('data_emissao');
           darVals.push(p.data_emissao);
+        }
+        if (hasManual) {
+          darCols.push('manual');
+          darVals.push(0);
         }
         const darStmt = await dbRun(
           db,
@@ -447,8 +513,8 @@ async function atualizarEventoComDars(db, id, data, helpers) {
       await dbRun(db, `DELETE FROM dars WHERE id IN (${ph})`, antigosIds);
     }
 
-    const cols = await dbAll(db, 'PRAGMA table_info(dars)');
-    const hasDataEmissao = cols.some(c => c.name === 'data_emissao');
+    const darSchema = await describeDarTable(db);
+    const { hasDataEmissao, hasManual } = darSchema;
     if (!eventoGratuitoFlag) {
       const docLimpo = onlyDigits(cliente.documento);
       const tipoInscricao = docLimpo.length === 11 ? 3 : 4;
@@ -471,6 +537,10 @@ async function atualizarEventoComDars(db, id, data, helpers) {
         if (hasDataEmissao && p.data_emissao) {
           darCols.push('data_emissao');
           darVals.push(p.data_emissao);
+        }
+        if (hasManual) {
+          darCols.push('manual');
+          darVals.push(0);
         }
         const darStmt = await dbRun(
           db,
@@ -536,6 +606,159 @@ async function atualizarEventoComDars(db, id, data, helpers) {
   }
 }
 
+async function criarDarManualEvento(db, eventoId, payload = {}, helpers = {}) {
+  const {
+    gerarTokenDocumento = require('../utils/token').gerarTokenDocumento,
+    imprimirTokenEmPdf = require('../utils/token').imprimirTokenEmPdf,
+  } = helpers;
+
+  if (!db) throw new Error('Banco de dados não fornecido.');
+  const id = Number(eventoId);
+  if (!Number.isInteger(id) || id <= 0) {
+    throw new Error('Evento inválido.');
+  }
+
+  const evento = await dbGet(
+    db,
+    `SELECT e.id, e.nome_evento, c.nome_razao_social, c.documento, c.endereco, c.cep
+       FROM Eventos e
+       JOIN Clientes_Eventos c ON c.id = e.id_cliente
+      WHERE e.id = ?`,
+    [id]
+  );
+  if (!evento) {
+    const err = new Error('Evento não encontrado.');
+    err.status = 404;
+    throw err;
+  }
+
+  const valorNumber = Number(payload.valor);
+  if (!Number.isFinite(valorNumber) || valorNumber <= 0) {
+    throw new Error('Valor da DAR manual inválido.');
+  }
+
+  const vencimentoStr = payload.vencimento || payload.data_vencimento;
+  if (!vencimentoStr) {
+    throw new Error('Data de vencimento é obrigatória.');
+  }
+  const vencDate = new Date(`${vencimentoStr}T00:00:00`);
+  if (Number.isNaN(vencDate.getTime())) {
+    throw new Error('Data de vencimento inválida.');
+  }
+  const vencimentoISO = vencDate.toISOString().slice(0, 10);
+  const mesRef = Number(vencimentoISO.slice(5, 7));
+  const anoRef = Number(vencimentoISO.slice(0, 4));
+
+  const status = (payload.status || 'Emitido').toString().trim() || 'Emitido';
+  const numeroDocumento = payload.numero_documento || payload.numero || null;
+  const linhaDigitavel = payload.linha_digitavel || payload.linhaDigitavel || null;
+  const codigoBarras = payload.codigo_barras || payload.codigoBarras || null;
+
+  const darSchema = await describeDarTable(db);
+  const nowISO = new Date().toISOString();
+
+  let pdfBase64 = sanitizePdfBase64(payload.pdf_url || payload.pdfBase64);
+  if (!pdfBase64 && payload.pdfBuffer) {
+    const buf = Buffer.isBuffer(payload.pdfBuffer)
+      ? payload.pdfBuffer
+      : Buffer.from(payload.pdfBuffer);
+    pdfBase64 = buf.toString('base64');
+  }
+  if (!pdfBase64) {
+    pdfBase64 = await gerarPdfManualBasico({
+      eventoNome: evento.nome_evento,
+      clienteNome: evento.nome_razao_social,
+      valor: valorNumber,
+      vencimentoISO,
+    });
+  }
+
+  const tokenDocumento = await gerarTokenDocumento('DAR_EVENTO', null, db);
+  const pdfComToken = await imprimirTokenEmPdf(pdfBase64, tokenDocumento, { onlyLastPage: true });
+
+  await dbRun(db, 'BEGIN TRANSACTION');
+  try {
+    const darCols = ['valor', 'data_vencimento', 'status', 'mes_referencia', 'ano_referencia', 'permissionario_id', 'tipo_permissionario'];
+    const darVals = [valorNumber, vencimentoISO, status, mesRef, anoRef, null, 'Evento'];
+    if (darSchema.hasDataEmissao) {
+      darCols.push('data_emissao');
+      darVals.push(nowISO);
+    }
+    if (darSchema.hasManual) {
+      darCols.push('manual');
+      darVals.push(1);
+    }
+
+    const darStmt = await dbRun(
+      db,
+      `INSERT INTO dars (${darCols.join(',')}) VALUES (${darCols.map(() => '?').join(',')})`,
+      darVals
+    );
+    const darId = darStmt.lastID;
+
+    const updateCols = [];
+    const updateVals = [];
+    if (darSchema.hasPdfUrl && pdfComToken) {
+      updateCols.push('pdf_url = ?');
+      updateVals.push(pdfComToken);
+    }
+    if (darSchema.hasNumeroDocumento && numeroDocumento) {
+      updateCols.push('numero_documento = ?');
+      updateVals.push(numeroDocumento);
+    }
+    if (darSchema.hasLinhaDigitavel && linhaDigitavel) {
+      updateCols.push('linha_digitavel = ?');
+      updateVals.push(linhaDigitavel);
+    }
+    if (darSchema.hasCodigoBarras && codigoBarras) {
+      updateCols.push('codigo_barras = ?');
+      updateVals.push(codigoBarras);
+    }
+    if (updateCols.length) {
+      await dbRun(
+        db,
+        `UPDATE dars SET ${updateCols.join(', ')} WHERE id = ?`,
+        [...updateVals, darId]
+      );
+    }
+
+    let numeroParcela = Number(payload.numero_parcela || payload.parcela || payload.parcela_num);
+    if (!Number.isInteger(numeroParcela) || numeroParcela <= 0) {
+      const current = await dbGet(
+        db,
+        'SELECT MAX(numero_parcela) AS maxParcela FROM DARs_Eventos WHERE id_evento = ?',
+        [id]
+      );
+      numeroParcela = Number(current?.maxParcela || 0) + 1;
+    }
+
+    await dbRun(
+      db,
+      `INSERT INTO DARs_Eventos (id_dar, id_evento, numero_parcela, valor_parcela, data_vencimento)
+       VALUES (?, ?, ?, ?, ?)`,
+      [darId, id, numeroParcela, valorNumber, vencimentoISO]
+    );
+
+    await dbRun(db, 'COMMIT');
+
+    return {
+      id: darId,
+      numero_parcela: numeroParcela,
+      valor: valorNumber,
+      vencimento: vencimentoISO,
+      status,
+      manual: darSchema.hasManual ? 1 : undefined,
+      pdf_url: pdfComToken,
+      numero_documento: numeroDocumento,
+      linha_digitavel: linhaDigitavel,
+      codigo_barras: codigoBarras,
+    };
+  } catch (err) {
+    try { await dbRun(db, 'ROLLBACK'); } catch {}
+    throw err;
+  }
+}
+
 async function emitirDarAdvertencia(evento, valorMulta, { db, helpers = {}, hoje = new Date() } = {}) {
   const {
     emitirGuiaSefaz = require('./sefazService').emitirGuiaSefaz,
@@ -564,11 +787,21 @@ async function emitirDarAdvertencia(evento, valorMulta, { db, helpers = {}, hoje
 
   await dbRun(db, 'BEGIN TRANSACTION');
   try {
+    const darSchema = await describeDarTable(db);
+    const darCols = ['valor', 'data_vencimento', 'status', 'mes_referencia', 'ano_referencia', 'permissionario_id', 'tipo_permissionario'];
+    const darVals = [Number(valorMulta), vencimentoISO, 'Pendente', Number(mes), Number(ano), null, 'Advertencia'];
+    if (darSchema.hasDataEmissao) {
+      darCols.push('data_emissao');
+      darVals.push(hoje.toISOString());
+    }
+    if (darSchema.hasManual) {
+      darCols.push('manual');
+      darVals.push(0);
+    }
     const darStmt = await dbRun(
       db,
-      `INSERT INTO dars (valor, data_vencimento, status, mes_referencia, ano_referencia, permissionario_id, tipo_permissionario, data_emissao)
-       VALUES (?, ?, 'Pendente', ?, ?, NULL, 'Advertencia', ?)`,
-      [Number(valorMulta), vencimentoISO, Number(mes), Number(ano), hoje.toISOString()]
+      `INSERT INTO dars (${darCols.join(',')}) VALUES (${darCols.map(() => '?').join(',')})`,
+      darVals
     );
     const darId = darStmt.lastID;
 
@@ -626,6 +859,7 @@ async function emitirDarAdvertencia(evento, valorMulta, { db, helpers = {}, hoje
 module.exports = {
   criarEventoComDars,
   atualizarEventoComDars,
+  criarDarManualEvento,
   emitirDarAdvertencia,
   getNextNumeroTermo,
 };

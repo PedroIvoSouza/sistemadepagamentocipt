@@ -663,6 +663,10 @@ router.post(
       const { codigoTipoInscricao, numeroInscricao, nome, codigoIbgeMunicipio, dar } =
         await getContribuinteEmitenteForDar(darId);
 
+      if (dar && Object.prototype.hasOwnProperty.call(dar, 'manual') && Number(dar.manual) === 1) {
+        return res.status(400).json({ error: 'DAR manual não pode ser reemitida automaticamente.' });
+      }
+
       // Recalcula encargos para DARs atrasadas
       const enc = await calcularEncargosAtraso(dar).catch(() => null);
       if (enc) {
