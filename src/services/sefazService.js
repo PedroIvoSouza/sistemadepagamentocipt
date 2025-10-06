@@ -97,9 +97,18 @@ sefaz.interceptors.request.use((request) => {
    ========================== */
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+const MIN_CONSULTA_INTERVAL_RECOMENDADO_MS = 300000; // 5 minutos
 const MIN_CONSULTA_INTERVAL_MS = (() => {
-  const parsed = Number(process.env.SEFAZ_MIN_CONSULTA_INTERVAL_MS ?? 180000);
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 180000;
+  const parsed = Number(process.env.SEFAZ_MIN_CONSULTA_INTERVAL_MS ?? MIN_CONSULTA_INTERVAL_RECOMENDADO_MS);
+  const coerced = Number.isFinite(parsed) && parsed >= 0 ? parsed : MIN_CONSULTA_INTERVAL_RECOMENDADO_MS;
+
+  if (coerced < MIN_CONSULTA_INTERVAL_RECOMENDADO_MS) {
+    console.warn(
+      `[SEFAZ] Intervalo configurado (${coerced}ms) abaixo da recomendação mínima de ${MIN_CONSULTA_INTERVAL_RECOMENDADO_MS}ms.`
+    );
+  }
+
+  return coerced;
 })();
 
 let nextConsultaDisponivel = 0;

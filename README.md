@@ -15,6 +15,7 @@ Adicione no arquivo `.env` ou nas variáveis do servidor:
 - `ASSINAFY_API_URL` (opcional): URL base da API. Padrão `https://api.assinafy.com`.
 - `ASSINAFY_CALLBACK_URL`: URL pública para o retorno após a assinatura, ex.: `https://seusistema/api/documentos/assinafy/callback`.
 - `VPN_HEALTHCHECK_TLS_INSECURE` (opcional): defina como `true` para permitir certificados TLS autoassinados no health-check HTTP da VPN/infovia. Mantenha ausente ou `false` para validar os certificados normalmente.
+- `SEFAZ_MIN_CONSULTA_INTERVAL_MS` (opcional): intervalo mínimo entre consultas à SEFAZ em milissegundos. O padrão é `300000` (5 minutos), conforme orientação do órgão. Valores menores são aceitos apenas para ambientes de teste.
 
 Certifique-se de reiniciar o servidor após alterar as variáveis.
 
@@ -28,6 +29,8 @@ As DARs utilizam os seguintes status padronizados:
 - `Vencido` – vencimento ultrapassado sem pagamento.
 
 O valor legado `Vencida` foi unificado para `Vencido` e não deve mais ser utilizado.
+
+- `POST /api/admin/dars/conciliar` — dispara manualmente a conciliação das DARs. Informe `{ "data": "YYYY-MM-DD" }` no corpo para selecionar o dia; caso omita, utiliza o padrão configurado (ontem). O endpoint respeita o intervalo mínimo entre consultas imposto pela SEFAZ.
 
 ## Dashboard Administrativo
 

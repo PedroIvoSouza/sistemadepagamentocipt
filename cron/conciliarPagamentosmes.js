@@ -400,6 +400,12 @@ async function conciliarPagamentosDoDia(dataISO) {
     }
   }
   console.log(`[CONCILIA] ${dataDia} finalizado. DARs atualizadas: ${totalAtualizados}/${todosPagamentos.length}.`);
+
+  return {
+    dataDia,
+    totalPagamentos: todosPagamentos.length,
+    totalAtualizados,
+  };
 }
 
 // ------------------------- Lock simples (anti conc. simultânea) -------------------------
@@ -419,6 +425,18 @@ async function withLock(fn) {
     try { fs.closeSync(fd); } catch {}
     try { fs.unlinkSync(fdPath); } catch {}
   }
+}
+
+async function executarConciliacaoDia(dataISO) {
+  let resumo = null;
+  let executado = false;
+
+  await withLock(async () => {
+    executado = true;
+    resumo = await conciliarPagamentosDoDia(dataISO);
+  });
+
+  return { executado, resumo };
 }
 
 // ------------------------- Agendamento diário (06:00) -------------------------
@@ -469,5 +487,5 @@ if (require.main === module) {
     db.close(err => { if (err) console.error('[CONCILIA] Erro ao fechar DB:', err.message); });
   });
 } else {
-  module.exports = { scheduleConciliacao, conciliarPagamentosDoDia };
+  module.exports = { scheduleConciliacao, conciliarPagamentosDoDia, executarConciliacaoDia };
 }
