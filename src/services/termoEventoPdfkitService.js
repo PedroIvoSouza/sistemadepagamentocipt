@@ -341,7 +341,7 @@ function tabelaDiscriminacao(doc, dados) {
 
 
 /* ================== Função principal ================== */
-async function gerarTermoEventoPdfkitEIndexar(eventoId) {
+async function gerarTermoEventoPdfkitEIndexar(eventoId, options = {}) {
   console.log('[TERMO][SERVICE] gerarTermoEventoPdfkitEIndexar para evento', eventoId);
   await ensureDocumentosSchema();
 
@@ -361,11 +361,15 @@ async function gerarTermoEventoPdfkitEIndexar(eventoId) {
     'termo/get-evento'
   );
   if (!ev) throw new Error('Evento não encontrado');
-  if (!ev.documento_responsavel) throw new Error('CPF do responsável não informado');
 
   const permissionarioId = ev.id_cliente;
   const token = await gerarTokenDocumento('termo_evento', permissionarioId, db);
   let tokenYFromBottom;
+
+  const overrideCpf = onlyDigits(options.cpfResponsavel || '');
+  const documentoResponsavel = overrideCpf || onlyDigits(ev.documento_responsavel || '') || onlyDigits(ev.documento || '');
+  ev.documento_responsavel = documentoResponsavel;
+  ev.documento = onlyDigits(ev.documento || '');
 
   // 2) Parcelas (pega, por parcela, a DAR mais recente e válida, via dar_id DESC)
 const parcelas = await dbAll(

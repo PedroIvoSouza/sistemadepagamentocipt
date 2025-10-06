@@ -159,7 +159,7 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
     const sql = `
       SELECT c.nome_responsavel, c.nome_razao_social, c.email, c.telefone,
              c.documento_responsavel, c.documento,
-             e.nome_evento, e.numero_termo
+             e.nome_evento, e.numero_termo, e.id_cliente
         FROM Eventos e
         JOIN Clientes_Eventos c ON c.id = e.id_cliente
        WHERE e.id = ?`;
@@ -171,11 +171,24 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
     if (!signerEmail) {
       return res.status(400).json({ ok:false, error:'E-mail do signatário é obrigatório.' });
     }
-    signerCpf   = signerCpf   || onlyDigits(row.documento_responsavel || row.documento || '');
+    const normalizedSignerCpfInput = onlyDigits(signerCpf || '');
+    const storedCpf = onlyDigits(row.documento_responsavel || '');
+    const fallbackCpf = onlyDigits(row.documento || '');
+    const effectiveCpf = normalizedSignerCpfInput || storedCpf || fallbackCpf;
+    signerCpf = effectiveCpf;
     signerPhone = signerPhone || row.telefone || '';
 
+    if (!storedCpf && normalizedSignerCpfInput && row.id_cliente) {
+      await dbRun(
+        `UPDATE Clientes_Eventos SET documento_responsavel = ? WHERE id = ?`,
+        [normalizedSignerCpfInput, row.id_cliente],
+        'termo/update-cpf-responsavel'
+      );
+      row.documento_responsavel = normalizedSignerCpfInput;
+    }
+
     // Etapa 1: Gerar o termo em PDF
-    const out = await gerarTermoEventoPdfkitEIndexar(id);
+    const out = await gerarTermoEventoPdfkitEIndexar(id, { cpfResponsavel: effectiveCpf });
 
     // Etapa 2: Fazer o upload para a Assinafy
     const uploaded = await uploadDocumentFromFile(out.filePath, out.fileName);
