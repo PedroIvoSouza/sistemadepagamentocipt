@@ -23,19 +23,24 @@ function setupRouter(arg) {
   const assinafyPath = path.resolve(__dirname, '../src/services/assinafyService.js');
   const ensureSignerMock = options.ensureSignerMock || (async () => ({ id: 'signer-mock', email: 'mock@example.com' }));
   const requestSignaturesMock = options.requestSignaturesMock || (async () => {});
+  const uploadDocumentMock = options.uploadDocumentMock || (async () => ({}));
+  const waitUntilReadyForAssignmentMock = options.waitUntilReadyForAssignmentMock || (async () => {});
   require.cache[assinafyPath] = {
     exports: {
-      uploadDocumentFromFile: async () => ({}),
+      uploadDocumentFromFile: uploadDocumentMock,
       ensureSigner: ensureSignerMock,
       requestSignatures: requestSignaturesMock,
       getDocument: async () => ({}),
       pickBestArtifactUrl: () => null,
       waitUntilPendingSignature: async () => {},
-      waitUntilReadyForAssignment: async () => {},
+      waitUntilReadyForAssignment: waitUntilReadyForAssignmentMock,
       getSigningUrl: async () => null,
       onlyDigits: (value = '') => String(value).replace(/\D/g, ''),
     },
   };
+  const termoServicePath = path.resolve(__dirname, '../src/services/termoEventoPdfkitService.js');
+  const gerarTermoMock = options.gerarTermoMock || (async () => ({ filePath: '/tmp/mock.pdf', fileName: 'mock.pdf' }));
+  require.cache[termoServicePath] = { exports: { gerarTermoEventoPdfkitEIndexar: gerarTermoMock } };
   delete require.cache[require.resolve('../src/api/adminEventosRoutes.js')];
   const routes = require('../src/api/adminEventosRoutes.js');
   const app = express();
@@ -155,4 +160,93 @@ test('POST /:id/termo/reativar-assinatura usa e-mail atualizado do signatário',
     options: { message: undefined, expires_at: undefined },
   });
   assert.ok(calls.some((c) => c.step === 'db:run'));
+});
+
+test('POST /:id/termo/enviar-assinatura salva CPF informado e não retorna erro', async () => {
+  const calls = [];
+  const dbStub = {
+    stub: true,
+    get: (sql, params, cb) => {
+      calls.push({ step: 'db:get', sql, params });
+      if (/FROM Eventos e/.test(sql)) {
+        return cb(null, {
+          nome_responsavel: 'Responsável',
+          nome_razao_social: 'Empresa X',
+          email: 'contato@example.com',
+          telefone: '82991112233',
+          documento_responsavel: '',
+          documento: '12345678000100',
+          nome_evento: 'Evento Teste',
+          numero_termo: '123/2025',
+          id_cliente: 77,
+        });
+      }
+      return cb(null, null);
+    },
+    run: (sql, params, cb) => {
+      calls.push({ step: 'db:run', sql, params });
+      cb.call({ lastID: 0, changes: 1 }, null);
+    },
+  };
+
+  const ensureSignerMock = async (payload) => {
+    calls.push({ step: 'ensure', payload });
+    return { id: 'signer-1', email: payload.email };
+  };
+
+  const requestSignaturesMock = async (docId, signerIds, options) => {
+    calls.push({ step: 'request', docId, signerIds, options });
+  };
+
+  const gerarTermoMock = async (eventoId, opts) => {
+    calls.push({ step: 'gerar', eventoId, opts });
+    return { filePath: '/tmp/termo.pdf', fileName: 'termo.pdf' };
+  };
+
+  const uploadDocumentMock = async () => ({ id: 'assinafy-1' });
+
+  const { app } = setupRouter({
+    atualizarMock: async () => {},
+    ensureSignerMock,
+    requestSignaturesMock,
+    dbStub,
+    gerarTermoMock,
+    uploadDocumentMock,
+  });
+
+  const res = await supertest(app)
+    .post('/55/termo/enviar-assinatura')
+    .send({
+      signerName: 'Responsável',
+      signerEmail: 'contato@example.com',
+      signerCpf: '123.456.789-09',
+      signerPhone: '(82) 99111-2233',
+    })
+    .expect(200);
+
+  assert.deepEqual(res.body, {
+    ok: true,
+    message: 'Documento enviado com sucesso! O signatário receberá as instruções por e-mail.',
+  });
+
+  const cpfUpdate = calls.find(
+    (c) =>
+      c.step === 'db:run' &&
+      /UPDATE Clientes_Eventos SET documento_responsavel = \? WHERE id = \?/.test(c.sql)
+  );
+  assert.ok(cpfUpdate, 'esperava atualização do documento_responsavel');
+  assert.equal(cpfUpdate.params[0], '12345678909');
+  assert.equal(String(cpfUpdate.params[1]), '77');
+
+  const gerarCall = calls.find((c) => c.step === 'gerar');
+  assert.ok(gerarCall, 'esperava chamada para geração do termo');
+  assert.equal(gerarCall.opts.cpfResponsavel, '12345678909');
+
+  const ensureCall = calls.find((c) => c.step === 'ensure');
+  assert.ok(ensureCall, 'esperava chamada ensureSigner');
+  assert.equal(ensureCall.payload.government_id, '12345678909');
+
+  const requestCall = calls.find((c) => c.step === 'request');
+  assert.ok(requestCall, 'esperava requestSignatures');
+  assert.deepEqual(requestCall.signerIds, ['signer-1']);
 });
