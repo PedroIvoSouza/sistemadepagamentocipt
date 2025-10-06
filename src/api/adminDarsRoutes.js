@@ -938,7 +938,11 @@ await dbRunAsync(
   `UPDATE dars
       SET numero_documento = ?,
           pdf_url          = ?,
-          status           = CASE WHEN COALESCE(status,'') IN ('','Pendente','Vencido','Vencida') THEN 'Reemitido' ELSE status END,
+          status           = CASE
+                                WHEN status = 'Pago Parcialmente' THEN 'Parcialmente Pago'
+                                WHEN COALESCE(status,'') IN ('','Pendente','Vencido','Vencida') THEN 'Reemitido'
+                                ELSE status
+                              END,
           data_emissao     = COALESCE(data_emissao, date('now')),
           emitido_por_id   = COALESCE(emitido_por_id, ?),
           valor            = ?,
