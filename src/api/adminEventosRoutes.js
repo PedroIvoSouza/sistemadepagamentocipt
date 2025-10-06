@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
 
+const authorizeRole = require('../middleware/roleMiddleware');
 const adminAuthMiddleware = require('../middleware/adminAuthMiddleware');
 const db = require('../database/db');
 
@@ -13,6 +14,7 @@ const { getDocumentStatus } = require('../services/assinafyClient');
 const { emitirGuiaSefaz } = require('../services/sefazService');
 const { gerarTokenDocumento, imprimirTokenEmPdf } = require('../utils/token');
 const { criarEventoComDars, atualizarEventoComDars, criarDarManualEvento } = require('../services/eventoDarService');
+const { parseDateInput, formatISODate } = require('../utils/businessDays');
 
 const {
   uploadDocumentFromFile,
@@ -729,6 +731,7 @@ router.get('/:eventoId/dars', async (req, res) => {
         COALESCE(de.valor_parcela, d.valor) AS valor,
         d.id                                AS dar_id,
         COALESCE(de.data_vencimento, d.data_vencimento) AS vencimento,
+        d.data_pagamento                    AS data_pagamento,
         d.status                            AS status,
         d.pdf_url                           AS pdf_url,
         d.numero_documento                  AS dar_numero${manualSelect}
@@ -793,6 +796,161 @@ router.post('/:id/dars/manual', upload.single('pdf'), async (req, res) => {
     res.status(err.status || 400).json({ error: err.message || 'Não foi possível criar a DAR manual.' });
   }
 });
+
+router.post(
+  '/:eventoId/dars/:darId/baixa-manual',
+  [authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN']), upload.single('comprovante')],
+  async (req, res) => {
+    let tempFilePath = null;
+    try {
+      const eventoId = Number(req.params.eventoId);
+      const darId = Number(req.params.darId);
+
+      if (!Number.isInteger(eventoId) || eventoId <= 0) {
+        return res.status(400).json({ error: 'Identificador de evento inválido.' });
+      }
+
+      if (!Number.isInteger(darId) || darId <= 0) {
+        return res.status(400).json({ error: 'Identificador de DAR inválido.' });
+      }
+
+      const vinculo = await dbGet(
+        `SELECT d.id AS dar_id, d.status, d.comprovante_token, d.data_pagamento
+           FROM DARs_Eventos de
+           JOIN dars d ON d.id = de.id_dar
+          WHERE de.id_evento = ? AND de.id_dar = ?`,
+        [eventoId, darId],
+        'evento/baixa-manual/buscar-vinculo'
+      );
+
+      if (!vinculo) {
+        return res.status(404).json({ error: 'Vínculo entre evento e DAR não encontrado.' });
+      }
+
+      const rawDataPagamento =
+        req.body?.dataPagamento ??
+        req.body?.data_pagamento ??
+        req.body?.paymentDate ??
+        req.body?.data ??
+        null;
+
+      const parsedDataPagamento = parseDateInput(rawDataPagamento);
+      if (!parsedDataPagamento) {
+        return res.status(400).json({ error: 'Data de pagamento inválida. Utilize o formato AAAA-MM-DD ou DD/MM/AAAA.' });
+      }
+      const dataPagamentoISO = formatISODate(parsedDataPagamento);
+
+      const file = req.file;
+      if (!file || !file.buffer || !file.buffer.length) {
+        return res.status(400).json({ error: 'Envie o arquivo de comprovante do pagamento.' });
+      }
+
+      const MAX_SIZE = 10 * 1024 * 1024;
+      if (file.size > MAX_SIZE) {
+        return res.status(400).json({ error: 'O comprovante excede o limite de 10 MB.' });
+      }
+
+      const allowedMime = new Set(['application/pdf', 'application/x-pdf', 'image/jpeg', 'image/png']);
+      const allowedExt = new Set(['.pdf', '.jpg', '.jpeg', '.png']);
+      const originalExt = (path.extname(file.originalname || '') || '').toLowerCase();
+      const mime = String(file.mimetype || '').toLowerCase();
+
+      let finalExt = allowedExt.has(originalExt) ? originalExt : '';
+      if (!finalExt) {
+        if (mime === 'application/pdf' || mime === 'application/x-pdf') finalExt = '.pdf';
+        else if (mime === 'image/jpeg') finalExt = '.jpg';
+        else if (mime === 'image/png') finalExt = '.png';
+      }
+
+      if (!finalExt || (!allowedExt.has(finalExt) && !allowedMime.has(mime))) {
+        return res.status(400).json({ error: 'Formato de arquivo inválido. Utilize PDF, JPG ou PNG.' });
+      }
+
+      const docsDir = path.join(process.cwd(), 'public', 'documentos');
+      fs.mkdirSync(docsDir, { recursive: true });
+      const safeBase = `comprovante_evento_${eventoId}_dar_${darId}_${Date.now()}`;
+      const fileName = `${safeBase}${finalExt}`;
+      const filePath = path.join(docsDir, fileName);
+      fs.writeFileSync(filePath, file.buffer);
+      tempFilePath = filePath;
+      const publicUrl = `/documentos/${fileName}`;
+
+      let tokenDoc = vinculo.comprovante_token || null;
+      let existingDoc = null;
+      if (tokenDoc) {
+        existingDoc = await dbGet(
+          `SELECT id, caminho FROM documentos WHERE token = ?`,
+          [tokenDoc],
+          'evento/baixa-manual/documento-atual'
+        ).catch(() => null);
+        if (!existingDoc) tokenDoc = null;
+      }
+
+      if (!tokenDoc) {
+        tokenDoc = await gerarTokenDocumento('DAR_COMPROVANTE_MANUAL', null, db);
+      }
+
+      const previousPath = existingDoc?.caminho && String(existingDoc.caminho).trim() ? existingDoc.caminho : null;
+
+      await dbRun(
+        `UPDATE documentos
+            SET tipo = ?,
+                caminho = ?,
+                pdf_url = ?,
+                pdf_public_url = ?,
+                status = 'upload_manual',
+                permissionario_id = NULL,
+                evento_id = ?,
+                created_at = datetime('now')
+          WHERE token = ?`,
+        [
+          'DAR_COMPROVANTE_MANUAL',
+          filePath,
+          filePath,
+          publicUrl,
+          eventoId,
+          tokenDoc,
+        ],
+        'evento/baixa-manual/update-documento'
+      );
+
+      await dbRun(
+        `UPDATE dars
+            SET status = 'Pago',
+                data_pagamento = ?,
+                comprovante_token = ?
+          WHERE id = ?`,
+        [dataPagamentoISO, tokenDoc, darId],
+        'evento/baixa-manual/update-dar'
+      );
+
+      if (previousPath && previousPath !== filePath) {
+        try {
+          if (fs.existsSync(previousPath)) fs.unlinkSync(previousPath);
+        } catch (cleanupErr) {
+          console.warn('[admin/eventos] Falha ao remover comprovante antigo:', cleanupErr?.message || cleanupErr);
+        }
+      }
+
+      return res.json({
+        ok: true,
+        token: tokenDoc,
+        data_pagamento: dataPagamentoISO,
+        comprovante_url: publicUrl,
+      });
+    } catch (err) {
+      if (tempFilePath) {
+        try {
+          if (fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath);
+        } catch (cleanupErr) {
+          console.warn('[admin/eventos] Falha ao limpar comprovante temporário:', cleanupErr?.message || cleanupErr);
+        }
+      }
+      console.error('[admin/eventos] ERRO POST /:eventoId/dars/:darId/baixa-manual:', err);
+      return res.status(500).json({ error: 'Falha ao registrar baixa manual do evento.' });
+    }
+  }
+);
 
 router.get('/:id', async (req, res) => {
   const { id } = req.params;

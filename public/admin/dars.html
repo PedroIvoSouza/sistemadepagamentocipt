@@ -304,7 +304,6 @@
           const podeNotificar = ['Pendente','Vencido','Vencida','Emitido','Reemitido'].includes(dar.status);
           if (podeNotificar) {
             buttons.push(`<button class="btn btn-sm btn-outline-info enviar-notificacao-btn" data-id="${esc(dar.id)}" title="Enviar notificação por e-mail"><i class="bi bi-envelope-fill"></i> Notificar</button>`);
-            buttons.push(`<button class="btn btn-sm btn-outline-success baixa-manual-btn" data-id="${esc(dar.id)}" data-nome="${esc(dar.nome_empresa)}" data-competencia="${esc(competenciaLabel)}" data-valor="R$ ${esc(valorFormatado)}" data-vencimento="${esc(vencimentoFmt)}" data-pagamento="${esc(dataPagamentoISO)}" title="Registrar baixa manual"><i class="bi bi-clipboard-check-fill"></i> Baixar manualmente</button>`);
           } else if (dar.status === 'Pago') {
             buttons.push(`<button class="btn btn-sm btn-outline-info comprovante-btn" data-id="${esc(dar.id)}" title="Ver comprovante"><i class="bi bi-file-earmark-pdf-fill"></i> Comprovante</button>`);
           }
