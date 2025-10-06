@@ -16,6 +16,7 @@ const path = require('path');
 const multer = require('multer');
 const { gerarComprovante } = require('../services/darComprovanteService');
 const { gerarTokenDocumento, imprimirTokenEmPdf } = require('../utils/token');
+const { corrigirTriggersParcialmentePago } = require('../utils/sqliteFixes');
 const { getLastBusinessDayISO, isBusinessDay, parseDateInput, formatISODate } = require('../utils/businessDays');
 const { normalizeMsisdn } = require('../utils/phone');
 const whatsappService = require('../services/whatsappService');
@@ -558,6 +559,12 @@ router.post(
       if (!dar) {
         return res.status(404).json({ error: 'DAR não encontrado.' });
       }
+
+      await corrigirTriggersParcialmentePago(db, {
+        all: dbAllAsync,
+        run: dbRunAsync,
+        ctxPrefix: 'dars/baixa-manual/triggers',
+      });
 
       const rawDataPagamento =
         req.body?.dataPagamento ??

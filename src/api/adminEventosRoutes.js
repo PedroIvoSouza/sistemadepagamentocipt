@@ -31,6 +31,7 @@ const {
 const { sendMessage } = require('../services/whatsappService');
 
 const { gerarTermoEventoPdfkitEIndexar } = require('../services/termoEventoPdfkitService');
+const { corrigirTriggersParcialmentePago } = require('../utils/sqliteFixes');
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
@@ -915,6 +916,12 @@ router.post(
       if (!vinculo) {
         return res.status(404).json({ error: 'Vínculo entre evento e DAR não encontrado.' });
       }
+
+      await corrigirTriggersParcialmentePago(db, {
+        all: dbAll,
+        run: dbRun,
+        ctxPrefix: 'evento/baixa-manual/triggers',
+      });
 
       const rawDataPagamento =
         req.body?.dataPagamento ??

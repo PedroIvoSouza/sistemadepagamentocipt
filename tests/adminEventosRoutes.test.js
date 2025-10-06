@@ -24,6 +24,15 @@ function setupRouter(arg) {
     },
   };
   const dbStub = options.dbStub || { stub: true };
+  if (!dbStub.all) {
+    dbStub.all = (sql, params, cb) => {
+      if (typeof params === 'function') {
+        cb = params;
+        params = [];
+      }
+      cb(null, []);
+    };
+  }
   const dbPath = path.resolve(__dirname, '../src/database/db.js');
   require.cache[dbPath] = { exports: dbStub };
   const servicePath = path.resolve(__dirname, '../src/services/eventoDarService.js');
@@ -309,7 +318,18 @@ test('POST /:eventoId/dars/:darId/baixa-manual reutiliza documento manual existe
 
       return cb(null, null);
     },
+    all: (sql, params, cb) => {
+      if (/sqlite_master/.test(sql)) {
+        return cb(null, []);
+      }
+      cb(null, []);
+    },
     run: (sql, params, cb) => {
+      if (/BEGIN IMMEDIATE/i.test(sql) || /COMMIT/i.test(sql) || /ROLLBACK/i.test(sql)) {
+        cb.call({ lastID: 0, changes: 0 }, null);
+        return;
+      }
+
       if (/UPDATE documentos/.test(sql)) {
         cb.call({ lastID: 0, changes: 1 }, null);
         return;
