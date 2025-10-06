@@ -519,9 +519,27 @@ window.onload = () => {
   const parseCurrency = (s) => {
     if (!s) return 0;
     if (typeof s === 'number') return s;
-    const v = String(s).replace('R$','').replace(/\./g,'').replace(',','.').trim();
-    const n = parseFloat(v);
-    return isNaN(n) ? 0 : n;
+    const raw = String(s).trim();
+    if (!raw) return 0;
+    const cleaned = raw.replace(/[R$\s]/g, '');
+    const hasComma = cleaned.includes(',');
+    let sanitized = cleaned;
+    if (hasComma) {
+      sanitized = sanitized.replace(/\./g, '').replace(',', '.');
+    } else {
+      const dotMatches = sanitized.match(/\./g) || [];
+      if (dotMatches.length > 1) {
+        sanitized = sanitized.replace(/\./g, '');
+      } else if (dotMatches.length === 1) {
+        const [, decimalPart = ''] = sanitized.split('.');
+        if (!decimalPart || decimalPart.length > 2) {
+          sanitized = sanitized.replace(/\./g, '');
+        }
+      }
+      sanitized = sanitized.replace(',', '.');
+    }
+    const n = Number(sanitized);
+    return Number.isFinite(n) ? n : 0;
   };
   const fmtBRL = n => `R$ ${Number(n||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}`;
   const evIdOf = ev => ev?.id || ev?.evento_id || ev?.id_evento || ev?.eventoId;
