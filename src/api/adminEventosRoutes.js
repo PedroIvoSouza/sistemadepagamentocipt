@@ -77,6 +77,98 @@ const dbRun = (sql, p = [], ctx = '') =>
     });
   });
 
+const normalizarStatusParcialEvento = async (eventoId, ctxPrefix = 'evento/normalizar-status') => {
+  try {
+    await dbRun(
+      `UPDATE Eventos
+          SET status = CASE
+                WHEN status = 'Pago Parcialmente' THEN 'Parcialmente Pago'
+                ELSE status
+              END
+        WHERE id = ?`,
+      [eventoId],
+      `${ctxPrefix}/evento`
+    );
+  } catch (err) {
+    console.warn('[admin/eventos] falha ao normalizar status do evento', err?.message || err);
+  }
+
+  try {
+    await dbRun(
+      `UPDATE dars
+          SET status = CASE
+                WHEN status = 'Pago Parcialmente' THEN 'Parcialmente Pago'
+                ELSE status
+              END
+        WHERE id IN (
+          SELECT de.id_dar
+            FROM DARs_Eventos de
+           WHERE de.id_evento = ?
+        )`,
+      [eventoId],
+      `${ctxPrefix}/dars`
+    );
+  } catch (err) {
+    console.warn('[admin/eventos] falha ao normalizar status das DARs do evento', err?.message || err);
+  }
+};
+
+const atualizarStatusEventoPorDars = async (eventoId, ctxPrefix = 'evento/recalcular-status') => {
+  const evento = await dbGet(
+    'SELECT status FROM Eventos WHERE id = ?',
+    [eventoId],
+    `${ctxPrefix}/evento-atual`
+  );
+
+  if (!evento) return;
+
+  if (['Cancelado', 'Realizado'].includes(evento.status)) {
+    return;
+  }
+
+  const statusRows = await dbAll(
+    `SELECT d.status
+       FROM DARs_Eventos de
+       JOIN dars d ON d.id = de.id_dar
+      WHERE de.id_evento = ?`,
+    [eventoId],
+    `${ctxPrefix}/listar-status-dars`
+  );
+
+  if (!statusRows || statusRows.length === 0) {
+    return;
+  }
+
+  const statuses = statusRows
+    .map((row) => (row?.status || '').trim())
+    .filter((status) => status.length > 0);
+
+  if (statuses.length === 0) {
+    return;
+  }
+
+  const allPaid = statuses.every((status) => status === 'Pago');
+  const anyPaid = statuses.some((status) => status === 'Pago');
+
+  let targetStatus = evento.status;
+
+  if (allPaid) {
+    targetStatus = 'Pago';
+  } else if (anyPaid) {
+    targetStatus = 'Parcialmente Pago';
+  } else if (['Pago', 'Parcialmente Pago'].includes(evento.status)) {
+    targetStatus = 'Emitido';
+  }
+
+  if (targetStatus !== evento.status) {
+    await dbRun(
+      `UPDATE Eventos SET status = ? WHERE id = ?`,
+      [targetStatus, eventoId],
+      `${ctxPrefix}/atualizar-evento`
+    );
+  }
+};
+
 /* ========= Middleware ========= */
 router.use(adminAuthMiddleware);
 
@@ -904,37 +996,56 @@ router.post(
 
       const previousPath = existingDoc?.caminho && String(existingDoc.caminho).trim() ? existingDoc.caminho : null;
 
-      await dbRun(
-        `UPDATE documentos
-            SET tipo = ?,
-                caminho = ?,
-                pdf_url = ?,
-                pdf_public_url = ?,
-                status = 'upload_manual',
-                permissionario_id = NULL,
-                evento_id = ?,
-                created_at = datetime('now')
-          WHERE token = ?`,
-        [
-          'DAR_COMPROVANTE_MANUAL',
-          filePath,
-          filePath,
-          publicUrl,
-          eventoId,
-          tokenDoc,
-        ],
-        'evento/baixa-manual/update-documento'
-      );
+      await dbRun('BEGIN IMMEDIATE TRANSACTION', [], 'evento/baixa-manual/BEGIN');
+      let committed = false;
+      try {
+        await normalizarStatusParcialEvento(eventoId, 'evento/baixa-manual/normalizar');
 
-      await dbRun(
-        `UPDATE dars
-            SET status = 'Pago',
-                data_pagamento = ?,
-                comprovante_token = ?
-          WHERE id = ?`,
-        [dataPagamentoISO, tokenDoc, darId],
-        'evento/baixa-manual/update-dar'
-      );
+        await dbRun(
+          `UPDATE documentos
+              SET tipo = ?,
+                  caminho = ?,
+                  pdf_url = ?,
+                  pdf_public_url = ?,
+                  status = 'upload_manual',
+                  permissionario_id = NULL,
+                  evento_id = ?,
+                  created_at = datetime('now')
+            WHERE token = ?`,
+          [
+            'DAR_COMPROVANTE_MANUAL',
+            filePath,
+            filePath,
+            publicUrl,
+            eventoId,
+            tokenDoc,
+          ],
+          'evento/baixa-manual/update-documento'
+        );
+
+        await dbRun(
+          `UPDATE dars
+              SET status = 'Pago',
+                  data_pagamento = ?,
+                  comprovante_token = ?
+            WHERE id = ?`,
+          [dataPagamentoISO, tokenDoc, darId],
+          'evento/baixa-manual/update-dar'
+        );
+
+        await atualizarStatusEventoPorDars(eventoId, 'evento/baixa-manual/recalcular');
+
+        await dbRun('COMMIT', [], 'evento/baixa-manual/COMMIT');
+        committed = true;
+      } finally {
+        if (!committed) {
+          try {
+            await dbRun('ROLLBACK', [], 'evento/baixa-manual/ROLLBACK');
+          } catch (rollbackErr) {
+            console.warn('[admin/eventos] falha ao fazer rollback da baixa manual', rollbackErr?.message || rollbackErr);
+          }
+        }
+      }
 
       if (previousPath && previousPath !== filePath) {
         try {
