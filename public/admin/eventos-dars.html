@@ -41,6 +41,7 @@
     .custom-modal { display: none; position: fixed; z-index: 1050; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.5); }
     .custom-modal .modal-content { background-color: #fefefe; margin: 2% auto; padding: 25px; border: 1px solid #888; width: 90%; max-width: 800px; border-radius: var(--raio-borda); }
     .custom-modal .modal-content.small { max-width: 500px; }
+    #dars-modal .modal-content { max-width: 960px; }
     .modal-content fieldset { border: 1px solid #ddd; padding: 1rem; margin-bottom: 1rem; border-radius: .5rem; }
     .modal-content legend { font-size: 1rem; font-weight: 700; color: var(--cor-primaria); padding: 0 .5rem; width: auto; }
     .summary-row { display: flex; justify-content: space-between; font-size: 1.1rem; padding: .5rem 0; }
@@ -362,7 +363,8 @@
       <div id="dars-list"></div>
       <div class="mt-3">
         <form id="dar-manual-form" class="border rounded p-3 bg-light">
-          <h6 class="fw-bold mb-3">Adicionar DAR manual</h6>
+          <h6 class="fw-bold mb-2">Emitir DAR manual</h6>
+          <p class="small text-muted mb-3">Informe os dados abaixo para emitirmos a guia oficial diretamente na SEFAZ.</p>
           <div class="row g-3">
             <div class="col-md-4">
               <label class="form-label" for="dar-manual-valor">Valor (R$)</label>
@@ -373,42 +375,12 @@
               <input type="date" class="form-control" id="dar-manual-vencimento" required>
             </div>
             <div class="col-md-4">
-              <label class="form-label" for="dar-manual-status">Status</label>
-              <select id="dar-manual-status" class="form-select">
-                <option value="Emitido" selected>Emitido</option>
-                <option value="Pendente">Pendente</option>
-                <option value="Pago">Pago</option>
-                <option value="Cancelado">Cancelado</option>
-              </select>
-            </div>
-          </div>
-          <div class="row g-3 mt-0 mt-md-3">
-            <div class="col-md-4">
-              <label class="form-label" for="dar-manual-parcela">Número da Parcela (opcional)</label>
-              <input type="number" min="1" class="form-control" id="dar-manual-parcela" placeholder="Sequência automática se vazio">
-            </div>
-            <div class="col-md-4">
-              <label class="form-label" for="dar-manual-numero">Número do Documento (opcional)</label>
-              <input type="text" class="form-control" id="dar-manual-numero">
-            </div>
-            <div class="col-md-4">
-              <label class="form-label" for="dar-manual-pdf">PDF da DAR</label>
-              <input type="file" class="form-control" id="dar-manual-pdf" accept="application/pdf">
-              <div class="form-text">Envie o PDF emitido manualmente ou deixe em branco para gerar um recibo simples.</div>
-            </div>
-          </div>
-          <div class="row g-3 mt-0 mt-md-3">
-            <div class="col-md-6">
-              <label class="form-label" for="dar-manual-linha">Linha Digitável (opcional)</label>
-              <input type="text" class="form-control" id="dar-manual-linha">
-            </div>
-            <div class="col-md-6">
-              <label class="form-label" for="dar-manual-codigo">Código de Barras (opcional)</label>
-              <input type="text" class="form-control" id="dar-manual-codigo">
+              <label class="form-label" for="dar-manual-parcela">Número da parcela</label>
+              <input type="number" min="1" class="form-control" id="dar-manual-parcela" placeholder="Informe a sequência" required>
             </div>
           </div>
           <div id="dar-manual-error" class="alert alert-danger mt-3 d-none"></div>
-          <button type="submit" class="btn btn-outline-primary fw-bold w-100 mt-3">Salvar DAR manual</button>
+          <button type="submit" class="btn btn-outline-primary fw-bold w-100 mt-3">Emitir DAR</button>
         </form>
       </div>
     </div>
@@ -547,9 +519,27 @@ window.onload = () => {
   const parseCurrency = (s) => {
     if (!s) return 0;
     if (typeof s === 'number') return s;
-    const v = String(s).replace('R$','').replace(/\./g,'').replace(',','.').trim();
-    const n = parseFloat(v);
-    return isNaN(n) ? 0 : n;
+    const raw = String(s).trim();
+    if (!raw) return 0;
+    const cleaned = raw.replace(/[R$\s]/g, '');
+    const hasComma = cleaned.includes(',');
+    let sanitized = cleaned;
+    if (hasComma) {
+      sanitized = sanitized.replace(/\./g, '').replace(',', '.');
+    } else {
+      const dotMatches = sanitized.match(/\./g) || [];
+      if (dotMatches.length > 1) {
+        sanitized = sanitized.replace(/\./g, '');
+      } else if (dotMatches.length === 1) {
+        const [, decimalPart = ''] = sanitized.split('.');
+        if (!decimalPart || decimalPart.length > 2) {
+          sanitized = sanitized.replace(/\./g, '');
+        }
+      }
+      sanitized = sanitized.replace(',', '.');
+    }
+    const n = Number(sanitized);
+    return Number.isFinite(n) ? n : 0;
   };
   const fmtBRL = n => `R$ ${Number(n||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}`;
   const evIdOf = ev => ev?.id || ev?.evento_id || ev?.id_evento || ev?.eventoId;
@@ -784,12 +774,7 @@ window.onload = () => {
   const darManualForm = document.getElementById('dar-manual-form');
   const darManualValorInput = document.getElementById('dar-manual-valor');
   const darManualVencimentoInput = document.getElementById('dar-manual-vencimento');
-  const darManualStatusSelect = document.getElementById('dar-manual-status');
   const darManualParcelaInput = document.getElementById('dar-manual-parcela');
-  const darManualNumeroInput = document.getElementById('dar-manual-numero');
-  const darManualLinhaInput = document.getElementById('dar-manual-linha');
-  const darManualCodigoInput = document.getElementById('dar-manual-codigo');
-  const darManualPdfInput = document.getElementById('dar-manual-pdf');
   const darManualError = document.getElementById('dar-manual-error');
   const eventoBaixaManualModalEl = document.getElementById('eventoBaixaManualModal');
   const eventoBaixaManualForm = document.getElementById('eventoBaixaManualForm');
@@ -1566,14 +1551,18 @@ function normalizarEvento(payload){
       const dars = await listarDARs(eventoId);
       if (!Array.isArray(dars) || dars.length === 0) {
         darsList.innerHTML = `<div class="alert alert-info">Nenhuma DAR encontrada para ${nome}.</div>`;
+        if (darManualParcelaInput) {
+          darManualParcelaInput.value = '1';
+          darManualParcelaInput.min = '1';
+        }
         await sincronizarStatusEvento(eventoId, []);
         return;
       }
 
       const manualCount = dars.filter(d => Number(d.manual || d.is_manual || 0) === 1).length;
       const manualInfo = manualCount
-        ? `<p class="small text-warning fw-semibold mb-2">⚠ ${manualCount} parcela(s) manuais não serão conciliadas automaticamente.</p>`
-        : `<p class="small text-muted mb-2">DARs automáticas são conciliadas com a SEFAZ.</p>`;
+        ? `<p class="small text-warning fw-semibold mb-2">⚠ ${manualCount} parcela(s) antigas marcadas como manuais não possuem conciliação automática.</p>`
+        : `<p class="small text-muted mb-2">As DARs emitidas por aqui são enviadas diretamente para a SEFAZ.</p>`;
 
       const escAttr = (value) => String(value ?? '')
         .replace(/&/g, '&amp;')
@@ -1674,6 +1663,19 @@ function normalizarEvento(payload){
           </table>
         </div>`;
 
+      if (darManualParcelaInput) {
+        const maxParcela = dars.reduce((acc, d) => {
+          const raw = d.parcela_num ?? d.referencia ?? d.numero_parcela ?? d.parcela;
+          const parsed = Number(raw);
+          return Number.isFinite(parsed) && parsed > acc ? parsed : acc;
+        }, 0);
+        if (!darManualParcelaInput.value) {
+          const next = maxParcela > 0 ? maxParcela + 1 : 1;
+          darManualParcelaInput.value = String(next);
+        }
+        darManualParcelaInput.min = '1';
+      }
+
       await sincronizarStatusEvento(eventoId, dars);
     } catch (e) {
       console.error(e);
@@ -1686,7 +1688,7 @@ function normalizarEvento(payload){
     darModalEventoNome = eventoNome || `#${eventoId}`;
     if (darManualForm) {
       darManualForm.reset();
-      if (darManualStatusSelect) darManualStatusSelect.value = 'Emitido';
+      if (darManualParcelaInput) darManualParcelaInput.value = '';
       if (darManualError) {
         darManualError.classList.add('d-none');
         darManualError.textContent = '';
@@ -1724,57 +1726,55 @@ function normalizarEvento(payload){
       return;
     }
 
+    const parcelaNumero = Number(darManualParcelaInput?.value);
+    if (!Number.isInteger(parcelaNumero) || parcelaNumero <= 0) {
+      if (darManualError) {
+        darManualError.textContent = 'Informe o número sequencial da parcela.';
+        darManualError.classList.remove('d-none');
+      }
+      return;
+    }
+
     if (darManualError) {
       darManualError.classList.add('d-none');
       darManualError.textContent = '';
     }
 
-    const formData = new FormData();
-    formData.append('valor', Number(valor).toFixed(2));
-    formData.append('vencimento', vencimento);
-    formData.append('status', darManualStatusSelect?.value || 'Emitido');
-
-    const parcela = darManualParcelaInput?.value?.trim();
-    if (parcela) formData.append('numero_parcela', parcela);
-    const numeroDoc = darManualNumeroInput?.value?.trim();
-    if (numeroDoc) formData.append('numero_documento', numeroDoc);
-    const linha = darManualLinhaInput?.value?.trim();
-    if (linha) formData.append('linha_digitavel', linha);
-    const codigo = darManualCodigoInput?.value?.trim();
-    if (codigo) formData.append('codigo_barras', codigo);
-    const arquivo = darManualPdfInput?.files?.[0];
-    if (arquivo) formData.append('pdf', arquivo);
+    const payload = {
+      valor: Number(valor).toFixed(2),
+      vencimento,
+      numero_parcela: parcelaNumero,
+    };
 
     const submitBtn = darManualForm.querySelector('button[type="submit"]');
     const originalLabel = submitBtn ? submitBtn.innerHTML : '';
     if (submitBtn) {
       submitBtn.disabled = true;
-      submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Salvando...';
+      submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Emitindo...';
     }
 
     try {
       const resp = await fetch(`/api/admin/eventos/${darModalEventoId}/dars/manual`, {
         method: 'POST',
-        headers: AUTH_HEADERS,
-        body: formData,
+        headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
       });
       const json = await resp.json().catch(() => ({}));
       if (!resp.ok || json.error) throw new Error(json.error || `Erro ${resp.status}`);
-      alert('DAR manual salva com sucesso.');
+      alert('DAR emitida com sucesso.');
       darManualForm.reset();
-      if (darManualStatusSelect) darManualStatusSelect.value = 'Emitido';
       await renderizarDARsModal();
     } catch (err) {
       if (darManualError) {
-        darManualError.textContent = err.message || 'Não foi possível salvar a DAR manual.';
+        darManualError.textContent = err.message || 'Não foi possível emitir a DAR.';
         darManualError.classList.remove('d-none');
       } else {
-        alert(err.message || 'Não foi possível salvar a DAR manual.');
+        alert(err.message || 'Não foi possível emitir a DAR.');
       }
     } finally {
       if (submitBtn) {
         submitBtn.disabled = false;
-        submitBtn.innerHTML = originalLabel || 'Salvar DAR manual';
+        submitBtn.innerHTML = originalLabel || 'Emitir DAR';
       }
     }
   });

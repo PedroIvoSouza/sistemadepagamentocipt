@@ -49,54 +49,6 @@ async function describeDarTable(db) {
   };
 }
 
-function sanitizePdfBase64(pdf) {
-  if (!pdf) return null;
-  const str = String(pdf).trim();
-  if (!str) return null;
-  const [, b64] = str.split('base64,');
-  return b64 ? b64 : str;
-}
-
-async function gerarPdfManualBasico({ eventoNome, clienteNome, valor, vencimentoISO }) {
-  const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
-  const pdfDoc = await PDFDocument.create();
-  const page = pdfDoc.addPage();
-  const fontTitle = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-  const fontBody = await pdfDoc.embedFont(StandardFonts.Helvetica);
-  const { width } = page.getSize();
-
-  let cursorY = page.getHeight() - 72;
-  const margin = 60;
-  const drawLine = (text, opts = {}) => {
-    const { font = fontBody, size = 12, color = rgb(0, 0, 0) } = opts;
-    page.drawText(text, { x: margin, y: cursorY, size, font, color, maxWidth: width - margin * 2 });
-    cursorY -= size + 8;
-  };
-
-  drawLine('Documento de Arrecadação Manual', { font: fontTitle, size: 18 });
-  cursorY -= 8;
-  drawLine('Centro de Inovação do Polo Tecnológico (CIPT)', { font: fontBody, size: 11 });
-  cursorY -= 12;
-  drawLine(`Evento: ${eventoNome || '-'}`);
-  drawLine(`Permissionário/Cliente: ${clienteNome || '-'}`);
-
-  const valorFmt = Number(valor || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-  const vencimentoFmt = vencimentoISO
-    ? new Date(`${vencimentoISO}T12:00:00`).toLocaleDateString('pt-BR')
-    : '-';
-  drawLine(`Valor: ${valorFmt}`);
-  drawLine(`Vencimento: ${vencimentoFmt}`);
-
-  cursorY -= 12;
-  drawLine(
-    'Este documento foi inserido manualmente no sistema e não terá conciliação automática com a SEFAZ.',
-    { size: 10, color: rgb(0.25, 0.25, 0.25) }
-  );
-
-  const pdfBytes = await pdfDoc.save();
-  return Buffer.from(pdfBytes).toString('base64');
-}
-
 const feriadosFixos = [
   '01/01', '21/04', '01/05', '24/06', '07/09',
   '16/09', '12/10', '02/11', '15/11', '25/12'
@@ -608,6 +560,7 @@ async function atualizarEventoComDars(db, id, data, helpers) {
 
 async function criarDarManualEvento(db, eventoId, payload = {}, helpers = {}) {
   const {
+    emitirGuiaSefaz = require('./sefazService').emitirGuiaSefaz,
     gerarTokenDocumento = require('../utils/token').gerarTokenDocumento,
     imprimirTokenEmPdf = require('../utils/token').imprimirTokenEmPdf,
   } = helpers;
@@ -649,95 +602,177 @@ async function criarDarManualEvento(db, eventoId, payload = {}, helpers = {}) {
   const mesRef = Number(vencimentoISO.slice(5, 7));
   const anoRef = Number(vencimentoISO.slice(0, 4));
 
-  const status = (payload.status || 'Emitido').toString().trim() || 'Emitido';
-  const numeroDocumento = payload.numero_documento || payload.numero || null;
-  const linhaDigitavel = payload.linha_digitavel || payload.linhaDigitavel || null;
-  const codigoBarras = payload.codigo_barras || payload.codigoBarras || null;
+  let numeroParcela = Number(payload.numero_parcela || payload.parcela || payload.parcela_num);
+  if (!Number.isInteger(numeroParcela) || numeroParcela <= 0) {
+    const current = await dbGet(
+      db,
+      'SELECT MAX(numero_parcela) AS maxParcela FROM DARs_Eventos WHERE id_evento = ?',
+      [id]
+    );
+    numeroParcela = Number(current?.maxParcela || 0) + 1;
+  }
+
+  const existingVinculo = await dbGet(
+    db,
+    `SELECT de.id            AS vinculo_id,
+            de.id_dar       AS vinculo_dar_id,
+            d.status        AS dar_status
+       FROM DARs_Eventos de
+  LEFT JOIN dars d ON d.id = de.id_dar
+      WHERE de.id_evento = ? AND de.numero_parcela = ?`,
+    [id, numeroParcela]
+  );
+
+  if (existingVinculo?.dar_status === 'Pago') {
+    const err = new Error('Não é possível substituir uma DAR já paga.');
+    err.status = 409;
+    throw err;
+  }
+
+  const documentoLimpo = onlyDigits(evento.documento);
+  if (!documentoLimpo) {
+    throw new Error('Documento do cliente inválido.');
+  }
+  const tipoInscricao = documentoLimpo.length === 11 ? 3 : 4;
+  const receitaCod = Number(String(process.env.RECEITA_CODIGO_EVENTO).replace(/\D/g, ''));
+  if (!receitaCod) {
+    throw new Error('RECEITA_CODIGO_EVENTO inválido.');
+  }
+
+  const totalParcelasRow = await dbGet(
+    db,
+    'SELECT COUNT(*) AS total FROM DARs_Eventos WHERE id_evento = ?',
+    [id]
+  );
+  const totalParcelas = Math.max(Number(totalParcelasRow?.total || 0), numeroParcela);
+
+  const payloadSefaz = {
+    versao: '1.0',
+    contribuinteEmitente: {
+      codigoTipoInscricao: tipoInscricao,
+      numeroInscricao: documentoLimpo,
+      nome: evento.nome_razao_social,
+      codigoIbgeMunicipio: Number(process.env.COD_IBGE_MUNICIPIO),
+      descricaoEndereco: evento.endereco || '-',
+      numeroCep: onlyDigits(evento.cep),
+    },
+    receitas: [{
+      codigo: receitaCod,
+      competencia: { mes: mesRef, ano: anoRef },
+      valorPrincipal: Number(valorNumber.toFixed(2)),
+      valorDesconto: 0,
+      dataVencimento: vencimentoISO,
+    }],
+    dataLimitePagamento: vencimentoISO,
+    observacao: `CIPT Evento: ${evento.nome_evento || ''} | Parcela ${numeroParcela} de ${totalParcelas}`,
+  };
 
   const darSchema = await describeDarTable(db);
   const nowISO = new Date().toISOString();
 
-  let pdfBase64 = sanitizePdfBase64(payload.pdf_url || payload.pdfBase64);
-  if (!pdfBase64 && payload.pdfBuffer) {
-    const buf = Buffer.isBuffer(payload.pdfBuffer)
-      ? payload.pdfBuffer
-      : Buffer.from(payload.pdfBuffer);
-    pdfBase64 = buf.toString('base64');
-  }
-  if (!pdfBase64) {
-    pdfBase64 = await gerarPdfManualBasico({
-      eventoNome: evento.nome_evento,
-      clienteNome: evento.nome_razao_social,
-      valor: valorNumber,
-      vencimentoISO,
-    });
-  }
-
-  const tokenDocumento = await gerarTokenDocumento('DAR_EVENTO', null, db);
-  const pdfComToken = await imprimirTokenEmPdf(pdfBase64, tokenDocumento, { onlyLastPage: true });
-
   await dbRun(db, 'BEGIN TRANSACTION');
   try {
-    const darCols = ['valor', 'data_vencimento', 'status', 'mes_referencia', 'ano_referencia', 'permissionario_id', 'tipo_permissionario'];
-    const darVals = [valorNumber, vencimentoISO, status, mesRef, anoRef, null, 'Evento'];
-    if (darSchema.hasDataEmissao) {
-      darCols.push('data_emissao');
-      darVals.push(nowISO);
-    }
-    if (darSchema.hasManual) {
-      darCols.push('manual');
-      darVals.push(1);
+    let darId = Number(existingVinculo?.vinculo_dar_id) || null;
+
+    if (darId) {
+      const baseCols = ['valor = ?', 'data_vencimento = ?', 'mes_referencia = ?', 'ano_referencia = ?', 'status = ?'];
+      const baseVals = [valorNumber, vencimentoISO, mesRef, anoRef, 'Pendente'];
+      if (darSchema.hasManual) {
+        baseCols.push('manual = ?');
+        baseVals.push(0);
+      }
+      if (darSchema.hasDataEmissao) {
+        baseCols.push('data_emissao = ?');
+        baseVals.push(nowISO);
+      }
+      await dbRun(db, `UPDATE dars SET ${baseCols.join(', ')} WHERE id = ?`, [...baseVals, darId]);
+    } else {
+      const darCols = ['valor', 'data_vencimento', 'status', 'mes_referencia', 'ano_referencia', 'permissionario_id', 'tipo_permissionario'];
+      const darVals = [valorNumber, vencimentoISO, 'Pendente', mesRef, anoRef, null, 'Evento'];
+      if (darSchema.hasDataEmissao) {
+        darCols.push('data_emissao');
+        darVals.push(nowISO);
+      }
+      if (darSchema.hasManual) {
+        darCols.push('manual');
+        darVals.push(0);
+      }
+      const darStmt = await dbRun(
+        db,
+        `INSERT INTO dars (${darCols.join(',')}) VALUES (${darCols.map(() => '?').join(',')})`,
+        darVals
+      );
+      darId = darStmt.lastID;
     }
 
-    const darStmt = await dbRun(
-      db,
-      `INSERT INTO dars (${darCols.join(',')}) VALUES (${darCols.map(() => '?').join(',')})`,
-      darVals
-    );
-    const darId = darStmt.lastID;
+    const retorno = await emitirGuiaSefaz(payloadSefaz);
+    if (!retorno || !retorno.pdfBase64 || !retorno.numeroGuia) {
+      throw new Error('Retorno inválido ao emitir a DAR na SEFAZ.');
+    }
 
-    const updateCols = [];
-    const updateVals = [];
-    if (darSchema.hasPdfUrl && pdfComToken) {
+    const tokenDocumento = await gerarTokenDocumento('DAR_EVENTO', null, db);
+    const pdfComToken = await imprimirTokenEmPdf(retorno.pdfBase64, tokenDocumento, { onlyLastPage: true });
+
+    const statusFinal =
+      existingVinculo?.vinculo_dar_id && existingVinculo.dar_status && existingVinculo.dar_status !== 'Pendente'
+        ? 'Reemitido'
+        : 'Emitido';
+
+    const updateCols = ['valor = ?', 'data_vencimento = ?', 'mes_referencia = ?', 'ano_referencia = ?', 'status = ?'];
+    const updateVals = [valorNumber, vencimentoISO, mesRef, anoRef, statusFinal];
+
+    if (darSchema.hasNumeroDocumento) {
+      updateCols.push('numero_documento = ?');
+      updateVals.push(retorno.numeroGuia);
+    }
+    if (darSchema.hasPdfUrl) {
       updateCols.push('pdf_url = ?');
       updateVals.push(pdfComToken);
     }
-    if (darSchema.hasNumeroDocumento && numeroDocumento) {
-      updateCols.push('numero_documento = ?');
-      updateVals.push(numeroDocumento);
-    }
-    if (darSchema.hasLinhaDigitavel && linhaDigitavel) {
+    if (darSchema.hasLinhaDigitavel) {
       updateCols.push('linha_digitavel = ?');
-      updateVals.push(linhaDigitavel);
+      updateVals.push(retorno.linhaDigitavel || null);
     }
-    if (darSchema.hasCodigoBarras && codigoBarras) {
+    if (darSchema.hasCodigoBarras) {
       updateCols.push('codigo_barras = ?');
-      updateVals.push(codigoBarras);
+      updateVals.push(retorno.codigoBarras || null);
     }
-    if (updateCols.length) {
-      await dbRun(
-        db,
-        `UPDATE dars SET ${updateCols.join(', ')} WHERE id = ?`,
-        [...updateVals, darId]
-      );
+    if (darSchema.hasManual) {
+      updateCols.push('manual = ?');
+      updateVals.push(0);
     }
-
-    let numeroParcela = Number(payload.numero_parcela || payload.parcela || payload.parcela_num);
-    if (!Number.isInteger(numeroParcela) || numeroParcela <= 0) {
-      const current = await dbGet(
-        db,
-        'SELECT MAX(numero_parcela) AS maxParcela FROM DARs_Eventos WHERE id_evento = ?',
-        [id]
-      );
-      numeroParcela = Number(current?.maxParcela || 0) + 1;
+    if (darSchema.hasDataEmissao) {
+      updateCols.push('data_emissao = ?');
+      updateVals.push(nowISO);
     }
 
     await dbRun(
       db,
-      `INSERT INTO DARs_Eventos (id_dar, id_evento, numero_parcela, valor_parcela, data_vencimento)
-       VALUES (?, ?, ?, ?, ?)`,
-      [darId, id, numeroParcela, valorNumber, vencimentoISO]
+      `UPDATE dars SET ${updateCols.join(', ')} WHERE id = ?`,
+      [...updateVals, darId]
     );
+
+    if (existingVinculo?.vinculo_id) {
+      await dbRun(
+        db,
+        `UPDATE DARs_Eventos SET id_dar = ?, valor_parcela = ?, data_vencimento = ? WHERE id = ?`,
+        [darId, valorNumber, vencimentoISO, existingVinculo.vinculo_id]
+      );
+    } else {
+      const updateJoin = await dbRun(
+        db,
+        `UPDATE DARs_Eventos SET id_dar = ?, valor_parcela = ?, data_vencimento = ? WHERE id_evento = ? AND numero_parcela = ?`,
+        [darId, valorNumber, vencimentoISO, id, numeroParcela]
+      );
+      if (!updateJoin || !updateJoin.changes) {
+        await dbRun(
+          db,
+          `INSERT INTO DARs_Eventos (id_dar, id_evento, numero_parcela, valor_parcela, data_vencimento)
+           VALUES (?, ?, ?, ?, ?)`,
+          [darId, id, numeroParcela, valorNumber, vencimentoISO]
+        );
+      }
+    }
 
     await dbRun(db, 'COMMIT');
 
@@ -746,12 +781,12 @@ async function criarDarManualEvento(db, eventoId, payload = {}, helpers = {}) {
       numero_parcela: numeroParcela,
       valor: valorNumber,
       vencimento: vencimentoISO,
-      status,
-      manual: darSchema.hasManual ? 1 : undefined,
-      pdf_url: pdfComToken,
-      numero_documento: numeroDocumento,
-      linha_digitavel: linhaDigitavel,
-      codigo_barras: codigoBarras,
+      status: statusFinal,
+      manual: darSchema.hasManual ? 0 : undefined,
+      numero_documento: darSchema.hasNumeroDocumento ? retorno.numeroGuia : undefined,
+      linha_digitavel: darSchema.hasLinhaDigitavel ? retorno.linhaDigitavel || null : undefined,
+      codigo_barras: darSchema.hasCodigoBarras ? retorno.codigoBarras || null : undefined,
+      pdf_url: darSchema.hasPdfUrl ? pdfComToken : undefined,
     };
   } catch (err) {
     try { await dbRun(db, 'ROLLBACK'); } catch {}
