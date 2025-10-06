@@ -884,7 +884,22 @@ router.post(
       }
 
       if (!tokenDoc) {
-        tokenDoc = await gerarTokenDocumento('DAR_COMPROVANTE_MANUAL', null, db);
+        existingDoc = await dbGet(
+          `SELECT id, token, caminho
+             FROM documentos
+            WHERE evento_id = ? AND tipo = ?
+         ORDER BY id DESC
+            LIMIT 1`,
+          [eventoId, 'DAR_COMPROVANTE_MANUAL'],
+          'evento/baixa-manual/documento-evento-atual'
+        ).catch(() => null);
+
+        if (existingDoc?.token) {
+          tokenDoc = existingDoc.token;
+        } else {
+          existingDoc = null;
+          tokenDoc = await gerarTokenDocumento('DAR_COMPROVANTE_MANUAL', null, db);
+        }
       }
 
       const previousPath = existingDoc?.caminho && String(existingDoc.caminho).trim() ? existingDoc.caminho : null;
