@@ -414,6 +414,40 @@
     </div>
   </div>
 
+  <div class="modal fade" id="eventoBaixaManualModal" tabindex="-1" aria-labelledby="eventoBaixaManualModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <form class="modal-content" id="eventoBaixaManualForm" novalidate>
+        <div class="modal-header">
+          <h5 class="modal-title" id="eventoBaixaManualModalLabel">Registrar baixa manual</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+        </div>
+        <div class="modal-body">
+          <p class="small text-muted mb-3" id="eventoBaixaManualResumo"></p>
+          <input type="hidden" id="eventoBaixaManualDarId">
+          <div class="mb-3">
+            <label for="eventoBaixaManualData" class="form-label">Data do pagamento</label>
+            <input type="date" class="form-control" id="eventoBaixaManualData" required>
+            <div class="invalid-feedback">Informe a data do pagamento.</div>
+          </div>
+          <div class="mb-3">
+            <label for="eventoBaixaManualArquivo" class="form-label">Comprovante</label>
+            <input type="file" class="form-control" id="eventoBaixaManualArquivo" accept=".pdf,image/png,image/jpeg,image/jpg" required>
+            <div class="form-text">Envie o comprovante em PDF, JPG ou PNG (máximo 10 MB).</div>
+            <div class="invalid-feedback">Envie o comprovante do pagamento.</div>
+          </div>
+          <div class="alert alert-danger d-none" id="eventoBaixaManualErro"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-success" id="eventoBaixaManualSubmitBtn">
+            <span class="spinner-border spinner-border-sm me-2 d-none" role="status" aria-hidden="true" id="eventoBaixaManualLoading"></span>
+            Confirmar baixa manual
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- Modal para confirmação/edição dos dados do signatário -->
 <div id="assinafy-modal" class="modal fade" tabindex="-1" aria-labelledby="assinafy-modal-title" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
@@ -567,10 +601,22 @@ window.onload = () => {
   window.baixarPdfBase64 = baixarPdfBase64; // usado no onclick gerado
 
   // A FUNÇÃO QUE FALTAVA:
-  const formatDateBR = iso => {
-    if (!iso || !String(iso).includes('-')) return '-'; // Garante que a data não é nula
-    const d = new Date(iso + 'T12:00:00');
-    return isNaN(d) ? '-' : d.toLocaleDateString('pt-BR');
+  const formatDateBR = (value = '') => {
+    if (!value) return '-';
+    const raw = String(value).trim();
+    if (!raw) return '-';
+    const normalized = (() => {
+      if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return `${raw}T12:00:00`;
+      if (/^\d{4}-\d{2}-\d{2}T/.test(raw)) return raw;
+      if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) {
+        const [dd, mm, yyyy] = raw.split('/');
+        return `${yyyy}-${mm}-${dd}T12:00:00`;
+      }
+      return raw.includes('T') ? raw : `${raw}T12:00:00`;
+    })();
+    const d = new Date(normalized);
+    if (Number.isNaN(d.getTime())) return raw;
+    return d.toLocaleDateString('pt-BR');
   };
   const parseFirstDate = val => {
     if (!val) return '';
@@ -745,6 +791,15 @@ window.onload = () => {
   const darManualCodigoInput = document.getElementById('dar-manual-codigo');
   const darManualPdfInput = document.getElementById('dar-manual-pdf');
   const darManualError = document.getElementById('dar-manual-error');
+  const eventoBaixaManualModalEl = document.getElementById('eventoBaixaManualModal');
+  const eventoBaixaManualForm = document.getElementById('eventoBaixaManualForm');
+  const eventoBaixaManualDarIdInput = document.getElementById('eventoBaixaManualDarId');
+  const eventoBaixaManualResumo = document.getElementById('eventoBaixaManualResumo');
+  const eventoBaixaManualDataInput = document.getElementById('eventoBaixaManualData');
+  const eventoBaixaManualArquivoInput = document.getElementById('eventoBaixaManualArquivo');
+  const eventoBaixaManualErro = document.getElementById('eventoBaixaManualErro');
+  const eventoBaixaManualSubmitBtn = document.getElementById('eventoBaixaManualSubmitBtn');
+  const eventoBaixaManualLoading = document.getElementById('eventoBaixaManualLoading');
 
   // Modal Assinafy (dados do signatário)
   const assinafyModal = document.getElementById('assinafy-modal');
@@ -764,6 +819,7 @@ window.onload = () => {
   const cpfInput = document.getElementById('cpf-input');
   const cpfMask = IMask(cpfInput, { mask: '000.000.000-00' });
   const assinafyModalInstance = assinafyModal ? new bootstrap.Modal(assinafyModal) : null;
+  const eventoBaixaManualModalInstance = eventoBaixaManualModalEl ? new bootstrap.Modal(eventoBaixaManualModalEl) : null;
   const adminSuccessModalEl = document.getElementById('adminSuccessModal');
   const successModal = adminSuccessModalEl ? new bootstrap.Modal(adminSuccessModalEl) : null;
 
@@ -775,6 +831,17 @@ window.onload = () => {
   });
   closeAssinafyModalBtn?.addEventListener('click', ()=> assinafyModalInstance?.hide());
   closeCpfModalBtn?.addEventListener('click', ()=> cpfModal.style.display='none');
+  eventoBaixaManualModalEl?.addEventListener('hidden.bs.modal', ()=>{
+    eventoBaixaManualForm?.reset();
+    eventoBaixaManualForm?.classList.remove('was-validated');
+    if (eventoBaixaManualResumo) eventoBaixaManualResumo.textContent = '';
+    if (eventoBaixaManualErro) {
+      eventoBaixaManualErro.classList.add('d-none');
+      eventoBaixaManualErro.textContent = '';
+    }
+    if (eventoBaixaManualLoading) eventoBaixaManualLoading.classList.add('d-none');
+    if (eventoBaixaManualSubmitBtn) eventoBaixaManualSubmitBtn.disabled = false;
+  });
 
   // =======================
   // Estado
@@ -1508,53 +1575,92 @@ function normalizarEvento(payload){
         ? `<p class="small text-warning fw-semibold mb-2">⚠ ${manualCount} parcela(s) manuais não serão conciliadas automaticamente.</p>`
         : `<p class="small text-muted mb-2">DARs automáticas são conciliadas com a SEFAZ.</p>`;
 
+      const escAttr = (value) => String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;')
+        .replace(/</g, '&lt;');
       const tabela = dars.map(d => {
         const valor = Number(d.valor ?? d.parcela_valor ?? d.dar_valor ?? 0);
+        const valorFmt = fmtBRL(valor);
         const venc = d.vencimento ?? d.dar_venc ?? null;
-        const vencFmt = venc ? new Date(`${venc}T12:00:00`).toLocaleDateString('pt-BR') : '-';
+        const vencFmt = formatDateBR(venc);
         const status = d.status ?? d.dar_status ?? 'Pendente';
         const pdfRaw = d.pdf_url ?? d.dar_pdf ?? '';
         const pdfStr = pdfRaw.toString().replace(/\s/g,'');
         const hasB64 = isPdfBase64(pdfStr);
         const darId = d.id || d.dar_id || d.parcela_id || d.referencia || d.parcela_num || '';
         const isManual = Number(d.manual || d.is_manual || 0) === 1;
+        const dataPagamentoRaw = d.data_pagamento || d.dar_data_pagamento || null;
+        const dataPagamentoFmt = dataPagamentoRaw ? formatDateBR(dataPagamentoRaw) : '';
         const origemBadge = isManual
           ? '<span class="badge bg-dark text-light">Manual</span>'
           : '<span class="badge bg-info text-dark">Automática</span>';
-        let btnHtml;
+
+        const actions = [];
         if (status === 'Pago') {
-          btnHtml = `<span class="text-success"><i class="bi bi-check-circle-fill"></i> Pago</span>`;
+          actions.push('<span class="text-success"><i class="bi bi-check-circle-fill"></i> Pago</span>');
         } else if (isManual) {
-          btnHtml = hasB64
-            ? `<button class="btn btn-sm btn-success" data-dar-b64="${pdfStr}" data-evento="${eventoId}" data-parc="${d.parcela_num||''}">
-                 <i class="bi bi-download"></i> Baixar
-               </button>`
-            : '<span class="text-muted small">Anexe um PDF para download</span>';
+          actions.push(
+            hasB64
+              ? `<button class="btn btn-sm btn-success" data-dar-b64="${pdfStr}" data-evento="${eventoId}" data-parc="${d.parcela_num||''}">
+                   <i class="bi bi-download"></i> Baixar
+                 </button>`
+              : '<span class="text-muted small">Anexe um PDF para download</span>'
+          );
         } else {
-          btnHtml = hasB64
-            ? `<button class="btn btn-sm btn-success" data-dar-b64="${pdfStr}" data-evento="${eventoId}" data-parc="${d.parcela_num||''}">
-                 <i class="bi bi-download"></i> Baixar
-               </button>`
-            : `<div class="btn-group">
-                 <button class="btn btn-sm btn-outline-primary btn-reemitir-dar" data-dar-id="${darId}" data-evento-id="${eventoId}">
-                   <i class="bi bi-printer"></i> Reemitir
-                 </button>
-                 <button class="btn btn-sm btn-outline-secondary btn-baixar-endpoint" data-dar-id="${darId}" data-evento-id="${eventoId}">
-                   <i class="bi bi-file-earmark-arrow-down"></i> Baixar
-                 </button>
-               </div>`;
+          actions.push(
+            hasB64
+              ? `<button class="btn btn-sm btn-success" data-dar-b64="${pdfStr}" data-evento="${eventoId}" data-parc="${d.parcela_num||''}">
+                   <i class="bi bi-download"></i> Baixar
+                 </button>`
+              : `<div class="btn-group">
+                   <button class="btn btn-sm btn-outline-primary btn-reemitir-dar" data-dar-id="${darId}" data-evento-id="${eventoId}">
+                     <i class="bi bi-printer"></i> Reemitir
+                   </button>
+                   <button class="btn btn-sm btn-outline-secondary btn-baixar-endpoint" data-dar-id="${darId}" data-evento-id="${eventoId}">
+                     <i class="bi bi-file-earmark-arrow-down"></i> Baixar
+                   </button>
+                 </div>`
+          );
         }
+
+        if (status !== 'Pago') {
+          actions.push(
+            `<button class="btn btn-sm btn-warning text-dark fw-semibold btn-baixa-manual-evento"` +
+            ` data-dar-id="${escAttr(darId)}"` +
+            ` data-dar-parcela="${escAttr(d.parcela_num || d.referencia || '')}"` +
+            ` data-dar-valor="${escAttr(Number.isFinite(valor) ? valor.toFixed(2) : '')}"` +
+            ` data-dar-valor-formatado="${escAttr(valorFmt)}"` +
+            ` data-dar-vencimento="${escAttr(venc || '')}"` +
+            ` data-dar-vencimento-formatado="${escAttr(vencFmt)}"` +
+            ` data-dar-status="${escAttr(status)}"` +
+            ` data-dar-data-pagamento="${escAttr(dataPagamentoRaw || '')}"` +
+            ` data-dar-data-pagamento-formatado="${escAttr(dataPagamentoFmt || '')}">
+               <i class="bi bi-clipboard-check-fill me-1"></i> Baixa manual
+             </button>`
+          );
+        }
+
+        const btnHtml = actions.length
+          ? `<div class="d-flex flex-wrap gap-2 justify-content-center">${actions.join('')}</div>`
+          : '<span class="text-muted small">—</span>';
+
         const badge = status==='Pago' ? 'bg-success'
                      : ['Emitido','Reemitido'].includes(status) ? 'bg-primary'
                      : status==='Realizado' ? 'bg-secondary'
                      : status==='Vencido' ? 'bg-danger'
                      : 'bg-warning text-dark';
+        const pagamentoInfo = status === 'Pago' && dataPagamentoFmt
+          ? `<div class="small text-muted">Pago em ${dataPagamentoFmt}</div>`
+          : '';
+
         return `<tr>
           <td>${d.parcela_num || d.referencia || '-'}</td>
-          <td class="text-end">${fmtBRL(valor)}</td>
+          <td class="text-end">${valorFmt}</td>
           <td>${vencFmt}</td>
           <td>${origemBadge}</td>
-          <td><span class="badge ${badge}">${status}</span>${isManual ? '<div class="small text-muted">Sem conciliação automática</div>' : ''}</td>
+          <td><span class="badge ${badge}">${status}</span>${isManual ? '<div class="small text-muted">Sem conciliação automática</div>' : ''}${pagamentoInfo}</td>
           <td class="text-center">${btnHtml}</td>
         </tr>`;
       }).join('');
@@ -1670,6 +1776,74 @@ function normalizarEvento(payload){
         submitBtn.disabled = false;
         submitBtn.innerHTML = originalLabel || 'Salvar DAR manual';
       }
+    }
+  });
+
+  eventoBaixaManualForm?.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    if (!darModalEventoId) {
+      alert('Nenhum evento selecionado para registrar a baixa.');
+      return;
+    }
+
+    const darId = eventoBaixaManualDarIdInput?.value;
+    if (!darId) {
+      alert('Identificador da DAR ausente.');
+      return;
+    }
+
+    eventoBaixaManualForm.classList.add('was-validated');
+
+    const dataPagamento = eventoBaixaManualDataInput?.value?.trim();
+    if (!dataPagamento) {
+      eventoBaixaManualDataInput?.focus();
+      return;
+    }
+
+    const arquivo = eventoBaixaManualArquivoInput?.files?.[0];
+    if (!arquivo) {
+      eventoBaixaManualArquivoInput?.focus();
+      return;
+    }
+
+    if (eventoBaixaManualErro) {
+      eventoBaixaManualErro.classList.add('d-none');
+      eventoBaixaManualErro.textContent = '';
+    }
+
+    if (eventoBaixaManualSubmitBtn) eventoBaixaManualSubmitBtn.disabled = true;
+    if (eventoBaixaManualLoading) eventoBaixaManualLoading.classList.remove('d-none');
+
+    try {
+      const formData = new FormData();
+      formData.append('dataPagamento', dataPagamento);
+      formData.append('comprovante', arquivo);
+
+      const headers = {};
+      if (AUTH_HEADERS && AUTH_HEADERS.Authorization) headers.Authorization = AUTH_HEADERS.Authorization;
+      const resp = await fetch(`/api/admin/eventos/${darModalEventoId}/dars/${darId}/baixa-manual`, {
+        method: 'POST',
+        headers,
+        body: formData,
+      });
+      const payload = await resp.json().catch(() => ({}));
+      if (!resp.ok || payload?.error) {
+        throw new Error(payload?.error || `Falha ao registrar baixa manual (código ${resp.status}).`);
+      }
+
+      alert('Baixa manual registrada com sucesso.');
+      eventoBaixaManualModalInstance?.hide();
+      await renderizarDARsModal();
+      await carregarEventos();
+    } catch (err) {
+      if (eventoBaixaManualErro) {
+        eventoBaixaManualErro.textContent = err.message || 'Não foi possível registrar a baixa manual.';
+        eventoBaixaManualErro.classList.remove('d-none');
+      }
+      console.error(err);
+    } finally {
+      if (eventoBaixaManualSubmitBtn) eventoBaixaManualSubmitBtn.disabled = false;
+      if (eventoBaixaManualLoading) eventoBaixaManualLoading.classList.add('d-none');
     }
   });
 
@@ -1847,9 +2021,60 @@ function normalizarEvento(payload){
 
     // Ações dentro do modal de DARs (delegadas)
     darsList.addEventListener('click', async (e)=>{
+      const btnManual = e.target.closest('.btn-baixa-manual-evento');
       const btnB64  = e.target.closest('button[data-dar-b64]');
       const btnReem = e.target.closest('.btn-reemitir-dar');
       const btnDown = e.target.closest('.btn-baixar-endpoint');
+
+      if (btnManual){
+        e.preventDefault();
+        if (!darModalEventoId) {
+          alert('Evento não identificado para registrar a baixa.');
+          return;
+        }
+        const darId = btnManual.dataset.darId;
+        if (!darId) {
+          alert('Não foi possível identificar a DAR selecionada.');
+          return;
+        }
+
+        if (eventoBaixaManualDarIdInput) eventoBaixaManualDarIdInput.value = darId;
+
+        const resumoPartes = [];
+        if (darModalEventoNome) resumoPartes.push(`Evento ${darModalEventoNome}`);
+        const parcelaLabel = btnManual.dataset.darParcela || '';
+        if (parcelaLabel) resumoPartes.push(`Parcela ${parcelaLabel}`);
+        const valorLabel = btnManual.dataset.darValorFormatado || '';
+        if (valorLabel) resumoPartes.push(`Valor ${valorLabel}`);
+        const vencFmt = btnManual.dataset.darVencimentoFormatado || '';
+        if (vencFmt && vencFmt !== '-') resumoPartes.push(`Vencimento ${vencFmt}`);
+        if (eventoBaixaManualResumo) eventoBaixaManualResumo.textContent = resumoPartes.join(' • ');
+
+        const pagamentoIso = btnManual.dataset.darDataPagamento || '';
+        let dataDefault = '';
+        if (pagamentoIso) {
+          if (/^\d{4}-\d{2}-\d{2}/.test(pagamentoIso)) {
+            dataDefault = pagamentoIso.slice(0, 10);
+          } else if (/^\d{2}\/\d{2}\/\d{4}$/.test(pagamentoIso)) {
+            const [dd, mm, yyyy] = pagamentoIso.split('/');
+            dataDefault = `${yyyy}-${mm}-${dd}`;
+          }
+        }
+        if (!dataDefault) dataDefault = new Date().toISOString().slice(0, 10);
+        if (eventoBaixaManualDataInput) eventoBaixaManualDataInput.value = dataDefault;
+        if (eventoBaixaManualArquivoInput) eventoBaixaManualArquivoInput.value = '';
+
+        eventoBaixaManualForm?.classList.remove('was-validated');
+        if (eventoBaixaManualErro) {
+          eventoBaixaManualErro.classList.add('d-none');
+          eventoBaixaManualErro.textContent = '';
+        }
+        if (eventoBaixaManualLoading) eventoBaixaManualLoading.classList.add('d-none');
+        if (eventoBaixaManualSubmitBtn) eventoBaixaManualSubmitBtn.disabled = false;
+
+        eventoBaixaManualModalInstance?.show();
+        return;
+      }
 
       if (btnB64){
         try{
