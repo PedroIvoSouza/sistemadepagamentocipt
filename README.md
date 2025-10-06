@@ -61,6 +61,7 @@ O valor legado `Vencida` foi unificado para `Vencido` e não deve mais ser utili
 5. **Escopo: apenas DARs emitidas pelo sistema**
    O conciliador cruza os pagamentos da SEFAZ com as DARs cujo status ainda não é `Pago`, filtrando por permissionário, eventos vinculados e número da guia antes de aplicar tolerâncias de valor. Assim, somente as guias geradas pelo sistema são atualizadas; pagamentos sem correspondência permanecem em análise manual.
 
+
 ## Dashboard Administrativo
 
 Na página `/admin/dashboard.html` há um seletor ao lado do título **Resumo Mensal de DARs** que permite filtrar os dados por:
