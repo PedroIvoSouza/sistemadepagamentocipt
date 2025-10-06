@@ -9,10 +9,20 @@ function setupRouter(arg) {
   const atualizarMock = options.atualizarMock || (async () => {});
   const adminAuthPath = path.resolve(__dirname, '../src/middleware/adminAuthMiddleware.js');
   require.cache[adminAuthPath] = { exports: (_req, _res, next) => next() };
+  const roleMiddlewarePath = path.resolve(__dirname, '../src/middleware/roleMiddleware.js');
+  require.cache[roleMiddlewarePath] = {
+    exports: () => (_req, _res, next) => next(),
+  };
   const sefazPath = path.resolve(__dirname, '../src/services/sefazService.js');
   require.cache[sefazPath] = { exports: { emitirGuiaSefaz: async () => {} } };
   const tokenPath = path.resolve(__dirname, '../src/utils/token.js');
-  require.cache[tokenPath] = { exports: { gerarTokenDocumento: async () => {}, imprimirTokenEmPdf: async () => {} } };
+  const gerarTokenDocumentoMock = options.gerarTokenDocumentoMock || (async () => {});
+  require.cache[tokenPath] = {
+    exports: {
+      gerarTokenDocumento: gerarTokenDocumentoMock,
+      imprimirTokenEmPdf: async () => {},
+    },
+  };
   const dbStub = options.dbStub || { stub: true };
   const dbPath = path.resolve(__dirname, '../src/database/db.js');
   require.cache[dbPath] = { exports: dbStub };
@@ -249,4 +259,91 @@ test('POST /:id/termo/enviar-assinatura salva CPF informado e não retorna erro'
   const requestCall = calls.find((c) => c.step === 'request');
   assert.ok(requestCall, 'esperava requestSignatures');
   assert.deepEqual(requestCall.signerIds, ['signer-1']);
+});
+
+test('POST /:eventoId/dars/:darId/baixa-manual reutiliza documento manual existente do evento', async () => {
+  const fs = require('fs');
+  const mkdirCalls = [];
+  const writeCalls = [];
+  const existsCalls = [];
+  const unlinkCalls = [];
+  const originalMkdir = fs.mkdirSync;
+  const originalWrite = fs.writeFileSync;
+  const originalExists = fs.existsSync;
+  const originalUnlink = fs.unlinkSync;
+  fs.mkdirSync = (...args) => {
+    mkdirCalls.push(args);
+  };
+  fs.writeFileSync = (...args) => {
+    writeCalls.push(args);
+  };
+  fs.existsSync = (...args) => {
+    existsCalls.push(args);
+    return false;
+  };
+  fs.unlinkSync = (...args) => {
+    unlinkCalls.push(args);
+  };
+
+  let gerarTokenChamadas = 0;
+  const gerarTokenDocumentoMock = async () => {
+    gerarTokenChamadas += 1;
+    return 'novo-token';
+  };
+
+  const dbStub = {
+    stub: true,
+    get: (sql, params, cb) => {
+      if (/FROM DARs_Eventos/.test(sql)) {
+        return cb(null, {
+          dar_id: 10,
+          status: 'Emitido',
+          comprovante_token: null,
+          data_pagamento: null,
+        });
+      }
+
+      if (/FROM documentos\s+WHERE evento_id/.test(sql)) {
+        return cb(null, { id: 33, token: 'token-existente', caminho: '/caminho/antigo.pdf' });
+      }
+
+      return cb(null, null);
+    },
+    run: (sql, params, cb) => {
+      if (/UPDATE documentos/.test(sql)) {
+        cb.call({ lastID: 0, changes: 1 }, null);
+        return;
+      }
+
+      if (/UPDATE dars/.test(sql)) {
+        cb.call({ lastID: 0, changes: 1 }, null);
+        return;
+      }
+
+      throw new Error(`SQL inesperado: ${sql}`);
+    },
+  };
+
+  const { app } = setupRouter({ dbStub, gerarTokenDocumentoMock });
+
+  try {
+    const response = await supertest(app)
+      .post('/55/dars/10/baixa-manual')
+      .field('dataPagamento', '2025-10-01')
+      .attach('comprovante', Buffer.from('%PDF-1.4'), 'comprovante.pdf')
+      .expect(200);
+
+    assert.equal(response.body.token, 'token-existente');
+    assert.equal(response.body.data_pagamento, '2025-10-01');
+    assert.equal(gerarTokenChamadas, 0);
+    assert.ok(mkdirCalls.length > 0);
+    assert.ok(writeCalls.length > 0);
+    assert.equal(existsCalls.length, 1);
+    assert.equal(unlinkCalls.length, 0);
+  } finally {
+    fs.mkdirSync = originalMkdir;
+    fs.writeFileSync = originalWrite;
+    fs.existsSync = originalExists;
+    fs.unlinkSync = originalUnlink;
+  }
 });
