@@ -775,38 +775,22 @@ router.get('/:eventoId/dars', async (req, res) => {
   }
 });
 
-router.post('/:id/dars/manual', upload.single('pdf'), async (req, res) => {
+router.post('/:id/dars/manual', async (req, res) => {
   const { id } = req.params;
   try {
-    const { valor, vencimento, status, numero_documento, linha_digitavel, codigo_barras, numero_parcela } = req.body || {};
-    const pdfInline = req.body?.pdf_base64 || req.body?.pdf_url || req.body?.pdfUrl;
-    const pdfFile = req.file;
-
-    if (pdfFile && pdfFile.mimetype && pdfFile.mimetype !== 'application/pdf') {
-      return res.status(400).json({ error: 'O arquivo enviado deve estar em formato PDF.' });
-    }
+    const { valor, vencimento, numero_parcela } = req.body || {};
 
     const dar = await criarDarManualEvento(
       db,
       id,
-      {
-        valor,
-        vencimento,
-        status,
-        numero_documento,
-        linha_digitavel,
-        codigo_barras,
-        numero_parcela,
-        pdf_url: pdfInline,
-        pdfBuffer: pdfFile?.buffer,
-      },
-      { gerarTokenDocumento, imprimirTokenEmPdf }
+      { valor, vencimento, numero_parcela },
+      { emitirGuiaSefaz, gerarTokenDocumento, imprimirTokenEmPdf }
     );
 
     res.status(201).json({ ok: true, dar });
   } catch (err) {
     console.error('[admin/eventos] criar DAR manual erro:', err);
-    res.status(err.status || 400).json({ error: err.message || 'Não foi possível criar a DAR manual.' });
+    res.status(err.status || 400).json({ error: err.message || 'Não foi possível emitir a DAR manual.' });
   }
 });
 
