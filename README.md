@@ -15,6 +15,7 @@ Adicione no arquivo `.env` ou nas variáveis do servidor:
 - `ASSINAFY_API_URL` (opcional): URL base da API. Padrão `https://api.assinafy.com`.
 - `ASSINAFY_CALLBACK_URL`: URL pública para o retorno após a assinatura, ex.: `https://seusistema/api/documentos/assinafy/callback`.
 - `VPN_HEALTHCHECK_TLS_INSECURE` (opcional): defina como `true` para permitir certificados TLS autoassinados no health-check HTTP da VPN/infovia. Mantenha ausente ou `false` para validar os certificados normalmente.
+- `SEFAZ_MIN_CONSULTA_INTERVAL_MS` (opcional): intervalo mínimo entre consultas à SEFAZ em milissegundos. O padrão é `300000` (5 minutos), conforme orientação do órgão. Valores menores são aceitos apenas para ambientes de teste.
 
 Certifique-se de reiniciar o servidor após alterar as variáveis.
 
@@ -28,6 +29,37 @@ As DARs utilizam os seguintes status padronizados:
 - `Vencido` – vencimento ultrapassado sem pagamento.
 
 O valor legado `Vencida` foi unificado para `Vencido` e não deve mais ser utilizado.
+
+- `POST /api/admin/dars/conciliar` — dispara manualmente a conciliação das DARs. Informe `{ "data": "YYYY-MM-DD" }` no corpo para selecionar o dia; caso omita, utiliza o padrão configurado (ontem). O endpoint respeita o intervalo mínimo entre consultas imposto pela SEFAZ.
+
+### Como configurar e executar a conciliação manual das DARs
+
+1. **Variáveis de ambiente**
+   - Garanta que `SQLITE_STORAGE` aponte para o arquivo `sistemacipt.db` utilizado em produção ou no ambiente de homologação (ex.: `SQLITE_STORAGE=/var/cipt/sistemacipt.db`).
+   - Ajuste `CONCILIAR_BASE_DIA` para `ontem` (padrão) ou `hoje` quando precisar conciliar o mesmo dia da consulta.
+   - Mantenha `SEFAZ_MIN_CONSULTA_INTERVAL_MS` com pelo menos 300000 (5 minutos), conforme orientação da SEFAZ, para evitar bloqueios durante as chamadas de consulta.
+
+2. **Instalar dependências e preparar o banco**
+   ```bash
+   npm install
+   npx sequelize-cli db:migrate
+   ```
+   As migrações garantem que a tabela `dars` contenha as colunas utilizadas pelo conciliador.
+
+3. **Executar a conciliação via CLI**
+   - Para rodar apenas um dia (ex.: 2025-09-18):
+     ```bash
+     node cron/conciliarPagamentosmes.js --date=2025-09-18
+     ```
+   - Para um intervalo contínuo de dias: `node cron/conciliarPagamentosmes.js --range=2025-09-01:2025-09-18`
+   - Sem parâmetros, o script usa `CONCILIAR_BASE_DIA` para definir o dia padrão (ontem por padrão). Em todos os casos o arquivo de lock `/tmp/cipt-concilia.lock` evita execuções concorrentes.
+
+4. **Executar pelo painel administrativo**
+   - Autentique-se como `SUPER_ADMIN` ou `FINANCE_ADMIN`.
+   - Chame `POST /api/admin/dars/conciliar` com corpo opcional `{ "data": "YYYY-MM-DD" }`. Quando omitido, o endpoint usa o mesmo padrão do script (ontem). O retorno informa quantos pagamentos foram importados e quantas DARs emitidas pelo sistema foram atualizadas para `Pago` (o conciliador ignora registros já pagos ou ainda não emitidos).
+
+5. **Escopo: apenas DARs emitidas pelo sistema**
+   O conciliador cruza os pagamentos da SEFAZ com as DARs cujo status ainda não é `Pago`, filtrando por permissionário, eventos vinculados e número da guia antes de aplicar tolerâncias de valor. Assim, somente as guias geradas pelo sistema são atualizadas; pagamentos sem correspondência permanecem em análise manual.
 
 ## Dashboard Administrativo
 

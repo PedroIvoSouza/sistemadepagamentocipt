@@ -19,6 +19,7 @@ const { gerarTokenDocumento, imprimirTokenEmPdf } = require('../utils/token');
 const { getLastBusinessDayISO, isBusinessDay, parseDateInput, formatISODate } = require('../utils/businessDays');
 const { normalizeMsisdn } = require('../utils/phone');
 const whatsappService = require('../services/whatsappService');
+const { executarConciliacaoDia } = require('../../cron/conciliarPagamentosmes');
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -101,6 +102,61 @@ function buildWhatsappMsisdn(perm) {
   if (!normalized) return null;
   return normalized.startsWith('55') ? normalized : `55${normalized}`;
 }
+
+router.post(
+  '/conciliar',
+  [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN'])],
+  async (req, res) => {
+    try {
+      const { data } = req.body || {};
+
+      let alvoISO = null;
+      if (data) {
+        const parsed = parseDateInput(data);
+        if (!parsed) {
+          return res.status(400).json({ ok: false, error: 'Data inválida. Use o formato AAAA-MM-DD.' });
+        }
+        alvoISO = formatISODate(parsed);
+      } else {
+        const base = new Date();
+        if ((process.env.CONCILIAR_BASE_DIA || 'ontem').toLowerCase() !== 'hoje') {
+          base.setDate(base.getDate() - 1);
+        }
+        alvoISO = formatISODate(base);
+      }
+
+      if (!alvoISO) {
+        return res.status(400).json({ ok: false, error: 'Não foi possível determinar a data para conciliação.' });
+      }
+
+      const { executado, resumo } = await executarConciliacaoDia(alvoISO);
+
+      if (!executado) {
+        return res.status(409).json({
+          ok: false,
+          error: 'Já existe uma conciliação em andamento. Aguarde alguns minutos e tente novamente.',
+        });
+      }
+
+      const totalPagamentos = resumo?.totalPagamentos ?? 0;
+      const totalAtualizados = resumo?.totalAtualizados ?? 0;
+      const dataConsolidada = resumo?.dataDia || alvoISO;
+
+      return res.json({
+        ok: true,
+        data: dataConsolidada,
+        conciliacao: resumo || { dataDia: dataConsolidada, totalPagamentos, totalAtualizados },
+        mensagem: `Conciliação de ${dataConsolidada} finalizada. ${totalAtualizados}/${totalPagamentos} pagamentos vinculados.`,
+      });
+    } catch (error) {
+      console.error('[ADMIN][DAR][conciliar] erro:', error);
+      return res.status(500).json({
+        ok: false,
+        error: `Falha ao executar conciliação: ${error.message || 'erro desconhecido'}`,
+      });
+    }
+  }
+);
 // helper: pega contribuinte conforme DAR ser de permissionário OU de evento
 async function getContribuinteEmitenteForDar(darId) {
   // 1) Busca a DAR
