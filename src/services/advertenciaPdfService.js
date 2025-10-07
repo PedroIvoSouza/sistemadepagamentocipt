@@ -62,11 +62,15 @@ async function ensureDocumentosSchema() {
   await add('signed_at', 'TEXT');
   await add('signer', 'TEXT');
   await add('created_at', 'TEXT');
+  await add('versao', 'INTEGER DEFAULT 1');
 
+  await dbRun(`UPDATE documentos SET versao = 1 WHERE versao IS NULL`, [], 'doc/set-versao-default');
+  await dbRun(`DROP INDEX IF EXISTS ux_documentos_evento_tipo`, [], 'doc/drop-ux');
+  await dbRun(`DROP INDEX IF EXISTS idx_documentos_evento_tipo`, [], 'doc/drop-idx');
   await dbRun(
-    `CREATE UNIQUE INDEX IF NOT EXISTS ux_documentos_evento_tipo ON documentos(evento_id, tipo)`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS ux_documentos_evento_tipo_versao ON documentos(evento_id, tipo, versao)`,
     [],
-    'doc/index-ux'
+    'doc/index-ux-versao'
   );
 }
 
