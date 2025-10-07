@@ -97,10 +97,19 @@ async function ensureDocumentosSchema() {
     signed_pdf_public_url TEXT,
     signed_at TEXT,
     signer TEXT,
-    created_at TEXT
+    created_at TEXT,
+    versao INTEGER DEFAULT 1
   )`);
+  const cols = await dbAll(`PRAGMA table_info(documentos)`);
+  const have = new Set(cols.map((c) => c.name));
+  if (!have.has('versao')) {
+    await dbRun(`ALTER TABLE documentos ADD COLUMN versao INTEGER DEFAULT 1`);
+  }
   try {
-    await dbRun(`CREATE UNIQUE INDEX IF NOT EXISTS ux_documentos_evento_tipo ON documentos(evento_id, tipo)`);
+    await dbRun(`UPDATE documentos SET versao = 1 WHERE versao IS NULL`);
+    await dbRun(`DROP INDEX IF EXISTS ux_documentos_evento_tipo`);
+    await dbRun(`DROP INDEX IF EXISTS idx_documentos_evento_tipo`);
+    await dbRun(`CREATE UNIQUE INDEX IF NOT EXISTS ux_documentos_evento_tipo_versao ON documentos(evento_id, tipo, versao)`);
   } catch (_) { /* ignore */ }
 }
 
