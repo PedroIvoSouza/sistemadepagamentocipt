@@ -4,6 +4,13 @@ const { enviarEmailNovaDar } = require('../src/services/emailService');
 
 // --- Funções Auxiliares para Datas ---
 
+const formatTimestampBR = (date = new Date()) =>
+    date.toLocaleString('pt-BR', {
+        dateStyle: 'short',
+        timeStyle: 'medium',
+        hour12: false,
+    });
+
 // Função para verificar se um dia é útil (não é Sábado nem Domingo)
 function isDiaUtil(data) {
     const diaDaSemana = data.getDay(); // 0 = Domingo, 6 = Sábado
@@ -24,7 +31,7 @@ function getUltimoDiaUtil(ano, mes) {
 // --- Lógica Principal do Robô ---
 
 async function gerarDarsEEnviarNotificacoes() {
-    console.log(`[ROBÔ] ${new Date().toLocaleString('pt-BR')}: Iniciando rotina de geração de DARs...`);
+    console.log(`[ROBÔ] ${formatTimestampBR()}: Iniciando rotina de geração de DARs...`);
     const db = new sqlite3.Database('./sistemacipt.db');
 
     try {

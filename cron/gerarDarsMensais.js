@@ -19,6 +19,13 @@ const TEST_PERMISSIONARIO_ID = process.env.TEST_PERMISSIONARIO_ID
 // ================== Datas (AL, BR) ==================
 const { getLastBusinessDay } = require('../src/utils/businessDays');
 
+const formatTimestampBR = (date = new Date()) =>
+  date.toLocaleString('pt-BR', {
+    dateStyle: 'short',
+    timeStyle: 'medium',
+    hour12: false,
+  });
+
 // ================== Helpers DB ==================
 function dbAll(db, sql, params = []) {
   return new Promise((resolve, reject) => {
@@ -63,7 +70,7 @@ async function gerarDarsEEnviarNotificacoes() {
 
     const permissionarios = await dbAll(db, sql, params); // SEMPRE array
     console.log(
-      `[ROBÔ] ${new Date().toLocaleString('pt-BR')}: Iniciando rotina de geração de DARs...`
+      `[ROBÔ] ${formatTimestampBR()}: Iniciando rotina de geração de DARs...`
     );
     console.log(
       `[ROBÔ] ${permissionarios.length} permissionários. Competência ${String(mesReferencia).padStart(2, '0')}/${anoReferencia} - vencimento ${vencISO}`

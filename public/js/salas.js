@@ -83,12 +83,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         return livres;
     }
 
+    const formatoHoraBR = { hour: '2-digit', minute: '2-digit', hour12: false };
+
     function formatarHora(dataHora) {
-        return new Date(dataHora).toLocaleTimeString('pt-BR', {
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: false
-        });
+        return new Date(dataHora).toLocaleTimeString('pt-BR', formatoHoraBR);
     }
 
     function formatarDataBR(dataStr) {
@@ -102,7 +100,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         locale: 'pt-br',
         themeSystem: 'bootstrap5',
         displayEventEnd: true,
-        eventTimeFormat: { hour: '2-digit', minute: '2-digit', hour12: false },
+        eventTimeFormat: formatoHoraBR,
+        slotLabelFormat: formatoHoraBR,
         dateClick: info => {
             calendar.changeView('timeGridDay', info.dateStr);
         },

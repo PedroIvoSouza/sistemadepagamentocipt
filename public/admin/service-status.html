@@ -312,6 +312,12 @@
         const SNAPSHOT_STORAGE_KEY = 'adminServiceStatus:lastSnapshot';
         let hasRenderedOnce = false;
 
+        const dataHoraFormatter = new Intl.DateTimeFormat('pt-BR', {
+            dateStyle: 'short',
+            timeStyle: 'medium',
+            hour12: false
+        });
+
         const showAlert = (message, type = 'warning') => {
             statusAlert.textContent = message;
             statusAlert.className = `alert alert-${type} status-alert`;
@@ -325,11 +331,7 @@
 
         const updateLastUpdated = (date = new Date()) => {
             if (!lastUpdatedEl) return;
-            const formatter = new Intl.DateTimeFormat('pt-BR', {
-                dateStyle: 'short',
-                timeStyle: 'medium'
-            });
-            lastUpdatedEl.textContent = `Atualizado em ${formatter.format(date)}`;
+            lastUpdatedEl.textContent = `Atualizado em ${dataHoraFormatter.format(date)}`;
         };
 
         const showLoading = () => {
@@ -454,7 +456,10 @@
             if (timestamp) {
                 const ts = document.createElement('p');
                 ts.className = 'status-timestamp mb-0';
-                ts.textContent = `Última verificação: ${new Date(timestamp).toLocaleString('pt-BR')}`;
+                const dataVerificacao = new Date(timestamp);
+                ts.textContent = Number.isNaN(dataVerificacao.getTime())
+                    ? `Última verificação: ${timestamp}`
+                    : `Última verificação: ${dataHoraFormatter.format(dataVerificacao)}`;
                 body.appendChild(ts);
             }
 
