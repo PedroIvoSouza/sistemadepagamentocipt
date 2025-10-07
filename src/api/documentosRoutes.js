@@ -50,7 +50,11 @@ async function ensureDocumentosSchema(){
   await add('signed_at', 'TEXT');
   await add('signer', 'TEXT');
   await add('created_at', 'TEXT');
-  await dbRun(`CREATE UNIQUE INDEX IF NOT EXISTS ux_documentos_evento_tipo ON documentos(evento_id, tipo)`);
+  await add('versao', "INTEGER DEFAULT 1");
+  await dbRun(`UPDATE documentos SET versao = 1 WHERE versao IS NULL`);
+  await dbRun(`DROP INDEX IF EXISTS ux_documentos_evento_tipo`);
+  await dbRun(`DROP INDEX IF EXISTS idx_documentos_evento_tipo`);
+  await dbRun(`CREATE UNIQUE INDEX IF NOT EXISTS ux_documentos_evento_tipo_versao ON documentos(evento_id, tipo, versao)`);
 }
 ensureDocumentosSchema().catch(err => {
   console.error('Schema init failed', err);
@@ -119,7 +123,10 @@ router.get('/:id', async (req, res) => {
 // Lista documentos por evento
 router.get('/por-evento/:eventoId', async (req, res) => {
   try {
-    const rows = await dbAll(`SELECT * FROM documentos WHERE evento_id=? ORDER BY id DESC`, [req.params.eventoId]);
+    const rows = await dbAll(
+      `SELECT * FROM documentos WHERE evento_id=? ORDER BY COALESCE(versao,1) DESC, created_at DESC, id DESC`,
+      [req.params.eventoId]
+    );
     res.json(rows);
   } catch (e) {
     console.error('[documentos]/por-evento GET erro:', e.message);
@@ -157,19 +164,26 @@ router.get('/:id/signed', async (req, res) => {
 
 // Upsert genérico (retrocompatibilidade)
 router.post('/upsert', async (req, res) => {
-  const { tipo, evento_id, pdf_url, pdf_public_url, token=null, status='gerado' } = req.body || {};
+  const { tipo, evento_id, pdf_url, pdf_public_url, token=null, status='gerado', versao: versaoInput } = req.body || {};
   if (!tipo || !evento_id) return res.status(400).json({ error: 'tipo e evento_id são obrigatórios.' });
   try {
     const createdAt = new Date().toISOString();
+    const versao = Number.isFinite(Number(versaoInput)) && Number(versaoInput) > 0 ? Number(versaoInput) : 1;
     await dbRun(
-      `INSERT INTO documentos (tipo, token, evento_id, pdf_url, pdf_public_url, status, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(evento_id, tipo) DO UPDATE SET
+      `INSERT INTO documentos (tipo, token, evento_id, versao, pdf_url, pdf_public_url, status, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(evento_id, tipo, versao) DO UPDATE SET
           pdf_url=excluded.pdf_url, pdf_public_url=excluded.pdf_public_url,
           status=excluded.status, created_at=excluded.created_at`,
-      [tipo, token, evento_id, pdf_url || null, pdf_public_url || null, status, createdAt]
+      [tipo, token, evento_id, versao, pdf_url || null, pdf_public_url || null, status, createdAt]
     );
-    const doc = await dbGet(`SELECT * FROM documentos WHERE evento_id=? AND tipo=?`, [evento_id, tipo]);
+    const doc = await dbGet(
+      `SELECT * FROM documentos
+         WHERE evento_id=? AND tipo=?
+         ORDER BY COALESCE(versao,1) DESC, created_at DESC, id DESC
+         LIMIT 1`,
+      [evento_id, tipo]
+    );
     res.json({ ok:true, documento: doc });
   } catch (e) {
     console.error('[documentos]/upsert erro:', e.message);
@@ -184,15 +198,25 @@ router.post('/upsert', async (req, res) => {
 // Gera (se necessário) e baixa o termo do evento (PDF)
 router.get('/termo/:eventoId', async (req, res) => {
   const eventoId = req.params.eventoId;
+  const versaoParam = Number(req.query?.versao);
+  const versaoFiltro = Number.isFinite(versaoParam) && versaoParam > 0 ? versaoParam : null;
   try {
-    let docRow = await dbGet(`SELECT * FROM documentos WHERE evento_id=? AND tipo='termo_evento'`, [eventoId]);
+    const baseQuery = versaoFiltro
+      ? `SELECT * FROM documentos WHERE evento_id=? AND tipo='termo_evento' AND COALESCE(versao,1)=? ORDER BY created_at DESC, id DESC LIMIT 1`
+      : `SELECT * FROM documentos WHERE evento_id=? AND tipo='termo_evento' ORDER BY COALESCE(versao,1) DESC, created_at DESC, id DESC LIMIT 1`;
+    const baseParams = versaoFiltro ? [eventoId, versaoFiltro] : [eventoId];
+
+    let docRow = await dbGet(baseQuery, baseParams);
     if (!docRow || !docRow.pdf_url || !fs.existsSync(docRow.pdf_url)) {
-      await gerarTermoEventoPdfkitEIndexar(eventoId);
-      docRow = await dbGet(`SELECT * FROM documentos WHERE evento_id=? AND tipo='termo_evento'`, [eventoId]);
+      await gerarTermoEventoPdfkitEIndexar(eventoId, versaoFiltro ? { versao: versaoFiltro } : {});
+      docRow = await dbGet(baseQuery, baseParams);
     }
-    if (!docRow || !docRow.pdf_url) return res.status(404).json({ error: 'Termo não encontrado.' });
+    if (!docRow || !docRow.pdf_url) {
+      return res.status(404).json({ error: 'Termo não encontrado.' });
+    }
     const abs = path.resolve(docRow.pdf_url);
-    return safeSendFile(res, abs, `termo_evento_${eventoId}.pdf`);
+    const versao = docRow.versao || versaoFiltro || 1;
+    return safeSendFile(res, abs, `termo_evento_${eventoId}_v${String(versao).padStart(2, '0')}.pdf`);
   } catch (e) {
     console.error('[documentos]/termo/:eventoId GET erro:', e);
     res.status(500).json({ error: 'Erro ao gerar/servir termo.' });
@@ -203,7 +227,11 @@ router.get('/termo/:eventoId', async (req, res) => {
 router.post('/termo/:eventoId/generate', async (req, res) => {
   const eventoId = req.params.eventoId;
   try {
-    const out = await gerarTermoEventoPdfkitEIndexar(eventoId);
+    const { novaVersao, versao } = req.body || {};
+    const opts = {};
+    if (novaVersao) opts.novaVersao = true;
+    if (Number.isFinite(Number(versao)) && Number(versao) > 0) opts.versao = Number(versao);
+    const out = await gerarTermoEventoPdfkitEIndexar(eventoId, opts);
     res.json({ ok:true, ...out });
   } catch (e) {
     console.error('[documentos]/termo/:eventoId/generate erro:', e);
@@ -214,13 +242,61 @@ router.post('/termo/:eventoId/generate', async (req, res) => {
 // Devolve metadados do termo (inclui assinatura_url)
 router.get('/termo/:eventoId/meta', async (req, res) => {
   const eventoId = req.params.eventoId;
+  const versaoParam = Number(req.query?.versao);
+  const versaoFiltro = Number.isFinite(versaoParam) && versaoParam > 0 ? versaoParam : null;
   try {
-    let docRow = await dbGet(`SELECT * FROM documentos WHERE evento_id=? AND tipo='termo_evento'`, [eventoId]);
-    if (!docRow || !docRow.pdf_url || !fs.existsSync(docRow.pdf_url)) {
+    let docs = await dbAll(
+      `SELECT * FROM documentos
+         WHERE evento_id=? AND tipo='termo_evento'
+         ORDER BY COALESCE(versao,1) DESC, created_at DESC, id DESC`,
+      [eventoId]
+    );
+
+    if (!Array.isArray(docs) || docs.length === 0 || (!versaoFiltro && (!docs[0]?.pdf_url || !fs.existsSync(docs[0].pdf_url)))) {
       await gerarTermoEventoPdfkitEIndexar(eventoId);
-      docRow = await dbGet(`SELECT * FROM documentos WHERE evento_id=? AND tipo='termo_evento'`, [eventoId]);
+      docs = await dbAll(
+        `SELECT * FROM documentos
+           WHERE evento_id=? AND tipo='termo_evento'
+           ORDER BY COALESCE(versao,1) DESC, created_at DESC, id DESC`,
+        [eventoId]
+      );
     }
-    if (!docRow) return res.status(404).json({ error: 'Termo não encontrado.' });
+
+    if (!Array.isArray(docs) || docs.length === 0) {
+      return res.status(404).json({ error: 'Termo não encontrado.' });
+    }
+
+    let docRow = docs[0];
+    if (versaoFiltro) {
+      const encontrado = docs.find((d) => Number(d.versao || 1) === versaoFiltro);
+      if (!encontrado) {
+        return res.status(404).json({ error: 'Versão do termo não encontrada.' });
+      }
+      docRow = encontrado;
+      if (!docRow.pdf_url || !fs.existsSync(docRow.pdf_url)) {
+        await gerarTermoEventoPdfkitEIndexar(eventoId, { versao: versaoFiltro });
+        docRow = await dbGet(
+          `SELECT * FROM documentos
+             WHERE evento_id=? AND tipo='termo_evento' AND COALESCE(versao,1)=?
+             ORDER BY created_at DESC, id DESC
+             LIMIT 1`,
+          [eventoId, versaoFiltro]
+        );
+      }
+    }
+
+    const payloadDocs = docs.map((d) => ({
+      id: d.id,
+      versao: Number(d.versao || 1),
+      status: d.status || 'gerado',
+      pdf_public_url: d.pdf_public_url || null,
+      assinafy_id: d.assinafy_id || null,
+      assinatura_url: d.assinatura_url || null,
+      signed_pdf_public_url: d.signed_pdf_public_url || null,
+      signed_at: d.signed_at || null,
+      download_url: `/api/documentos/termo/${eventoId}?versao=${Number(d.versao || 1)}`
+    }));
+
     res.json({
       ok:true,
       documento_id: docRow.id,
@@ -228,9 +304,11 @@ router.get('/termo/:eventoId/meta', async (req, res) => {
       status: docRow.status || 'gerado',
       pdf_public_url: docRow.pdf_public_url || null,
       assinafy_id: docRow.assinafy_id || null,
-      assinatura_url: docRow.assinatura_url || null,   // ← exposto para o front do cliente
+      assinatura_url: docRow.assinatura_url || null,
       signed_pdf_public_url: docRow.signed_pdf_public_url || null,
-      signed_at: docRow.signed_at || null
+      signed_at: docRow.signed_at || null,
+      versao: Number(docRow.versao || 1),
+      documentos: payloadDocs
     });
   } catch (e) {
     console.error('[documentos]/termo/:eventoId/meta erro:', e);
@@ -241,10 +319,16 @@ router.get('/termo/:eventoId/meta', async (req, res) => {
 // Apenas disponibiliza a URL pública do PDF (útil para front abrir em nova aba)
 router.post('/termo/:eventoId/disponibilizar', async (req, res) => {
   const eventoId = req.params.eventoId;
+  const versaoParam = Number(req.body?.versao || req.query?.versao);
+  const versaoFiltro = Number.isFinite(versaoParam) && versaoParam > 0 ? versaoParam : null;
   try {
-    const docRow = await dbGet(`SELECT * FROM documentos WHERE evento_id=? AND tipo='termo_evento'`, [eventoId]);
+    const query = versaoFiltro
+      ? `SELECT * FROM documentos WHERE evento_id=? AND tipo='termo_evento' AND COALESCE(versao,1)=? ORDER BY created_at DESC, id DESC LIMIT 1`
+      : `SELECT * FROM documentos WHERE evento_id=? AND tipo='termo_evento' ORDER BY COALESCE(versao,1) DESC, created_at DESC, id DESC LIMIT 1`;
+    const params = versaoFiltro ? [eventoId, versaoFiltro] : [eventoId];
+    const docRow = await dbGet(query, params);
     if (!docRow || !docRow.pdf_public_url) return res.status(404).json({ error: 'Termo não disponível publicamente.' });
-    res.json({ ok:true, pdf_public_url: docRow.pdf_public_url });
+    res.json({ ok:true, pdf_public_url: docRow.pdf_public_url, versao: Number(docRow.versao || 1) });
   } catch (e) {
     console.error('[documentos]/termo/:eventoId/disponibilizar erro:', e);
     res.status(500).json({ error: 'Erro ao disponibilizar termo.' });
@@ -373,7 +457,14 @@ router.post('/assinafy/webhook', express.json({ type:'application/json' }), asyn
 // Compat: baixar por caminho público
 router.get('/termo-public/:eventoId', async (req, res) => {
   try {
-    const doc = await dbGet(`SELECT * FROM documentos WHERE evento_id=? AND tipo='termo_evento'`, [req.params.eventoId]);
+    const versaoParam = Number(req.query?.versao);
+    const versaoFiltro = Number.isFinite(versaoParam) && versaoParam > 0 ? versaoParam : null;
+    const doc = await dbGet(
+      versaoFiltro
+        ? `SELECT * FROM documentos WHERE evento_id=? AND tipo='termo_evento' AND COALESCE(versao,1)=? ORDER BY created_at DESC, id DESC LIMIT 1`
+        : `SELECT * FROM documentos WHERE evento_id=? AND tipo='termo_evento' ORDER BY COALESCE(versao,1) DESC, created_at DESC, id DESC LIMIT 1`,
+      versaoFiltro ? [req.params.eventoId, versaoFiltro] : [req.params.eventoId]
+    );
     if (!doc || !doc.pdf_public_url) return res.status(404).json({ error: 'Termo não disponível publicamente.' });
     const abs = path.join(PUBLIC_DIR, doc.pdf_public_url.replace(/^\//,''));
     return safeSendFile(res, abs);
@@ -386,7 +477,14 @@ router.get('/termo-public/:eventoId', async (req, res) => {
 // Compat: retorna apenas a URL pública
 router.get('/termo-url/:eventoId', async (req, res) => {
   try {
-    const doc = await dbGet(`SELECT pdf_public_url FROM documentos WHERE evento_id=? AND tipo='termo_evento'`, [req.params.eventoId]);
+    const versaoParam = Number(req.query?.versao);
+    const versaoFiltro = Number.isFinite(versaoParam) && versaoParam > 0 ? versaoParam : null;
+    const doc = await dbGet(
+      versaoFiltro
+        ? `SELECT pdf_public_url FROM documentos WHERE evento_id=? AND tipo='termo_evento' AND COALESCE(versao,1)=? ORDER BY created_at DESC, id DESC LIMIT 1`
+        : `SELECT pdf_public_url FROM documentos WHERE evento_id=? AND tipo='termo_evento' ORDER BY COALESCE(versao,1) DESC, created_at DESC, id DESC LIMIT 1`,
+      versaoFiltro ? [req.params.eventoId, versaoFiltro] : [req.params.eventoId]
+    );
     if (!doc?.pdf_public_url) return res.status(404).json({ error: 'URL não disponível.' });
     res.json({ url: doc.pdf_public_url });
   } catch (e) {

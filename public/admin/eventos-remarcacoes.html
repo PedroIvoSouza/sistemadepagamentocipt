@@ -246,7 +246,7 @@
         const resp = await fetch(`/api/admin/eventos/${id}/remarcar`, {
           method:'PUT',
           headers:{'Content-Type':'application/json', ...AUTH_HEADERS},
-          body: JSON.stringify({ mode:'unilateral', nova_data: nova })
+          body: JSON.stringify({ modo:'unilateral', nova_data: nova })
         });
         if (!resp.ok) throw new Error('Falha');
         remarcarModal.hide();
@@ -276,7 +276,7 @@
           await fetch(`/api/admin/eventos/${id}/remarcar`, {
             method:'PUT',
             headers:{'Content-Type':'application/json', ...AUTH_HEADERS},
-            body: JSON.stringify({ mode:'aprovar' })
+            body: JSON.stringify({ modo:'aprovar' })
           });
           carregarRemarcacoes();
         }catch{
@@ -290,7 +290,7 @@
           await fetch(`/api/admin/eventos/${id}/remarcar`, {
             method:'PUT',
             headers:{'Content-Type':'application/json', ...AUTH_HEADERS},
-            body: JSON.stringify({ mode:'rejeitar' })
+            body: JSON.stringify({ modo:'rejeitar' })
           });
           carregarRemarcacoes();
         }catch{
@@ -306,7 +306,7 @@
           await fetch(`/api/admin/eventos/${id}/remarcar`, {
             method:'PUT',
             headers:{'Content-Type':'application/json', ...AUTH_HEADERS},
-            body: JSON.stringify({ mode:'unilateral', nova_data: nova })
+            body: JSON.stringify({ modo:'unilateral', nova_data: nova })
           });
           carregarRemarcacoes();
         }catch{

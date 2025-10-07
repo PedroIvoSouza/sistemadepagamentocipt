@@ -72,53 +72,81 @@ clientRouter.use(authMiddleware, authorizeRole(['CLIENTE_EVENTO']));
 clientRouter.get('/:id/termo/meta', async (req, res) => {
   try {
     const eventoId = req.params.id;
-    // garante que existe registro em `documentos` (gera se necessário)
-    let doc = await dbGet(`SELECT * FROM documentos WHERE evento_id = ? AND tipo = 'termo_evento' ORDER BY created_at DESC, id DESC LIMIT 1`, [eventoId]);
-    if (!doc || !doc.pdf_url || !fs.existsSync(doc.pdf_url)) {
-      await gerarTermoEventoPdfkitEIndexar(eventoId);
-      doc = await dbGet(`SELECT * FROM documentos WHERE evento_id = ? AND tipo = 'termo_evento' ORDER BY created_at DESC, id DESC LIMIT 1`, [eventoId]);
-    }
-    if (!doc || !doc.pdf_url) return res.status(404).json({ error: 'Termo não encontrado.' });
+    let docs = await dbAll(
+      `SELECT * FROM documentos
+        WHERE evento_id = ? AND tipo = 'termo_evento'
+        ORDER BY COALESCE(versao, 1) DESC, created_at DESC, id DESC`,
+      [eventoId]
+    );
 
-    // preferir a pública (que já apontamos para /public/documentos/...)
-    const url = doc.pdf_public_url || null;
+    if (!Array.isArray(docs) || docs.length === 0 || !docs[0]?.pdf_url || !fs.existsSync(docs[0].pdf_url)) {
+      await gerarTermoEventoPdfkitEIndexar(eventoId);
+      docs = await dbAll(
+        `SELECT * FROM documentos
+          WHERE evento_id = ? AND tipo = 'termo_evento'
+          ORDER BY COALESCE(versao, 1) DESC, created_at DESC, id DESC`,
+        [eventoId]
+      );
+    }
+
+    if (!Array.isArray(docs) || docs.length === 0) {
+      return res.status(404).json({ error: 'Termo não encontrado.' });
+    }
+
+    const docAtual = docs[0];
+    const url = docAtual.pdf_public_url || null;
 
     let assinafy = null;
-    if (doc.assinafy_id && !doc.signed_pdf_public_url) {
+    if (docAtual.assinafy_id && !docAtual.signed_pdf_public_url) {
       try {
-        assinafy = await getDocument(doc.assinafy_id);
+        assinafy = await getDocument(docAtual.assinafy_id);
       } catch {}
     }
 
-    const bestAssinado = doc.signed_pdf_public_url || (assinafy ? pickBestArtifactUrl(assinafy) : null);
+    const bestAssinadoAtual = docAtual.signed_pdf_public_url || (assinafy ? pickBestArtifactUrl(assinafy) : null);
 
-    // Se ainda não temos URL assinada, salva no banco e marca como assinado
-    if (!doc.signed_pdf_public_url && bestAssinado) {
+    if (!docAtual.signed_pdf_public_url && bestAssinadoAtual) {
       const now = new Date().toISOString();
       try {
         await dbRun(
           `UPDATE documentos SET signed_pdf_public_url = ?, status = 'assinado', signed_at = COALESCE(signed_at, ?) WHERE id = ?`,
-          [bestAssinado, now, doc.id]
+          [bestAssinadoAtual, now, docAtual.id]
         );
-        doc.signed_pdf_public_url = bestAssinado;
-        doc.status = 'assinado';
-        if (!doc.signed_at) doc.signed_at = now;
+        docAtual.signed_pdf_public_url = bestAssinadoAtual;
+        docAtual.status = 'assinado';
+        if (!docAtual.signed_at) docAtual.signed_at = now;
       } catch (err) {
         console.error('Erro ao atualizar signed_pdf_public_url:', err);
       }
     }
 
-    const raw = assinafy?.data?.status || assinafy?.status || doc.status;
-    const status = normalizeAssinafyStatus(raw, !!bestAssinado);
+    const raw = assinafy?.data?.status || assinafy?.status || docAtual.status;
+    const status = normalizeAssinafyStatus(raw, !!bestAssinadoAtual);
+
+    const documentosResposta = docs.map((d) => {
+      const versao = Number(d.versao || 1);
+      const downloadUrl = `/api/admin/eventos/${eventoId}/termo?versao=${versao}`;
+      return {
+        id: d.id,
+        versao,
+        status: d.status || 'gerado',
+        pdf_public_url: d.pdf_public_url || null,
+        signed_pdf_public_url: d.signed_pdf_public_url || null,
+        signed_at: d.signed_at || null,
+        assinafy_id: d.assinafy_id || null,
+        download_url: downloadUrl
+      };
+    });
 
     return res.json({
       ok: true,
       evento_id: eventoId,
       status,
       pdf_public_url: url,
-      assinafy_id: doc.assinafy_id || null,
-      signed_pdf_public_url: bestAssinado || null,
-      signed_at: doc.signed_at || null
+      assinafy_id: docAtual.assinafy_id || null,
+      signed_pdf_public_url: bestAssinadoAtual || null,
+      signed_at: docAtual.signed_at || null,
+      documentos: documentosResposta
     });
   } catch (e) {
     console.error('[PORTAL] /:id/termo/meta erro:', e);
@@ -137,12 +165,21 @@ clientRouter.post('/:id/termo/assinafy/link', async (req, res) => {
 
     // Garante PDF do termo
     let doc = await dbGet(
-      `SELECT * FROM documentos WHERE evento_id = ? AND tipo = 'termo_evento' ORDER BY created_at DESC, id DESC LIMIT 1`,
+      `SELECT * FROM documentos
+         WHERE evento_id = ? AND tipo = 'termo_evento'
+         ORDER BY COALESCE(versao, 1) DESC, created_at DESC, id DESC
+         LIMIT 1`,
       [eventoId]
     );
     if (!doc || !doc.pdf_url || !fs.existsSync(doc.pdf_url)) {
       await gerarTermoEventoPdfkitEIndexar(eventoId);
-      doc = await dbGet(`SELECT * FROM documentos WHERE evento_id = ? AND tipo = 'termo_evento' ORDER BY created_at DESC, id DESC LIMIT 1`, [eventoId]);
+      doc = await dbGet(
+        `SELECT * FROM documentos
+           WHERE evento_id = ? AND tipo = 'termo_evento'
+           ORDER BY COALESCE(versao, 1) DESC, created_at DESC, id DESC
+           LIMIT 1`,
+        [eventoId]
+      );
     }
     if (!doc || !doc.pdf_url || !fs.existsSync(doc.pdf_url)) {
       return res.status(409).json({ error: 'PDF do termo não encontrado.' });

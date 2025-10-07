@@ -180,32 +180,79 @@
           const btns = document.getElementById(`btns-${eventoId}`);
           if(!btns) return;
 
-          const estaAssinado = meta.status === 'assinado';
-          const foiEnviado = meta.assinafy_id && meta.status !== 'nao_enviado';
+          const docs = Array.isArray(meta.documentos) ? meta.documentos : [];
+          const docAtual = docs[0] || null;
+          const statusAtual = (docAtual?.status || meta.status || '').toLowerCase();
+          const estaAssinado = statusAtual === 'assinado';
+          const foiEnviado = !!docAtual?.assinafy_id && !estaAssinado;
 
-          // Constrói a URL de download de forma segura
-          const urlDownloadSegura = meta.assinafy_id
-            ? `/api/documentos/assinafy/${meta.assinafy_id}/download-signed`
-            : meta.signed_pdf_public_url;
+          const buildDownloadUrl = (doc) => {
+            if (!doc) return null;
+            if (doc.signed_pdf_public_url) return doc.signed_pdf_public_url;
+            if ((doc.status || '').toLowerCase() === 'assinado' && doc.assinafy_id) {
+              return `/api/documentos/assinafy/${doc.assinafy_id}/download-signed`;
+            }
+            if (doc.download_url) return doc.download_url;
+            const versao = doc.versao || 1;
+            return `${TERMO_ENDPOINT(eventoId)}?versao=${versao}`;
+          };
 
-          let botoesTermoHtml = `
-            <button class="btn btn-sm btn-outline-secondary" data-baixar-termo="${eventoId}">
-              <i class="bi bi-filetype-pdf"></i> Baixar Termo Original
-            </button>
-          `;
+          const formatStatusLabel = (doc, atual) => {
+            const versao = doc.versao || 1;
+            const statusTxt = (doc.status || '').toLowerCase();
+            let label = `Versão ${versao}`;
+            if (atual) label += ' • atual';
+            if (statusTxt === 'assinado') label += ' (assinado)';
+            else if (statusTxt === 'pendente_assinatura' || statusTxt === 'enviado') label += ' (pendente)';
+            return label;
+          };
 
-          if (estaAssinado) {
+          let botoesTermoHtml = '';
+          if (docs.length > 1 && docAtual) {
+            const classePrincipal = estaAssinado ? 'btn-success' : 'btn-outline-secondary';
+            const rotuloPrincipal = estaAssinado ? 'Baixar Termo Assinado' : 'Baixar Termo Atual';
+            const hrefPrincipal = buildDownloadUrl(docAtual);
             botoesTermoHtml += `
-              <a class="btn btn-sm btn-success" href="${urlDownloadSegura}" target="_blank" rel="noopener">
-                <i class="bi bi-download"></i> Baixar Termo Assinado
+              <div class="btn-group">
+                <a class="btn btn-sm ${classePrincipal}" href="${hrefPrincipal}" target="_blank" rel="noopener">
+                  <i class="bi bi-filetype-pdf"></i> ${rotuloPrincipal}
+                </a>
+                <button type="button" class="btn btn-sm ${classePrincipal} dropdown-toggle dropdown-toggle-split" data-bs-toggle="dropdown" aria-expanded="false">
+                  <span class="visually-hidden">Alternar lista de termos</span>
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                  ${docs.map((doc) => {
+                    const href = buildDownloadUrl(doc);
+                    const ativo = doc.id === docAtual.id;
+                    const rotulo = formatStatusLabel(doc, ativo);
+                    const attrs = href ? `href="${href}" target="_blank" rel="noopener"` : 'href="#"';
+                    const disabled = href ? '' : ' disabled';
+                    return `<li><a class="dropdown-item${ativo ? ' active' : ''}${disabled}" ${attrs}>${rotulo}</a></li>`;
+                  }).join('')}
+                </ul>
+              </div>`;
+          } else if (docAtual) {
+            const classePrincipal = estaAssinado ? 'btn-success' : 'btn-outline-secondary';
+            const rotuloPrincipal = estaAssinado ? 'Baixar Termo Assinado' : 'Baixar Termo Atual';
+            const hrefPrincipal = buildDownloadUrl(docAtual);
+            botoesTermoHtml += `
+              <a class="btn btn-sm ${classePrincipal}" href="${hrefPrincipal}" target="_blank" rel="noopener">
+                <i class="bi bi-filetype-pdf"></i> ${rotuloPrincipal}
               </a>`;
-          } else if (foiEnviado) {
+          } else {
+            botoesTermoHtml += `
+              <button class="btn btn-sm btn-outline-secondary" data-baixar-termo="${eventoId}">
+                <i class="bi bi-filetype-pdf"></i> Baixar Termo
+              </button>`;
+          }
+
+          if (foiEnviado) {
             botoesTermoHtml += `
               <button class="btn btn-sm btn-primary" data-assinar-termo="${eventoId}">
                 <i class="bi bi-pen"></i> Assinar Termo
               </button>`;
           }
-          
+
           btns.innerHTML = botoesTermoHtml;
         }catch(e){ 
           console.warn('Falha ao atualizar UI do evento:', e); 
