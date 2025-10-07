@@ -1,3 +1,5 @@
+const { gerarTermoEventoPdfkitEIndexar } = require('./termoEventoPdfkitService');
+
 const onlyDigits = (v = '') => String(v).replace(/\D/g, '');
 
 const dbRun = (db, sql, p = []) =>
@@ -352,6 +354,48 @@ async function atualizarEventoComDars(db, id, data, helpers) {
     throw new Error('Campos obrigatórios estão faltando.');
   }
 
+  const originalEvento = await dbGet(
+    db,
+    `SELECT nome_evento, espaco_utilizado, area_m2, datas_evento, data_vigencia_final,
+            total_diarias, valor_bruto, tipo_desconto, desconto_manual, valor_final,
+            numero_oficio_sei, hora_inicio, hora_fim, hora_montagem, hora_desmontagem,
+            numero_processo, numero_termo, emprestimo_tvs, emprestimo_caixas_som,
+            emprestimo_microfones, evento_gratuito, justificativa_gratuito
+       FROM Eventos WHERE id = ?`,
+    [id]
+  );
+  if (!originalEvento) {
+    throw Object.assign(new Error('Evento não encontrado.'), { status: 404 });
+  }
+
+  const normalizeArrayCampo = (valor) => {
+    if (!valor) return [];
+    if (Array.isArray(valor)) return valor.map((v) => String(v)).filter(Boolean);
+    if (typeof valor === 'string') {
+      const trimmed = valor.trim();
+      if (!trimmed) return [];
+      try {
+        const arr = JSON.parse(trimmed);
+        if (Array.isArray(arr)) return arr.map((v) => String(v)).filter(Boolean);
+      } catch {}
+      return trimmed
+        .split(',')
+        .map((v) => v.trim())
+        .filter(Boolean);
+    }
+    return [];
+  };
+
+  const cmpArrays = (a, b) => {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (a[i] !== b[i]) return false;
+    }
+    return true;
+  };
+
+  let termoPrecisaNovaVersao = false;
+
   const cliente = await dbGet(
     db,
     `SELECT nome_razao_social, documento, endereco, cep, tipo_cliente, valor_aluguel FROM Clientes_Eventos WHERE id = ?`,
@@ -388,6 +432,75 @@ async function atualizarEventoComDars(db, id, data, helpers) {
     dataVigenciaFinal = tmp.toISOString().slice(0, 10);
   } else if (dataVigenciaFinal) {
     dataVigenciaFinal = new Date(dataVigenciaFinal).toISOString().slice(0, 10);
+  }
+
+  const normalizaTexto = (v) => (v == null ? '' : String(v).trim());
+  const normalizaNumero = (v) => Number(v == null ? 0 : v);
+  const normalizaHora = (v) => (v == null ? '' : String(v).trim());
+
+  const origDatas = normalizeArrayCampo(originalEvento.datas_evento).map((d) => d);
+  const novasDatas = normalizeArrayCampo(datasEvento).map((d) => d);
+  const datasOrigOrdenadas = [...origDatas].sort();
+  const datasNovasOrdenadas = [...novasDatas].sort();
+  if (!cmpArrays(datasOrigOrdenadas, datasNovasOrdenadas)) {
+    termoPrecisaNovaVersao = true;
+  }
+
+  const espacosOrig = normalizeArrayCampo(originalEvento.espaco_utilizado).map((d) => d.toLowerCase());
+  const espacosNovos = normalizeArrayCampo(espacosUtilizados).map((d) => d.toLowerCase());
+  const espacosOrigOrdenados = [...espacosOrig].sort();
+  const espacosNovosOrdenados = [...espacosNovos].sort();
+  if (!cmpArrays(espacosOrigOrdenados, espacosNovosOrdenados)) {
+    termoPrecisaNovaVersao = true;
+  }
+
+  const comparacoesSimples = [
+    [normalizaTexto(originalEvento.nome_evento), normalizaTexto(nomeEvento)],
+    [normalizaTexto(originalEvento.numero_processo), normalizaTexto(numeroProcesso)],
+    [normalizaTexto(originalEvento.numero_termo), normalizaTexto(numeroTermo)],
+    [normalizaTexto(originalEvento.hora_inicio), normalizaHora(horaInicio)],
+    [normalizaTexto(originalEvento.hora_fim), normalizaHora(horaFim)],
+    [normalizaTexto(originalEvento.hora_montagem), normalizaHora(horaMontagem)],
+    [normalizaTexto(originalEvento.hora_desmontagem), normalizaHora(horaDesmontagem)],
+    [normalizaTexto(originalEvento.numero_oficio_sei), normalizaTexto(numeroOficioSei)],
+    [normalizaTexto(originalEvento.justificativa_gratuito), normalizaTexto(justificativaGratuito)],
+  ];
+
+  for (const [anterior, atual] of comparacoesSimples) {
+    if (anterior !== atual) {
+      termoPrecisaNovaVersao = true;
+      break;
+    }
+  }
+
+  if (!termoPrecisaNovaVersao) {
+    const comparacoesNumericas = [
+      [normalizaNumero(originalEvento.area_m2), normalizaNumero(areaM2)],
+      [normalizaNumero(originalEvento.total_diarias), normalizaNumero(totalDiarias)],
+      [normalizaNumero(originalEvento.valor_bruto), normalizaNumero(valorBruto)],
+      [normalizaNumero(originalEvento.desconto_manual), normalizaNumero(descontoManualPercent)],
+      [normalizaNumero(originalEvento.valor_final), normalizaNumero(valorFinal)],
+    ];
+    for (const [anterior, atual] of comparacoesNumericas) {
+      if (Number(anterior || 0).toFixed(2) !== Number(atual || 0).toFixed(2)) {
+        termoPrecisaNovaVersao = true;
+        break;
+      }
+    }
+  }
+
+  if (!termoPrecisaNovaVersao) {
+    const tipoDescontoAnterior = normalizaTexto(originalEvento.tipo_desconto);
+    const tipoDescontoAtual = normalizaTexto(tipoDescontoAuto || originalEvento.tipo_desconto);
+    if (tipoDescontoAnterior !== tipoDescontoAtual) {
+      termoPrecisaNovaVersao = true;
+    }
+  }
+
+  const eventoGratuitoAnterior = Number(originalEvento.evento_gratuito) ? 1 : 0;
+  const eventoGratuitoAtual = eventoGratuitoFlag ? 1 : 0;
+  if (eventoGratuitoAnterior !== eventoGratuitoAtual) {
+    termoPrecisaNovaVersao = true;
   }
 
   await dbRun(db, 'BEGIN TRANSACTION');
@@ -551,6 +664,11 @@ async function atualizarEventoComDars(db, id, data, helpers) {
     }
 
     await dbRun(db, 'COMMIT');
+
+    if (termoPrecisaNovaVersao) {
+      await gerarTermoEventoPdfkitEIndexar(id, { novaVersao: true });
+    }
+
     return id;
   } catch (err) {
     try { await dbRun(db, 'ROLLBACK'); } catch {}

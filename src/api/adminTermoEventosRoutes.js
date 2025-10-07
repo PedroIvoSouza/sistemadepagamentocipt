@@ -254,6 +254,8 @@ router.get(
     try {
       await ensureDocumentosSchema();
       const { eventoId } = req.params;
+      const versaoParam = Number(req.query?.versao);
+      const versaoFiltro = Number.isFinite(versaoParam) && versaoParam > 0 ? versaoParam : null;
 
       const resp = await dbGet(
         `SELECT c.documento_responsavel
@@ -266,10 +268,26 @@ router.get(
         return res.status(400).json({ error: 'CPF do responsável não informado' });
       }
 
+      const docQuery = versaoFiltro
+        ? `SELECT id, token, signed_pdf_public_url, pdf_url, pdf_public_url, versao
+             FROM documentos
+            WHERE evento_id = ? AND tipo = 'termo_evento' AND COALESCE(versao, 1) = ?
+            ORDER BY created_at DESC, id DESC
+            LIMIT 1`
+        : `SELECT id, token, signed_pdf_public_url, pdf_url, pdf_public_url, versao
+             FROM documentos
+            WHERE evento_id = ? AND tipo = 'termo_evento'
+            ORDER BY COALESCE(versao, 1) DESC, created_at DESC, id DESC
+            LIMIT 1`;
+      const docParams = versaoFiltro ? [eventoId, versaoFiltro] : [eventoId];
       const docAssinado = await dbGet(
-        `SELECT id, token, signed_pdf_public_url FROM documentos WHERE evento_id = ? AND tipo = 'termo_evento' ORDER BY id DESC LIMIT 1`,
-        [eventoId]
+        docQuery,
+        docParams
       );
+      if (!docAssinado && versaoFiltro) {
+        return res.status(404).json({ error: 'Versão solicitada não encontrada.' });
+      }
+
       if (docAssinado?.signed_pdf_public_url) {
         const filePath = path.join(
           process.cwd(),
@@ -279,18 +297,35 @@ router.get(
         if (fs.existsSync(filePath)) {
           if (docAssinado.token) res.set('X-Documento-Token', docAssinado.token);
           res.set('X-Documento-Id', String(docAssinado.id));
+          if (docAssinado.versao) res.set('X-Documento-Versao', String(docAssinado.versao));
           return res.sendFile(filePath);
         }
       }
 
-      const out = await gerarTermoEventoPdfkitEIndexar(eventoId);
+      if (docAssinado?.pdf_url && fs.existsSync(path.resolve(docAssinado.pdf_url))) {
+        if (docAssinado.token) res.set('X-Documento-Token', docAssinado.token);
+        res.set('X-Documento-Id', String(docAssinado.id));
+        if (docAssinado.versao) res.set('X-Documento-Versao', String(docAssinado.versao));
+        return res.sendFile(path.resolve(docAssinado.pdf_url));
+      }
+
+      const out = await gerarTermoEventoPdfkitEIndexar(eventoId, versaoFiltro ? { versao: versaoFiltro } : {});
 
       const docInfo = await dbGet(
-        `SELECT id, token FROM documentos WHERE evento_id = ? AND tipo = 'termo_evento' ORDER BY id DESC LIMIT 1`,
-        [eventoId]
+        versaoFiltro
+          ? `SELECT id, token, versao FROM documentos
+               WHERE evento_id = ? AND tipo = 'termo_evento' AND COALESCE(versao, 1) = ?
+               ORDER BY created_at DESC, id DESC
+               LIMIT 1`
+          : `SELECT id, token, versao FROM documentos
+               WHERE evento_id = ? AND tipo = 'termo_evento'
+               ORDER BY COALESCE(versao, 1) DESC, created_at DESC, id DESC
+               LIMIT 1`,
+        versaoFiltro ? [eventoId, versaoFiltro] : [eventoId]
       );
       if (docInfo?.token) res.set('X-Documento-Token', docInfo.token);
       if (docInfo?.id) res.set('X-Documento-Id', String(docInfo.id));
+      if (docInfo?.versao) res.set('X-Documento-Versao', String(docInfo.versao));
 
       return res.sendFile(out.filePath);
     } catch (err) {

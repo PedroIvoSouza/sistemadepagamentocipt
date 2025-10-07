@@ -141,9 +141,9 @@ async function gerarAdvertenciaPdfEIndexar({ advertenciaId = null, evento = {}, 
   const createdAt = new Date().toISOString();
   const publicUrl = `/documentos/${fileName}`;
   await dbRun(
-    `INSERT INTO documentos (tipo, token, evento_id, permissionario_id, pdf_url, pdf_public_url, status, created_at)
-     VALUES ('advertencia', ?, ?, ?, ?, ?, 'gerado', ?)
-     ON CONFLICT(evento_id, tipo) DO UPDATE SET
+    `INSERT INTO documentos (tipo, token, evento_id, permissionario_id, pdf_url, pdf_public_url, status, created_at, versao)
+     VALUES ('advertencia', ?, ?, ?, ?, ?, 'gerado', ?, 1)
+     ON CONFLICT(evento_id, tipo, versao) DO UPDATE SET
        token = excluded.token,
        pdf_url = excluded.pdf_url,
        pdf_public_url = excluded.pdf_public_url,

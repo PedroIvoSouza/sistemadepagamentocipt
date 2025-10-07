@@ -282,6 +282,7 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
 
     // Etapa 1: Gerar o termo em PDF
     const out = await gerarTermoEventoPdfkitEIndexar(id, { cpfResponsavel: effectiveCpf });
+    const versaoDocumento = Number(out?.versao || 1);
 
     // Etapa 2: Fazer o upload para a Assinafy
     const uploaded = await uploadDocumentFromFile(out.filePath, out.fileName);
@@ -323,13 +324,15 @@ router.post('/:id/termo/enviar-assinatura', async (req, res) => {
 
     // Etapa 6: Salvar no banco de dados. Note que 'assinaturaUrl' é explicitamente nulo.
     await dbRun(
-      `INSERT INTO documentos (tipo, evento_id, pdf_url, pdf_public_url, status, created_at, assinafy_id, assinatura_url)
-       VALUES ('termo_evento', ?, ?, ?, 'pendente_assinatura', datetime('now'), ?, NULL)
-       ON CONFLICT(evento_id, tipo) DO UPDATE SET
+      `INSERT INTO documentos (tipo, evento_id, versao, pdf_url, pdf_public_url, status, created_at, assinafy_id, assinatura_url)
+       VALUES ('termo_evento', ?, ?, ?, ?, 'pendente_assinatura', datetime('now'), ?, NULL)
+       ON CONFLICT(evento_id, tipo, versao) DO UPDATE SET
          status = 'pendente_assinatura',
          assinafy_id = excluded.assinafy_id,
-         assinatura_url = NULL`,
-      [id, out.filePath, out.publicUrl || out.pdf_public_url || null, assinafyDocId]
+         assinatura_url = NULL,
+         pdf_url = excluded.pdf_url,
+         pdf_public_url = excluded.pdf_public_url`,
+      [id, versaoDocumento, out.filePath, out.pdf_public_url || null, assinafyDocId]
     );
 
     // Etapa 7: Retornar sucesso para o Admin.
@@ -359,7 +362,10 @@ router.post('/:id/termo/reativar-assinatura', async (req, res) => {
 
   try {
     const row = await dbGet(
-      `SELECT assinafy_id FROM documentos WHERE evento_id = ? AND tipo = 'termo_evento' ORDER BY id DESC LIMIT 1`,
+      `SELECT assinafy_id FROM documentos
+        WHERE evento_id = ? AND tipo = 'termo_evento'
+        ORDER BY COALESCE(versao, 1) DESC, created_at DESC, id DESC
+        LIMIT 1`,
       [id],
       'reativar/get-doc'
     );
@@ -762,8 +768,8 @@ router.get('/remarcacoes', async (req, res) => {
 router.put('/:id/remarcar', async (req, res) => {
   try {
     const { id } = req.params;
-    let { nova_data, modo } = req.body || {};
-    modo = String(modo || '').toLowerCase();
+    let { nova_data, modo, mode } = req.body || {};
+    modo = String(modo || mode || '').toLowerCase();
     if (!['aprovar', 'unilateral', 'rejeitar', 'recusar'].includes(modo)) {
       return res.status(400).json({ error: 'Modo inválido. Use aprovar, unilateral ou rejeitar.' });
     }
@@ -1171,7 +1177,10 @@ router.get('/:id', async (req, res) => {
 router.post('/:eventoId/termo/disponibilizar', async (req, res) => {
   try {
     const { eventoId } = req.params;
-    const sql = `SELECT * FROM documentos WHERE evento_id = ? AND tipo = 'termo_evento' ORDER BY id DESC LIMIT 1`;
+    const sql = `SELECT * FROM documentos
+      WHERE evento_id = ? AND tipo = 'termo_evento'
+      ORDER BY COALESCE(versao, 1) DESC, created_at DESC, id DESC
+      LIMIT 1`;
     const row = await dbGet(sql, [eventoId], 'termo/get-doc-row');
     if (!row) return res.status(404).json({ ok: false, error: 'Nenhum termo gerado ainda.' });
     return res.json({

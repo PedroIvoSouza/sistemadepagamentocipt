@@ -184,8 +184,16 @@ async function ensureDocumentosSchema() {
   await add('signed_at', 'TEXT');
   await add('signer', 'TEXT');
   await add('created_at', 'TEXT');
+  await add('versao', "INTEGER DEFAULT 1");
 
-  await dbRun(`CREATE UNIQUE INDEX IF NOT EXISTS ux_documentos_evento_tipo ON documentos(evento_id, tipo)`, [], 'doc/index-ux');
+  await dbRun(`UPDATE documentos SET versao = 1 WHERE versao IS NULL`, [], 'doc/set-versao-default');
+  await dbRun(`DROP INDEX IF EXISTS ux_documentos_evento_tipo`, [], 'doc/drop-ux-evento-tipo');
+  await dbRun(`DROP INDEX IF EXISTS idx_documentos_evento_tipo`, [], 'doc/drop-idx-evento-tipo');
+  await dbRun(
+    `CREATE UNIQUE INDEX IF NOT EXISTS ux_documentos_evento_tipo_versao ON documentos(evento_id, tipo, versao)`,
+    [],
+    'doc/index-ux-evento-tipo-versao'
+  );
 }
 
 /* ================== Blocos de desenho ================== */
@@ -345,6 +353,28 @@ async function gerarTermoEventoPdfkitEIndexar(eventoId, options = {}) {
   console.log('[TERMO][SERVICE] gerarTermoEventoPdfkitEIndexar para evento', eventoId);
   await ensureDocumentosSchema();
 
+  const { novaVersao = false } = options;
+  let versaoInformada = Number(options?.versao);
+  if (!Number.isFinite(versaoInformada) || versaoInformada <= 0) {
+    versaoInformada = null;
+  }
+
+  const versaoRow = await dbGet(
+    `SELECT MAX(COALESCE(versao, 1)) AS maxVersao FROM documentos WHERE evento_id = ? AND tipo = 'termo_evento'`,
+    [eventoId],
+    'termo/max-versao'
+  );
+  const versaoAtualMax = Number(versaoRow?.maxVersao || 0) || 0;
+  let versao = versaoInformada;
+  if (!versao) {
+    if (novaVersao) {
+      versao = versaoAtualMax + 1;
+    } else {
+      versao = versaoAtualMax || 1;
+    }
+  }
+  if (versao <= 0) versao = 1;
+
   // 1) Evento + Cliente
   const ev = await dbGet(
     `SELECT e.*,
@@ -480,7 +510,8 @@ const saldoISO = parcelas.length > 1
     isoLocalToday() || 's-d';
   
   const fileName = sanitizeForFilename(
-    `TermoPermissao_${String(ev.numero_termo || 's-n').replace(/[\/\\]/g, '-')}_${(ev.nome_razao_social || 'Cliente')}_${dataParaArquivoStr}.pdf`
+    `TermoPermissao_${String(ev.numero_termo || 's-n').replace(/[\/\\]/g, '-')}_v${String(versao).padStart(2, '0')}_` +
+      `${(ev.nome_razao_social || 'Cliente')}_${dataParaArquivoStr}.pdf`
   );
   const filePath = path.join(publicDir, fileName);
 
@@ -708,9 +739,9 @@ const saldoISO = parcelas.length > 1
   const createdAt = new Date().toISOString();
   const publicUrl = `/documentos/${fileName}`;
   await dbRun(
-    `INSERT INTO documentos (tipo, token, permissionario_id, evento_id, pdf_url, pdf_public_url, status, created_at)
-     VALUES ('termo_evento', ?, ?, ?, ?, ?, 'gerado', ?)
-     ON CONFLICT(evento_id, tipo) DO UPDATE SET
+    `INSERT INTO documentos (tipo, token, permissionario_id, evento_id, pdf_url, pdf_public_url, status, created_at, versao)
+     VALUES ('termo_evento', ?, ?, ?, ?, ?, 'gerado', ?, ?)
+     ON CONFLICT(evento_id, tipo, versao) DO UPDATE SET
        permissionario_id = excluded.permissionario_id,
        evento_id = excluded.evento_id,
        token = excluded.token,
@@ -718,11 +749,11 @@ const saldoISO = parcelas.length > 1
        pdf_public_url = excluded.pdf_public_url,
        status = 'gerado',
        created_at = excluded.created_at`,
-    [token, permissionarioId, eventoId, filePath, publicUrl, createdAt],
+    [token, permissionarioId, eventoId, filePath, publicUrl, createdAt, versao],
     'termo/upsert-documento'
   );
 
-  return { filePath, fileName, pdf_public_url: publicUrl, data_vigencia_final: vigenciaFinalISO };
+  return { filePath, fileName, pdf_public_url: publicUrl, data_vigencia_final: vigenciaFinalISO, versao };
 }
 
 module.exports = { gerarTermoEventoPdfkitEIndexar };
