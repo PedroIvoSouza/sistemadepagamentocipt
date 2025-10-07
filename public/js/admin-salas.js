@@ -5,6 +5,8 @@ let modalNovaSala;
 let modalNovaReserva;
 let eventoSelecionado;
 
+const formatoHoraBR = { hour: '2-digit', minute: '2-digit', hour12: false };
+
 document.addEventListener('DOMContentLoaded', () => {
   const calendarEl = document.getElementById('calendar');
   if (calendarEl && window.FullCalendar) {
@@ -14,11 +16,8 @@ document.addEventListener('DOMContentLoaded', () => {
       editable: true,
       themeSystem: 'bootstrap5',
       displayEventEnd: true,
-      eventTimeFormat: {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false
-      },
+      eventTimeFormat: formatoHoraBR,
+      slotLabelFormat: formatoHoraBR,
       eventSources: [fetchReservas],
       eventClick: onEventClick,
       eventDrop: onEventChange,
@@ -56,9 +55,8 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function formatRange(inicio, fim) {
-  const opcoes = { hour: '2-digit', minute: '2-digit', hour12: false };
-  const ini = new Date(inicio).toLocaleTimeString('pt-BR', opcoes);
-  const f = new Date(fim).toLocaleTimeString('pt-BR', opcoes);
+  const ini = new Date(inicio).toLocaleTimeString('pt-BR', formatoHoraBR);
+  const f = new Date(fim).toLocaleTimeString('pt-BR', formatoHoraBR);
   return `${ini} - ${f}`;
 }
 
