@@ -562,7 +562,22 @@ window.onload = () => {
     btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
     try {
       const r = await fetch(TERMO_ENDPOINT(eventoId), { headers: AUTH_HEADERS, cache: 'no-store' });
-      if (!r.ok) throw new Error('Falha ao gerar termo');
+      if (!r.ok) {
+        let message = 'Falha ao gerar termo';
+        try {
+          const contentType = r.headers.get('content-type') || '';
+          if (contentType.includes('application/json')) {
+            const data = await r.json();
+            message = data?.error || data?.message || message;
+          } else {
+            const text = (await r.text()).trim();
+            if (text) message = text;
+          }
+        } catch (parseErr) {
+          console.warn('[baixarTermoOriginal] falha ao ler erro:', parseErr);
+        }
+        throw new Error(message);
+      }
       const blob = await r.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
