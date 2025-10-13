@@ -262,13 +262,22 @@ router.get(
       const versaoFiltro = Number.isFinite(versaoParam) && versaoParam > 0 ? versaoParam : null;
 
       const resp = await dbGet(
-        `SELECT c.documento_responsavel
+        `SELECT c.documento_responsavel,
+                c.documento,
+                c.tipo_cliente
            FROM Eventos e
            JOIN Clientes_Eventos c ON c.id = e.id_cliente
           WHERE e.id = ?`,
         [eventoId]
       );
-      if (!resp?.documento_responsavel) {
+
+      const cpfResponsavel = onlyDigits(resp?.documento_responsavel || '');
+      const cpfCliente = onlyDigits(resp?.documento || '');
+      const tipoCliente = String(resp?.tipo_cliente || '').trim().toUpperCase();
+      const fallbackCpf =
+        cpfResponsavel ||
+        ((tipoCliente === 'PF' || cpfCliente.length === 11) ? cpfCliente : '');
+      if (!fallbackCpf) {
         return res.status(400).json({ error: 'CPF do responsável não informado' });
       }
 
@@ -313,7 +322,12 @@ router.get(
         return res.sendFile(path.resolve(docAssinado.pdf_url));
       }
 
-      const out = await gerarTermoEventoPdfkitEIndexar(eventoId, versaoFiltro ? { versao: versaoFiltro } : {});
+      const out = await gerarTermoEventoPdfkitEIndexar(
+        eventoId,
+        versaoFiltro
+          ? { versao: versaoFiltro, cpfResponsavel: fallbackCpf }
+          : { cpfResponsavel: fallbackCpf }
+      );
 
       const docInfo = await dbGet(
         versaoFiltro
