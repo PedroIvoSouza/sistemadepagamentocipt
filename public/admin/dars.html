@@ -32,6 +32,14 @@
     .card { border:none; border-radius:var(--raio-borda); box-shadow:0 2px 5px rgba(0,0,0,.05); margin-bottom:2rem; }
     .table-hover tbody tr:hover { background:#f8f9fa; }
     .badge { font-size:.8rem; padding:.5em .8em; }
+    .metric-card { border:none; border-radius:var(--raio-borda); box-shadow:0 2px 5px rgba(0,0,0,.05); padding:1.25rem; }
+    .metric-card .display-6 { font-size:2.5rem; }
+    .atrasado-row { border-left:4px solid rgba(220,53,69,.35); background-color:#fff5f5; }
+    #conciliacaoMensagem { min-height:1.25rem; }
+    .list-group-item small { display:block; }
+    @media (max-width:575.98px) {
+      .metric-card .display-6 { font-size:2rem; }
+    }
   </style>
 </head>
 <body>
@@ -53,36 +61,108 @@
 
         <div class="card">
           <div class="card-body p-4">
-            <div class="row g-3 mb-4">
-              <div class="col-md-4">
-                <input type="text" id="searchInput" class="form-control" placeholder="Buscar por Nome ou CNPJ...">
+            <div class="row g-3 mb-4 align-items-end">
+              <div class="col-12 col-lg-4">
+                <label for="searchInput" class="form-label small text-muted">Busca</label>
+                <input type="text" id="searchInput" class="form-control" placeholder="Buscar por nome, documento ou número da guia...">
               </div>
-              <div class="col-md-2">
+              <div class="col-6 col-lg-2">
+                <label for="filtro-mes" class="form-label small text-muted">Mês</label>
                 <select id="filtro-mes" class="form-select">
                   <option value="todos">Todos os Meses</option>
                 </select>
               </div>
-              <div class="col-md-2">
+              <div class="col-6 col-lg-2">
+                <label for="filtro-ano" class="form-label small text-muted">Ano</label>
                 <select id="filtro-ano" class="form-select"></select>
               </div>
-              <div class="col-md-2">
+              <div class="col-6 col-lg-2">
+                <label for="filtro-status" class="form-label small text-muted">Status</label>
                 <select id="filtro-status" class="form-select">
                   <option value="todos" selected>Todos os Status</option>
                   <option value="Pendente">Pendente</option>
+                  <option value="Emitido">Emitido</option>
+                  <option value="Reemitido">Reemitido</option>
                   <option value="Pago">Pago</option>
+                  <option value="Parcialmente Pago">Parcialmente Pago</option>
+                  <option value="Vencido">Vencido</option>
                   <option value="Vencida">Vencida</option>
                 </select>
               </div>
-              <div class="col-md-2">
+              <div class="col-6 col-lg-2">
+                <label for="filtro-origem" class="form-label small text-muted">Origem</label>
+                <select id="filtro-origem" class="form-select">
+                  <option value="todos" selected>Todas as Origens</option>
+                  <option value="permissionario">Permissionários</option>
+                  <option value="evento">Eventos</option>
+                </select>
+              </div>
+              <div class="col-6 col-lg-2 d-flex align-items-center">
+                <div class="form-check form-switch mt-4">
+                  <input class="form-check-input" type="checkbox" id="filtro-atrasados">
+                  <label class="form-check-label small" for="filtro-atrasados">Somente atrasados</label>
+                </div>
+              </div>
+              <div class="col-12 col-lg-2">
                 <button id="filterButton" class="btn btn-primary w-100">Filtrar</button>
               </div>
             </div>
 
+            <div id="resumoIndicadores" class="row g-3 mb-4"></div>
+
+            <div class="row g-3 mb-4">
+              <div class="col-xl-4">
+                <div class="card h-100" id="cardConciliacao">
+                  <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                      <h2 class="h5 mb-0">Conciliação automática</h2>
+                      <span class="badge bg-secondary-subtle text-secondary" id="conciliacaoBadge">Carregando...</span>
+                    </div>
+                    <p class="text-muted small mb-1" id="conciliacaoUltimaExecucao">Última execução: —</p>
+                    <p class="text-muted small" id="conciliacaoUltimoSucesso">Último sucesso: —</p>
+                    <div id="conciliacaoMensagem" class="text-danger small d-none mb-2"></div>
+                    <button type="button" class="btn btn-outline-primary btn-sm" id="conciliacaoRefreshBtn">
+                      <i class="bi bi-arrow-repeat me-1"></i>
+                      Atualizar status
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div class="col-xl-8">
+                <div class="card h-100">
+                  <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                      <h2 class="h5 mb-0">DARs atrasadas em destaque</h2>
+                      <div class="btn-group btn-group-sm" role="group" aria-label="Ver atrasados">
+                        <button type="button" class="btn btn-outline-danger" id="verAtrasadosPermBtn">Permissionários</button>
+                        <button type="button" class="btn btn-outline-danger" id="verAtrasadosEventosBtn">Eventos</button>
+                        <button type="button" class="btn btn-outline-secondary" id="verAtrasadosTodosBtn">Todos</button>
+                      </div>
+                    </div>
+                    <div class="row g-3">
+                      <div class="col-md-6">
+                        <h6 class="text-uppercase text-muted small mb-2">Permissionários</h6>
+                        <ul class="list-group list-group-flush small" id="listaAtrasadosPermissionarios">
+                          <li class="list-group-item text-muted">Carregando...</li>
+                        </ul>
+                      </div>
+                      <div class="col-md-6">
+                        <h6 class="text-uppercase text-muted small mb-2">Eventos</h6>
+                        <ul class="list-group list-group-flush small" id="listaAtrasadosEventos">
+                          <li class="list-group-item text-muted">Carregando...</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div class="table-responsive">
-              <table class="table table-hover align-middle">
+              <table class="table table-hover align-middle" id="dars-table">
                 <thead>
                   <tr>
-                    <th>Permissionário</th>
+                    <th>Contribuinte / Evento</th>
                     <th>Competência</th>
                     <th>Vencimento</th>
                     <th class="text-end">Valor (R$)</th>
@@ -190,13 +270,37 @@
   <script>
     // --- helpers ---
     function esc(v){ return String(v ?? '').replace(/[&<>"'/]/g, s=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','/':'&#47;' }[s])); }
-    function formatarCNPJ(cnpj) {
-      if (!cnpj) return '';
-      const cnpjLimpo = cnpj.toString().replace(/\D/g,'');
-      if (cnpjLimpo.length === 14) return cnpjLimpo.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/,'$1.$2.$3/$4-$5');
-      return cnpj;
+    function formatarDocumento(valor) {
+      if (!valor) return '';
+      const digits = String(valor).replace(/\D/g, '');
+      if (digits.length === 11) return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+      if (digits.length === 14) return digits.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
+      return String(valor);
     }
-
+    function formatarCNPJ(cnpj) { return formatarDocumento(cnpj); }
+    function formatarData(valor) {
+      if (!valor) return '—';
+      const str = String(valor).slice(0, 10);
+      const partes = str.split('-');
+      if (partes.length === 3) return `${partes[2]}/${partes[1]}/${partes[0]}`;
+      try {
+        return new Date(valor).toLocaleDateString('pt-BR');
+      } catch {
+        return String(valor);
+      }
+    }
+    function formatarDataHora(valor) {
+      if (!valor) return '—';
+      const base = String(valor).replace(' ', 'T');
+      const data = new Date(base);
+      if (Number.isNaN(data.getTime())) return formatarData(valor);
+      return data.toLocaleString('pt-BR');
+    }
+    function formatCurrency(valor) {
+      const numero = Number(valor || 0);
+      if (!Number.isFinite(numero)) return '0,00';
+      return numero.toLocaleString('pt-BR',{ minimumFractionDigits:2, maximumFractionDigits:2 });
+    }
     function hojeISO(){
       const agora = new Date();
       const ajustada = new Date(agora.getTime() - agora.getTimezoneOffset() * 60000);
@@ -220,9 +324,23 @@
       const filtroMes     = document.getElementById('filtro-mes');
       const filtroAno     = document.getElementById('filtro-ano');
       const filtroStatus  = document.getElementById('filtro-status');
+      const filtroOrigem  = document.getElementById('filtro-origem');
+      const filtroAtrasados = document.getElementById('filtro-atrasados');
       const filterButton  = document.getElementById('filterButton');
       const tableBody     = document.getElementById('dars-table-body');
       const paginationNav = document.getElementById('paginationNav');
+      const indicadoresResumo = document.getElementById('resumoIndicadores');
+      const conciliacaoBadge = document.getElementById('conciliacaoBadge');
+      const conciliacaoUltimaExecucao = document.getElementById('conciliacaoUltimaExecucao');
+      const conciliacaoUltimoSucesso = document.getElementById('conciliacaoUltimoSucesso');
+      const conciliacaoMensagem = document.getElementById('conciliacaoMensagem');
+      const conciliacaoRefreshBtn = document.getElementById('conciliacaoRefreshBtn');
+      const listaAtrasadosPermissionarios = document.getElementById('listaAtrasadosPermissionarios');
+      const listaAtrasadosEventos = document.getElementById('listaAtrasadosEventos');
+      const verAtrasadosPermBtn = document.getElementById('verAtrasadosPermBtn');
+      const verAtrasadosEventosBtn = document.getElementById('verAtrasadosEventosBtn');
+      const verAtrasadosTodosBtn = document.getElementById('verAtrasadosTodosBtn');
+      const darsTable = document.getElementById('dars-table');
       const gerarDarSemJurosModalEl = document.getElementById('gerarDarSemJurosModal');
       const gerarDarSemJurosForm = document.getElementById('gerarDarSemJurosForm');
       const semJurosPermissionarioSelect = document.getElementById('semJurosPermissionario');
@@ -259,8 +377,17 @@
         const mes    = filtroMes.value;
         const ano    = filtroAno.value;
         const status = filtroStatus.value;
+        const origem = filtroOrigem?.value || 'todos';
+        const atrasados = filtroAtrasados?.checked ? 'true' : 'false';
 
-        const url = `/api/admin/dars?page=${page}&search=${encodeURIComponent(search)}&mes=${mes}&ano=${ano}&status=${status}&limit=10`;
+        const url = `/api/admin/dars?page=${page}`
+          + `&search=${encodeURIComponent(search)}`
+          + `&mes=${encodeURIComponent(mes)}`
+          + `&ano=${encodeURIComponent(ano)}`
+          + `&status=${encodeURIComponent(status)}`
+          + `&origem=${encodeURIComponent(origem)}`
+          + `&atrasados=${atrasados}`
+          + `&limit=10`;
 
         try{
           const response = await fetch(url, { headers:{ Authorization:`Bearer ${token}` } });
@@ -280,46 +407,92 @@
           tableBody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Nenhum DAR encontrado para os filtros selecionados.</td></tr>';
           return;
         }
-        const statusColors = {
-          Pendente: 'bg-warning text-dark',
-          Pago: 'bg-success text-white',
-          Vencido: 'bg-danger text-white',
-          Vencida: 'bg-danger text-white',
-          Emitido: 'bg-primary text-white',
-          Reemitido: 'bg-primary text-white'
-        };
         const rows = dars.map(dar=>{
-          const statusColor = statusColors[dar.status] || 'bg-secondary text-white';
-          const mesReferencia = dar.mes_referencia == null ? '--' : String(dar.mes_referencia).padStart(2,'0');
+          const statusLabel = dar.status || 'Pendente';
+          const statusLower = statusLabel.toLowerCase();
+          const statusColors = {
+            pendente: 'bg-warning text-dark',
+            pago: 'bg-success text-white',
+            'parcialmente pago': 'bg-info text-dark',
+            'pago parcialmente': 'bg-info text-dark',
+            vencido: 'bg-danger text-white',
+            vencida: 'bg-danger text-white',
+            emitido: 'bg-primary text-white',
+            reemitido: 'bg-primary text-white'
+          };
+          const statusColor = statusColors[statusLower] || 'bg-secondary text-white';
+          const mesReferencia = dar.mes_referencia == null ? null : String(dar.mes_referencia).padStart(2,'0');
           const anoReferencia = dar.ano_referencia == null ? '' : String(dar.ano_referencia);
-          const competenciaLabel = anoReferencia ? `${mesReferencia}/${anoReferencia}` : mesReferencia;
-          const vencimentoFmt = dar.data_vencimento
-            ? new Date(`${dar.data_vencimento}T00:00:00Z`).toLocaleDateString('pt-BR',{ timeZone:'UTC' })
-            : '-';
-          const valorNumerico = Number(dar.valor || 0);
-          const valorFormatado = valorNumerico.toLocaleString('pt-BR',{ minimumFractionDigits:2, maximumFractionDigits:2 });
-          const dataPagamentoISO = dar.data_pagamento ? String(dar.data_pagamento).split('T')[0] : '';
+          const competenciaLabel = anoReferencia ? `${mesReferencia || '--'}/${anoReferencia}` : (mesReferencia || '--');
+          const vencimentoFmt = dar.data_vencimento ? formatarData(dar.data_vencimento) : '—';
+          const valorFormatado = formatCurrency(dar.valor);
+          const pagamentoISO = dar.data_pagamento ? String(dar.data_pagamento).split('T')[0] : '';
+          const pagamentoFmt = dar.data_pagamento ? formatarData(dar.data_pagamento) : '';
+          const origem = String(dar.origem || '').toLowerCase();
+          const isEvento = origem === 'evento';
+          const nomePrincipal = isEvento
+            ? (dar.nome_evento || dar.nome_principal || 'Evento')
+            : (dar.nome_permissionario || dar.nome_principal || 'Permissionário');
+          const docPrincipal = formatarDocumento(dar.documento_principal);
+          const clienteNome = isEvento && dar.cliente_evento ? dar.cliente_evento : '';
+          const docCliente = isEvento ? formatarDocumento(dar.documento_cliente) : '';
+          const numeroGuia = dar.numero_documento ? String(dar.numero_documento).trim() : '';
+          const linhaDigitavel = dar.linha_digitavel ? String(dar.linha_digitavel).trim() : '';
+          const estaAtrasado = Number(dar.esta_atrasado) === 1;
+          const diasAtraso = Number(dar.dias_em_atraso || 0);
+          const estaPago = statusLower.startsWith('pago') || statusLower.startsWith('parcialmente pago');
+          const badgeOrigem = isEvento
+            ? '<span class="badge bg-info text-dark">Evento</span>'
+            : (String(dar.tipo_registro || '').toLowerCase() === 'advertencia'
+              ? '<span class="badge bg-danger-subtle text-danger">Advertência</span>'
+              : '<span class="badge bg-primary-subtle text-primary">Permissionário</span>');
+          const atrasadoBadge = estaAtrasado
+            ? `<span class="badge bg-danger-subtle text-danger ms-2">Atrasado${diasAtraso ? ` · ${esc(diasAtraso)}d` : ''}</span>`
+            : '';
+          const headerLine = `<div class="d-flex flex-wrap align-items-center gap-2"><strong>${esc(nomePrincipal)}</strong>${badgeOrigem}${atrasadoBadge}</div>`;
+          const docInfo = docPrincipal ? `<div class="small text-muted">Documento: ${esc(docPrincipal)}</div>` : '';
+          const clienteInfo = clienteNome
+            ? `<div class="small text-muted">Cliente: ${esc(clienteNome)}${docCliente ? ` • ${esc(docCliente)}` : ''}</div>`
+            : '';
+          const guiaInfo = numeroGuia ? `<div class="small text-muted">Guia: ${esc(numeroGuia)}</div>` : '';
+          const linhaInfo = linhaDigitavel ? `<div class="small text-muted">Linha Digitável: ${esc(linhaDigitavel)}</div>` : '';
+          const vencimentoExtra = estaAtrasado && diasAtraso > 0
+            ? `<div class="small text-danger">há ${esc(diasAtraso)} dia(s)</div>`
+            : '';
+          const pagamentoInfo = estaPago && pagamentoFmt
+            ? `<div class="small text-muted mt-1">Pago em ${esc(pagamentoFmt)}</div>`
+            : '';
 
           const buttons = [];
-          const podeNotificar = ['Pendente','Vencido','Vencida','Emitido','Reemitido'].includes(dar.status);
+          const podeNotificar = !isEvento && ['pendente','vencido','vencida','emitido','reemitido'].includes(statusLower);
           if (podeNotificar) {
             buttons.push(`<button class="btn btn-sm btn-outline-info enviar-notificacao-btn" data-id="${esc(dar.id)}" title="Enviar notificação por e-mail"><i class="bi bi-envelope-fill"></i> Notificar</button>`);
-          } else if (dar.status === 'Pago') {
+          }
+          if (!isEvento && !estaPago) {
+            buttons.push(
+              `<button class="btn btn-sm btn-outline-secondary baixa-manual-btn" data-id="${esc(dar.id)}" data-nome="${esc(nomePrincipal)}" data-competencia="${esc(competenciaLabel)}" data-vencimento="${esc(vencimentoFmt)}" data-valor="R$ ${esc(valorFormatado)}" data-pagamento="${esc(pagamentoISO)}" title="Registrar baixa manual">
+                <i class="bi bi-receipt"></i> Baixa manual
+              </button>`
+            );
+          }
+          if (estaPago) {
             buttons.push(`<button class="btn btn-sm btn-outline-info comprovante-btn" data-id="${esc(dar.id)}" title="Ver comprovante"><i class="bi bi-file-earmark-pdf-fill"></i> Comprovante</button>`);
           }
-
           const acaoBotao = buttons.length ? buttons.join(' ') : '<span class="text-muted small">—</span>';
 
           return `
-            <tr>
+            <tr class="${estaAtrasado ? 'atrasado-row' : ''}">
               <td>
-                <strong>${esc(dar.nome_empresa)}</strong>
-                <div class="small text-muted">${esc(formatarCNPJ(dar.cnpj))}</div>
+                ${headerLine}
+                ${docInfo}
+                ${clienteInfo}
+                ${guiaInfo}
+                ${linhaInfo}
               </td>
               <td>${esc(competenciaLabel)}</td>
-              <td>${esc(vencimentoFmt)}</td>
+              <td>${esc(vencimentoFmt)}${vencimentoExtra}</td>
               <td class="text-end">${esc(valorFormatado)}</td>
-              <td class="text-center"><span class="badge ${statusColor}">${esc(dar.status)}</span></td>
+              <td class="text-center"><span class="badge ${statusColor}">${esc(statusLabel)}</span>${pagamentoInfo}</td>
               <td class="text-center">${acaoBotao}</td>
             </tr>`;
         }).join('');
@@ -339,7 +512,231 @@
         paginationNav.innerHTML = html;
       }
 
+      function renderIndicadores(totals){
+        if (!indicadoresResumo) return;
+        const perm = totals?.permissionarios || { total:0, pagos:0, atrasados:0, valor_em_aberto:0 };
+        const eventos = totals?.eventos || { total:0, pagos:0, atrasados:0, valor_em_aberto:0 };
+
+        const cards = [
+          {
+            titulo: 'Pagos (Permissionários)',
+            valor: perm.pagos,
+            destaque: 'text-success',
+            subtitulo: `${perm.total} emitidos`
+          },
+          {
+            titulo: 'Pagos (Eventos)',
+            valor: eventos.pagos,
+            destaque: 'text-success',
+            subtitulo: `${eventos.total} emitidos`
+          },
+          {
+            titulo: 'Atrasados (Permissionários)',
+            valor: perm.atrasados,
+            destaque: 'text-danger',
+            subtitulo: `Em aberto: R$ ${formatCurrency(perm.valor_em_aberto)}`
+          },
+          {
+            titulo: 'Atrasados (Eventos)',
+            valor: eventos.atrasados,
+            destaque: 'text-danger',
+            subtitulo: `Em aberto: R$ ${formatCurrency(eventos.valor_em_aberto)}`
+          }
+        ];
+
+        indicadoresResumo.innerHTML = cards
+          .map(card => `
+            <div class="col-sm-6 col-lg-3">
+              <div class="metric-card h-100">
+                <h6 class="text-muted text-uppercase small mb-2">${esc(card.titulo)}</h6>
+                <div class="display-6 fw-semibold ${card.destaque}">${esc(card.valor)}</div>
+                <div class="text-muted small">${esc(card.subtitulo)}</div>
+              </div>
+            </div>
+          `)
+          .join('');
+      }
+
+      async function carregarIndicadores(){
+        if (!indicadoresResumo) return;
+        try {
+          const response = await fetch('/api/admin/dars/indicadores', { headers:{ Authorization:`Bearer ${token}` } });
+          if (!response.ok) throw new Error('Falha ao carregar indicadores.');
+          const data = await response.json();
+          renderIndicadores(data?.totals || {});
+        } catch (error) {
+          console.error('Indicadores DAR:', error);
+          indicadoresResumo.innerHTML = `<div class="col-12 text-danger small">${esc(error.message || 'Erro ao carregar indicadores.')}</div>`;
+        }
+      }
+
+      function renderConciliaStatus(payload){
+        if (!conciliacaoBadge || !conciliacaoUltimaExecucao || !conciliacaoUltimoSucesso) return;
+        const lockAtivo = Boolean(payload?.lockAtivo);
+        const ultimaExec = payload?.ultimaExecucao || null;
+        const ultimaSucesso = payload?.ultimaSucesso || null;
+
+        let badgeClass = 'bg-secondary-subtle text-secondary';
+        let badgeLabel = 'Sem histórico';
+
+        if (lockAtivo) {
+          badgeClass = 'bg-warning text-dark';
+          badgeLabel = 'Em execução';
+        } else if (ultimaExec && ultimaExec.status === 'falha') {
+          badgeClass = 'bg-danger';
+          badgeLabel = 'Falha recente';
+        } else if (ultimaExec) {
+          badgeClass = 'bg-success';
+          badgeLabel = 'Em dia';
+        }
+
+        conciliacaoBadge.className = `badge ${badgeClass}`;
+        conciliacaoBadge.textContent = badgeLabel;
+
+        if (ultimaExec) {
+          const resumoExec = `${ultimaExec.total_atualizados ?? 0}/${ultimaExec.total_pagamentos ?? 0} pagamentos`;
+          const quando = ultimaExec.data_execucao ? formatarDataHora(ultimaExec.data_execucao) : formatarData(ultimaExec.data_referencia);
+          conciliacaoUltimaExecucao.textContent = `Última execução: ${quando} (${resumoExec})`;
+        } else {
+          conciliacaoUltimaExecucao.textContent = 'Última execução: —';
+        }
+
+        if (ultimaSucesso) {
+          const quandoSucesso = ultimaSucesso.data_execucao ? formatarDataHora(ultimaSucesso.data_execucao) : formatarData(ultimaSucesso.data_referencia);
+          conciliacaoUltimoSucesso.textContent = `Último sucesso: ${quandoSucesso}`;
+        } else {
+          conciliacaoUltimoSucesso.textContent = 'Último sucesso: —';
+        }
+
+        if (conciliacaoMensagem) {
+          const mensagem = lockAtivo
+            ? 'Conciliação em andamento. Aguarde alguns minutos.'
+            : (ultimaExec && ultimaExec.status === 'falha' && ultimaExec.mensagem ? `Falha: ${ultimaExec.mensagem}` : '');
+          if (mensagem) {
+            conciliacaoMensagem.textContent = mensagem;
+            conciliacaoMensagem.classList.remove('d-none');
+          } else {
+            conciliacaoMensagem.textContent = '';
+            conciliacaoMensagem.classList.add('d-none');
+          }
+        }
+      }
+
+      async function carregarConciliaStatus(){
+        if (!conciliacaoBadge) return;
+        try {
+          const response = await fetch('/api/admin/dars/conciliacao/status', { headers:{ Authorization:`Bearer ${token}` } });
+          if (!response.ok) throw new Error('Falha ao consultar status.');
+          const data = await response.json();
+          renderConciliaStatus(data);
+        } catch (error) {
+          console.error('Status conciliação:', error);
+          conciliacaoBadge.className = 'badge bg-danger';
+          conciliacaoBadge.textContent = 'Erro';
+          if (conciliacaoMensagem) {
+            conciliacaoMensagem.textContent = error.message || 'Erro ao consultar status da conciliação.';
+            conciliacaoMensagem.classList.remove('d-none');
+          }
+        }
+      }
+
+      function renderAtrasadosList(lista, container, origem){
+        if (!container) return;
+        if (!Array.isArray(lista) || !lista.length) {
+          container.innerHTML = '<li class="list-group-item text-muted small">Nenhum atraso encontrado.</li>';
+          return;
+        }
+        container.innerHTML = lista
+          .map(item => {
+            const nome = origem === 'evento'
+              ? (item.nome_evento || item.nome_principal || 'Evento')
+              : (item.nome_permissionario || item.nome_principal || 'Permissionário');
+            const cliente = origem === 'evento' && item.cliente_evento
+              ? `<div class="text-muted small">Cliente: ${esc(item.cliente_evento)}</div>`
+              : '';
+            const dias = Number(item.dias_em_atraso || 0);
+            const vencimento = item.data_vencimento ? formatarData(item.data_vencimento) : '—';
+            const valorFmt = formatCurrency(item.valor);
+            return `
+              <li class="list-group-item d-flex justify-content-between align-items-start gap-3">
+                <div>
+                  <strong>${esc(nome)}</strong>
+                  <div class="text-muted small">Vencimento ${esc(vencimento)}</div>
+                  <div class="text-muted small">Valor: R$ ${esc(valorFmt)}</div>
+                  ${cliente}
+                </div>
+                <span class="badge bg-danger-subtle text-danger align-self-center">${esc(dias > 0 ? `${dias}d` : '1d+')}</span>
+              </li>
+            `;
+          })
+          .join('');
+      }
+
+      async function carregarAtrasados(){
+        if (!listaAtrasadosPermissionarios || !listaAtrasadosEventos) return;
+        try {
+          const response = await fetch('/api/admin/dars/atrasados?limit=6', { headers:{ Authorization:`Bearer ${token}` } });
+          if (!response.ok) throw new Error('Falha ao listar atrasados.');
+          const data = await response.json();
+          renderAtrasadosList(data?.permissionarios || [], listaAtrasadosPermissionarios, 'permissionario');
+          renderAtrasadosList(data?.eventos || [], listaAtrasadosEventos, 'evento');
+        } catch (error) {
+          console.error('DARs atrasados:', error);
+          const msg = `<li class="list-group-item text-danger small">${esc(error.message || 'Erro ao carregar atrasados.')}</li>`;
+          listaAtrasadosPermissionarios.innerHTML = msg;
+          listaAtrasadosEventos.innerHTML = msg;
+        }
+      }
+
+      async function atualizarDashboards(){
+        await Promise.allSettled([
+          carregarIndicadores(),
+          carregarConciliaStatus(),
+          carregarAtrasados()
+        ]);
+      }
+
       filterButton.addEventListener('click', ()=> fetchDars(1));
+
+      if (searchInput) {
+        searchInput.addEventListener('keydown', (event) => {
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            fetchDars(1);
+          }
+        });
+      }
+
+      if (filtroOrigem) {
+        filtroOrigem.addEventListener('change', () => fetchDars(1));
+      }
+
+      if (filtroAtrasados) {
+        filtroAtrasados.addEventListener('change', () => fetchDars(1));
+      }
+
+      if (conciliacaoRefreshBtn) {
+        conciliacaoRefreshBtn.addEventListener('click', () => carregarConciliaStatus());
+      }
+
+      function aplicarFiltroAtrasos(origem){
+        if (filtroOrigem) filtroOrigem.value = origem || 'todos';
+        if (filtroAtrasados) filtroAtrasados.checked = true;
+        fetchDars(1);
+        if (darsTable) {
+          darsTable.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }
+
+      if (verAtrasadosPermBtn) {
+        verAtrasadosPermBtn.addEventListener('click', () => aplicarFiltroAtrasos('permissionario'));
+      }
+      if (verAtrasadosEventosBtn) {
+        verAtrasadosEventosBtn.addEventListener('click', () => aplicarFiltroAtrasos('evento'));
+      }
+      if (verAtrasadosTodosBtn) {
+        verAtrasadosTodosBtn.addEventListener('click', () => aplicarFiltroAtrasos('todos'));
+      }
 
       function getSemJurosModalInstance(){
         if (!gerarDarSemJurosModalEl) return null;
@@ -523,7 +920,8 @@
           atualizarValorSemJuros();
           const modalInstance = getSemJurosModalInstance();
           modalInstance?.hide();
-          fetchDars();
+          await fetchDars();
+          await atualizarDashboards();
         }catch(error){
           console.error('Erro ao gerar DAR sem juros:', error);
           AppUI.toast(error.message || 'Falha ao gerar o DAR.', 'error');
@@ -716,6 +1114,7 @@
             const modal = getBaixaManualModalInstance();
             modal?.hide();
             await fetchDars(currentPageState);
+            await atualizarDashboards();
           }catch(error){
             console.error('Erro ao registrar baixa manual:', error);
             AppUI.toast(error.message || 'Falha ao registrar a baixa manual.', 'error');
@@ -738,6 +1137,7 @@
 
       // primeira carga
       fetchDars();
+      atualizarDashboards();
     });
   </script>
 </body>

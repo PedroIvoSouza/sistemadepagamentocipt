@@ -63,6 +63,176 @@ const dbAll = (sql,p=[]) => new Promise((res,rej)=>db.all(sql,p,(e,r)=>e?rej(e):
 const dbRun = (sql,p=[]) => new Promise((res,rej)=>db.run(sql,p,function(e){ if(e) return rej(e); res(this); }));
 const dbGet = (sql,p=[]) => new Promise((res,rej)=>db.get(sql,p,(e,r)=>e?rej(e):res(r)));
 
+let conciliaTableEnsured = false;
+let conciliaDetalheTableEnsured = false;
+
+async function ensureConciliacaoLogTable() {
+  if (conciliaTableEnsured) return;
+  try {
+    const row = await dbGet(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='dar_conciliacoes' LIMIT 1"
+    );
+    if (!row || !row.name) {
+      await dbRun(
+        `CREATE TABLE IF NOT EXISTS dar_conciliacoes (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          data_execucao TEXT NOT NULL,
+          data_referencia TEXT NOT NULL,
+          iniciou_em TEXT,
+          finalizou_em TEXT,
+          duracao_ms INTEGER,
+          total_pagamentos INTEGER DEFAULT 0,
+          total_atualizados INTEGER DEFAULT 0,
+          status TEXT NOT NULL DEFAULT 'sucesso' CHECK(status IN ('sucesso','falha')),
+          mensagem TEXT
+        )`
+      );
+      await dbRun('CREATE INDEX IF NOT EXISTS idx_dar_conciliacoes_data_ref ON dar_conciliacoes(data_referencia)');
+      await dbRun('CREATE INDEX IF NOT EXISTS idx_dar_conciliacoes_execucao ON dar_conciliacoes(data_execucao DESC)');
+    }
+  } catch (err) {
+    console.error('[CONCILIA] Falha ao garantir tabela de conciliações:', err?.message || err);
+  } finally {
+    conciliaTableEnsured = true;
+  }
+}
+
+async function ensureConciliacaoDetalhesTable() {
+  if (conciliaDetalheTableEnsured) return;
+  try {
+    const row = await dbGet(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='dar_conciliacoes_pagamentos' LIMIT 1"
+    );
+    if (!row || !row.name) {
+      await dbRun(
+        `CREATE TABLE IF NOT EXISTS dar_conciliacoes_pagamentos (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          conciliacao_id INTEGER NOT NULL,
+          dar_id INTEGER,
+          status_anterior TEXT,
+          status_atual TEXT,
+          numero_documento TEXT,
+          valor REAL,
+          data_vencimento TEXT,
+          data_pagamento TEXT,
+          origem TEXT,
+          contribuinte TEXT,
+          documento_contribuinte TEXT,
+          pagamento_guia TEXT,
+          pagamento_documento TEXT,
+          pagamento_valor REAL,
+          pagamento_data TEXT,
+          criado_em TEXT DEFAULT (datetime('now')),
+          FOREIGN KEY (conciliacao_id) REFERENCES dar_conciliacoes(id) ON DELETE CASCADE
+        )`
+      );
+      await dbRun(
+        'CREATE INDEX IF NOT EXISTS idx_dar_conc_pag_conciliacao ON dar_conciliacoes_pagamentos(conciliacao_id)'
+      );
+      await dbRun('CREATE INDEX IF NOT EXISTS idx_dar_conc_pag_dar ON dar_conciliacoes_pagamentos(dar_id)');
+    }
+  } catch (err) {
+    console.error('[CONCILIA] Falha ao garantir tabela de detalhes da conciliação:', err?.message || err);
+  } finally {
+    conciliaDetalheTableEnsured = true;
+  }
+}
+
+async function registrarConciliacaoLog(entry) {
+  try {
+    await ensureConciliacaoLogTable();
+    const agora = new Date().toISOString();
+    const dataReferencia = entry?.dataReferencia || null;
+    const iniciouEm = entry?.iniciouEm || null;
+    const finalizouEm = entry?.finalizouEm || null;
+    const duracaoMs = Number.isFinite(entry?.duracaoMs) ? Math.max(0, Math.round(entry.duracaoMs)) : null;
+    const totalPagamentos = Number.isFinite(entry?.totalPagamentos)
+      ? entry.totalPagamentos
+      : Number(entry?.totalPagamentos || 0);
+    const totalAtualizados = Number.isFinite(entry?.totalAtualizados)
+      ? entry.totalAtualizados
+      : Number(entry?.totalAtualizados || 0);
+    const status = entry?.sucesso === false ? 'falha' : 'sucesso';
+    const mensagem = entry?.mensagem ? String(entry.mensagem).slice(0, 500) : null;
+
+    const insert = await dbRun(
+      `INSERT INTO dar_conciliacoes (
+        data_execucao,
+        data_referencia,
+        iniciou_em,
+        finalizou_em,
+        duracao_ms,
+        total_pagamentos,
+        total_atualizados,
+        status,
+        mensagem
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        agora,
+        dataReferencia,
+        iniciouEm,
+        finalizouEm,
+        duracaoMs,
+        totalPagamentos,
+        totalAtualizados,
+        status,
+        mensagem,
+      ]
+    );
+
+    const conciliacaoId = insert?.lastID || insert?.lastId || insert?.id || null;
+    const detalhes = Array.isArray(entry?.pagamentosDetalhes) ? entry.pagamentosDetalhes : [];
+
+    if (conciliacaoId && detalhes.length) {
+      await ensureConciliacaoDetalhesTable();
+      for (const detalhe of detalhes) {
+        try {
+          await dbRun(
+            `INSERT INTO dar_conciliacoes_pagamentos (
+              conciliacao_id,
+              dar_id,
+              status_anterior,
+              status_atual,
+              numero_documento,
+              valor,
+              data_vencimento,
+              data_pagamento,
+              origem,
+              contribuinte,
+              documento_contribuinte,
+              pagamento_guia,
+              pagamento_documento,
+              pagamento_valor,
+              pagamento_data
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+              conciliacaoId,
+              detalhe?.darId || null,
+              detalhe?.statusAnterior || null,
+              detalhe?.statusAtual || null,
+              detalhe?.numeroDocumento || null,
+              detalhe?.valor != null ? Number(detalhe.valor) : null,
+              detalhe?.dataVencimento || null,
+              detalhe?.dataPagamento || null,
+              detalhe?.origem || null,
+              detalhe?.contribuinte || null,
+              detalhe?.documentoContribuinte || null,
+              detalhe?.pagamento?.guia || null,
+              detalhe?.pagamento?.documento || null,
+              detalhe?.pagamento?.valor != null ? Number(detalhe.pagamento.valor) : null,
+              detalhe?.pagamento?.data || null,
+            ]
+          );
+        } catch (err) {
+          console.error('[CONCILIA] Falha ao registrar detalhe de conciliação:', err?.message || err);
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[CONCILIA] Não foi possível registrar log da conciliação:', err?.message || err);
+  }
+}
+
 // ------------------------- Tie-breakers -------------------------
 async function applyTiebreakers(cands, guiaNum, dtPgto) {
   let list = (cands || []).slice();
@@ -97,36 +267,88 @@ async function applyTiebreakers(cands, guiaNum, dtPgto) {
   return list[0] || null;
 }
 
-async function rankAndTry(rows, tolList, ctxLabel, dtPgto, guiaNum, pagoCents) {
+async function rankAndTry(rows, tolList, ctxLabel, dtPgto, guiaNum, pagoCents, marcarFn) {
   rows = rows || [];
   dlog(`${ctxLabel}: candidatos pré-tolerância = ${rows.length}`);
   for (const tol of tolList) {
-    const candTol = rows.filter(r => Math.abs(Math.round(r.valor*100) - pagoCents) <= tol);
+    const candTol = rows.filter((r) => Math.abs(Math.round(r.valor * 100) - pagoCents) <= tol);
     dlog(`${ctxLabel}: tol=${tol}¢ → ${candTol.length} candidato(s)`);
     if (candTol.length === 1) {
-      const r = await dbRun(
-        `UPDATE dars SET status='Pago', data_pagamento=COALESCE(?, data_pagamento) WHERE id=? AND status!='Pago'`,
-        [dtPgto || null, candTol[0].id]
-      );
-      if (r?.changes > 0) return { done:true };
+      const resultado = await marcarFn(candTol[0], ctxLabel, dtPgto);
+      if (resultado?.vinculado) {
+        return { done: true, resultado };
+      }
     } else if (candTol.length > 1) {
       const picked = await applyTiebreakers(candTol, guiaNum, dtPgto);
       if (picked) {
-        const r = await dbRun(
-          `UPDATE dars SET status='Pago', data_pagamento=COALESCE(?, data_pagamento) WHERE id=? AND status!='Pago'`,
-          [dtPgto || null, picked.id]
-        );
-        if (r?.changes > 0) {
+        const resultado = await marcarFn(picked, ctxLabel, dtPgto);
+        if (resultado?.vinculado) {
           dlog(`${ctxLabel}: resolveu via tie-breakers (ref/vencimento): id=${picked.id}`);
-          return { done:true };
+          return { done: true, resultado };
         }
       }
-      dlog(`${ctxLabel}: Ambíguo (${candTol.length}). Exemplos:`,
-        candTol.slice(0,3).map(x=>({id:x.id,valor:x.valor,numero_documento:x.numero_documento})));
-      return { done:false, multi:true };
+      dlog(
+        `${ctxLabel}: Ambíguo (${candTol.length}). Exemplos:`,
+        candTol.slice(0, 3).map((x) => ({ id: x.id, valor: x.valor, numero_documento: x.numero_documento }))
+      );
+      return { done: false, multi: true };
     }
   }
-  return { done:false };
+  return { done: false };
+}
+
+async function obterResumoDarParaLog(darId) {
+  if (!darId) return null;
+  const dar = await dbGet(
+    `SELECT id, numero_documento, valor, data_vencimento, data_pagamento, status, permissionario_id
+       FROM dars
+      WHERE id = ?
+      LIMIT 1`,
+    [darId]
+  ).catch(() => null);
+
+  if (!dar) return null;
+
+  let origem = null;
+  let contribuinte = null;
+  let documentoContribuinte = null;
+
+  if (dar.permissionario_id) {
+    origem = 'permissionario';
+    const perm = await dbGet(
+      `SELECT nome_empresa, cnpj, cpf FROM permissionarios WHERE id = ? LIMIT 1`,
+      [dar.permissionario_id]
+    ).catch(() => null);
+    contribuinte = perm?.nome_empresa || null;
+    const doc = String(perm?.cnpj || perm?.cpf || '').trim();
+    documentoContribuinte = doc || null;
+  } else {
+    origem = 'evento';
+    const ev = await dbGet(
+      `SELECT e.nome_evento, ce.nome_razao_social, ce.documento, ce.documento_responsavel
+         FROM DARs_Eventos de
+         JOIN Eventos e ON e.id = de.id_evento
+         JOIN Clientes_Eventos ce ON ce.id = e.id_cliente
+        WHERE de.id_dar = ?
+        LIMIT 1`,
+      [darId]
+    ).catch(() => null);
+    contribuinte = ev?.nome_evento || ev?.nome_razao_social || null;
+    const docEv = String(ev?.documento || ev?.documento_responsavel || '').trim();
+    documentoContribuinte = docEv || null;
+  }
+
+  return {
+    darId,
+    numero_documento: dar.numero_documento || null,
+    valor: dar.valor != null ? Number(dar.valor) : null,
+    data_vencimento: dar.data_vencimento || null,
+    data_pagamento: dar.data_pagamento || null,
+    status: dar.status || null,
+    origem,
+    contribuinte,
+    documento_contribuinte: documentoContribuinte,
+  };
 }
 
 // ------------------------- Vinculação -------------------------
@@ -145,73 +367,116 @@ async function tentarVincularPagamento(pagamento) {
   const docPagador = normalizeDoc(numeroInscricao || '');
   const pagoCents = cents(valorPago);
 
+  const pagamentoResumo = {
+    guia: numeroGuia || codigoBarras || linhaDigitavel || null,
+    documento: numeroInscricao || null,
+    valor: valorPago != null ? Number(valorPago) : null,
+    data: dataPagamento || null,
+  };
+
+  const anexarPagamento = (resultado) => {
+    if (resultado && resultado.vinculado) {
+      resultado.pagamento = pagamentoResumo;
+    }
+    return resultado;
+  };
+
+  async function marcarDar(row, via) {
+    if (!row || !row.id) return { vinculado: false };
+    const statusAnterior = row.status || null;
+    const statusLower = String(statusAnterior || '').toLowerCase();
+    if (statusLower.startsWith('pago')) {
+      return anexarPagamento({ vinculado: true, atualizado: false, darId: row.id, via, statusAnterior });
+    }
+
+    const update = await dbRun(
+      `UPDATE dars SET status='Pago', data_pagamento=COALESCE(?, data_pagamento) WHERE id=? AND status!='Pago'`,
+      [dataPagamento || null, row.id]
+    );
+
+    if (update?.changes > 0) {
+      return anexarPagamento({ vinculado: true, atualizado: true, darId: row.id, via, statusAnterior });
+    }
+
+    const after = await dbGet(`SELECT status FROM dars WHERE id = ?`, [row.id]).catch(() => null);
+    if (String(after?.status || '').toLowerCase().startsWith('pago')) {
+      return anexarPagamento({ vinculado: true, atualizado: false, darId: row.id, via, statusAnterior });
+    }
+
+    return { vinculado: false };
+  }
+
+  async function marcarPorSelect(selectSql, params, via) {
+    const row = await dbGet(selectSql, params).catch(() => null);
+    if (!row || !row.id) return null;
+    return marcarDar(row, via);
+  }
+
   // Tolerância: só 2¢ quando houver chave exata; ampla quando NÃO houver.
   const hasChaveExata = !!(numeroGuia || codigoBarras || linhaDigitavel);
   const tolList = hasChaveExata
-    ? [2]  // guia/linha/código -> apenas arredondamento
+    ? [2]
     : [2, TOL_BASE, Math.max(TOL_BASE, Math.round(pagoCents * 0.03))];
 
-  // 0) Tentativas diretas
-  const diretas = [
-    { label:'id',               sql:`UPDATE dars SET status='Pago', data_pagamento=COALESCE(?, data_pagamento) WHERE id=? AND status!='Pago'`,                 val: numeroDocOrigem },
-    { label:'codigo_barras',    sql:`UPDATE dars SET status='Pago', data_pagamento=COALESCE(?, data_pagamento) WHERE codigo_barras=? AND status!='Pago'`,      val: codigoBarras },
-    { label:'linha_digitavel',  sql:`UPDATE dars SET status='Pago', data_pagamento=COALESCE(?, data_pagamento) WHERE linha_digitavel=? AND status!='Pago'`,    val: linhaDigitavel },
-    { label:'numero_documento', sql:`UPDATE dars SET status='Pago', data_pagamento=COALESCE(?, data_pagamento) WHERE numero_documento=? AND status!='Pago'`,   val: guiaNum },
-  ];
-  for (const t of diretas) {
-    if (!t.val) continue;
-    const r = await dbRun(t.sql, [dataPagamento || null, t.val]);
-    dlog(`direta: ${t.label}=${t.val} → changes=${r?.changes || 0}`);
-    if (r?.changes > 0) return true;
-
-    // já estava 'Pago'?
-    let wherePaid = '';
-    if (t.label === 'numero_documento')       wherePaid = `CAST(${SQL_NORM('numero_documento')} AS INTEGER) = CAST(? AS INTEGER)`;
-    else if (t.label === 'codigo_barras' || t.label === 'linha_digitavel') wherePaid = `${t.label} = ?`;
-    else if (t.label === 'id')                wherePaid = `id = ?`;
-
-    if (wherePaid) {
-      const already = await dbGet(`SELECT id FROM dars WHERE ${wherePaid} AND status='Pago' LIMIT 1`, [t.val]);
-      if (already?.id) { console.log(`[INFO] encontrada por ${t.label}=${t.val}, mas já estava 'Pago'.`); return true; }
-    }
+  // 0) Tentativas diretas (chaves exatas)
+  if (numeroDocOrigem) {
+    const res = await marcarPorSelect('SELECT id, status FROM dars WHERE id = ? LIMIT 1', [numeroDocOrigem], 'direto:id');
+    if (res?.vinculado) return res;
   }
-
-  // 0.2) equivalências normalizadas
   if (codigoBarras) {
-    const cbNorm = normalizeDoc(codigoBarras);
-    const r = await dbRun(
-      `UPDATE dars SET status='Pago', data_pagamento=COALESCE(?, data_pagamento)
-         WHERE ${SQL_NORM('codigo_barras')} = ? AND status!='Pago'`,
-      [dataPagamento || null, cbNorm]
-    );
-    dlog(`direta: codigo_barras(num)=${cbNorm} → changes=${r?.changes || 0}`);
-    if (r?.changes > 0) return true;
-    const already = await dbGet(
-      `SELECT id FROM dars WHERE ${SQL_NORM('codigo_barras')} = ? AND status='Pago' LIMIT 1`,
-      [cbNorm]
-    );
-    if (already?.id) { console.log(`[INFO] encontrada por codigo_barras=${codigoBarras}, mas já estava 'Pago'.`); return true; }
+    const res = await marcarPorSelect('SELECT id, status FROM dars WHERE codigo_barras = ? LIMIT 1', [codigoBarras], 'direto:codigo_barras');
+    if (res?.vinculado) return res;
+  }
+  if (linhaDigitavel) {
+    const res = await marcarPorSelect('SELECT id, status FROM dars WHERE linha_digitavel = ? LIMIT 1', [linhaDigitavel], 'direto:linha_digitavel');
+    if (res?.vinculado) return res;
   }
   if (guiaNum) {
-    const r = await dbRun(
-      `UPDATE dars SET status='Pago', data_pagamento=COALESCE(?, data_pagamento)
-         WHERE CAST(${SQL_NORM('numero_documento')} AS INTEGER) = CAST(? AS INTEGER)
-           AND status!='Pago'`,
-      [dataPagamento || null, guiaNum]
-    );
-    dlog(`direta: numero_documento(num)=~${guiaNum} → changes=${r?.changes || 0}`);
-    if (r?.changes > 0) return true;
-    const already = await dbGet(
-      `SELECT id FROM dars WHERE CAST(${SQL_NORM('numero_documento')} AS INTEGER) = CAST(? AS INTEGER) AND status='Pago' LIMIT 1`,
-      [guiaNum]
-    );
-    if (already?.id) { console.log(`[INFO] encontrada por numero_documento=${guiaNum}, mas já estava 'Pago'.`); return true; }
+    const res = await marcarPorSelect('SELECT id, status FROM dars WHERE numero_documento = ? LIMIT 1', [guiaNum], 'direto:numero_documento');
+    if (res?.vinculado) return res;
   }
 
-  if (!(valorPago > 0)) return false;
+  // 0.2) Equivalências normalizadas
+  if (codigoBarras) {
+    const cbNorm = normalizeDoc(codigoBarras);
+    if (cbNorm) {
+      const res = await marcarPorSelect(
+        `SELECT id, status FROM dars WHERE ${SQL_NORM('codigo_barras')} = ? LIMIT 1`,
+        [cbNorm],
+        'direto:codigo_barras_norm'
+      );
+      if (res?.vinculado) return res;
+    }
+  }
+  if (linhaDigitavel) {
+    const ldNorm = normalizeDoc(linhaDigitavel);
+    if (ldNorm) {
+      const res = await marcarPorSelect(
+        `SELECT id, status FROM dars WHERE ${SQL_NORM('linha_digitavel')} = ? LIMIT 1`,
+        [ldNorm],
+        'direto:linha_digitavel_norm'
+      );
+      if (res?.vinculado) return res;
+    }
+  }
+  if (guiaNum) {
+    const res = await marcarPorSelect(
+      `SELECT id, status FROM dars WHERE CAST(${SQL_NORM('numero_documento')} AS INTEGER) = CAST(? AS INTEGER) LIMIT 1`,
+      [guiaNum],
+      'direto:numero_documento_num'
+    );
+    if (res?.vinculado) return res;
+  }
+
+  if (!(valorPago > 0)) return { vinculado: false };
 
   // Data base para vetar vencimento futuro
-  const dataBase = (dataPagamento || ymd(new Date()));
+  const dataBase = dataPagamento || ymd(new Date());
+
+  const marcarRankFn = async (candidate, ctxLabel) => {
+    if (!candidate || !candidate.id) return { vinculado: false };
+    return marcarDar({ id: candidate.id, status: candidate.status }, `rank:${ctxLabel}`);
+  };
 
   // 1) Permissionário (CNPJ exato/raiz) + tolerância
   let permIds = [];
@@ -222,14 +487,14 @@ async function tentarVincularPagamento(pagamento) {
       const raiz = cnpjRoot(docPagador);
       const permRaiz = await dbAll(`SELECT id FROM permissionarios WHERE substr(${SQL_NORM('cnpj')},1,8) = ?`, [raiz]);
       if (permRaiz.length === 1) permIds = [permRaiz[0].id];
-      else if (permRaiz.length > 1) permIds = permRaiz.map(r => r.id);
+      else if (permRaiz.length > 1) permIds = permRaiz.map((r) => r.id);
     }
   }
   if (permIds.length > 0) {
-    const placeholders = permIds.map(()=>'?').join(',');
+    const placeholders = permIds.map(() => '?').join(',');
     const candPerm = await dbAll(
       `SELECT d.id, d.valor, d.numero_documento, d.data_vencimento,
-              d.mes_referencia, d.ano_referencia
+              d.mes_referencia, d.ano_referencia, d.status
          FROM dars d
         WHERE d.permissionario_id IN (${placeholders})
           AND d.status != 'Pago'
@@ -240,14 +505,15 @@ async function tentarVincularPagamento(pagamento) {
         LIMIT 50`,
       [...permIds, dataBase, cents(valorPago)]
     );
-    const r = await rankAndTry(candPerm, tolList, 'perm', dataPagamento, guiaNum, cents(valorPago));
-    if (r.done || r.multi) return !!r.done;
+    const r = await rankAndTry(candPerm, tolList, 'perm', dataPagamento, guiaNum, cents(valorPago), marcarRankFn);
+    if (r?.resultado?.vinculado) return r.resultado;
+    if (r?.multi) return { vinculado: false };
   }
 
   // 2) Eventos (doc cliente exato/raiz) + tolerância
   const candEv = await dbAll(
     `SELECT d.id, d.valor, d.numero_documento, d.data_vencimento,
-            d.mes_referencia, d.ano_referencia
+            d.mes_referencia, d.ano_referencia, d.status
        FROM dars d
        JOIN DARs_Eventos de ON de.id_dar = d.id
        JOIN Eventos e       ON e.id = de.id_evento
@@ -262,18 +528,17 @@ async function tentarVincularPagamento(pagamento) {
                ABS(ROUND(d.valor*100) - ?) ASC,
                d.data_vencimento ASC
       LIMIT 50`,
-    [normalizeDoc(numeroInscricao||''), isCNPJ(numeroInscricao||'') ? cnpjRoot(numeroInscricao) : '__NO_ROOT__', dataBase, cents(valorPago)]
+    [normalizeDoc(numeroInscricao || ''), isCNPJ(numeroInscricao || '') ? cnpjRoot(numeroInscricao) : '__NO_ROOT__', dataBase, cents(valorPago)]
   );
-  {
-    const r = await rankAndTry(candEv, tolList, 'evento', dataPagamento, guiaNum, cents(valorPago));
-    if (r.done || r.multi) return !!r.done;
-  }
+  const rEvento = await rankAndTry(candEv, tolList, 'evento', dataPagamento, guiaNum, cents(valorPago), marcarRankFn);
+  if (rEvento?.resultado?.vinculado) return rEvento.resultado;
+  if (rEvento?.multi) return { vinculado: false };
 
   // 3) Guia + valor (mesmo número, sem depender do valor exato)
   if (guiaNum) {
     const candGuia = await dbAll(
       `SELECT d.id, d.valor, d.numero_documento, d.data_vencimento,
-              d.mes_referencia, d.ano_referencia
+              d.mes_referencia, d.ano_referencia, d.status
          FROM dars d
         WHERE CAST(${SQL_NORM('d.numero_documento')} AS INTEGER) = CAST(? AS INTEGER)
           AND d.status != 'Pago'
@@ -284,8 +549,9 @@ async function tentarVincularPagamento(pagamento) {
         LIMIT 50`,
       [guiaNum, dataBase, cents(valorPago)]
     );
-    const r = await rankAndTry(candGuia, tolList, 'guia+valor', dataPagamento, guiaNum, cents(valorPago));
-    if (r.done || r.multi) return !!r.done;
+    const rGuia = await rankAndTry(candGuia, tolList, 'guia+valor', dataPagamento, guiaNum, cents(valorPago), marcarRankFn);
+    if (rGuia?.resultado?.vinculado) return rGuia.resultado;
+    if (rGuia?.multi) return { vinculado: false };
   }
 
   // 4) LIKE sufixo da guia + valor
@@ -294,7 +560,7 @@ async function tentarVincularPagamento(pagamento) {
     if (sfx) {
       const candLike = await dbAll(
         `SELECT d.id, d.valor, d.numero_documento, d.data_vencimento,
-                d.mes_referencia, d.ano_referencia
+                d.mes_referencia, d.ano_referencia, d.status
            FROM dars d
           WHERE ${SQL_NORM('d.numero_documento')} LIKE '%' || ?
             AND d.status != 'Pago'
@@ -305,17 +571,18 @@ async function tentarVincularPagamento(pagamento) {
           LIMIT 50`,
         [sfx, dataBase, cents(valorPago)]
       );
-      const r = await rankAndTry(candLike, tolList, 'likeGuia+valor', dataPagamento, guiaNum, cents(valorPago));
-      if (r.done || r.multi) return !!r.done;
+      const rLike = await rankAndTry(candLike, tolList, 'likeGuia+valor', dataPagamento, guiaNum, cents(valorPago), marcarRankFn);
+      if (rLike?.resultado?.vinculado) return rLike.resultado;
+      if (rLike?.multi) return { vinculado: false };
     }
   }
 
   // 5) Janela de vencimento ±60d + valor (último recurso)
-  const baseDt = dataPagamento ? String(dataPagamento).slice(0,10) : ymd(new Date());
+  const baseDt = dataPagamento ? String(dataPagamento).slice(0, 10) : ymd(new Date());
   const maxTol = Math.max(TOL_BASE, Math.round(cents(valorPago) * 0.03));
   const candJan = await dbAll(
     `SELECT d.id, d.valor, d.numero_documento, d.data_vencimento,
-            d.mes_referencia, d.ano_referencia
+            d.mes_referencia, d.ano_referencia, d.status
        FROM dars d
       WHERE d.status != 'Pago'
         AND ABS(ROUND(d.valor*100) - ?) <= ?
@@ -329,15 +596,13 @@ async function tentarVincularPagamento(pagamento) {
   );
   dlog(`janela±60d: candidatos = ${candJan.length}`);
   if (candJan.length === 1) {
-    const r = await dbRun(`UPDATE dars SET status='Pago', data_pagamento=COALESCE(?, data_pagamento) WHERE id=? AND status!='Pago'`,
-      [dataPagamento || null, candJan[0].id]);
-    if (r?.changes > 0) return true;
+    const res = await marcarDar({ id: candJan[0].id, status: candJan[0].status }, 'janela±60d');
+    if (res?.vinculado) return res;
   } else if (candJan.length > 1) {
     const picked = await applyTiebreakers(candJan, guiaNum, dataPagamento);
     if (picked) {
-      const r = await dbRun(`UPDATE dars SET status='Pago', data_pagamento=COALESCE(?, data_pagamento) WHERE id=? AND status!='Pago'`,
-        [dataPagamento || null, picked.id]);
-      if (r?.changes > 0) return true;
+      const res = await marcarDar({ id: picked.id, status: picked.status }, 'janela±60d');
+      if (res?.vinculado) return res;
     }
   }
 
@@ -348,7 +613,7 @@ async function tentarVincularPagamento(pagamento) {
     );
     if (!existe?.ok) console.warn(`[MOTIVO] DAR inexistente no banco para guia=${guiaNum}. Verifique se foi emitida/importada.`);
   }
-  return false;
+  return { vinculado: false };
 }
 
 // ------------------------- Core diário -------------------------
@@ -356,56 +621,118 @@ async function conciliarPagamentosDoDia(dataISO) {
   const dataDia = dataISO || ymd(new Date());
   console.log(`[CONCILIA] Iniciando conciliação do dia ${dataDia}... DB=${DB_PATH}`);
 
+  const inicioMs = Date.now();
   const dia = new Date(`${dataDia}T00:00:00`);
   const dtHoraInicioDia = toDateTimeString(dia, 0, 0, 0);
-  const dtHoraFimDia    = toDateTimeString(dia, 23, 59, 59);
+  const dtHoraFimDia = toDateTimeString(dia, 23, 59, 59);
 
   const pagamentosMap = new Map();
+  let resumo = { dataDia, totalPagamentos: 0, totalAtualizados: 0, pagamentosAtualizados: [] };
+  let sucesso = false;
+  let mensagemErro = null;
 
   try {
-    // Arrecadação (dia fechado)
-    const pagsArr = await listarPagamentosPorDataArrecadacao(dataDia, dataDia);
-    for (const p of pagsArr) {
-      const key = p.numeroGuia || p.codigoBarras || p.linhaDigitavel ||
-        `${p.numeroInscricao}-${p.valorPago}-${p.dataPagamento || ''}`;
-      if (!pagamentosMap.has(key)) pagamentosMap.set(key, p);
+    try {
+      // Arrecadação (dia fechado)
+      const pagsArr = await listarPagamentosPorDataArrecadacao(dataDia, dataDia);
+      for (const p of pagsArr) {
+        const key =
+          p.numeroGuia ||
+          p.codigoBarras ||
+          p.linhaDigitavel ||
+          `${p.numeroInscricao}-${p.valorPago}-${p.dataPagamento || ''}`;
+        if (!pagamentosMap.has(key)) pagamentosMap.set(key, p);
+      }
+    } catch (e) {
+      console.warn(`[CONCILIA] Aviso por-data-arrecadacao(${dataDia}): ${e.message || e}`);
     }
-  } catch (e) {
-    console.warn(`[CONCILIA] Aviso por-data-arrecadacao(${dataDia}): ${e.message || e}`);
-  }
 
-  try {
-    // Inclusão (janela 00:00:00~23:59:59)
-    const pagsInc = await listarPagamentosPorDataInclusao(dtHoraInicioDia, dtHoraFimDia);
-    for (const p of pagsInc) {
-      const key = p.numeroGuia || p.codigoBarras || p.linhaDigitavel ||
-        `${p.numeroInscricao}-${p.valorPago}-${p.dataPagamento || ''}`;
-      if (!pagamentosMap.has(key)) pagamentosMap.set(key, p);
+    try {
+      // Inclusão (janela 00:00:00~23:59:59)
+      const pagsInc = await listarPagamentosPorDataInclusao(dtHoraInicioDia, dtHoraFimDia);
+      for (const p of pagsInc) {
+        const key =
+          p.numeroGuia ||
+          p.codigoBarras ||
+          p.linhaDigitavel ||
+          `${p.numeroInscricao}-${p.valorPago}-${p.dataPagamento || ''}`;
+        if (!pagamentosMap.has(key)) pagamentosMap.set(key, p);
+      }
+    } catch (e) {
+      console.warn(`[CONCILIA] Aviso por-data-inclusao(${dataDia}): ${e.message || e}`);
     }
-  } catch (e) {
-    console.warn(`[CONCILIA] Aviso por-data-inclusao(${dataDia}): ${e.message || e}`);
-  }
 
-  const todosPagamentos = Array.from(pagamentosMap.values());
-  console.log(`[CONCILIA] ${todosPagamentos.length} pagamentos únicos encontrados na SEFAZ para ${dataDia}.`);
+    const todosPagamentos = Array.from(pagamentosMap.values());
+    console.log(`[CONCILIA] ${todosPagamentos.length} pagamentos únicos encontrados na SEFAZ para ${dataDia}.`);
 
-  let totalAtualizados = 0;
-  for (const pagamento of todosPagamentos) {
-    const vinculado = await tentarVincularPagamento(pagamento);
-    if (vinculado) {
-      console.log(`--> SUCESSO: Pagamento de ${pagamento.numeroInscricao} (Guia: ${pagamento.numeroGuia || '—'}) atualizado p/ 'Pago'.`);
-      totalAtualizados++;
-    } else {
-      console.warn(`--> ALERTA: Pagamento não vinculado. SEFAZ -> Doc: ${pagamento.numeroInscricao}, Guia: ${pagamento.numeroGuia || '—'}, Valor: ${pagamento.valorPago}`);
+    let totalAtualizados = 0;
+    const detalhesAtualizados = [];
+    for (const pagamento of todosPagamentos) {
+      const resultado = await tentarVincularPagamento(pagamento);
+      if (resultado?.vinculado) {
+        console.log(`--> SUCESSO: Pagamento de ${pagamento.numeroInscricao} (Guia: ${pagamento.numeroGuia || '—'}) atualizado p/ 'Pago'.`);
+        totalAtualizados++;
+
+        if (resultado.atualizado && resultado.darId) {
+          const resumoDar = await obterResumoDarParaLog(resultado.darId);
+          if (resumoDar) {
+            detalhesAtualizados.push({
+              darId: resultado.darId,
+              statusAnterior: resultado.statusAnterior || null,
+              statusAtual: resumoDar.status || 'Pago',
+              numeroDocumento: resumoDar.numero_documento || null,
+              valor: resumoDar.valor,
+              dataVencimento: resumoDar.data_vencimento || null,
+              dataPagamento: resumoDar.data_pagamento || resultado.pagamento?.data || pagamento.dataPagamento || null,
+              origem: resumoDar.origem || null,
+              contribuinte: resumoDar.contribuinte || null,
+              documentoContribuinte: resumoDar.documento_contribuinte || null,
+              pagamento: {
+                guia:
+                  resultado.pagamento?.guia ||
+                  pagamento.numeroGuia ||
+                  pagamento.codigoBarras ||
+                  pagamento.linhaDigitavel ||
+                  null,
+                documento: resultado.pagamento?.documento || pagamento.numeroInscricao || null,
+                valor: resultado.pagamento?.valor != null ? Number(resultado.pagamento.valor) : pagamento.valorPago || null,
+                data: resultado.pagamento?.data || pagamento.dataPagamento || null,
+              },
+            });
+          }
+        }
+      } else {
+        console.warn(`--> ALERTA: Pagamento não vinculado. SEFAZ -> Doc: ${pagamento.numeroInscricao}, Guia: ${pagamento.numeroGuia || '—'}, Valor: ${pagamento.valorPago}`);
+      }
     }
-  }
-  console.log(`[CONCILIA] ${dataDia} finalizado. DARs atualizadas: ${totalAtualizados}/${todosPagamentos.length}.`);
+    console.log(`[CONCILIA] ${dataDia} finalizado. DARs atualizadas: ${totalAtualizados}/${todosPagamentos.length}.`);
 
-  return {
-    dataDia,
-    totalPagamentos: todosPagamentos.length,
-    totalAtualizados,
-  };
+    resumo = {
+      dataDia,
+      totalPagamentos: todosPagamentos.length,
+      totalAtualizados,
+      pagamentosAtualizados: detalhesAtualizados,
+    };
+    sucesso = true;
+    return resumo;
+  } catch (error) {
+    mensagemErro = error?.message || String(error);
+    console.error(`[CONCILIA] Falha ao concluir conciliação de ${dataDia}:`, mensagemErro);
+    throw error;
+  } finally {
+    const fimMs = Date.now();
+    await registrarConciliacaoLog({
+      dataReferencia: dataDia,
+      iniciouEm: new Date(inicioMs).toISOString(),
+      finalizouEm: new Date(fimMs).toISOString(),
+      duracaoMs: fimMs - inicioMs,
+      totalPagamentos: resumo.totalPagamentos,
+      totalAtualizados: resumo.totalAtualizados,
+      sucesso,
+      mensagem: mensagemErro,
+      pagamentosDetalhes: resumo.pagamentosAtualizados,
+    });
+  }
 }
 
 // ------------------------- Lock simples (anti conc. simultânea) -------------------------

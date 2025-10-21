@@ -25,6 +25,103 @@ const { executarConciliacaoDia } = require('../../cron/conciliarPagamentosmes');
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
+const CONCILIA_LOCK_PATH = '/tmp/cipt-concilia.lock';
+
+const DAR_BASE_CTE = `
+WITH base AS (
+  SELECT
+    d.id,
+    d.permissionario_id,
+    NULL AS evento_id,
+    d.mes_referencia,
+    d.ano_referencia,
+    d.valor,
+    d.data_vencimento,
+    d.data_pagamento,
+    d.status,
+    d.numero_documento,
+    d.pdf_url,
+    d.linha_digitavel,
+    d.codigo_barras,
+    COALESCE(NULLIF(TRIM(d.tipo_permissionario), ''), 'Permissionario') AS tipo_registro,
+    'permissionario' AS origem,
+    p.nome_empresa AS nome_principal,
+    p.nome_empresa AS nome_permissionario,
+    NULL AS nome_evento,
+    NULL AS cliente_evento,
+    COALESCE(NULLIF(TRIM(p.cnpj), ''), '') AS documento_principal,
+    COALESCE(NULLIF(TRIM(p.cnpj), ''), '') AS documento_cliente,
+    COALESCE(NULLIF(TRIM(p.tipo), ''), 'Permissionario') AS categoria_origem,
+    REPLACE(REPLACE(REPLACE(COALESCE(NULLIF(TRIM(p.cnpj), ''), ''), '.', ''), '-', ''), '/', '') AS documento_limpo,
+    REPLACE(REPLACE(REPLACE(COALESCE(NULLIF(TRIM(p.cnpj), ''), ''), '.', ''), '-', ''), '/', '') AS cliente_documento_limpo,
+    REPLACE(REPLACE(REPLACE(COALESCE(d.numero_documento, ''), '.', ''), '-', ''), '/', '') AS numero_documento_limpo,
+    REPLACE(REPLACE(REPLACE(COALESCE(d.linha_digitavel, ''), '.', ''), '-', ''), ' ', '') AS linha_digitavel_limpa,
+    REPLACE(REPLACE(REPLACE(COALESCE(d.codigo_barras, ''), '.', ''), '-', ''), ' ', '') AS codigo_barras_limpa
+  FROM dars d
+  JOIN permissionarios p ON p.id = d.permissionario_id
+
+  UNION ALL
+
+  SELECT
+    d.id,
+    d.permissionario_id,
+    e.id AS evento_id,
+    d.mes_referencia,
+    d.ano_referencia,
+    d.valor,
+    d.data_vencimento,
+    d.data_pagamento,
+    d.status,
+    d.numero_documento,
+    d.pdf_url,
+    d.linha_digitavel,
+    d.codigo_barras,
+    'Evento' AS tipo_registro,
+    'evento' AS origem,
+    COALESCE(NULLIF(TRIM(e.nome_evento), ''), COALESCE(NULLIF(TRIM(ce.nome_razao_social), ''), 'Evento')) AS nome_principal,
+    NULL AS nome_permissionario,
+    COALESCE(NULLIF(TRIM(e.nome_evento), ''), NULLIF(TRIM(ce.nome_razao_social), '')) AS nome_evento,
+    COALESCE(NULLIF(TRIM(ce.nome_razao_social), ''), '—') AS cliente_evento,
+    COALESCE(NULLIF(TRIM(ce.documento), ''), NULLIF(TRIM(ce.documento_responsavel), '')) AS documento_principal,
+    COALESCE(NULLIF(TRIM(ce.documento), ''), NULLIF(TRIM(ce.documento_responsavel), '')) AS documento_cliente,
+    'Evento' AS categoria_origem,
+    REPLACE(REPLACE(REPLACE(COALESCE(NULLIF(TRIM(ce.documento), ''), NULLIF(TRIM(ce.documento_responsavel), ''), ''), '.', ''), '-', ''), '/', '') AS documento_limpo,
+    REPLACE(REPLACE(REPLACE(COALESCE(NULLIF(TRIM(ce.documento), ''), NULLIF(TRIM(ce.documento_responsavel), ''), ''), '.', ''), '-', ''), '/', '') AS cliente_documento_limpo,
+    REPLACE(REPLACE(REPLACE(COALESCE(d.numero_documento, ''), '.', ''), '-', ''), '/', '') AS numero_documento_limpo,
+    REPLACE(REPLACE(REPLACE(COALESCE(d.linha_digitavel, ''), '.', ''), '-', ''), ' ', '') AS linha_digitavel_limpa,
+    REPLACE(REPLACE(REPLACE(COALESCE(d.codigo_barras, ''), '.', ''), '-', ''), ' ', '') AS codigo_barras_limpa
+  FROM dars d
+  JOIN DARs_Eventos de ON de.id_dar = d.id
+  JOIN Eventos e ON e.id = de.id_evento
+  JOIN Clientes_Eventos ce ON ce.id = e.id_cliente
+)
+`;
+
+const STATUS_PAGO_COND = `(
+  LOWER(COALESCE(base.status, '')) LIKE 'pago%'
+  OR LOWER(COALESCE(base.status, '')) LIKE 'parcialmente pago%'
+  OR LOWER(COALESCE(base.status, '')) LIKE 'pago parcialmente%'
+)`;
+
+const STATUS_PARCIAL_COND = `(
+  LOWER(COALESCE(base.status, '')) LIKE 'parcialmente pago%'
+  OR LOWER(COALESCE(base.status, '')) LIKE 'pago parcialmente%'
+)`;
+
+const ATRASADO_CASE = `CASE
+  WHEN ${STATUS_PAGO_COND} THEN 0
+  WHEN base.data_vencimento IS NULL OR base.data_vencimento = '' THEN 0
+  WHEN DATE('now','localtime') <= DATE(base.data_vencimento) THEN 0
+  ELSE 1
+END`;
+
+const DIAS_ATRASO_CASE = `CASE
+  WHEN ${STATUS_PAGO_COND} THEN 0
+  WHEN base.data_vencimento IS NULL OR base.data_vencimento = '' THEN 0
+  WHEN DATE('now','localtime') <= DATE(base.data_vencimento) THEN 0
+  ELSE CAST(julianday(DATE('now','localtime')) - julianday(DATE(base.data_vencimento)) AS INTEGER)
+END`;
+
 // Helpers async
 const dbGetAsync = (sql, params = []) =>
   new Promise((resolve, reject) => db.get(sql, params, (err, row) => (err ? reject(err) : resolve(row))));
@@ -247,6 +344,190 @@ async function getContribuinteEmitenteForDar(darId) {
   };
 }
 
+router.get(
+  '/conciliacao/status',
+  [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN'])],
+  async (req, res) => {
+    try {
+      const lockAtivo = fs.existsSync(CONCILIA_LOCK_PATH);
+      let existeTabela = false;
+      try {
+        const check = await dbGetAsync(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name='dar_conciliacoes' LIMIT 1"
+        );
+        existeTabela = Boolean(check && check.name);
+      } catch {
+        existeTabela = false;
+      }
+
+      if (!existeTabela) {
+        return res.json({ ok: true, lockAtivo, ultimaExecucao: null, ultimaSucesso: null });
+      }
+
+      const lastExec = await dbGetAsync(
+        `SELECT id, data_execucao, data_referencia, iniciou_em, finalizou_em, duracao_ms,
+                total_pagamentos, total_atualizados, status, mensagem
+           FROM dar_conciliacoes
+          ORDER BY datetime(data_execucao) DESC
+          LIMIT 1`
+      ).catch(() => null);
+
+      const lastSuccess = await dbGetAsync(
+        `SELECT id, data_execucao, data_referencia, iniciou_em, finalizou_em, duracao_ms,
+                total_pagamentos, total_atualizados
+           FROM dar_conciliacoes
+          WHERE status = 'sucesso'
+          ORDER BY datetime(data_execucao) DESC
+          LIMIT 1`
+      ).catch(() => null);
+
+      const normalizeRow = (row, fallbackStatus = null) => {
+        if (!row) return null;
+        return {
+          id: row.id || null,
+          data_execucao: row.data_execucao || null,
+          data_referencia: row.data_referencia || null,
+          iniciou_em: row.iniciou_em || null,
+          finalizou_em: row.finalizou_em || null,
+          duracao_ms: row.duracao_ms != null ? Number(row.duracao_ms) : null,
+          total_pagamentos: Number(row.total_pagamentos ?? 0),
+          total_atualizados: Number(row.total_atualizados ?? 0),
+          status: row.status || fallbackStatus,
+          mensagem: row.mensagem || null,
+        };
+      };
+
+      return res.json({
+        ok: true,
+        lockAtivo,
+        ultimaExecucao: normalizeRow(lastExec),
+        ultimaSucesso: normalizeRow(lastSuccess, lastSuccess ? 'sucesso' : null),
+      });
+    } catch (error) {
+      console.error('[AdminDARs] ERRO GET /api/admin/dars/conciliacao/status:', error);
+      return res.status(500).json({ error: 'Erro ao consultar status da conciliação.' });
+    }
+  }
+);
+
+router.get(
+  '/conciliacoes',
+  [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN'])],
+  async (req, res) => {
+    try {
+      const page = Math.max(1, parseInt(req.query.page || '1', 10));
+      const limit = Math.min(100, Math.max(1, parseInt(req.query.limit || '20', 10)));
+      const offset = (page - 1) * limit;
+
+      const tableExists = await dbGetAsync(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='dar_conciliacoes' LIMIT 1"
+      ).catch(() => null);
+
+      if (!tableExists?.name) {
+        return res.json({ ok: true, page, limit, total: 0, registros: [] });
+      }
+
+      const totalRow = await dbGetAsync('SELECT COUNT(*) AS total FROM dar_conciliacoes').catch(() => ({ total: 0 }));
+      const total = Number(totalRow?.total || 0);
+
+      const rows = await dbAllAsync(
+        `SELECT id, data_execucao, data_referencia, iniciou_em, finalizou_em, duracao_ms,
+                total_pagamentos, total_atualizados, status, mensagem
+           FROM dar_conciliacoes
+          ORDER BY datetime(data_execucao) DESC
+          LIMIT ? OFFSET ?`,
+        [limit, offset]
+      );
+
+      const registros = rows.map((row) => ({
+        id: row.id,
+        data_execucao: row.data_execucao || null,
+        data_referencia: row.data_referencia || null,
+        iniciou_em: row.iniciou_em || null,
+        finalizou_em: row.finalizou_em || null,
+        duracao_ms: row.duracao_ms != null ? Number(row.duracao_ms) : null,
+        total_pagamentos: Number(row.total_pagamentos ?? 0),
+        total_atualizados: Number(row.total_atualizados ?? 0),
+        status: row.status || null,
+        mensagem: row.mensagem || null,
+      }));
+
+      return res.json({ ok: true, page, limit, total, registros });
+    } catch (error) {
+      console.error('[AdminDARs] ERRO GET /api/admin/dars/conciliacoes:', error);
+      return res.status(500).json({ error: 'Erro ao listar conciliações.' });
+    }
+  }
+);
+
+router.get(
+  '/conciliacoes/:id/pagamentos',
+  [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN'])],
+  async (req, res) => {
+    try {
+      const conciliacaoId = Number.parseInt(req.params.id, 10);
+      if (!Number.isInteger(conciliacaoId) || conciliacaoId <= 0) {
+        return res.status(400).json({ error: 'Identificador de conciliação inválido.' });
+      }
+
+      const tableExists = await dbGetAsync(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='dar_conciliacoes_pagamentos' LIMIT 1"
+      ).catch(() => null);
+
+      if (!tableExists?.name) {
+        return res.json({ ok: true, conciliacaoId, total: 0, pagamentos: [] });
+      }
+
+      const rows = await dbAllAsync(
+        `SELECT p.id, p.dar_id, p.status_anterior, p.status_atual, p.numero_documento, p.valor,
+                p.data_vencimento, p.data_pagamento, p.origem, p.contribuinte, p.documento_contribuinte,
+                p.pagamento_guia, p.pagamento_documento, p.pagamento_valor, p.pagamento_data, p.criado_em,
+                d.numero_documento AS dar_numero_documento,
+                d.valor AS dar_valor,
+                d.data_vencimento AS dar_data_vencimento,
+                d.data_pagamento AS dar_data_pagamento,
+                d.status AS dar_status
+           FROM dar_conciliacoes_pagamentos p
+      LEFT JOIN dars d ON d.id = p.dar_id
+          WHERE p.conciliacao_id = ?
+          ORDER BY p.id ASC`,
+        [conciliacaoId]
+      );
+
+      const pagamentos = rows.map((row) => ({
+        id: row.id,
+        dar_id: row.dar_id || null,
+        status_anterior: row.status_anterior || null,
+        status_atual: row.status_atual || row.dar_status || null,
+        numero_documento: row.numero_documento || row.dar_numero_documento || null,
+        valor:
+          row.valor != null
+            ? Number(row.valor)
+            : row.dar_valor != null
+            ? Number(row.dar_valor)
+            : null,
+        data_vencimento: row.data_vencimento || row.dar_data_vencimento || null,
+        data_pagamento: row.data_pagamento || row.dar_data_pagamento || null,
+        origem: row.origem || null,
+        contribuinte: row.contribuinte || null,
+        documento_contribuinte: row.documento_contribuinte || null,
+        pagamento: {
+          guia: row.pagamento_guia || null,
+          documento: row.pagamento_documento || null,
+          valor: row.pagamento_valor != null ? Number(row.pagamento_valor) : null,
+          data: row.pagamento_data || null,
+        },
+        registrado_em: row.criado_em || null,
+      }));
+
+      return res.json({ ok: true, conciliacaoId, total: pagamentos.length, pagamentos });
+    } catch (error) {
+      console.error('[AdminDARs] ERRO GET /api/admin/dars/conciliacoes/:id/pagamentos:', error);
+      return res.status(500).json({ error: 'Erro ao listar pagamentos conciliados.' });
+    }
+  }
+);
+
 /**
  * GET /api/admin/dars
  * Lista paginada com filtros (nome/CNPJ, status, mês, ano)
@@ -256,70 +537,257 @@ router.get(
   [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN'])],
   async (req, res) => {
     try {
-      const search = String(req.query.search || '').trim();
-      const status = String(req.query.status || 'todos').trim();
-      const mes = String(req.query.mes || 'todos').trim();
-      const ano = String(req.query.ano || 'todos').trim();
-      const tipo = String(req.query.tipo || '').trim();
+      const searchRaw = String(req.query.search || '').trim();
+      const statusRaw = String(req.query.status || 'todos').trim();
+      const mesRaw = String(req.query.mes || 'todos').trim();
+      const anoRaw = String(req.query.ano || 'todos').trim();
+      const tipoRaw = String(req.query.tipo || '').trim();
+      const origemRaw = String(req.query.origem || '').trim().toLowerCase();
+      const atrasadosRaw = String(req.query.atrasados || '').trim().toLowerCase();
 
       const page = Math.max(1, parseInt(req.query.page || '1', 10));
       const limit = Math.max(1, parseInt(req.query.limit || '10', 10));
       const offset = (page - 1) * limit;
 
-      let baseSql = `
-        SELECT
-          d.id, d.mes_referencia, d.ano_referencia, d.valor,
-          d.data_vencimento, d.data_pagamento, d.status,
-          d.numero_documento, d.pdf_url,
-          p.nome_empresa, p.cnpj, p.tipo
-        FROM dars d
-        JOIN permissionarios p ON d.permissionario_id = p.id
-        WHERE 1=1
-      `;
+      const filters = [];
       const params = [];
 
-      if (search) {
-        baseSql += ` AND (p.nome_empresa LIKE ? OR p.cnpj LIKE ?)`;
-        params.push(`%${search}%`, `%${search}%`);
-      }
-      if (status && status !== 'todos') {
-        if (['vencido', 'vencida'].includes(status.toLowerCase())) {
-          baseSql += ` AND d.status IN (?, ?)`;
-          params.push('Vencido', 'Vencida');
+      if (searchRaw) {
+        const searchLower = `%${searchRaw.toLowerCase()}%`;
+        const digits = searchRaw.replace(/\D/g, '');
+        const digitsLike = digits ? `%${digits}%` : null;
+
+        const conds = [
+          'LOWER(COALESCE(base.nome_principal, "")) LIKE ?',
+          'LOWER(COALESCE(base.nome_evento, "")) LIKE ?',
+          'LOWER(COALESCE(base.cliente_evento, "")) LIKE ?',
+          'LOWER(COALESCE(base.nome_permissionario, "")) LIKE ?',
+          'LOWER(COALESCE(base.numero_documento, "")) LIKE ?'
+        ];
+        params.push(searchLower, searchLower, searchLower, searchLower, searchLower);
+
+        if (digitsLike) {
+          conds.push('base.documento_limpo LIKE ?');
+          conds.push('base.cliente_documento_limpo LIKE ?');
+          conds.push('base.numero_documento_limpo LIKE ?');
+          conds.push('base.linha_digitavel_limpa LIKE ?');
+          conds.push('base.codigo_barras_limpa LIKE ?');
+          params.push(digitsLike, digitsLike, digitsLike, digitsLike, digitsLike);
         } else {
-          baseSql += ` AND d.status = ?`;
-          params.push(status);
+          conds.push('LOWER(COALESCE(base.linha_digitavel, "")) LIKE ?');
+          conds.push('LOWER(COALESCE(base.codigo_barras, "")) LIKE ?');
+          params.push(searchLower, searchLower);
+        }
+
+        filters.push(`(${conds.join(' OR ')})`);
+      }
+
+      if (statusRaw && statusRaw.toLowerCase() !== 'todos') {
+        const statusLower = statusRaw.toLowerCase();
+        if (statusLower === 'vencido' || statusLower === 'vencida') {
+          filters.push("LOWER(base.status) IN ('vencido','vencida')");
+        } else if (statusLower === 'pago') {
+          filters.push(STATUS_PAGO_COND);
+        } else if (statusLower === 'parcialmente pago') {
+          filters.push(STATUS_PARCIAL_COND);
+        } else {
+          filters.push('LOWER(base.status) = ?');
+          params.push(statusLower);
         }
       }
-      if (mes && mes !== 'todos') {
-        baseSql += ` AND d.mes_referencia = ?`;
-        params.push(mes);
-      }
-      if (ano && ano !== 'todos') {
-        baseSql += ` AND d.ano_referencia = ?`;
-        params.push(ano);
-      }
-      if (tipo) {
-        baseSql += ` AND p.tipo = ?`;
-        params.push(tipo);
+
+      if (mesRaw && mesRaw !== 'todos') {
+        const mes = parseInt(mesRaw, 10);
+        if (Number.isFinite(mes)) {
+          filters.push('CAST(base.mes_referencia AS INTEGER) = ?');
+          params.push(mes);
+        }
       }
 
-      const countSql = `SELECT COUNT(*) as total FROM (${baseSql}) AS src`;
-      const { total } = await dbGetAsync(countSql, params);
-      const totalPages = Math.ceil(total / limit);
+      if (anoRaw && anoRaw !== 'todos') {
+        const ano = parseInt(anoRaw, 10);
+        if (Number.isFinite(ano)) {
+          filters.push('CAST(base.ano_referencia AS INTEGER) = ?');
+          params.push(ano);
+        }
+      }
 
-      const pageSql = `${baseSql} ORDER BY d.ano_referencia DESC, d.mes_referencia DESC, p.nome_empresa LIMIT ? OFFSET ?`;
-      const rows = await dbAllAsync(pageSql, [...params, limit, offset]);
+      if (tipoRaw) {
+        const tipoLower = tipoRaw.toLowerCase();
+        if (tipoLower === 'evento') {
+          filters.push("base.origem = 'evento'");
+        } else {
+          filters.push('LOWER(COALESCE(base.categoria_origem, "")) = ?');
+          params.push(tipoLower);
+        }
+      }
+
+      if (origemRaw === 'evento' || origemRaw === 'permissionario') {
+        filters.push('base.origem = ?');
+        params.push(origemRaw);
+      }
+
+      if (['1', 'true', 'sim', 'on'].includes(atrasadosRaw)) {
+        filters.push(`${ATRASADO_CASE} = 1`);
+      }
+
+      const whereSql = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
+
+      const countSql = `
+        ${DAR_BASE_CTE}
+        SELECT COUNT(*) AS total
+        FROM base
+        ${whereSql}
+      `;
+      const countRow = await dbGetAsync(countSql, params);
+      const total = Number(countRow?.total || 0);
+      const totalPages = total ? Math.ceil(total / limit) : 0;
+
+      const dataSql = `
+        ${DAR_BASE_CTE}
+        SELECT
+          base.id,
+          base.permissionario_id,
+          base.evento_id,
+          base.mes_referencia,
+          base.ano_referencia,
+          base.valor,
+          base.data_vencimento,
+          base.data_pagamento,
+          base.status,
+          base.numero_documento,
+          base.pdf_url,
+          base.linha_digitavel,
+          base.codigo_barras,
+          base.tipo_registro,
+          base.origem,
+          base.nome_principal,
+          base.nome_permissionario,
+          base.nome_evento,
+          base.cliente_evento,
+          base.documento_principal,
+          base.documento_cliente,
+          base.categoria_origem,
+          ${ATRASADO_CASE} AS esta_atrasado,
+          ${DIAS_ATRASO_CASE} AS dias_em_atraso
+        FROM base
+        ${whereSql}
+        ORDER BY
+          ${ATRASADO_CASE} DESC,
+          CASE WHEN base.data_vencimento IS NULL OR base.data_vencimento = '' THEN 1 ELSE 0 END,
+          DATE(base.data_vencimento) ASC,
+          base.ano_referencia DESC,
+          base.mes_referencia DESC,
+          base.nome_principal COLLATE NOCASE ASC
+        LIMIT ?
+        OFFSET ?
+      `;
+
+      const dataParams = [...params, limit, offset];
+      const rows = await dbAllAsync(dataSql, dataParams);
 
       return res.status(200).json({
         dars: rows,
         totalPages,
         currentPage: page,
-        totalItems: total
+        totalItems: total,
       });
     } catch (err) {
       console.error('[AdminDARs] ERRO GET /api/admin/dars:', err);
       return res.status(500).json({ error: 'Erro ao buscar os DARs.' });
+    }
+  }
+);
+
+router.get(
+  '/indicadores',
+  [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN'])],
+  async (req, res) => {
+    try {
+      const rows = await dbAllAsync(
+        `
+          ${DAR_BASE_CTE}
+          SELECT
+            base.origem,
+            COUNT(*) AS total,
+            SUM(CASE WHEN ${STATUS_PAGO_COND} THEN 1 ELSE 0 END) AS pagos,
+            SUM(${ATRASADO_CASE}) AS atrasados,
+            ROUND(SUM(CASE WHEN ${STATUS_PAGO_COND} THEN 0 ELSE COALESCE(base.valor, 0) END), 2) AS valor_em_aberto
+          FROM base
+          GROUP BY base.origem
+        `
+      );
+
+      const empty = () => ({ total: 0, pagos: 0, atrasados: 0, valor_em_aberto: 0 });
+      const totals = {
+        permissionarios: empty(),
+        eventos: empty(),
+        geral: empty(),
+      };
+
+      for (const row of rows) {
+        const origem = row?.origem === 'evento' ? 'eventos' : 'permissionarios';
+        const bucket = totals[origem];
+        bucket.total = Number(row?.total || 0);
+        bucket.pagos = Number(row?.pagos || 0);
+        bucket.atrasados = Number(row?.atrasados || 0);
+        bucket.valor_em_aberto = Number(row?.valor_em_aberto || 0);
+      }
+
+      totals.geral.total = totals.permissionarios.total + totals.eventos.total;
+      totals.geral.pagos = totals.permissionarios.pagos + totals.eventos.pagos;
+      totals.geral.atrasados = totals.permissionarios.atrasados + totals.eventos.atrasados;
+      totals.geral.valor_em_aberto = Number(
+        (totals.permissionarios.valor_em_aberto || 0) + (totals.eventos.valor_em_aberto || 0)
+      );
+
+      return res.json({ ok: true, totals });
+    } catch (error) {
+      console.error('[AdminDARs] ERRO GET /api/admin/dars/indicadores:', error);
+      return res.status(500).json({ error: 'Erro ao calcular indicadores de DARs.' });
+    }
+  }
+);
+
+router.get(
+  '/atrasados',
+  [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN'])],
+  async (req, res) => {
+    try {
+      const limitParam = Math.max(1, Math.min(parseInt(req.query.limit || '6', 10) || 6, 50));
+      const rows = await dbAllAsync(
+        `
+          ${DAR_BASE_CTE}
+          SELECT
+            base.id,
+            base.origem,
+            base.nome_principal,
+            base.nome_evento,
+            base.nome_permissionario,
+            base.cliente_evento,
+            base.documento_principal,
+            base.documento_cliente,
+            base.valor,
+            base.data_vencimento,
+            base.status,
+            base.mes_referencia,
+            base.ano_referencia,
+            ${DIAS_ATRASO_CASE} AS dias_em_atraso
+          FROM base
+          WHERE ${ATRASADO_CASE} = 1
+          ORDER BY DATE(base.data_vencimento) ASC, base.id ASC
+          LIMIT ?
+        `,
+        [limitParam * 2]
+      );
+
+      const permissionarios = rows.filter((row) => row.origem === 'permissionario').slice(0, limitParam);
+      const eventos = rows.filter((row) => row.origem === 'evento').slice(0, limitParam);
+
+      return res.json({ ok: true, permissionarios, eventos });
+    } catch (error) {
+      console.error('[AdminDARs] ERRO GET /api/admin/dars/atrasados:', error);
+      return res.status(500).json({ error: 'Erro ao listar DARs atrasadas.' });
     }
   }
 );
