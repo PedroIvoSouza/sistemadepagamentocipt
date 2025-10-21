@@ -63,6 +63,80 @@ const dbAll = (sql,p=[]) => new Promise((res,rej)=>db.all(sql,p,(e,r)=>e?rej(e):
 const dbRun = (sql,p=[]) => new Promise((res,rej)=>db.run(sql,p,function(e){ if(e) return rej(e); res(this); }));
 const dbGet = (sql,p=[]) => new Promise((res,rej)=>db.get(sql,p,(e,r)=>e?rej(e):res(r)));
 
+let conciliaTableEnsured = false;
+async function ensureConciliacaoLogTable() {
+  if (conciliaTableEnsured) return;
+  try {
+    const row = await dbGet(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='dar_conciliacoes' LIMIT 1"
+    );
+    if (!row || !row.name) {
+      await dbRun(
+        `CREATE TABLE IF NOT EXISTS dar_conciliacoes (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          data_execucao TEXT NOT NULL,
+          data_referencia TEXT NOT NULL,
+          iniciou_em TEXT,
+          finalizou_em TEXT,
+          duracao_ms INTEGER,
+          total_pagamentos INTEGER DEFAULT 0,
+          total_atualizados INTEGER DEFAULT 0,
+          status TEXT NOT NULL DEFAULT 'sucesso' CHECK(status IN ('sucesso','falha')),
+          mensagem TEXT
+        )`
+      );
+      await dbRun('CREATE INDEX IF NOT EXISTS idx_dar_conciliacoes_data_ref ON dar_conciliacoes(data_referencia)');
+      await dbRun('CREATE INDEX IF NOT EXISTS idx_dar_conciliacoes_execucao ON dar_conciliacoes(data_execucao DESC)');
+    }
+  } catch (err) {
+    console.error('[CONCILIA] Falha ao garantir tabela de conciliações:', err?.message || err);
+  } finally {
+    conciliaTableEnsured = true;
+  }
+}
+
+async function registrarConciliacaoLog(entry) {
+  try {
+    await ensureConciliacaoLogTable();
+    const agora = new Date().toISOString();
+    const dataReferencia = entry?.dataReferencia || null;
+    const iniciouEm = entry?.iniciouEm || null;
+    const finalizouEm = entry?.finalizouEm || null;
+    const duracaoMs = Number.isFinite(entry?.duracaoMs) ? Math.max(0, Math.round(entry.duracaoMs)) : null;
+    const totalPagamentos = Number.isFinite(entry?.totalPagamentos) ? entry.totalPagamentos : Number(entry?.totalPagamentos || 0);
+    const totalAtualizados = Number.isFinite(entry?.totalAtualizados) ? entry.totalAtualizados : Number(entry?.totalAtualizados || 0);
+    const status = entry?.sucesso === false ? 'falha' : 'sucesso';
+    const mensagem = entry?.mensagem ? String(entry.mensagem).slice(0, 500) : null;
+
+    await dbRun(
+      `INSERT INTO dar_conciliacoes (
+        data_execucao,
+        data_referencia,
+        iniciou_em,
+        finalizou_em,
+        duracao_ms,
+        total_pagamentos,
+        total_atualizados,
+        status,
+        mensagem
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        agora,
+        dataReferencia,
+        iniciouEm,
+        finalizouEm,
+        duracaoMs,
+        totalPagamentos,
+        totalAtualizados,
+        status,
+        mensagem,
+      ]
+    );
+  } catch (err) {
+    console.error('[CONCILIA] Não foi possível registrar log da conciliação:', err?.message || err);
+  }
+}
+
 // ------------------------- Tie-breakers -------------------------
 async function applyTiebreakers(cands, guiaNum, dtPgto) {
   let list = (cands || []).slice();
@@ -356,56 +430,86 @@ async function conciliarPagamentosDoDia(dataISO) {
   const dataDia = dataISO || ymd(new Date());
   console.log(`[CONCILIA] Iniciando conciliação do dia ${dataDia}... DB=${DB_PATH}`);
 
+  const inicioMs = Date.now();
   const dia = new Date(`${dataDia}T00:00:00`);
   const dtHoraInicioDia = toDateTimeString(dia, 0, 0, 0);
-  const dtHoraFimDia    = toDateTimeString(dia, 23, 59, 59);
+  const dtHoraFimDia = toDateTimeString(dia, 23, 59, 59);
 
   const pagamentosMap = new Map();
+  let resumo = { dataDia, totalPagamentos: 0, totalAtualizados: 0 };
+  let sucesso = false;
+  let mensagemErro = null;
 
   try {
-    // Arrecadação (dia fechado)
-    const pagsArr = await listarPagamentosPorDataArrecadacao(dataDia, dataDia);
-    for (const p of pagsArr) {
-      const key = p.numeroGuia || p.codigoBarras || p.linhaDigitavel ||
-        `${p.numeroInscricao}-${p.valorPago}-${p.dataPagamento || ''}`;
-      if (!pagamentosMap.has(key)) pagamentosMap.set(key, p);
+    try {
+      // Arrecadação (dia fechado)
+      const pagsArr = await listarPagamentosPorDataArrecadacao(dataDia, dataDia);
+      for (const p of pagsArr) {
+        const key =
+          p.numeroGuia ||
+          p.codigoBarras ||
+          p.linhaDigitavel ||
+          `${p.numeroInscricao}-${p.valorPago}-${p.dataPagamento || ''}`;
+        if (!pagamentosMap.has(key)) pagamentosMap.set(key, p);
+      }
+    } catch (e) {
+      console.warn(`[CONCILIA] Aviso por-data-arrecadacao(${dataDia}): ${e.message || e}`);
     }
-  } catch (e) {
-    console.warn(`[CONCILIA] Aviso por-data-arrecadacao(${dataDia}): ${e.message || e}`);
-  }
 
-  try {
-    // Inclusão (janela 00:00:00~23:59:59)
-    const pagsInc = await listarPagamentosPorDataInclusao(dtHoraInicioDia, dtHoraFimDia);
-    for (const p of pagsInc) {
-      const key = p.numeroGuia || p.codigoBarras || p.linhaDigitavel ||
-        `${p.numeroInscricao}-${p.valorPago}-${p.dataPagamento || ''}`;
-      if (!pagamentosMap.has(key)) pagamentosMap.set(key, p);
+    try {
+      // Inclusão (janela 00:00:00~23:59:59)
+      const pagsInc = await listarPagamentosPorDataInclusao(dtHoraInicioDia, dtHoraFimDia);
+      for (const p of pagsInc) {
+        const key =
+          p.numeroGuia ||
+          p.codigoBarras ||
+          p.linhaDigitavel ||
+          `${p.numeroInscricao}-${p.valorPago}-${p.dataPagamento || ''}`;
+        if (!pagamentosMap.has(key)) pagamentosMap.set(key, p);
+      }
+    } catch (e) {
+      console.warn(`[CONCILIA] Aviso por-data-inclusao(${dataDia}): ${e.message || e}`);
     }
-  } catch (e) {
-    console.warn(`[CONCILIA] Aviso por-data-inclusao(${dataDia}): ${e.message || e}`);
-  }
 
-  const todosPagamentos = Array.from(pagamentosMap.values());
-  console.log(`[CONCILIA] ${todosPagamentos.length} pagamentos únicos encontrados na SEFAZ para ${dataDia}.`);
+    const todosPagamentos = Array.from(pagamentosMap.values());
+    console.log(`[CONCILIA] ${todosPagamentos.length} pagamentos únicos encontrados na SEFAZ para ${dataDia}.`);
 
-  let totalAtualizados = 0;
-  for (const pagamento of todosPagamentos) {
-    const vinculado = await tentarVincularPagamento(pagamento);
-    if (vinculado) {
-      console.log(`--> SUCESSO: Pagamento de ${pagamento.numeroInscricao} (Guia: ${pagamento.numeroGuia || '—'}) atualizado p/ 'Pago'.`);
-      totalAtualizados++;
-    } else {
-      console.warn(`--> ALERTA: Pagamento não vinculado. SEFAZ -> Doc: ${pagamento.numeroInscricao}, Guia: ${pagamento.numeroGuia || '—'}, Valor: ${pagamento.valorPago}`);
+    let totalAtualizados = 0;
+    for (const pagamento of todosPagamentos) {
+      const vinculado = await tentarVincularPagamento(pagamento);
+      if (vinculado) {
+        console.log(`--> SUCESSO: Pagamento de ${pagamento.numeroInscricao} (Guia: ${pagamento.numeroGuia || '—'}) atualizado p/ 'Pago'.`);
+        totalAtualizados++;
+      } else {
+        console.warn(`--> ALERTA: Pagamento não vinculado. SEFAZ -> Doc: ${pagamento.numeroInscricao}, Guia: ${pagamento.numeroGuia || '—'}, Valor: ${pagamento.valorPago}`);
+      }
     }
-  }
-  console.log(`[CONCILIA] ${dataDia} finalizado. DARs atualizadas: ${totalAtualizados}/${todosPagamentos.length}.`);
+    console.log(`[CONCILIA] ${dataDia} finalizado. DARs atualizadas: ${totalAtualizados}/${todosPagamentos.length}.`);
 
-  return {
-    dataDia,
-    totalPagamentos: todosPagamentos.length,
-    totalAtualizados,
-  };
+    resumo = {
+      dataDia,
+      totalPagamentos: todosPagamentos.length,
+      totalAtualizados,
+    };
+    sucesso = true;
+    return resumo;
+  } catch (error) {
+    mensagemErro = error?.message || String(error);
+    console.error(`[CONCILIA] Falha ao concluir conciliação de ${dataDia}:`, mensagemErro);
+    throw error;
+  } finally {
+    const fimMs = Date.now();
+    await registrarConciliacaoLog({
+      dataReferencia: dataDia,
+      iniciouEm: new Date(inicioMs).toISOString(),
+      finalizouEm: new Date(fimMs).toISOString(),
+      duracaoMs: fimMs - inicioMs,
+      totalPagamentos: resumo.totalPagamentos,
+      totalAtualizados: resumo.totalAtualizados,
+      sucesso,
+      mensagem: mensagemErro,
+    });
+  }
 }
 
 // ------------------------- Lock simples (anti conc. simultânea) -------------------------
