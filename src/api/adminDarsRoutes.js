@@ -410,6 +410,124 @@ router.get(
   }
 );
 
+router.get(
+  '/conciliacoes',
+  [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN'])],
+  async (req, res) => {
+    try {
+      const page = Math.max(1, parseInt(req.query.page || '1', 10));
+      const limit = Math.min(100, Math.max(1, parseInt(req.query.limit || '20', 10)));
+      const offset = (page - 1) * limit;
+
+      const tableExists = await dbGetAsync(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='dar_conciliacoes' LIMIT 1"
+      ).catch(() => null);
+
+      if (!tableExists?.name) {
+        return res.json({ ok: true, page, limit, total: 0, registros: [] });
+      }
+
+      const totalRow = await dbGetAsync('SELECT COUNT(*) AS total FROM dar_conciliacoes').catch(() => ({ total: 0 }));
+      const total = Number(totalRow?.total || 0);
+
+      const rows = await dbAllAsync(
+        `SELECT id, data_execucao, data_referencia, iniciou_em, finalizou_em, duracao_ms,
+                total_pagamentos, total_atualizados, status, mensagem
+           FROM dar_conciliacoes
+          ORDER BY datetime(data_execucao) DESC
+          LIMIT ? OFFSET ?`,
+        [limit, offset]
+      );
+
+      const registros = rows.map((row) => ({
+        id: row.id,
+        data_execucao: row.data_execucao || null,
+        data_referencia: row.data_referencia || null,
+        iniciou_em: row.iniciou_em || null,
+        finalizou_em: row.finalizou_em || null,
+        duracao_ms: row.duracao_ms != null ? Number(row.duracao_ms) : null,
+        total_pagamentos: Number(row.total_pagamentos ?? 0),
+        total_atualizados: Number(row.total_atualizados ?? 0),
+        status: row.status || null,
+        mensagem: row.mensagem || null,
+      }));
+
+      return res.json({ ok: true, page, limit, total, registros });
+    } catch (error) {
+      console.error('[AdminDARs] ERRO GET /api/admin/dars/conciliacoes:', error);
+      return res.status(500).json({ error: 'Erro ao listar conciliações.' });
+    }
+  }
+);
+
+router.get(
+  '/conciliacoes/:id/pagamentos',
+  [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN'])],
+  async (req, res) => {
+    try {
+      const conciliacaoId = Number.parseInt(req.params.id, 10);
+      if (!Number.isInteger(conciliacaoId) || conciliacaoId <= 0) {
+        return res.status(400).json({ error: 'Identificador de conciliação inválido.' });
+      }
+
+      const tableExists = await dbGetAsync(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='dar_conciliacoes_pagamentos' LIMIT 1"
+      ).catch(() => null);
+
+      if (!tableExists?.name) {
+        return res.json({ ok: true, conciliacaoId, total: 0, pagamentos: [] });
+      }
+
+      const rows = await dbAllAsync(
+        `SELECT p.id, p.dar_id, p.status_anterior, p.status_atual, p.numero_documento, p.valor,
+                p.data_vencimento, p.data_pagamento, p.origem, p.contribuinte, p.documento_contribuinte,
+                p.pagamento_guia, p.pagamento_documento, p.pagamento_valor, p.pagamento_data, p.criado_em,
+                d.numero_documento AS dar_numero_documento,
+                d.valor AS dar_valor,
+                d.data_vencimento AS dar_data_vencimento,
+                d.data_pagamento AS dar_data_pagamento,
+                d.status AS dar_status
+           FROM dar_conciliacoes_pagamentos p
+      LEFT JOIN dars d ON d.id = p.dar_id
+          WHERE p.conciliacao_id = ?
+          ORDER BY p.id ASC`,
+        [conciliacaoId]
+      );
+
+      const pagamentos = rows.map((row) => ({
+        id: row.id,
+        dar_id: row.dar_id || null,
+        status_anterior: row.status_anterior || null,
+        status_atual: row.status_atual || row.dar_status || null,
+        numero_documento: row.numero_documento || row.dar_numero_documento || null,
+        valor:
+          row.valor != null
+            ? Number(row.valor)
+            : row.dar_valor != null
+            ? Number(row.dar_valor)
+            : null,
+        data_vencimento: row.data_vencimento || row.dar_data_vencimento || null,
+        data_pagamento: row.data_pagamento || row.dar_data_pagamento || null,
+        origem: row.origem || null,
+        contribuinte: row.contribuinte || null,
+        documento_contribuinte: row.documento_contribuinte || null,
+        pagamento: {
+          guia: row.pagamento_guia || null,
+          documento: row.pagamento_documento || null,
+          valor: row.pagamento_valor != null ? Number(row.pagamento_valor) : null,
+          data: row.pagamento_data || null,
+        },
+        registrado_em: row.criado_em || null,
+      }));
+
+      return res.json({ ok: true, conciliacaoId, total: pagamentos.length, pagamentos });
+    } catch (error) {
+      console.error('[AdminDARs] ERRO GET /api/admin/dars/conciliacoes/:id/pagamentos:', error);
+      return res.status(500).json({ error: 'Erro ao listar pagamentos conciliados.' });
+    }
+  }
+);
+
 /**
  * GET /api/admin/dars
  * Lista paginada com filtros (nome/CNPJ, status, mês, ano)
