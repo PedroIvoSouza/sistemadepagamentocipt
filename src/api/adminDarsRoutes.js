@@ -704,35 +704,42 @@ router.get(
   [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN'])],
   async (req, res) => {
     try {
-      const rows = await dbAllAsync(
+      const row = await dbGetAsync(
         `
           ${DAR_BASE_CTE}
           SELECT
-            base.origem,
-            COUNT(*) AS total,
-            SUM(CASE WHEN ${STATUS_PAGO_COND} THEN 1 ELSE 0 END) AS pagos,
-            SUM(${ATRASADO_CASE}) AS atrasados,
-            ROUND(SUM(CASE WHEN ${STATUS_PAGO_COND} THEN 0 ELSE COALESCE(base.valor, 0) END), 2) AS valor_em_aberto
+            SUM(CASE WHEN base.origem = 'permissionario' THEN 1 ELSE 0 END) AS perm_total,
+            SUM(CASE WHEN base.origem = 'permissionario' AND ${STATUS_PAGO_COND} THEN 1 ELSE 0 END) AS perm_pagos,
+            SUM(CASE WHEN base.origem = 'permissionario' AND ${ATRASADO_CASE} = 1 THEN 1 ELSE 0 END) AS perm_atrasados,
+            ROUND(SUM(CASE WHEN base.origem = 'permissionario' AND NOT (${STATUS_PAGO_COND}) THEN COALESCE(base.valor, 0) ELSE 0 END), 2) AS perm_aberto,
+            SUM(CASE WHEN base.origem = 'evento' THEN 1 ELSE 0 END) AS eventos_total,
+            SUM(CASE WHEN base.origem = 'evento' AND ${STATUS_PAGO_COND} THEN 1 ELSE 0 END) AS eventos_pagos,
+            SUM(CASE WHEN base.origem = 'evento' AND ${ATRASADO_CASE} = 1 THEN 1 ELSE 0 END) AS eventos_atrasados,
+            ROUND(SUM(CASE WHEN base.origem = 'evento' AND NOT (${STATUS_PAGO_COND}) THEN COALESCE(base.valor, 0) ELSE 0 END), 2) AS eventos_aberto
           FROM base
-          GROUP BY base.origem
         `
       );
 
-      const empty = () => ({ total: 0, pagos: 0, atrasados: 0, valor_em_aberto: 0 });
       const totals = {
-        permissionarios: empty(),
-        eventos: empty(),
-        geral: empty(),
+        permissionarios: {
+          total: Number(row?.perm_total || 0),
+          pagos: Number(row?.perm_pagos || 0),
+          atrasados: Number(row?.perm_atrasados || 0),
+          valor_em_aberto: Number(row?.perm_aberto || 0),
+        },
+        eventos: {
+          total: Number(row?.eventos_total || 0),
+          pagos: Number(row?.eventos_pagos || 0),
+          atrasados: Number(row?.eventos_atrasados || 0),
+          valor_em_aberto: Number(row?.eventos_aberto || 0),
+        },
+        geral: {
+          total: 0,
+          pagos: 0,
+          atrasados: 0,
+          valor_em_aberto: 0,
+        },
       };
-
-      for (const row of rows) {
-        const origem = row?.origem === 'evento' ? 'eventos' : 'permissionarios';
-        const bucket = totals[origem];
-        bucket.total = Number(row?.total || 0);
-        bucket.pagos = Number(row?.pagos || 0);
-        bucket.atrasados = Number(row?.atrasados || 0);
-        bucket.valor_em_aberto = Number(row?.valor_em_aberto || 0);
-      }
 
       totals.geral.total = totals.permissionarios.total + totals.eventos.total;
       totals.geral.pagos = totals.permissionarios.pagos + totals.eventos.pagos;
