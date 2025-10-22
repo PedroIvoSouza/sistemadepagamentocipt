@@ -458,7 +458,7 @@ function normalizePayload(p) {
     valorDesconto: Number(r0.valorDesconto ?? 0),
     dataVencimento: toISO(r0.dataVencimento),
   };
-  const dataLimite = toISO(p.dataLimitePagamento) || r.dataVencimento;
+  const dataLimite = clampDataLimitePagamento(r.dataVencimento, p.dataLimitePagamento);
 
   return {
     versao: p.versao || '1.0',

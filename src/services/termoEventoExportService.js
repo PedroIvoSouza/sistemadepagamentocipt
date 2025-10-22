@@ -186,9 +186,9 @@ async function buildPayloadFromEvento(eventoId) {
   const permitenteRazao = process.env.PERMITENTE_RAZAO || 'SECRETARIA DE ESTADO DA CIÊNCIA, DA TECNOLOGIA E DA INOVAÇÃO DE ALAGOAS - SECTI';
   const permitenteCnpj = process.env.PERMITENTE_CNPJ || '04.007.216/0001-30';
   const permitenteEnd = process.env.PERMITENTE_ENDERECO || 'R. BARÃO DE JARAGUÁ, Nº 590, JARAGUÁ, MACEIÓ - ALAGOAS - CEP: 57022-140';
-  const permitenteRepNm = process.env.PERMITENTE_REP_NOME || 'SÍLVIO ROMERO BULHÕES AZEVEDO';
-  const permitenteRepCg = process.env.PERMITENTE_REP_CARGO || 'SECRETÁRIO';
-  const permitenteRepCpf = process.env.PERMITENTE_REP_CPF || '053.549.204-93';
+  const permitenteRepNm = process.env.PERMITENTE_REP_NOME || 'ALINE RODRIGUES DOS SANTOS';
+  const permitenteRepCg = process.env.PERMITENTE_REP_CARGO || 'SECRETÁRIA';
+  const permitenteRepCpf = process.env.PERMITENTE_REP_CPF || '036.347.914-70';
 
   const imovelNome = process.env.IMOVEL_NOME || 'CENTRO DE INOVAÇÃO DO JARAGUÁ';
   const capDefault = process.env.CAPACIDADE_PADRAO ? Number(process.env.CAPACIDADE_PADRAO) : 313;
