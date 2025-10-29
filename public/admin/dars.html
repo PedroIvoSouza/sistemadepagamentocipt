@@ -158,6 +158,43 @@
               </div>
             </div>
 
+            <div class="card mb-4" id="solicitacoesBaixaCard">
+              <div class="card-body">
+                <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+                  <div>
+                    <h2 class="h5 mb-1">Solicitações de baixa manual</h2>
+                    <p class="text-muted small mb-0">Analise os pedidos enviados pelos permissionários e aprove ou rejeite com base nos anexos.</p>
+                  </div>
+                  <div class="d-flex align-items-center gap-2">
+                    <label for="solicitacoesBaixaFiltro" class="form-label small text-muted mb-0">Status</label>
+                    <select id="solicitacoesBaixaFiltro" class="form-select form-select-sm" style="min-width: 180px;">
+                      <option value="pendente" selected>Pendentes</option>
+                      <option value="aprovado">Aprovadas</option>
+                      <option value="rejeitado">Rejeitadas</option>
+                      <option value="todos">Todas</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="table-responsive">
+                  <table class="table table-sm align-middle mb-0" id="solicitacoesBaixaTabela">
+                    <thead class="table-light">
+                      <tr>
+                        <th>Permissionário</th>
+                        <th>Competência</th>
+                        <th>Pagamento</th>
+                        <th>Status</th>
+                        <th>Anexos</th>
+                        <th class="text-center">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody id="solicitacoesBaixaBody">
+                      <tr><td colspan="6" class="text-center text-muted">Carregando solicitações...</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
             <div class="table-responsive">
               <table class="table table-hover align-middle" id="dars-table">
                 <thead>
@@ -261,6 +298,47 @@
     </div>
   </div>
 
+  <div class="modal fade" id="solicitacaoBaixaModal" tabindex="-1" aria-labelledby="solicitacaoBaixaModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <form class="modal-content" id="solicitacaoBaixaForm" novalidate>
+        <div class="modal-header">
+          <h5 class="modal-title" id="solicitacaoBaixaModalLabel">Analisar solicitação de baixa</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="solicitacaoBaixaId">
+          <p class="small text-muted" id="solicitacaoBaixaResumo"></p>
+          <div class="mb-3">
+            <label for="solicitacaoBaixaData" class="form-label">Data do pagamento</label>
+            <input type="date" class="form-control" id="solicitacaoBaixaData" required>
+            <div class="invalid-feedback">Informe a data confirmada do pagamento.</div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Anexos enviados</label>
+            <div id="solicitacaoBaixaAnexos" class="d-flex flex-column gap-1 small"></div>
+          </div>
+          <div class="mb-3">
+            <label for="solicitacaoBaixaObs" class="form-label">Observação (opcional)</label>
+            <textarea id="solicitacaoBaixaObs" class="form-control" rows="2" placeholder="Adicione um comentário para registro ou comunicação ao permissionário"></textarea>
+          </div>
+          <div class="alert alert-warning small mb-0" role="alert">
+            Ao aprovar a solicitação o DAR será marcado como pago com a data indicada acima.
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-danger" id="solicitacaoBaixaRejeitarBtn">
+            <span class="spinner-border spinner-border-sm me-2 d-none" id="solicitacaoBaixaRejeitarLoading" role="status" aria-hidden="true"></span>
+            Rejeitar
+          </button>
+          <button type="submit" class="btn btn-success" id="solicitacaoBaixaAprovarBtn">
+            <span class="spinner-border spinner-border-sm me-2 d-none" id="solicitacaoBaixaAprovarLoading" role="status" aria-hidden="true"></span>
+            Aprovar baixa
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script src="/js/admin-sidebar.js"></script>
   <script src="/js/admin-guard.js"></script>
@@ -356,10 +434,25 @@
       const baixaManualArquivoInput = document.getElementById('baixaManualArquivo');
       const baixaManualSubmitBtn = document.getElementById('baixaManualSubmitBtn');
       const baixaManualLoading = document.getElementById('baixaManualLoading');
+      const solicitacoesBaixaFiltro = document.getElementById('solicitacoesBaixaFiltro');
+      const solicitacoesBaixaBody = document.getElementById('solicitacoesBaixaBody');
+      const solicitacaoBaixaModalEl = document.getElementById('solicitacaoBaixaModal');
+      const solicitacaoBaixaForm = document.getElementById('solicitacaoBaixaForm');
+      const solicitacaoBaixaIdInput = document.getElementById('solicitacaoBaixaId');
+      const solicitacaoBaixaResumo = document.getElementById('solicitacaoBaixaResumo');
+      const solicitacaoBaixaDataInput = document.getElementById('solicitacaoBaixaData');
+      const solicitacaoBaixaAnexos = document.getElementById('solicitacaoBaixaAnexos');
+      const solicitacaoBaixaObsInput = document.getElementById('solicitacaoBaixaObs');
+      const solicitacaoBaixaAprovarBtn = document.getElementById('solicitacaoBaixaAprovarBtn');
+      const solicitacaoBaixaAprovarLoading = document.getElementById('solicitacaoBaixaAprovarLoading');
+      const solicitacaoBaixaRejeitarBtn = document.getElementById('solicitacaoBaixaRejeitarBtn');
+      const solicitacaoBaixaRejeitarLoading = document.getElementById('solicitacaoBaixaRejeitarLoading');
+      const solicitacaoBaixaModal = solicitacaoBaixaModalEl ? new bootstrap.Modal(solicitacaoBaixaModalEl) : null;
 
       let currentPageState = 1;
       let semJurosPermissionariosCache = [];
       const semJurosPermissionariosMap = new Map();
+      const solicitacoesBaixaCache = new Map();
 
       // combos
       const meses = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
@@ -399,8 +492,180 @@
           currentPageState = Number(data.currentPage) || page;
         }catch(error){
           tableBody.innerHTML = `<tr><td colspan="6" class="text-center text-danger">${esc(error.message)}</td></tr>`;
-        }
       }
+    }
+
+    async function carregarSolicitacoesBaixa(){
+      if (!solicitacoesBaixaBody) return;
+      solicitacoesBaixaBody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Carregando solicitações...</td></tr>';
+      const status = solicitacoesBaixaFiltro?.value || 'pendente';
+      try {
+        const response = await fetch(`/api/admin/dars/baixa-solicitacoes?status=${encodeURIComponent(status)}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (!response.ok) throw new Error('Falha ao carregar solicitações.');
+        const data = await response.json();
+        const solicitacoes = Array.isArray(data?.solicitacoes) ? data.solicitacoes : [];
+        renderSolicitacoesBaixa(solicitacoes);
+      } catch (error) {
+        console.error('Solicitações de baixa:', error);
+        solicitacoesBaixaBody.innerHTML = `<tr><td colspan="6" class="text-center text-danger">${esc(error.message || 'Erro ao carregar solicitações.')}</td></tr>`;
+      }
+    }
+
+    function renderSolicitacoesBaixa(lista){
+      solicitacoesBaixaCache.clear();
+      if (!Array.isArray(lista) || !lista.length) {
+        solicitacoesBaixaBody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Nenhuma solicitação encontrada.</td></tr>';
+        return;
+      }
+
+      const rows = lista.map((item) => {
+        solicitacoesBaixaCache.set(Number(item.id), item);
+        const competencia = item.mes_referencia && item.ano_referencia ? `${String(item.mes_referencia).padStart(2,'0')}/${item.ano_referencia}` : '—';
+        const pagamento = formatarData(item.data_pagamento);
+        const statusLower = String(item.status || '').toLowerCase();
+        const badgeClasses = {
+          pendente: 'badge bg-warning text-dark',
+          aprovado: 'badge bg-success',
+          rejeitado: 'badge bg-danger',
+        };
+        const badgeClass = badgeClasses[statusLower] || 'badge bg-secondary';
+        const anexos = [];
+        if (item.guia_url) anexos.push(`<a href="${item.guia_url}" target="_blank" rel="noopener">Guia</a>`);
+        if (item.comprovante_url) anexos.push(`<a href="${item.comprovante_url}" target="_blank" rel="noopener">Comprovante</a>`);
+        const anexosHtml = anexos.length ? anexos.join(' • ') : '<span class="text-muted">—</span>';
+        const valorFmt = item.valor ? `R$ ${formatCurrency(item.valor)}` : '—';
+
+        let acoes = '<span class="text-muted small">—</span>';
+        if (statusLower === 'pendente') {
+          acoes = `<button class="btn btn-sm btn-primary analisar-solicitacao-btn" data-id="${item.id}">Analisar</button>`;
+        }
+
+        return `
+          <tr>
+            <td>${esc(item.nome_empresa || 'Permissionário')}<br><span class="small text-muted">${esc(formatarDocumento(item.cnpj))}</span></td>
+            <td>${competencia}<br><span class="small text-muted">${valorFmt}</span></td>
+            <td>${pagamento || '—'}</td>
+            <td><span class="${badgeClass}">${esc(item.status || 'Pendente')}</span></td>
+            <td>${anexosHtml}</td>
+            <td class="text-center">${acoes}</td>
+          </tr>
+        `;
+      }).join('');
+
+      solicitacoesBaixaBody.innerHTML = rows;
+      solicitacoesBaixaBody.querySelectorAll('.analisar-solicitacao-btn').forEach((btn) => {
+        btn.addEventListener('click', () => abrirSolicitacaoModal(btn.dataset.id));
+      });
+    }
+
+    function abrirSolicitacaoModal(id){
+      if (!solicitacaoBaixaModal || !id) return;
+      const solicitacao = solicitacoesBaixaCache.get(Number(id));
+      if (!solicitacao) return;
+
+      if (solicitacaoBaixaIdInput) solicitacaoBaixaIdInput.value = solicitacao.id;
+      if (solicitacaoBaixaResumo) {
+        const partes = [];
+        if (solicitacao.nome_empresa) partes.push(solicitacao.nome_empresa);
+        if (solicitacao.mes_referencia && solicitacao.ano_referencia) partes.push(`Competência ${String(solicitacao.mes_referencia).padStart(2,'0')}/${solicitacao.ano_referencia}`);
+        if (solicitacao.valor) partes.push(`Valor R$ ${formatCurrency(solicitacao.valor)}`);
+        solicitacaoBaixaResumo.textContent = partes.join(' • ');
+      }
+      if (solicitacaoBaixaDataInput) {
+        const data = solicitacao.data_pagamento ? String(solicitacao.data_pagamento).slice(0,10) : hojeISO();
+        solicitacaoBaixaDataInput.value = data;
+      }
+      if (solicitacaoBaixaAnexos) {
+        const links = [];
+        if (solicitacao.guia_url) links.push(`<a href="${solicitacao.guia_url}" target="_blank" rel="noopener">Guia</a>`);
+        if (solicitacao.comprovante_url) links.push(`<a href="${solicitacao.comprovante_url}" target="_blank" rel="noopener">Comprovante</a>`);
+        solicitacaoBaixaAnexos.innerHTML = links.length ? links.join(' • ') : '<span class="text-muted">Anexos indisponíveis.</span>';
+      }
+      if (solicitacaoBaixaObsInput) solicitacaoBaixaObsInput.value = '';
+      solicitacaoBaixaForm?.classList.remove('was-validated');
+      solicitacaoBaixaAprovarBtn?.classList.remove('disabled');
+      solicitacaoBaixaRejeitarBtn?.classList.remove('disabled');
+      solicitacaoBaixaAprovarLoading?.classList.add('d-none');
+      solicitacaoBaixaRejeitarLoading?.classList.add('d-none');
+      solicitacaoBaixaModal.show();
+    }
+
+    solicitacaoBaixaForm?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      solicitacaoBaixaForm.classList.add('was-validated');
+      const solicitacaoId = solicitacaoBaixaIdInput?.value;
+      const dataPagamento = solicitacaoBaixaDataInput?.value?.trim();
+      if (!solicitacaoId || !dataPagamento) return;
+      const observacao = solicitacaoBaixaObsInput?.value?.trim() || null;
+
+      try {
+        if (solicitacaoBaixaAprovarBtn) solicitacaoBaixaAprovarBtn.disabled = true;
+        solicitacaoBaixaAprovarLoading?.classList.remove('d-none');
+        const resp = await fetch(`/api/admin/dars/baixa-solicitacoes/${encodeURIComponent(solicitacaoId)}/aprovar`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ dataPagamento, observacao }),
+        });
+        const result = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(result.error || 'Falha ao aprovar a solicitação.');
+        AppUI?.toast?.('Solicitação aprovada com sucesso!', 'success');
+        solicitacaoBaixaModal?.hide();
+        carregarSolicitacoesBaixa();
+        fetchDars(currentPageState);
+      } catch (error) {
+        console.error('Erro ao aprovar solicitação:', error);
+        AppUI?.toast?.(error.message || 'Não foi possível aprovar a solicitação.', 'error');
+        if (solicitacaoBaixaAprovarBtn) solicitacaoBaixaAprovarBtn.disabled = false;
+      } finally {
+        solicitacaoBaixaAprovarLoading?.classList.add('d-none');
+      }
+    });
+
+    solicitacaoBaixaRejeitarBtn?.addEventListener('click', async () => {
+      const solicitacaoId = solicitacaoBaixaIdInput?.value;
+      if (!solicitacaoId) return;
+      const observacao = solicitacaoBaixaObsInput?.value?.trim() || null;
+      try {
+        solicitacaoBaixaRejeitarBtn.disabled = true;
+        solicitacaoBaixaRejeitarLoading?.classList.remove('d-none');
+        const resp = await fetch(`/api/admin/dars/baixa-solicitacoes/${encodeURIComponent(solicitacaoId)}/rejeitar`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ observacao }),
+        });
+        const result = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(result.error || 'Falha ao rejeitar a solicitação.');
+        AppUI?.toast?.('Solicitação rejeitada.', 'warn');
+        solicitacaoBaixaModal?.hide();
+        carregarSolicitacoesBaixa();
+        fetchDars(currentPageState);
+      } catch (error) {
+        console.error('Erro ao rejeitar solicitação:', error);
+        AppUI?.toast?.(error.message || 'Não foi possível rejeitar a solicitação.', 'error');
+        solicitacaoBaixaRejeitarBtn.disabled = false;
+      } finally {
+        solicitacaoBaixaRejeitarLoading?.classList.add('d-none');
+      }
+    });
+
+    solicitacaoBaixaModalEl?.addEventListener('hidden.bs.modal', () => {
+      solicitacaoBaixaForm?.reset();
+      solicitacaoBaixaForm?.classList.remove('was-validated');
+      if (solicitacaoBaixaResumo) solicitacaoBaixaResumo.textContent = '';
+      solicitacaoBaixaAprovarLoading?.classList.add('d-none');
+      solicitacaoBaixaRejeitarLoading?.classList.add('d-none');
+      if (solicitacaoBaixaAprovarBtn) solicitacaoBaixaAprovarBtn.disabled = false;
+      if (solicitacaoBaixaRejeitarBtn) solicitacaoBaixaRejeitarBtn.disabled = false;
+    });
+
 
       function renderTable(dars){
         if (!Array.isArray(dars) || dars.length===0){
@@ -697,6 +962,7 @@
       }
 
       filterButton.addEventListener('click', ()=> fetchDars(1));
+      solicitacoesBaixaFiltro?.addEventListener('change', () => carregarSolicitacoesBaixa());
 
       if (searchInput) {
         searchInput.addEventListener('keydown', (event) => {
@@ -1137,6 +1403,7 @@
 
       // primeira carga
       fetchDars();
+      carregarSolicitacoesBaixa();
       atualizarDashboards();
     });
   </script>

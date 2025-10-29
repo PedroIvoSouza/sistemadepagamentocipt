@@ -18,6 +18,14 @@ const { gerarComprovante } = require('../services/darComprovanteService');
 const { gerarTokenDocumento, imprimirTokenEmPdf } = require('../utils/token');
 const { corrigirTriggersParcialmentePago } = require('../utils/sqliteFixes');
 const { getLastBusinessDayISO, isBusinessDay, parseDateInput, formatISODate } = require('../utils/businessDays');
+const {
+  ensureSolicitacoesSchema,
+  armazenarAnexo,
+  registrarSolicitacao,
+  atualizarSolicitacao,
+  obterSolicitacaoPorId,
+  parseDataPagamento,
+} = require('../services/darBaixaManualService');
 const { normalizeMsisdn } = require('../utils/phone');
 const whatsappService = require('../services/whatsappService');
 const { executarConciliacaoDia } = require('../../cron/conciliarPagamentosmes');
@@ -26,6 +34,9 @@ const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 const CONCILIA_LOCK_PATH = '/tmp/cipt-concilia.lock';
+
+const DAR_GUIA_DOCUMENTO_TIPO = 'DAR_GUIA_MANUAL';
+const DAR_COMPROVANTE_DOCUMENTO_TIPO = 'DAR_COMPROVANTE_MANUAL';
 
 const DAR_BASE_CTE = `
 WITH base AS (
@@ -139,6 +150,10 @@ async function ensureAdvertenciaColumn() {
   }
   ensuredAdvertenciaColumn = true;
 }
+
+ensureSolicitacoesSchema(db).catch((err) => {
+  console.error('[AdminDARs] Falha ao garantir schema de solicitações de baixa:', err?.message || err);
+});
 
 function parseCompetencia(valor) {
   if (!valor && valor !== 0) return null;
@@ -1021,9 +1036,16 @@ router.post(
 
 router.post(
   '/:id/baixa-manual',
-  [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN']), upload.single('comprovante')],
+  [
+    authMiddleware,
+    authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN']),
+    upload.fields([
+      { name: 'guia', maxCount: 1 },
+      { name: 'comprovante', maxCount: 1 },
+    ]),
+  ],
   async (req, res) => {
-    let tempFilePath = null;
+    const arquivosCriados = [];
     try {
       const darId = Number(req.params.id);
       if (!Number.isInteger(darId) || darId <= 0) {
@@ -1048,80 +1070,41 @@ router.post(
         req.body?.data ??
         null;
 
-      const parsedDataPagamento = parseDateInput(rawDataPagamento);
-      if (!parsedDataPagamento) {
-        return res.status(400).json({ error: 'Data de pagamento inválida. Utilize o formato AAAA-MM-DD ou DD/MM/AAAA.' });
-      }
-      const dataPagamentoISO = formatISODate(parsedDataPagamento);
+      const dataPagamentoISO = parseDataPagamento(rawDataPagamento);
 
-      const file = req.file;
-      if (!file || !file.buffer || !file.buffer.length) {
-        return res.status(400).json({ error: 'Envie o arquivo de comprovante do pagamento.' });
-      }
+      const files = req.files || {};
+      const guiaFile = Array.isArray(files.guia) ? files.guia[0] : null;
+      const comprovanteFile = Array.isArray(files.comprovante) ? files.comprovante[0] : null;
 
-      const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
-      if (file.size > MAX_SIZE) {
-        return res.status(400).json({ error: 'O comprovante excede o limite de 10 MB.' });
+      if (!guiaFile) {
+        return res.status(400).json({ error: 'Envie a guia do DAR que foi paga.' });
+      }
+      if (!comprovanteFile) {
+        return res.status(400).json({ error: 'Envie o comprovante de pagamento.' });
       }
 
-      const allowedMime = new Set(['application/pdf', 'application/x-pdf', 'image/jpeg', 'image/png']);
-      const allowedExt = new Set(['.pdf', '.jpg', '.jpeg', '.png']);
-      const originalExt = (path.extname(file.originalname || '') || '').toLowerCase();
-      const mime = String(file.mimetype || '').toLowerCase();
+      const guia = await armazenarAnexo({
+        db,
+        darId,
+        permissionarioId: dar.permissionario_id,
+        arquivo: guiaFile,
+        tipoDocumento: DAR_GUIA_DOCUMENTO_TIPO,
+        campoLabel: 'guia do DAR',
+        prefixoArquivo: 'guia_manual',
+      });
+      arquivosCriados.push({ atual: guia.filePath, anterior: guia.previousPath });
 
-      let finalExt = allowedExt.has(originalExt) ? originalExt : '';
-      if (!finalExt) {
-        if (mime === 'application/pdf' || mime === 'application/x-pdf') finalExt = '.pdf';
-        else if (mime === 'image/jpeg') finalExt = '.jpg';
-        else if (mime === 'image/png') finalExt = '.png';
-      }
-
-      if (!finalExt || (!allowedExt.has(finalExt) && !allowedMime.has(mime))) {
-        return res.status(400).json({ error: 'Formato de arquivo inválido. Utilize PDF, JPG ou PNG.' });
-      }
-
-      const docsDir = path.join(process.cwd(), 'public', 'documentos');
-      fs.mkdirSync(docsDir, { recursive: true });
-      const safeBase = `comprovante_dar_${darId}_${Date.now()}`;
-      const fileName = `${safeBase}${finalExt}`;
-      const filePath = path.join(docsDir, fileName);
-      fs.writeFileSync(filePath, file.buffer);
-      tempFilePath = filePath;
-      const publicUrl = `/documentos/${fileName}`;
-
-      let tokenDoc = dar.comprovante_token || null;
-      let existingDoc = null;
-      if (tokenDoc) {
-        existingDoc = await dbGetAsync('SELECT id, caminho FROM documentos WHERE token = ?', [tokenDoc]).catch(() => null);
-        if (!existingDoc) tokenDoc = null;
-      }
-
-      if (!tokenDoc) {
-        tokenDoc = await gerarTokenDocumento('DAR_COMPROVANTE_MANUAL', dar.permissionario_id, db);
-      }
-
-      const previousPath = existingDoc?.caminho && String(existingDoc.caminho).trim() ? existingDoc.caminho : null;
-
-      await dbRunAsync(
-        `UPDATE documentos
-            SET tipo = ?,
-                caminho = ?,
-                pdf_url = ?,
-                pdf_public_url = ?,
-                status = 'upload_manual',
-                permissionario_id = ?,
-                evento_id = NULL,
-                created_at = datetime('now')
-          WHERE token = ?`,
-        [
-          'DAR_COMPROVANTE_MANUAL',
-          filePath,
-          filePath,
-          publicUrl,
-          dar.permissionario_id || null,
-          tokenDoc,
-        ]
-      );
+      const comprovante = await armazenarAnexo({
+        db,
+        darId,
+        permissionarioId: dar.permissionario_id,
+        arquivo: comprovanteFile,
+        tipoDocumento: DAR_COMPROVANTE_DOCUMENTO_TIPO,
+        campoLabel: 'comprovante do pagamento',
+        prefixoArquivo: 'comprovante_manual',
+        tokenExistente: dar.comprovante_token || null,
+      });
+      arquivosCriados.push({ atual: comprovante.filePath, anterior: comprovante.previousPath });
 
       await dbRunAsync(
         `UPDATE dars
@@ -1129,31 +1112,212 @@ router.post(
                 data_pagamento = ?,
                 comprovante_token = ?
           WHERE id = ?`,
-        [dataPagamentoISO, tokenDoc, darId]
+        [dataPagamentoISO, comprovante.token, darId]
       );
 
-      if (previousPath && previousPath !== filePath) {
-        try {
-          if (fs.existsSync(previousPath)) fs.unlinkSync(previousPath);
-        } catch (cleanupErr) {
-          console.warn('[AdminDARs] Falha ao remover comprovante antigo:', cleanupErr?.message || cleanupErr);
+      const adminId = req.user?.id || null;
+      const observacao = req.body?.observacao || req.body?.comentario || null;
+
+      const solicitacaoId = await registrarSolicitacao({
+        db,
+        darId,
+        permissionarioId: dar.permissionario_id,
+        solicitadoPorTipo: 'admin',
+        solicitadoPorId: adminId,
+        status: 'aprovado',
+        dataPagamentoISO,
+        guiaToken: guia.token,
+        comprovanteToken: comprovante.token,
+        adminId,
+        adminObservacao: observacao,
+      });
+
+      for (const info of arquivosCriados) {
+        if (info.anterior && info.anterior !== info.atual) {
+          try {
+            if (fs.existsSync(info.anterior)) fs.unlinkSync(info.anterior);
+          } catch (cleanupErr) {
+            console.warn('[AdminDARs] Falha ao remover arquivo antigo da baixa manual:', cleanupErr?.message || cleanupErr);
+          }
         }
       }
 
       return res.status(200).json({
         ok: true,
-        token: tokenDoc,
+        token: comprovante.token,
+        guia_token: guia.token,
         data_pagamento: dataPagamentoISO,
-        comprovante_url: publicUrl,
+        comprovante_url: comprovante.publicUrl,
+        guia_url: guia.publicUrl,
+        solicitacao_id: solicitacaoId,
       });
     } catch (err) {
-      if (tempFilePath) {
-        try {
-          if (fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath);
-        } catch {}
+      for (const info of arquivosCriados) {
+        if (info?.atual) {
+          try {
+            if (fs.existsSync(info.atual)) fs.unlinkSync(info.atual);
+          } catch {}
+        }
       }
       console.error('[AdminDARs] ERRO POST /:id/baixa-manual:', err);
-      return res.status(500).json({ error: 'Falha ao registrar baixa manual.' });
+      const status = err?.status && Number.isInteger(err.status) ? err.status : 500;
+      return res.status(status).json({ error: err?.message || 'Falha ao registrar baixa manual.' });
+    }
+  }
+);
+
+router.get(
+  '/baixa-solicitacoes',
+  [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN'])],
+  async (req, res) => {
+    try {
+      await ensureSolicitacoesSchema(db);
+      const statusRaw = String(req.query?.status || 'pendente').toLowerCase();
+      const params = [];
+      let whereClause = '';
+      if (statusRaw && statusRaw !== 'todos') {
+        whereClause = 'WHERE LOWER(s.status) = LOWER(?)';
+        params.push(statusRaw);
+      }
+
+      const solicitacoes = await dbAllAsync(
+        `SELECT s.*, d.valor, d.data_vencimento, d.status AS dar_status, d.mes_referencia, d.ano_referencia,
+                d.numero_documento, p.nome_empresa, p.cnpj,
+                docGuia.pdf_public_url  AS guia_url,
+                docComp.pdf_public_url  AS comprovante_url,
+                docGuia.caminho         AS guia_caminho,
+                docComp.caminho         AS comprovante_caminho,
+                admin.nome              AS admin_nome
+           FROM dar_baixa_solicitacoes s
+           JOIN dars d ON d.id = s.dar_id
+           JOIN permissionarios p ON p.id = s.permissionario_id
+      LEFT JOIN documentos docGuia ON docGuia.token = s.guia_token
+      LEFT JOIN documentos docComp ON docComp.token = s.comprovante_token
+      LEFT JOIN administradores admin ON admin.id = s.admin_id
+          ${whereClause}
+       ORDER BY datetime(COALESCE(s.atualizado_em, s.criado_em)) DESC`,
+        params
+      );
+
+      return res.json({ solicitacoes });
+    } catch (err) {
+      console.error('[AdminDARs] ERRO GET /baixa-solicitacoes:', err);
+      return res.status(500).json({ error: 'Falha ao listar solicitações de baixa.' });
+    }
+  }
+);
+
+router.post(
+  '/baixa-solicitacoes/:id/aprovar',
+  [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN'])],
+  async (req, res) => {
+    const solicitacaoId = Number(req.params.id);
+    if (!Number.isInteger(solicitacaoId) || solicitacaoId <= 0) {
+      return res.status(400).json({ error: 'Solicitação inválida.' });
+    }
+
+    try {
+      await ensureSolicitacoesSchema(db);
+      const solicitacao = await obterSolicitacaoPorId(db, solicitacaoId);
+      if (!solicitacao) {
+        return res.status(404).json({ error: 'Solicitação não encontrada.' });
+      }
+      if (String(solicitacao.status).toLowerCase() !== 'pendente') {
+        return res.status(409).json({ error: 'Solicitação já foi analisada.' });
+      }
+
+      const dar = await dbGetAsync('SELECT * FROM dars WHERE id = ?', [solicitacao.dar_id]);
+      if (!dar) {
+        return res.status(404).json({ error: 'DAR associado não encontrado.' });
+      }
+
+      if (!solicitacao.guia_token || !solicitacao.comprovante_token) {
+        return res.status(400).json({ error: 'Solicitação não possui anexos obrigatórios.' });
+      }
+
+      const rawData =
+        req.body?.dataPagamento ??
+        req.body?.data_pagamento ??
+        req.body?.paymentDate ??
+        solicitacao.data_pagamento ??
+        null;
+      const dataPagamentoISO = parseDataPagamento(rawData);
+
+      const adminId = req.user?.id || null;
+      const observacao = req.body?.observacao || req.body?.comentario || null;
+
+      await dbRunAsync('BEGIN IMMEDIATE TRANSACTION');
+      try {
+        await dbRunAsync(
+          `UPDATE dars
+              SET status = 'Pago',
+                  data_pagamento = ?,
+                  comprovante_token = ?
+            WHERE id = ?`,
+          [dataPagamentoISO, solicitacao.comprovante_token, solicitacao.dar_id]
+        );
+
+        await atualizarSolicitacao({
+          db,
+          solicitacaoId,
+          status: 'aprovado',
+          adminId,
+          adminObservacao: observacao,
+          dataPagamentoISO,
+        });
+
+        await dbRunAsync('COMMIT');
+      } catch (err) {
+        await dbRunAsync('ROLLBACK').catch(() => {});
+        throw err;
+      }
+
+      const atualizado = await obterSolicitacaoPorId(db, solicitacaoId);
+      return res.json({ ok: true, solicitacao: atualizado });
+    } catch (err) {
+      console.error('[AdminDARs] ERRO POST /baixa-solicitacoes/:id/aprovar:', err);
+      const status = err?.status && Number.isInteger(err.status) ? err.status : 500;
+      return res.status(status).json({ error: err?.message || 'Falha ao aprovar a solicitação.' });
+    }
+  }
+);
+
+router.post(
+  '/baixa-solicitacoes/:id/rejeitar',
+  [authMiddleware, authorizeRole(['SUPER_ADMIN', 'FINANCE_ADMIN'])],
+  async (req, res) => {
+    const solicitacaoId = Number(req.params.id);
+    if (!Number.isInteger(solicitacaoId) || solicitacaoId <= 0) {
+      return res.status(400).json({ error: 'Solicitação inválida.' });
+    }
+
+    try {
+      await ensureSolicitacoesSchema(db);
+      const solicitacao = await obterSolicitacaoPorId(db, solicitacaoId);
+      if (!solicitacao) {
+        return res.status(404).json({ error: 'Solicitação não encontrada.' });
+      }
+      if (String(solicitacao.status).toLowerCase() !== 'pendente') {
+        return res.status(409).json({ error: 'Solicitação já foi analisada.' });
+      }
+
+      const adminId = req.user?.id || null;
+      const observacao = req.body?.observacao || req.body?.comentario || null;
+
+      await atualizarSolicitacao({
+        db,
+        solicitacaoId,
+        status: 'rejeitado',
+        adminId,
+        adminObservacao: observacao,
+      });
+
+      const atualizado = await obterSolicitacaoPorId(db, solicitacaoId);
+      return res.json({ ok: true, solicitacao: atualizado });
+    } catch (err) {
+      console.error('[AdminDARs] ERRO POST /baixa-solicitacoes/:id/rejeitar:', err);
+      const status = err?.status && Number.isInteger(err.status) ? err.status : 500;
+      return res.status(status).json({ error: err?.message || 'Falha ao rejeitar a solicitação.' });
     }
   }
 );

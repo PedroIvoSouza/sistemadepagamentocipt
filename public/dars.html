@@ -127,6 +127,44 @@
             </div>
         </div>
     </div>
+
+    <div class="modal fade" id="solicitarBaixaModal" tabindex="-1" aria-labelledby="solicitarBaixaModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <form class="modal-content" id="solicitarBaixaForm" novalidate>
+                <div class="modal-header">
+                    <h5 class="modal-title" id="solicitarBaixaModalLabel">Solicitar baixa manual</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="solicitarBaixaDarId">
+                    <p class="small text-muted" id="solicitarBaixaResumo"></p>
+                    <div class="mb-3">
+                        <label for="solicitarBaixaData" class="form-label">Data do pagamento</label>
+                        <input type="date" class="form-control" id="solicitarBaixaData" required>
+                        <div class="invalid-feedback">Informe a data em que o pagamento foi realizado.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="solicitarBaixaGuia" class="form-label">Guia do DAR paga (PDF, JPG ou PNG)</label>
+                        <input type="file" class="form-control" id="solicitarBaixaGuia" accept=".pdf,image/png,image/jpeg" required>
+                        <div class="invalid-feedback">Anexe a guia emitida que foi paga.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="solicitarBaixaComprovante" class="form-label">Comprovante de pagamento</label>
+                        <input type="file" class="form-control" id="solicitarBaixaComprovante" accept=".pdf,image/png,image/jpeg" required>
+                        <div class="invalid-feedback">Anexe o comprovante de pagamento.</div>
+                    </div>
+                    <p class="small text-muted mb-0">Os anexos devem ter no máximo 10MB cada.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary" id="solicitarBaixaSubmit">
+                        <span class="spinner-border spinner-border-sm me-2 d-none" role="status" aria-hidden="true" id="solicitarBaixaLoading"></span>
+                        Enviar solicitação
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
     <script defer src="/js/mobile-adapter.js"></script>
     <script defer src="/js/ui-kit.js"></script>
     <script defer src="/js/mobile-tweaks.js"></script>
@@ -177,6 +215,13 @@
                 return cnpjLimpo.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
             }
             return cnpj;
+        }
+
+        function formatarDataISO(isoString){
+            if (!isoString) return '';
+            const date = new Date(isoString);
+            if (Number.isNaN(date.getTime())) return isoString;
+            return date.toLocaleDateString('pt-BR');
         }
 
         document.addEventListener('DOMContentLoaded', () => {
@@ -243,26 +288,56 @@
                     let tableHTML = '';
                     dars.forEach(dar => {
                         const statusColor = statusColors[dar.status] || 'bg-secondary text-white';
-                            tableHTML += `
+                        const competencia = `${String(dar.mes_referencia).padStart(2, '0')}/${dar.ano_referencia}`;
+                        const vencimento = new Date(dar.data_vencimento).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+                        const valorFormatado = dar.valor.toFixed(2).replace('.', ',');
+                        const solicitacao = dar.baixa_manual || null;
+
+                        let solicitacaoMensagem = '';
+                        let solicitacaoClasse = 'text-muted';
+                        let solicitarDisabled = '';
+                        if (solicitacao) {
+                            const statusSolic = String(solicitacao.status || '').toLowerCase();
+                            if (statusSolic === 'pendente') {
+                                solicitacaoMensagem = `Solicitação enviada em ${formatarDataISO(solicitacao.criado_em)}. Aguardando aprovação.`;
+                                solicitacaoClasse = 'text-warning';
+                                solicitarDisabled = 'disabled';
+                            } else if (statusSolic === 'aprovado') {
+                                const dataTexto = solicitacao.data_pagamento ? ` (pagamento em ${formatarDataISO(solicitacao.data_pagamento)})` : '';
+                                solicitacaoMensagem = `Baixa manual aprovada${dataTexto}.`;
+                                solicitacaoClasse = 'text-success';
+                                solicitarDisabled = 'disabled';
+                            } else if (statusSolic === 'rejeitado') {
+                                solicitacaoMensagem = `Solicitação rejeitada em ${formatarDataISO(solicitacao.atualizado_em)}. Você pode enviar novamente.`;
+                                solicitacaoClasse = 'text-danger';
+                            } else {
+                                solicitacaoMensagem = `Última solicitação registrada em ${formatarDataISO(solicitacao.atualizado_em || solicitacao.criado_em)}.`;
+                            }
+                        }
+
+                        tableHTML += `
                             <tr>
-                                <td>${String(dar.mes_referencia).padStart(2, '0')}/${dar.ano_referencia}</td>
-                                <td>${new Date(dar.data_vencimento).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</td>
-                                <td class="text-end">${dar.valor.toFixed(2).replace('.', ',')}</td>
+                                <td>${competencia}</td>
+                                <td>${vencimento}</td>
+                                <td class="text-end">${valorFormatado}</td>
                                 <td class="text-center"><span class="badge ${statusColor}">${dar.status}</span></td>
                                 <td class="text-center">
-                                <div class="btn-group">
-                                    <button class="btn btn-primary btn-sm emitir-btn" data-id="${dar.id}" data-status="${dar.status}" data-mes="${dar.mes_referencia}" data-ano="${dar.ano_referencia}" data-vencimento="${dar.data_vencimento}">
-                                    Emitir
-                                    </button>
-                                </div>
+                                    <div class="btn-group">
+                                        <button class="btn btn-primary btn-sm emitir-btn" data-id="${dar.id}" data-status="${dar.status}" data-mes="${dar.mes_referencia}" data-ano="${dar.ano_referencia}" data-vencimento="${dar.data_vencimento}">Emitir</button>
+                                        <button class="btn btn-outline-secondary btn-sm solicitar-baixa-btn" data-id="${dar.id}" data-competencia="${competencia}" data-valor="${valorFormatado}" data-vencimento="${dar.data_vencimento}" ${solicitarDisabled}>Solicitar baixa</button>
+                                    </div>
+                                    ${solicitacaoMensagem ? `<div class="mt-2 small ${solicitacaoClasse}">${solicitacaoMensagem}</div>` : ''}
                                 </td>
                             </tr>
-                            `;
+                        `;
                     });
                     tableBody.innerHTML = tableHTML;
-                    
+
                     document.querySelectorAll('.emitir-btn').forEach(button => {
                         button.addEventListener('click', handleEmitirClick, { capture: false });
+                    });
+                    document.querySelectorAll('.solicitar-baixa-btn').forEach(button => {
+                        button.addEventListener('click', handleSolicitarBaixaClick, { capture: false });
                     });
                 } catch (error) {
                     tableBody.innerHTML = `<tr><td colspan="5" class="text-center text-danger">${error.message}</td></tr>`;
@@ -372,10 +447,101 @@
                     darIdParaEmitir = null;
                 }
             });
-            
+
             filtroAno.addEventListener('change', fetchAndRenderDars);
             filtroStatus.addEventListener('change', fetchAndRenderDars);
-            
+
+            const solicitarBaixaModalEl = document.getElementById('solicitarBaixaModal');
+            const solicitarBaixaModal = solicitarBaixaModalEl ? new bootstrap.Modal(solicitarBaixaModalEl) : null;
+            const solicitarBaixaForm = document.getElementById('solicitarBaixaForm');
+            const solicitarBaixaDarIdInput = document.getElementById('solicitarBaixaDarId');
+            const solicitarBaixaResumo = document.getElementById('solicitarBaixaResumo');
+            const solicitarBaixaDataInput = document.getElementById('solicitarBaixaData');
+            const solicitarBaixaGuiaInput = document.getElementById('solicitarBaixaGuia');
+            const solicitarBaixaComprovanteInput = document.getElementById('solicitarBaixaComprovante');
+            const solicitarBaixaSubmitBtn = document.getElementById('solicitarBaixaSubmit');
+            const solicitarBaixaLoading = document.getElementById('solicitarBaixaLoading');
+
+            function handleSolicitarBaixaClick(event){
+                const button = event.currentTarget;
+                const darId = button.dataset.id;
+                if (!solicitarBaixaModal || !darId) return;
+                if (solicitarBaixaDarIdInput) solicitarBaixaDarIdInput.value = darId;
+                const partes = [];
+                if (button.dataset.competencia) partes.push(`Competência ${button.dataset.competencia}`);
+                if (button.dataset.vencimento) {
+                    try {
+                        partes.push(`Vencimento ${new Date(button.dataset.vencimento).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}`);
+                    } catch {
+                        partes.push(`Vencimento ${button.dataset.vencimento}`);
+                    }
+                }
+                if (button.dataset.valor) partes.push(`Valor R$ ${button.dataset.valor}`);
+                if (solicitarBaixaResumo) solicitarBaixaResumo.textContent = partes.join(' • ');
+                const hojeISO = new Date().toISOString().slice(0, 10);
+                if (solicitarBaixaDataInput) solicitarBaixaDataInput.value = hojeISO;
+                if (solicitarBaixaGuiaInput) solicitarBaixaGuiaInput.value = '';
+                if (solicitarBaixaComprovanteInput) solicitarBaixaComprovanteInput.value = '';
+                solicitarBaixaForm?.classList.remove('was-validated');
+                if (solicitarBaixaSubmitBtn) solicitarBaixaSubmitBtn.disabled = false;
+                if (solicitarBaixaLoading) solicitarBaixaLoading.classList.add('d-none');
+                solicitarBaixaModal.show();
+            }
+
+            async function enviarSolicitacaoBaixa(event){
+                event.preventDefault();
+                if (!solicitarBaixaForm) return;
+                solicitarBaixaForm.classList.add('was-validated');
+                const darId = solicitarBaixaDarIdInput?.value;
+                const dataPagamentoValor = solicitarBaixaDataInput?.value?.trim();
+                const guiaArquivo = solicitarBaixaGuiaInput?.files?.[0];
+                const comprovanteArquivo = solicitarBaixaComprovanteInput?.files?.[0];
+                if (!darId) {
+                    AppUI?.toast?.('Selecione um DAR para solicitar a baixa manual.', 'warn');
+                    return;
+                }
+                if (!dataPagamentoValor || !guiaArquivo || !comprovanteArquivo) {
+                    return;
+                }
+
+                const formData = new FormData();
+                formData.append('dataPagamento', dataPagamentoValor);
+                formData.append('guia', guiaArquivo);
+                formData.append('comprovante', comprovanteArquivo);
+
+                if (solicitarBaixaSubmitBtn) solicitarBaixaSubmitBtn.disabled = true;
+                if (solicitarBaixaLoading) solicitarBaixaLoading.classList.remove('d-none');
+
+                try {
+                    const response = await fetch(`/api/dars/${encodeURIComponent(darId)}/solicitacoes-baixa`, {
+                        method: 'POST',
+                        headers: { 'Authorization': `Bearer ${token}` },
+                        body: formData,
+                    });
+                    const result = await response.json().catch(() => ({}));
+                    if (!response.ok) {
+                        throw new Error(result.error || 'Não foi possível enviar a solicitação.');
+                    }
+                    AppUI?.toast?.('Solicitação registrada com sucesso! Aguarde a análise da equipe.', 'success');
+                    solicitarBaixaModal?.hide();
+                    fetchAndRenderDars();
+                } catch (error) {
+                    console.error('Erro ao solicitar baixa manual:', error);
+                    AppUI?.toast?.(error.message || 'Falha ao enviar a solicitação.', 'error');
+                    if (solicitarBaixaSubmitBtn) solicitarBaixaSubmitBtn.disabled = false;
+                    if (solicitarBaixaLoading) solicitarBaixaLoading.classList.add('d-none');
+                }
+            }
+
+            solicitarBaixaForm?.addEventListener('submit', enviarSolicitacaoBaixa);
+            solicitarBaixaModalEl?.addEventListener('hidden.bs.modal', () => {
+                solicitarBaixaForm?.reset();
+                solicitarBaixaForm?.classList.remove('was-validated');
+                if (solicitarBaixaResumo) solicitarBaixaResumo.textContent = '';
+                if (solicitarBaixaSubmitBtn) solicitarBaixaSubmitBtn.disabled = false;
+                if (solicitarBaixaLoading) solicitarBaixaLoading.classList.add('d-none');
+            });
+
             document.getElementById('logoutButton').addEventListener('click', (e) => {
                 e.preventDefault();
                 localStorage.removeItem('authToken');

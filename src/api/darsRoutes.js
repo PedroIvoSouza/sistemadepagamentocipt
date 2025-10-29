@@ -1,15 +1,28 @@
 // Em: src/api/darsRoutes.js
 const express = require('express');
+const fs = require('fs');
+const multer = require('multer');
 
 const authMiddleware = require('../middleware/authMiddleware');
 const { calcularEncargosAtraso } = require('../services/cobrancaService');
 const { emitirGuiaSefaz } = require('../services/sefazService');
 const { gerarTokenDocumento, imprimirTokenEmPdf } = require('../utils/token');
 const { linhaDigitavelParaCodigoBarras } = require('../utils/boleto');
+const {
+  ensureSolicitacoesSchema,
+  armazenarAnexo,
+  registrarSolicitacao,
+  obterUltimasSolicitacoesPorDar,
+  parseDataPagamento,
+} = require('../services/darBaixaManualService');
 
 const db = require('../database/db');
 
 const router = express.Router();
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+
+const DAR_GUIA_DOCUMENTO_TIPO = 'DAR_GUIA_MANUAL';
+const DAR_COMPROVANTE_DOCUMENTO_TIPO = 'DAR_COMPROVANTE_MANUAL';
 
 // helpers async
 const dbGetAsync = (sql, params = []) =>
@@ -90,6 +103,9 @@ async function ensureSchema() {
 }
 // dispara sem bloquear
 ensureSchema().catch(err => console.error('[MIGRATE] Falha garantindo schema:', err));
+ensureSolicitacoesSchema(db).catch((err) => {
+  console.error('[DARs] Falha ao garantir schema de solicitações de baixa:', err?.message || err);
+});
 
 // === Utils ==================================================================
 const onlyDigits = (v = '') => String(v).replace(/\D/g, '');
@@ -177,33 +193,162 @@ function buildSefazPayloadPermissionario({ perm, darLike }) {
 // === Rotas ==================================================================
 
 // Listagem dos DARs do permissionário logado
-router.get('/', authMiddleware, (req, res) => {
-  const userId = req.user.id;
-  const { ano, status } = req.query;
+router.get('/', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { ano, status } = req.query;
 
-  let sql = `SELECT * FROM dars WHERE permissionario_id = ?`;
-  const params = [userId];
+    let sql = `SELECT * FROM dars WHERE permissionario_id = ?`;
+    const params = [userId];
 
-  if (ano && ano !== 'todos') {
-    sql += ` AND ano_referencia = ?`;
-    params.push(ano);
+    if (ano && ano !== 'todos') {
+      sql += ` AND ano_referencia = ?`;
+      params.push(ano);
+    }
+    if (status && status !== 'todos') {
+      if (status === 'Vencido') {
+        sql += ` AND status IN ('Vencido','Vencida')`;
+      } else {
+        sql += ` AND status = ?`;
+        params.push(status);
+      }
+    }
+
+    sql += ` ORDER BY ano_referencia DESC, mes_referencia DESC`;
+
+    const rows = await dbAllAsync(sql, params);
+    const darIds = rows.map((row) => row.id).filter((id) => Number.isInteger(id));
+    const solicitacoesMap = await obterUltimasSolicitacoesPorDar(db, darIds);
+
+    const enriched = rows.map((row) => {
+      const solicitacao = solicitacoesMap.get(row.id);
+      if (!solicitacao) return row;
+      return {
+        ...row,
+        baixa_manual: {
+          id: solicitacao.id,
+          status: solicitacao.status,
+          data_pagamento: solicitacao.data_pagamento,
+          criado_em: solicitacao.criado_em,
+          atualizado_em: solicitacao.atualizado_em,
+        },
+      };
+    });
+
+    return res.status(200).json(enriched);
+  } catch (err) {
+    console.error('[DARs] ERRO GET /api/dars:', err);
+    return res.status(500).json({ error: 'Erro de banco de dados.' });
   }
-  if (status && status !== 'todos') {
-    if (status === 'Vencido') {
-      sql += ` AND status IN ('Vencido','Vencida')`;
-    } else {
-      sql += ` AND status = ?`;
-      params.push(status);
+});
+
+router.post(
+  '/:id/solicitacoes-baixa',
+  [
+    authMiddleware,
+    upload.fields([
+      { name: 'guia', maxCount: 1 },
+      { name: 'comprovante', maxCount: 1 },
+    ]),
+  ],
+  async (req, res) => {
+    const arquivosCriados = [];
+    try {
+      const permissionarioId = req.user.id;
+      const darId = Number(req.params.id);
+      if (!Number.isInteger(darId) || darId <= 0) {
+        return res.status(400).json({ error: 'Identificador de DAR inválido.' });
+      }
+
+      const dar = await dbGetAsync('SELECT * FROM dars WHERE id = ? AND permissionario_id = ?', [darId, permissionarioId]);
+      if (!dar) {
+        return res.status(404).json({ error: 'DAR não encontrado.' });
+      }
+
+      await ensureSolicitacoesSchema(db);
+      const pendente = await dbGetAsync(
+        `SELECT * FROM dar_baixa_solicitacoes WHERE dar_id = ? AND LOWER(status) = 'pendente' ORDER BY criado_em DESC LIMIT 1`,
+        [darId]
+      );
+      if (pendente) {
+        return res.status(409).json({ error: 'Já existe uma solicitação de baixa pendente para este DAR.' });
+      }
+
+      const rawDataPagamento =
+        req.body?.dataPagamento ??
+        req.body?.data_pagamento ??
+        req.body?.paymentDate ??
+        req.body?.data ??
+        null;
+      const dataPagamentoISO = parseDataPagamento(rawDataPagamento);
+
+      const files = req.files || {};
+      const guiaFile = Array.isArray(files.guia) ? files.guia[0] : null;
+      const comprovanteFile = Array.isArray(files.comprovante) ? files.comprovante[0] : null;
+
+      if (!guiaFile) {
+        return res.status(400).json({ error: 'Envie a guia do DAR que foi paga.' });
+      }
+      if (!comprovanteFile) {
+        return res.status(400).json({ error: 'Envie o comprovante de pagamento.' });
+      }
+
+      const guia = await armazenarAnexo({
+        db,
+        darId,
+        permissionarioId,
+        arquivo: guiaFile,
+        tipoDocumento: DAR_GUIA_DOCUMENTO_TIPO,
+        campoLabel: 'guia do DAR',
+        prefixoArquivo: 'guia_solicitacao',
+      });
+      arquivosCriados.push({ atual: guia.filePath, anterior: guia.previousPath });
+
+      const comprovante = await armazenarAnexo({
+        db,
+        darId,
+        permissionarioId,
+        arquivo: comprovanteFile,
+        tipoDocumento: DAR_COMPROVANTE_DOCUMENTO_TIPO,
+        campoLabel: 'comprovante do pagamento',
+        prefixoArquivo: 'comprovante_solicitacao',
+      });
+      arquivosCriados.push({ atual: comprovante.filePath, anterior: comprovante.previousPath });
+
+      const observacao = req.body?.observacao || req.body?.comentario || null;
+
+      const solicitacaoId = await registrarSolicitacao({
+        db,
+        darId,
+        permissionarioId,
+        solicitadoPorTipo: 'permissionario',
+        solicitadoPorId: permissionarioId,
+        status: 'pendente',
+        dataPagamentoISO,
+        guiaToken: guia.token,
+        comprovanteToken: comprovante.token,
+        adminObservacao: observacao,
+      });
+
+      return res.status(201).json({
+        ok: true,
+        solicitacao_id: solicitacaoId,
+        data_pagamento: dataPagamentoISO,
+      });
+    } catch (err) {
+      for (const info of arquivosCriados) {
+        if (info?.atual) {
+          try {
+            if (fs.existsSync(info.atual)) fs.unlinkSync(info.atual);
+          } catch {}
+        }
+      }
+      const status = err?.status && Number.isInteger(err.status) ? err.status : 500;
+      console.error('[DARs] ERRO POST /solicitacoes-baixa:', err);
+      return res.status(status).json({ error: err?.message || 'Falha ao registrar solicitação de baixa.' });
     }
   }
-
-  sql += ` ORDER BY ano_referencia DESC, mes_referencia DESC`;
-
-  db.all(sql, params, (err, rows) => {
-    if (err) return res.status(500).json({ error: 'Erro de banco de dados.' });
-    return res.status(200).json(rows);
-  });
-});
+);
 
 // Recalcular encargos (para DAR vencido)
 router.get('/:id/recalcular', authMiddleware, (req, res) => {
