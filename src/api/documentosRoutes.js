@@ -19,6 +19,7 @@ const TIPO_TITULO = {
   termo_evento: 'Termo do Evento',
   DAR_COMPROVANTE: 'Comprovante de DAR',
   DAR_COMPROVANTE_MANUAL: 'Comprovante de DAR (baixa manual)',
+  DAR_GUIA_MANUAL: 'Guia de DAR anexada na baixa manual',
 };
 
 // ===== DB setup =====
