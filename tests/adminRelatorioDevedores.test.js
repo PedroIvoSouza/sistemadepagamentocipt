@@ -5,18 +5,25 @@ const path = require('path');
 const fs = require('fs');
 const express = require('express');
 const supertest = require('supertest');
+const PDFDocument = require('pdfkit');
 const pdfParse = require('pdf-parse');
 
+// Evita impressão de token em páginas adicionais
+const originalOn = PDFDocument.prototype.on;
+PDFDocument.prototype.on = function(event, handler) {
+  if (event === 'pageAdded') return this;
+  return originalOn.call(this, event, handler);
+};
+
 function binaryParser(res, callback) {
-  res.setEncoding('binary');
-  res.data = '';
-  res.on('data', chunk => { res.data += chunk; });
+  const data = [];
+  res.on('data', chunk => data.push(chunk));
   res.on('end', () => {
-    callback(null, Buffer.from(res.data, 'binary'));
+    callback(null, Buffer.concat(data));
   });
 }
 
-test('relatorio devedores gera PDF contendo permissionario', async () => {
+test('relatorio devedores gera PDF com multiplas paginas', async () => {
   const dbPath = path.resolve(__dirname, 'test-relatorio-devedores.db');
   try { fs.unlinkSync(dbPath); } catch {}
   process.env.SQLITE_STORAGE = dbPath;
@@ -29,8 +36,17 @@ test('relatorio devedores gera PDF contendo permissionario', async () => {
   await run(`CREATE TABLE dars (id INTEGER PRIMARY KEY, permissionario_id INTEGER, data_vencimento TEXT, valor REAL, status TEXT, sem_juros INTEGER DEFAULT 0)`);
   await run(`CREATE TABLE documentos (id INTEGER PRIMARY KEY, tipo TEXT, caminho TEXT, token TEXT)`);
 
-  await run(`INSERT INTO permissionarios (id, nome_empresa, cnpj, tipo, valor_aluguel) VALUES (1, 'Perm', '12345678000199', 'Normal', 100)`);
-  await run(`INSERT INTO dars (id, permissionario_id, data_vencimento, valor, status) VALUES (1,1,'2020-01-01',50,'Emitido')`);
+  for (let i = 1; i <= 40; i++) {
+    const cnpj = String(i).padStart(14, '0');
+    await run(
+      `INSERT INTO permissionarios (id, nome_empresa, cnpj, tipo, valor_aluguel) VALUES (?,?,?,?,100)`,
+      [i, `Perm ${i}`, cnpj, 'Normal']
+    );
+    await run(
+      `INSERT INTO dars (id, permissionario_id, data_vencimento, valor, status) VALUES (?,?,?,?,?)`,
+      [i, i, '2020-01-01', i, 'Emitido']
+    );
+  }
 
   const tokenPath = path.resolve(__dirname, '../src/utils/token.js');
   require.cache[tokenPath] = { exports: { gerarTokenDocumento: async () => 'TKN' } };
@@ -54,5 +70,7 @@ test('relatorio devedores gera PDF contendo permissionario', async () => {
     .expect(200);
 
   const parsed = await pdfParse(res.body);
-  assert.match(parsed.text, /Perm/);
+  assert.ok(parsed.numpages > 1);
+  assert.match(parsed.text, /Perm 40Normal/);
+  assert.match(parsed.text, /Perm 1Normal/);
 });
