@@ -87,7 +87,7 @@ router.post('/', async (req, res) => {
     }
 
     const totalDiarias = datasEvento.length;
-    const valorBruto = calcularValorBruto(totalDiarias);
+    const valorBruto = calcularValorBruto(totalDiarias, espacosUtilizados);
     const valorFinal = calcularValorFinal(valorBruto, tipoDescontoAuto, descontoManualPercent);
     
     const totalParcelado = parcelas.reduce((acc, p) => acc + parseFloat(p.valor), 0);
