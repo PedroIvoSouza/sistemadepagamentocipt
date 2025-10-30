@@ -14,6 +14,7 @@ const { getDocumentStatus } = require('../services/assinafyClient');
 const { emitirGuiaSefaz } = require('../services/sefazService');
 const { gerarTokenDocumento, imprimirTokenEmPdf } = require('../utils/token');
 const { criarEventoComDars, atualizarEventoComDars, criarDarManualEvento } = require('../services/eventoDarService');
+const { calcularValorBruto, calcularValorFinal, identificarTabelaPorEspacos } = require('../services/eventoValorService');
 const { parseDateInput, formatISODate } = require('../utils/businessDays');
 
 const {
@@ -584,23 +585,21 @@ router.get('/:id/termo/assinafy-status', async (req, res) => {
    Rotas utilitárias já existentes (listar, detalhes, termo, etc.)
    =========================================================== */
 
-// Funções de cálculo de valor
-const precosPorDia = [2495.00, 1996.00, 1596.80, 1277.44, 1277.44];
-function calcularValorBruto(n) {
-  if (n <= 0) return 0;
-  let v = 0;
-  if (n >= 1) v += precosPorDia[0];
-  if (n >= 2) v += precosPorDia[1];
-  if (n >= 3) v += precosPorDia[2];
-  if (n >= 4) v += (n - 3) * precosPorDia[3];
-  return +v.toFixed(2);
-}
-function calcularValorFinal(vb, tipo, dm = 0) {
-  let v = vb;
-  if (tipo === 'Governo') v *= 0.8;
-  else if (tipo === 'Permissionario') v *= 0.4;
-  if (dm > 0) v *= (1 - dm / 100);
-  return +v.toFixed(2);
+function parseEspacosUtilizados(valor) {
+  if (!valor && valor !== 0) return [];
+  if (Array.isArray(valor)) return valor.filter(Boolean);
+  const texto = String(valor || '').trim();
+  if (!texto) return [];
+  if (texto.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(texto);
+      return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+    } catch {}
+  }
+  return texto
+    .split(/[,;\n]+/)
+    .map((parte) => parte.trim())
+    .filter(Boolean);
 }
 
 /* ===========================================================
@@ -674,17 +673,21 @@ router.get('/', async (req, res) => {
     const rows = await dbAll(dataSql, params.concat([limitNum, offset]));
 
     for (const evento of rows) {
+      const espacosUtilizadosLista = parseEspacosUtilizados(evento.espaco_utilizado ?? evento.espacosUtilizados);
+      evento.espacos_lista = espacosUtilizadosLista;
+      evento.tabela_preco = identificarTabelaPorEspacos(espacosUtilizadosLista);
       if (evento.evento_gratuito == 0 && (!evento.valor_final || evento.valor_final === 0)) {
         let datas = [];
         if (typeof evento.datas_evento === 'string') {
-          try { datas = JSON.parse(evento.datas_evento); } 
+          try { datas = JSON.parse(evento.datas_evento); }
           catch { datas = evento.datas_evento.split(',').map(s => s.trim()).filter(Boolean); }
         }
         if (Array.isArray(datas) && datas.length > 0) {
             const numDiarias = datas.length;
-            const valorBrutoRecalculado = calcularValorBruto(numDiarias);
+            const valorBrutoRecalculado = calcularValorBruto(numDiarias, espacosUtilizadosLista);
             const tipoCliente = evento.tipo_cliente || 'Geral';
-            const descontoManual = evento.percentual_desconto_manual || 0; 
+            const descontoManual = evento.percentual_desconto_manual || 0;
+            evento.valor_bruto = valorBrutoRecalculado;
             evento.valor_final = calcularValorFinal(valorBrutoRecalculado, tipoCliente, descontoManual);
         }
       }

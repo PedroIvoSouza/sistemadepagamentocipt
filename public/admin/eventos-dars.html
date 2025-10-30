@@ -202,6 +202,7 @@
                 <input type="text" id="sala-reunioes-numeros" class="form-control" placeholder="Números das salas (ex.: 214, 304)">
               </div>
             </div>
+            <p id="tabela-precos-hint" class="small text-muted mt-2">Tabela de preços aplicada: Auditório</p>
             <small id="capacidade-espaco" class="form-text text-muted"></small>
             <label class="form-label mt-3">Equipamentos</label>
             <div class="d-flex flex-column">
@@ -673,6 +674,7 @@ window.onload = () => {
   const salaReunioesNumerosWrapper = document.getElementById('sala-reunioes-numeros-wrapper');
   const salaReunioesNumerosInput = document.getElementById('sala-reunioes-numeros');
   const capacidadeEspacoDisplay = document.getElementById('capacidade-espaco');
+  const tabelaPrecosHint = document.getElementById('tabela-precos-hint');
   const equipTvsCheckbox = document.getElementById('equip-tvs');
   const equipCaixasCheckbox = document.getElementById('equip-caixas');
   const equipMicsCheckbox = document.getElementById('equip-mics');
@@ -702,6 +704,14 @@ window.onload = () => {
     'Sala de Reuniões': { area: 0, capacidade: 0 }
   };
 
+  const TABELAS_PRECOS = {
+    AUDITORIO: { label: 'Auditório', valores: [2495.00, 1996.00, 1596.80, 1277.44, 1277.44] },
+    ANFITEATRO: { label: 'Anfiteatro', valores: [1497.00, 1197.60, 958.08, 766.46, 766.46] },
+  };
+
+  let tabelaPrecoAtual = 'AUDITORIO';
+  let precosPorDia = [...TABELAS_PRECOS[tabelaPrecoAtual].valores];
+
   const numeroOficioSeiMask = IMask(numeroOficioSeiInput, { mask: '00000.000000/0000-00' });
   const numeroProcessoMask  = IMask(numeroProcessoInput, {
     mask: [
@@ -722,8 +732,37 @@ window.onload = () => {
     ]
   });
 
+  function normalizarNomeEspaco(valor){
+    if (!valor) return '';
+    return String(valor)
+      .normalize('NFD')
+      .replace(/[^\w\s]/g, '')
+      .toUpperCase();
+  }
+
+  function detectarTabelaPorEspacos(lista){
+    const nomes = Array.isArray(lista) ? lista.map(normalizarNomeEspaco) : [];
+    if (nomes.some(nome => nome.includes('AUDITORIO'))) return 'AUDITORIO';
+    if (nomes.some(nome => nome.includes('ANFITEATRO'))) return 'ANFITEATRO';
+    return 'AUDITORIO';
+  }
+
+  function atualizarTabelaPrecos(lista){
+    const chave = detectarTabelaPorEspacos(lista);
+    tabelaPrecoAtual = chave;
+    precosPorDia = [...(TABELAS_PRECOS[chave]?.valores || TABELAS_PRECOS.AUDITORIO.valores)];
+    if (tabelaPrecosHint) {
+      tabelaPrecosHint.textContent = `Tabela de preços aplicada: ${TABELAS_PRECOS[chave]?.label || 'Auditório'}`;
+    }
+  }
+
+  function obterEspacosSelecionados(){
+    return Array.from(document.querySelectorAll('input[name="espacos"]:checked')).map(cb => cb.value);
+  }
+
   function atualizarEspacos(){
-    const selecionados = Array.from(document.querySelectorAll('input[name="espacos"]:checked')).map(cb => cb.value);
+    const selecionados = obterEspacosSelecionados();
+    atualizarTabelaPrecos(selecionados);
     const totais = selecionados.reduce((acc, nome) => {
       if (nome === 'Sala de Reuniões') {
         const info = ESPACOS_INFO[nome] || { area: 0, capacidade: 0 };
@@ -742,6 +781,7 @@ window.onload = () => {
     }, { area: 0, capacidade: 0 });
     areaM2Input.value = totais.area ? totais.area.toFixed(2) : '';
     capacidadeEspacoDisplay.textContent = totais.capacidade ? `Capacidade total: ${totais.capacidade} pessoas` : '';
+    atualizarCalculos();
   }
 
   espacosContainer.addEventListener('change', () => {
@@ -865,8 +905,6 @@ window.onload = () => {
   const isFeriado = d => feriadosFixos.includes(`${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`);
   const isDiaUtil = d => d.getDay()!==0 && d.getDay()!==6 && !isFeriado(d);
 
-  // Tabela de preços/dia
-  const precosPorDia = [2495.00,1996.00,1596.80,1277.44,1277.44];
   function calcularValorBruto(n){
     if (n<=0) return 0;
     let v=0;
