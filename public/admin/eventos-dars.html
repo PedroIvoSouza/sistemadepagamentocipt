@@ -508,7 +508,7 @@
   <script defer src="/js/mobile-tweaks.js"></script>
   <script src="/js/proximoNumeroTermo.js"></script>
   <script>
-window.onload = () => {
+window.onload = async () => {
   // =======================
   // Helpers / util
   // =======================
@@ -669,8 +669,8 @@ window.onload = () => {
   const numeroProcessoInput = document.getElementById('numero-processo');
   const numeroTermoInput = document.getElementById('numero-termo');
   const espacosContainer = document.getElementById('espacos-checkboxes');
-  const espacosCheckboxes = espacosContainer.querySelectorAll('input[name="espacos"]');
-  const salaReunioesCheckbox = document.getElementById('espaco-sala-reunioes');
+  let espacosCheckboxes = [];
+  let salaReunioesCheckbox = null;
   const salaReunioesNumerosWrapper = document.getElementById('sala-reunioes-numeros-wrapper');
   const salaReunioesNumerosInput = document.getElementById('sala-reunioes-numeros');
   const capacidadeEspacoDisplay = document.getElementById('capacidade-espaco');
@@ -695,22 +695,13 @@ window.onload = () => {
   const horaMontagemPicker = flatpickr(horaMontagemInput, timePickerOptions);
   const horaDesmontagemPicker = flatpickr(horaDesmontagemInput, timePickerOptions);
 
-  const ESPACOS_INFO = {
-    'Auditório': { area: 429.68, capacidade: 313 },
-    'Anfiteatro': { area: 200, capacidade: 150 },
-    'Coworking do Espaço de Fomento': { area: 100, capacidade: 50 },
-    'Espaço em Frente ao Auditório': { area: 500, capacidade: 500 },
-    'Laboratório do OxeTech': { area: 0, capacidade: 0 },
-    'Sala de Reuniões': { area: 0, capacidade: 0 }
-  };
-
-  const TABELAS_PRECOS = {
-    AUDITORIO: { label: 'Auditório', valores: [2495.00, 1996.00, 1596.80, 1277.44, 1277.44] },
-    ANFITEATRO: { label: 'Anfiteatro', valores: [1497.00, 1197.60, 958.08, 766.46, 766.46] },
-  };
-
+  let espacosDisponiveis = [];
+  let espacosPorNomeNormalizado = new Map();
+  let tabelaPrecos = {};
+  let aliasesTabela = {};
   let tabelaPrecoAtual = 'AUDITORIO';
-  let precosPorDia = [...TABELAS_PRECOS[tabelaPrecoAtual].valores];
+  let precosPorDia = [0, 0, 0, 0, 0];
+  let espacosCarregados = false;
 
   const numeroOficioSeiMask = IMask(numeroOficioSeiInput, { mask: '00000.000000/0000-00' });
   const numeroProcessoMask  = IMask(numeroProcessoInput, {
@@ -737,23 +728,118 @@ window.onload = () => {
     return String(valor)
       .normalize('NFD')
       .replace(/[^\w\s]/g, '')
+      .trim()
       .toUpperCase();
   }
 
   function detectarTabelaPorEspacos(lista){
-    const nomes = Array.isArray(lista) ? lista.map(normalizarNomeEspaco) : [];
-    if (nomes.some(nome => nome.includes('AUDITORIO'))) return 'AUDITORIO';
-    if (nomes.some(nome => nome.includes('ANFITEATRO'))) return 'ANFITEATRO';
-    return 'AUDITORIO';
+    const nomes = Array.isArray(lista) ? lista.map(normalizarNomeEspaco).filter(Boolean) : [];
+    if (!nomes.length) return 'AUDITORIO';
+    let chaveEscolhida = 'AUDITORIO';
+    let valorAtual = tabelaPrecos[chaveEscolhida]?.valores?.[0] ?? 0;
+    nomes.forEach((nome) => {
+      const chave = aliasesTabela?.[nome] || nome;
+      const valores = tabelaPrecos[chave]?.valores;
+      if (Array.isArray(valores) && valores.length && Number(valores[0]) > valorAtual) {
+        valorAtual = Number(valores[0]);
+        chaveEscolhida = chave;
+      }
+    });
+    if (!tabelaPrecos[chaveEscolhida]) return 'AUDITORIO';
+    return chaveEscolhida;
   }
 
   function atualizarTabelaPrecos(lista){
     const chave = detectarTabelaPorEspacos(lista);
     tabelaPrecoAtual = chave;
-    precosPorDia = [...(TABELAS_PRECOS[chave]?.valores || TABELAS_PRECOS.AUDITORIO.valores)];
+    const valores = tabelaPrecos[chave]?.valores || tabelaPrecos.AUDITORIO?.valores || [0,0,0,0,0];
+    precosPorDia = [...valores];
     if (tabelaPrecosHint) {
-      tabelaPrecosHint.textContent = `Tabela de preços aplicada: ${TABELAS_PRECOS[chave]?.label || 'Auditório'}`;
+      const label = tabelaPrecos[chave]?.label || tabelaPrecos.AUDITORIO?.label || 'Auditório';
+      tabelaPrecosHint.textContent = `Tabela de preços aplicada: ${label}`;
     }
+  }
+
+  async function carregarEspacosEvento(){
+    try {
+      const resp = await fetch('/api/admin/espacos-evento', { headers: AUTH_HEADERS });
+      if (!resp.ok) {
+        const msg = await resp.text();
+        throw new Error(msg || `Falha HTTP ${resp.status}`);
+      }
+      const data = await resp.json();
+      espacosDisponiveis = Array.isArray(data.espacos) ? data.espacos : [];
+      tabelaPrecos = data.tabelasPreco || {};
+      aliasesTabela = data.aliases || {};
+      if (!aliasesTabela.AUDITORIO) aliasesTabela.AUDITORIO = 'AUDITORIO';
+      if (!aliasesTabela.ANFITEATRO) aliasesTabela.ANFITEATRO = 'ANFITEATRO';
+      espacosPorNomeNormalizado = new Map();
+      espacosDisponiveis.forEach((espaco) => {
+        const normNome = normalizarNomeEspaco(espaco.nome);
+        if (normNome) espacosPorNomeNormalizado.set(normNome, espaco);
+        const normSlug = normalizarNomeEspaco(espaco.slug);
+        if (normSlug) espacosPorNomeNormalizado.set(normSlug, espaco);
+      });
+      renderizarEspacos();
+      espacosCarregados = true;
+    } catch (err) {
+      console.error('Erro ao carregar espaços de eventos:', err);
+      AppUI?.toast?.('Não foi possível carregar os espaços de eventos.', 'error');
+      if (!Object.keys(tabelaPrecos).length) {
+        tabelaPrecos = {
+          AUDITORIO: { label: 'Auditório', valores: [2495.0, 1996.0, 1596.8, 1277.44, 1277.44] },
+          ANFITEATRO: { label: 'Anfiteatro', valores: [1497.0, 1197.6, 958.08, 766.46, 766.46] },
+        };
+      }
+      if (!aliasesTabela) {
+        aliasesTabela = { AUDITORIO: 'AUDITORIO', ANFITEATRO: 'ANFITEATRO' };
+      }
+      precosPorDia = [...(tabelaPrecos.AUDITORIO?.valores || [0,0,0,0,0])];
+    }
+  }
+
+  function renderizarEspacos(){
+    if (!espacosContainer) return;
+    const selecionados = new Set(obterEspacosSelecionados());
+    espacosContainer.innerHTML = '';
+    const frag = document.createDocumentFragment();
+    espacosDisponiveis
+      .filter((espaco) => espaco && espaco.ativo !== false)
+      .forEach((espaco) => {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'form-check';
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.className = 'form-check-input';
+        input.name = 'espacos';
+        input.value = espaco.nome;
+        input.id = `espaco-${espaco.slug}`;
+        input.dataset.slug = espaco.slug;
+        input.checked = selecionados.has(espaco.nome);
+        wrapper.appendChild(input);
+        const label = document.createElement('label');
+        label.className = 'form-check-label';
+        label.htmlFor = input.id;
+        label.textContent = espaco.nome;
+        wrapper.appendChild(label);
+        const detalhes = [];
+        if (espaco.capacidade) detalhes.push(`${espaco.capacidade} pessoas`);
+        if (espaco.area_m2) detalhes.push(`${Number(espaco.area_m2).toLocaleString('pt-BR')} m²`);
+        if (detalhes.length) {
+          const info = document.createElement('small');
+          info.className = 'text-muted d-block';
+          info.textContent = detalhes.join(' • ');
+          wrapper.appendChild(info);
+        }
+        frag.appendChild(wrapper);
+      });
+    espacosContainer.appendChild(frag);
+    espacosCheckboxes = Array.from(espacosContainer.querySelectorAll('input[name="espacos"]'));
+    salaReunioesCheckbox = espacosContainer.querySelector('input[data-slug="sala-de-reunioes"]') || null;
+    const salaAtiva = salaReunioesCheckbox?.checked ?? false;
+    salaReunioesNumerosWrapper.classList.toggle('d-none', !salaAtiva);
+    atualizarTabelaPrecos(obterEspacosSelecionados());
+    atualizarEspacos();
   }
 
   function obterEspacosSelecionados(){
@@ -764,18 +850,20 @@ window.onload = () => {
     const selecionados = obterEspacosSelecionados();
     atualizarTabelaPrecos(selecionados);
     const totais = selecionados.reduce((acc, nome) => {
-      if (nome === 'Sala de Reuniões') {
-        const info = ESPACOS_INFO[nome] || { area: 0, capacidade: 0 };
+      const norm = normalizarNomeEspaco(nome);
+      const info = espacosPorNomeNormalizado.get(norm);
+      if (!info) return acc;
+      const baseArea = Number(info.area_m2) || 0;
+      const baseCap = Number(info.capacidade) || 0;
+      const isSala = norm === 'SALA DE REUNIOES' || normalizarNomeEspaco(info.slug) === 'SALA DE REUNIOES';
+      if (isSala) {
         const numeros = salaReunioesNumerosInput.value.split(',').map(s=>s.trim()).filter(Boolean);
         const qtd = numeros.length || 1;
-        acc.area += (info.area||0) * qtd;
-        acc.capacidade += (info.capacidade||0) * qtd;
+        acc.area += baseArea * qtd;
+        acc.capacidade += baseCap * qtd;
       } else {
-        const info = ESPACOS_INFO[nome];
-        if (info) {
-          acc.area += info.area;
-          acc.capacidade += info.capacidade;
-        }
+        acc.area += baseArea;
+        acc.capacidade += baseCap;
       }
       return acc;
     }, { area: 0, capacidade: 0 });
@@ -785,8 +873,10 @@ window.onload = () => {
   }
 
   espacosContainer.addEventListener('change', () => {
-    salaReunioesNumerosWrapper.classList.toggle('d-none', !salaReunioesCheckbox.checked);
-    if (!salaReunioesCheckbox.checked) salaReunioesNumerosInput.value = '';
+    salaReunioesCheckbox = espacosContainer.querySelector('input[data-slug="sala-de-reunioes"]') || salaReunioesCheckbox;
+    const salaAtiva = salaReunioesCheckbox?.checked ?? false;
+    salaReunioesNumerosWrapper.classList.toggle('d-none', !salaAtiva);
+    if (!salaAtiva) salaReunioesNumerosInput.value = '';
     atualizarEspacos();
   });
   salaReunioesNumerosInput.addEventListener('input', atualizarEspacos);
@@ -905,13 +995,19 @@ window.onload = () => {
   const isFeriado = d => feriadosFixos.includes(`${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`);
   const isDiaUtil = d => d.getDay()!==0 && d.getDay()!==6 && !isFeriado(d);
 
-  function calcularValorBruto(n){
+  function calcularValorBruto(n, espacosLista){
     if (n<=0) return 0;
+    let tabelaRef = precosPorDia;
+    if (Array.isArray(espacosLista) && espacosLista.length) {
+      const chave = detectarTabelaPorEspacos(espacosLista);
+      tabelaRef = tabelaPrecos[chave]?.valores || tabelaPrecos.AUDITORIO?.valores || precosPorDia;
+    }
+    const valores = Array.isArray(tabelaRef) ? tabelaRef : precosPorDia;
     let v=0;
-    if (n>=1) v+=precosPorDia[0];
-    if (n>=2) v+=precosPorDia[1];
-    if (n>=3) v+=precosPorDia[2];
-    if (n>=4) v+=(n-3)*precosPorDia[3];
+    if (n>=1) v+=valores[0] || 0;
+    if (n>=2) v+=valores[1] || 0;
+    if (n>=3) v+=valores[2] || 0;
+    if (n>=4) v+=(n-3)*(valores[3] || 0);
     return +v.toFixed(2);
   }
   function calcularValorFinal(vb, tipo, dm=0){
@@ -1384,17 +1480,37 @@ function normalizarEvento(payload){
 
     let espacos_utilizados_texto = ev.espaco_utilizado ?? ev.espacosUtilizados ?? '';
     let espacos_utilizados_lista = [];
-    if (typeof espacos_utilizados_texto === 'string') {
-        const textoUpper = espacos_utilizados_texto.toUpperCase();
-        if (textoUpper.includes('AUDITÓRIO')) espacos_utilizados_lista.push('Auditório');
-        if (textoUpper.includes('ANFITEATRO')) espacos_utilizados_lista.push('Anfiteatro');
-        if (textoUpper.includes('COWORKING')) espacos_utilizados_lista.push('Coworking do Espaço de Fomento');
-        if (textoUpper.includes('ESPAÇO EM FRENTE AO AUDITÓRIO') || textoUpper.includes('ESPAÇO ABERTO')) espacos_utilizados_lista.push('Espaço em Frente ao Auditório');
+    if (typeof espacos_utilizados_texto === 'string' && espacos_utilizados_texto.trim().startsWith('[')) {
+        try {
+          const parsed = JSON.parse(espacos_utilizados_texto);
+          if (Array.isArray(parsed)) espacos_utilizados_lista = parsed.map((nome) => String(nome));
+        } catch {}
+    } else if (Array.isArray(espacos_utilizados_texto)) {
+        espacos_utilizados_lista = espacos_utilizados_texto.map((nome) => String(nome));
+    } else if (typeof espacos_utilizados_texto === 'string') {
+        const textoNormalizado = normalizarNomeEspaco(espacos_utilizados_texto);
+        const encontrados = new Set();
+        espacosDisponiveis.forEach((espaco) => {
+          const norm = normalizarNomeEspaco(espaco.nome);
+          if (norm && textoNormalizado.includes(norm) && !encontrados.has(norm)) {
+            espacos_utilizados_lista.push(espaco.nome);
+            encontrados.add(norm);
+          }
+        });
+        if (!encontrados.size) {
+          if (textoNormalizado.includes('AUDITORIO') && !espacos_utilizados_lista.includes('Auditório')) espacos_utilizados_lista.push('Auditório');
+          if (textoNormalizado.includes('ANFITEATRO') && !espacos_utilizados_lista.includes('Anfiteatro')) espacos_utilizados_lista.push('Anfiteatro');
+          if (textoNormalizado.includes('COWORKING') && !espacos_utilizados_lista.includes('Coworking do Espaço de Fomento')) espacos_utilizados_lista.push('Coworking do Espaço de Fomento');
+          if ((textoNormalizado.includes('ESPACO EM FRENTE AO AUDITORIO') || textoNormalizado.includes('ESPACO ABERTO')) && !espacos_utilizados_lista.includes('Espaço em Frente ao Auditório')) espacos_utilizados_lista.push('Espaço em Frente ao Auditório');
+        }
     }
 
     const id_cliente = ev.id_cliente ?? ev.cliente_id ?? ev.idCliente ?? '';
     const nome_evento = ev.nome_evento ?? ev.nome ?? ev.titulo ?? '';
-    const area_m2 = ev.area_m2 ?? ev.areaM2 ?? espacos_utilizados_lista.reduce((s, nome) => s + (ESPACOS_INFO[nome]?.area || 0), 0);
+    const area_m2 = ev.area_m2 ?? ev.areaM2 ?? espacos_utilizados_lista.reduce((s, nome) => {
+      const info = espacosPorNomeNormalizado.get(normalizarNomeEspaco(nome));
+      return s + (info ? Number(info.area_m2) || 0 : 0);
+    }, 0);
     const numero_oficio_sei = ev.numero_oficio_sei ?? ev.numeroOficioSei ?? '';
     const valor_final = ev.valor_final ?? 0;
     const evento_gratuito = ev.evento_gratuito ?? ev.eventoGratuito ?? false;
@@ -1424,6 +1540,8 @@ function normalizarEvento(payload){
     async function editarEvento(eventoId){
     if (!eventoId){ alert('ID inválido'); return; }
     if (!clientesCarregados) await carregarClientes();
+    if (!espacosCarregados) await carregarEspacosEvento();
+    else if (!espacosCheckboxes.length) renderizarEspacos();
 
     try{
       const raw = await fetchEventoById(eventoId);
@@ -1450,10 +1568,14 @@ function normalizarEvento(payload){
       equipCaixasCheckbox.checked = !!ev.emprestimo_caixas_som;
       equipMicsCheckbox.checked = !!ev.emprestimo_microfones;
 
+      const utilizadosNormalizados = (ev.espacos_utilizados || []).map(normalizarNomeEspaco);
       espacosCheckboxes.forEach(cb => {
-        if (cb.value === 'Sala de Reuniões') {
+        const normCb = normalizarNomeEspaco(cb.value);
+        const slugNorm = normalizarNomeEspaco(cb.dataset.slug);
+        const isSala = normCb === 'SALA DE REUNIOES' || slugNorm === 'SALA DE REUNIOES';
+        if (isSala) {
           const nums = (ev.espacos_utilizados || [])
-            .filter(e => e.startsWith('Sala de Reuniões'))
+            .filter(e => normalizarNomeEspaco(e).startsWith('SALA DE REUNIOES'))
             .map(e => e.replace(/[^0-9,]/g, '').trim())
             .filter(Boolean);
           cb.checked = nums.length > 0;
@@ -1465,7 +1587,7 @@ function normalizarEvento(payload){
             salaReunioesNumerosWrapper.classList.add('d-none');
           }
         } else {
-          cb.checked = (ev.espacos_utilizados || []).includes(cb.value);
+          cb.checked = utilizadosNormalizados.includes(normCb);
         }
       });
       atualizarEspacos();
@@ -1491,7 +1613,7 @@ function normalizarEvento(payload){
       // --- CORREÇÃO PRINCIPAL PARA PARCELAS ---
       // 1. Recalcula o valor final real com base nas datas e descontos do formulário
       const numDiarias = ev.datas_evento.length;
-      const valorBrutoRecalculado = calcularValorBruto(numDiarias);
+      const valorBrutoRecalculado = calcularValorBruto(numDiarias, ev.espacos_utilizados || []);
       const valorFinalRecalculado = calcularValorFinal(valorBrutoRecalculado, tipoDescontoAutoDisplay.value, descontoManualInput.value);
 
       // 2. Lógica inteligente para preencher as parcelas
@@ -2319,7 +2441,6 @@ function normalizarEvento(payload){
 
   clienteSelect.addEventListener('change', atualizarCalculos);
   descontoManualInput.addEventListener('input', atualizarCalculos);
-  clientesPromise = carregarClientes();
 
   searchInput.addEventListener('keyup', () => {
     clearTimeout(searchTimeout);
@@ -2367,8 +2488,9 @@ function normalizarEvento(payload){
   // =======================
   // Boot
   // =======================
+  await carregarEspacosEvento();
   inicializarEventListeners();
-  carregarClientes();
+  clientesPromise = carregarClientes();
   fetchEventos();
 };
 </script>
