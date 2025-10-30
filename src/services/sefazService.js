@@ -98,6 +98,7 @@ sefaz.interceptors.request.use((request) => {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const MIN_CONSULTA_INTERVAL_RECOMENDADO_MS = 180000; // 3 minutos exigidos pela SEFAZ para consultas de pagamento
+const MIN_CONSULTA_INTERVAL_RECOMENDADO_MS = 1500; // 1,5 segundo (valor seguro para evitar 504)
 const MIN_CONSULTA_INTERVAL_MS = (() => {
   const parsed = Number(process.env.SEFAZ_MIN_CONSULTA_INTERVAL_MS ?? MIN_CONSULTA_INTERVAL_RECOMENDADO_MS);
   const coerced = Number.isFinite(parsed) && parsed >= 0 ? parsed : MIN_CONSULTA_INTERVAL_RECOMENDADO_MS;
