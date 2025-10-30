@@ -281,6 +281,12 @@
             <div class="invalid-feedback">Informe a data em que o pagamento foi realizado.</div>
           </div>
           <div class="mb-3">
+            <label for="baixaManualGuia" class="form-label">Guia emitida (PDF ou imagem)</label>
+            <input type="file" class="form-control" id="baixaManualGuia" accept=".pdf,image/png,image/jpeg,image/jpg" required>
+            <div class="form-text">Anexe o PDF ou imagem da guia gerada para este DAR (máx. 10 MB).</div>
+            <div class="invalid-feedback">Envie a guia emitida para registrar a baixa.</div>
+          </div>
+          <div class="mb-3">
             <label for="baixaManualArquivo" class="form-label">Comprovante</label>
             <input type="file" class="form-control" id="baixaManualArquivo" accept=".pdf,image/png,image/jpeg,image/jpg" required>
             <div class="form-text">São aceitos arquivos PDF, JPG ou PNG com até 10 MB.</div>
@@ -431,6 +437,7 @@
       const baixaManualDarIdInput = document.getElementById('baixaManualDarId');
       const baixaManualResumo = document.getElementById('baixaManualResumo');
       const baixaManualDataInput = document.getElementById('baixaManualData');
+      const baixaManualGuiaInput = document.getElementById('baixaManualGuia');
       const baixaManualArquivoInput = document.getElementById('baixaManualArquivo');
       const baixaManualSubmitBtn = document.getElementById('baixaManualSubmitBtn');
       const baixaManualLoading = document.getElementById('baixaManualLoading');
@@ -1254,6 +1261,7 @@
               : hojeISO();
             baixaManualDataInput.value = dataPadrao;
           }
+          if (baixaManualGuiaInput) baixaManualGuiaInput.value = '';
           if (baixaManualArquivoInput) baixaManualArquivoInput.value = '';
           baixaManualForm?.classList.remove('was-validated');
           if (baixaManualSubmitBtn) baixaManualSubmitBtn.disabled = false;
@@ -1337,32 +1345,50 @@
             return;
           }
 
-          const arquivo = baixaManualArquivoInput?.files?.[0];
-          if (!arquivo){
+          const guiaArquivo = baixaManualGuiaInput?.files?.[0];
+          if (!guiaArquivo){
+            AppUI.toast('Envie a guia emitida para concluir a baixa.', 'warn');
+            baixaManualGuiaInput?.focus();
+            return;
+          }
+
+          const comprovanteArquivo = baixaManualArquivoInput?.files?.[0];
+          if (!comprovanteArquivo){
             AppUI.toast('Selecione o comprovante do pagamento.', 'warn');
             baixaManualArquivoInput?.focus();
             return;
           }
 
-          const mime = String(arquivo.type || '').toLowerCase();
-          const nomeArquivo = String(arquivo.name || '');
-          const ext = nomeArquivo.includes('.') ? nomeArquivo.slice(nomeArquivo.lastIndexOf('.')).toLowerCase() : '';
           const allowedMime = new Set(['application/pdf','application/x-pdf','image/jpeg','image/png']);
           const allowedExt = ['.pdf','.jpg','.jpeg','.png'];
-          if (!allowedMime.has(mime) && !allowedExt.includes(ext)){
-            AppUI.toast('Envie um arquivo PDF, JPG ou PNG.', 'warn');
-            return;
-          }
-
           const maxSize = 10 * 1024 * 1024;
-          if (arquivo.size > maxSize){
-            AppUI.toast('O comprovante pode ter até 10 MB.', 'warn');
-            return;
-          }
+
+          const validarUpload = (file, label, inputEl) => {
+            const nome = String(file?.name || '');
+            const mime = String(file?.type || '').toLowerCase();
+            const ext = nome.includes('.') ? nome.slice(nome.lastIndexOf('.')).toLowerCase() : '';
+            if (!allowedMime.has(mime) && !allowedExt.includes(ext)){
+              AppUI.toast(`Envie um arquivo PDF, JPG ou PNG para ${label}.`, 'warn');
+              inputEl?.focus();
+              return false;
+            }
+            if (file.size > maxSize){
+              AppUI.toast(`O arquivo de ${label} pode ter até 10 MB.`, 'warn');
+              inputEl?.focus();
+              return false;
+            }
+            return true;
+          };
+
+          if (!validarUpload(guiaArquivo, 'guia emitida', baixaManualGuiaInput)) return;
+          if (!validarUpload(comprovanteArquivo, 'comprovante', baixaManualArquivoInput)) return;
 
           const formData = new FormData();
           formData.append('dataPagamento', dataPagamentoValor);
-          formData.append('comprovante', arquivo, nomeArquivo || 'comprovante');
+          const nomeGuia = String(guiaArquivo.name || 'guia');
+          formData.append('guia', guiaArquivo, nomeGuia);
+          const nomeComprovante = String(comprovanteArquivo.name || 'comprovante');
+          formData.append('comprovante', comprovanteArquivo, nomeComprovante);
 
           try{
             if (baixaManualSubmitBtn) baixaManualSubmitBtn.disabled = true;
