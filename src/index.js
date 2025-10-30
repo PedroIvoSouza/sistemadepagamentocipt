@@ -62,6 +62,7 @@ const {
 
 const eventosRoutes          = require('./api/eventosRoutes');
 const adminEventosRoutes     = require('./api/adminEventosRoutes');   // inclui /:id/termo
+const adminEspacosEventoRoutes = require('./api/adminEspacosEventoRoutes');
 const webhooksAssinafyRoutes = require('./api/webhooksAssinafyRoutes');
 const assinafyRoutes         = require('./routes/assinafy');           // preparar/embedded
 const documentosRoutes       = require('./api/documentosRoutes');
@@ -110,6 +111,7 @@ mount('/api/admin',             'adminOficiosRoutes',    adminOficiosRoutes,    
 mount('/api/admin',             'adminAdvertenciasRoutes', adminAdvertenciasRoutes, app);
 mount('/api/admin',             'adminTermoEventosRoutes', adminTermoEventosRoutes, app);
 mount('/api/admin/salas',       'adminSalasRoutes',      adminSalasRoutes,      app);
+mount('/api/admin/espacos-evento', 'adminEspacosEventoRoutes', adminEspacosEventoRoutes, app);
 
 // Webhook Assinafy
 mount('/api/webhooks/assinafy', 'webhooksAssinafyRoutes', webhooksAssinafyRoutes, app);
