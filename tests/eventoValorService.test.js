@@ -5,6 +5,8 @@ const {
   calcularValorBruto,
   calcularValorFinal,
   identificarTabelaPorEspacos,
+  setEspacosTabelaOverrides,
+  getTabelaPrecosSnapshot,
 } = require('../src/services/eventoValorService');
 
 function extrairTabela(espacos) {
@@ -55,4 +57,27 @@ test('calcularValorFinal mantém descontos aplicados após novo cálculo bruto',
   const bruto = calcularValorBruto(1, ['Anfiteatro']);
   const finalPermissionario = calcularValorFinal(bruto, 'Permissionario');
   assert.equal(finalPermissionario, Number((bruto * 0.4).toFixed(2)));
+});
+
+test('setEspacosTabelaOverrides aplica nova tabela de preços personalizada', () => {
+  try {
+    setEspacosTabelaOverrides([
+      {
+        tabelaKey: 'ESPACO_PREMIUM',
+        nome: 'Espaço Premium',
+        slug: 'espaco-premium',
+        valores: [5000, 4000, 3500, 3000],
+      },
+    ]);
+
+    const valorPremium = calcularValorBruto(2, ['Espaço Premium']);
+    assert.equal(valorPremium, 9000);
+
+    const snapshot = getTabelaPrecosSnapshot();
+    assert.ok(snapshot.tabelas.ESPACO_PREMIUM);
+    assert.equal(snapshot.tabelas.ESPACO_PREMIUM.label, 'Espaço Premium');
+    assert.deepEqual(snapshot.tabelas.ESPACO_PREMIUM.valores.slice(0, 4), [5000, 4000, 3500, 3000]);
+  } finally {
+    setEspacosTabelaOverrides([]);
+  }
 });
