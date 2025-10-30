@@ -15,7 +15,7 @@ Adicione no arquivo `.env` ou nas variáveis do servidor:
 - `ASSINAFY_API_URL` (opcional): URL base da API. Padrão `https://api.assinafy.com`.
 - `ASSINAFY_CALLBACK_URL`: URL pública para o retorno após a assinatura, ex.: `https://seusistema/api/documentos/assinafy/callback`.
 - `VPN_HEALTHCHECK_TLS_INSECURE` (opcional): defina como `true` para permitir certificados TLS autoassinados no health-check HTTP da VPN/infovia. Mantenha ausente ou `false` para validar os certificados normalmente.
-- `SEFAZ_MIN_CONSULTA_INTERVAL_MS` (opcional): intervalo mínimo entre consultas à SEFAZ em milissegundos. O padrão é `300000` (5 minutos), conforme orientação do órgão. Valores menores são aceitos apenas para ambientes de teste.
+- `SEFAZ_MIN_CONSULTA_INTERVAL_MS` (opcional): intervalo mínimo entre consultas à SEFAZ em milissegundos. O padrão é `180000` (3 minutos), conforme orientação do órgão. Valores menores são aceitos apenas para ambientes de teste.
 
 Certifique-se de reiniciar o servidor após alterar as variáveis.
 
@@ -37,7 +37,7 @@ O valor legado `Vencida` foi unificado para `Vencido` e não deve mais ser utili
 1. **Variáveis de ambiente**
    - Garanta que `SQLITE_STORAGE` aponte para o arquivo `sistemacipt.db` utilizado em produção ou no ambiente de homologação (ex.: `SQLITE_STORAGE=/var/cipt/sistemacipt.db`).
    - Ajuste `CONCILIAR_BASE_DIA` para `ontem` (padrão) ou `hoje` quando precisar conciliar o mesmo dia da consulta.
-   - Mantenha `SEFAZ_MIN_CONSULTA_INTERVAL_MS` com pelo menos 300000 (5 minutos), conforme orientação da SEFAZ, para evitar bloqueios durante as chamadas de consulta.
+  - Mantenha `SEFAZ_MIN_CONSULTA_INTERVAL_MS` com pelo menos 180000 (3 minutos), conforme orientação da SEFAZ, para evitar bloqueios durante as chamadas de consulta.
 
 2. **Instalar dependências e preparar o banco**
    ```bash
