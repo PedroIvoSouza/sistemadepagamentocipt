@@ -41,6 +41,74 @@ function sanitizeSlug(slug, nome) {
   return base || `espaco-${Date.now()}`;
 }
 
+function buildSlugBase(nome) {
+  return String(nome || '')
+    .normalize('NFD')
+    .replace(/[^\w\s-]/g, '')
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .toLowerCase();
+}
+
+function ensureUniqueSlug(base, used, id) {
+  let candidate = base || `espaco-${id}`;
+  let suffix = 2;
+
+  while (!candidate || used.has(candidate)) {
+    candidate = base ? `${base}-${suffix}` : `espaco-${id}-${suffix}`;
+    suffix += 1;
+  }
+
+  used.add(candidate);
+  return candidate;
+}
+
+async function ensureSlugIntegrity() {
+  const rows = await allAsync(
+    `SELECT id, nome, slug FROM espacos_evento ORDER BY id ASC`
+  );
+  if (!rows.length) return;
+
+  const used = new Set();
+  const firstOccurrence = new Map();
+
+  rows.forEach((row) => {
+    const slug = String(row.slug || '').trim();
+    if (slug && !used.has(slug)) {
+      used.add(slug);
+      firstOccurrence.set(slug, row.id);
+    }
+  });
+
+  for (const row of rows) {
+    const currentSlug = String(row.slug || '').trim();
+    const isDuplicate = currentSlug && firstOccurrence.get(currentSlug) !== row.id;
+
+    if (currentSlug && !isDuplicate) continue;
+
+    const base = buildSlugBase(row.nome);
+    const novoSlug = ensureUniqueSlug(base, used, row.id);
+
+    await runAsync(
+      `UPDATE espacos_evento
+          SET slug = ?,
+              atualizado_em = COALESCE(atualizado_em, datetime('now'))
+        WHERE id = ?`,
+      [novoSlug, row.id]
+    );
+  }
+
+  const indexes = await allAsync(`PRAGMA index_list('espacos_evento')`);
+  const hasSlugIndex = indexes.some((idx) => idx?.name === 'idx_espacos_evento_slug');
+
+  if (!hasSlugIndex) {
+    await runAsync(
+      `CREATE UNIQUE INDEX IF NOT EXISTS idx_espacos_evento_slug ON espacos_evento(slug)`
+    );
+  }
+}
+
 function mapRow(row) {
   const valores = {
     valor_diaria_1: sanitizeNumber(row.valor_diaria_1),
@@ -86,10 +154,11 @@ async function ensureSchema() {
   const maybeAdd = async (name, ddl) => {
     if (!have.has(name)) {
       await runAsync(`ALTER TABLE espacos_evento ADD COLUMN ${ddl}`);
+      have.add(name);
     }
   };
 
-  await maybeAdd('slug', "slug TEXT NOT NULL UNIQUE");
+  await maybeAdd('slug', 'slug TEXT');
   await maybeAdd('capacidade', 'capacidade INTEGER NOT NULL DEFAULT 0');
   await maybeAdd('area_m2', 'area_m2 REAL NOT NULL DEFAULT 0');
   await maybeAdd('valor_diaria_1', 'valor_diaria_1 REAL NOT NULL DEFAULT 0');
@@ -99,6 +168,10 @@ async function ensureSchema() {
   await maybeAdd('ativo', 'ativo INTEGER NOT NULL DEFAULT 1');
   await maybeAdd('criado_em', "criado_em TEXT DEFAULT (datetime('now'))");
   await maybeAdd('atualizado_em', "atualizado_em TEXT DEFAULT (datetime('now'))");
+
+  if (have.has('slug')) {
+    await ensureSlugIntegrity();
+  }
 }
 
 async function loadCache() {
