@@ -11,114 +11,22 @@
   <link rel="stylesheet" href="/css/app-shell.css">
   <link rel="stylesheet" href="/css/mobile-tweaks.css">
   <style>
-    :root {
-      --cor-primaria: #0056a0;
-      --cor-sidebar: #004480;
-      --raio-borda: 0.75rem;
-    }
-
-    body {
-      font-family: 'Montserrat', sans-serif;
-      background-color: #f4f7f6;
-      color: #1f2937;
-    }
-
-    .wrapper {
-      display: flex;
-      width: 100%;
-      min-height: 100vh;
-    }
-
-    .main-content {
-      flex-grow: 1;
-      display: flex;
-      flex-direction: column;
-      min-width: 0;
-    }
-
-    .topbar {
-      background-color: #ffffff;
-      padding: 1rem 2rem;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-      display: flex;
-      justify-content: flex-end;
-      align-items: center;
-    }
-
-    .content {
-      padding: clamp(1.5rem, 4vw, 2.5rem);
-      flex: 1;
-    }
-
-    .page-header h1 {
-      font-size: clamp(1.5rem, 2.5vw, 1.9rem);
-      font-weight: 600;
-      margin-bottom: .35rem;
-    }
-
-    .page-header p {
-      color: #6b7280;
-      margin: 0;
-    }
-
-    .card {
-      border: none;
-      border-radius: var(--raio-borda);
-      box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
-      background-color: #ffffff;
-    }
-
-    .card-title {
-      font-weight: 600;
-      color: var(--cor-primaria);
-    }
-
-    .table thead th {
-      font-weight: 600;
-      color: #475569;
-      background-color: #f8fafc;
-      border-bottom-width: 0;
-      text-transform: uppercase;
-      font-size: 0.75rem;
-      letter-spacing: 0.03em;
-    }
-
-    .table td {
-      vertical-align: middle;
-      font-size: 0.95rem;
-    }
-
-    .status-badge {
-      font-size: 0.75rem;
-      border-radius: 999px;
-      padding: 0.35rem 0.75rem;
-    }
-
-    .btn-icon {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.5rem;
-      font-weight: 600;
-    }
-
-    #espacos-vazio {
-      border: 1px dashed #cbd5f5;
-      border-radius: var(--raio-borda);
-      background: #f8fafc;
-    }
-
+    body { background-color: #f4f7f6; }
+    .wrapper { display: flex; width: 100%; min-height: 100vh; }
+    .main-content { flex-grow: 1; display: flex; flex-direction: column; }
+    .topbar { background-color: #fff; padding: 1rem 2rem; box-shadow: 0 1px 3px rgba(0,0,0,0.08); display: flex; justify-content: flex-end; align-items: center; }
+    .content { padding: 2rem; }
+    .page-heading h1 { font-size: 1.75rem; font-weight: 600; margin-bottom: .25rem; }
+    .page-heading p { color: #6b7280; margin-bottom: 0; }
+    .card { border: none; border-radius: .75rem; box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08); }
+    .card-title { color: #0056a0; font-weight: 600; }
+    .table thead th { font-size: .75rem; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; background-color: #f8fafc; color: #475569; border-bottom: 0; }
+    .table td { vertical-align: middle; font-size: .95rem; }
+    .status-badge { font-size: .75rem; border-radius: 999px; padding: .35rem .75rem; }
+    #espacos-vazio { border: 1px dashed #cbd5f5; border-radius: .75rem; background: #f8fafc; }
     @media (max-width: 768px) {
-      .topbar {
-        padding: 0.85rem 1.25rem;
-      }
-
-      .content {
-        padding: 1.25rem;
-      }
-
-      .page-header {
-        gap: 0.75rem;
-      }
+      .topbar { padding: .85rem 1.25rem; }
+      .content { padding: 1.25rem; }
     }
   </style>
 </head>
@@ -132,19 +40,17 @@
         </div>
       </header>
       <main class="content">
-        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4 page-header">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4 page-heading">
           <div class="pe-md-3">
             <h1>Espaços de Eventos</h1>
-            <p class="small">Gerencie os ambientes disponíveis para reservas e cálculo de valores.</p>
+            <p class="small">Gerencie os ambientes disponíveis para reservas e cálculos.</p>
           </div>
           <div class="d-flex flex-wrap gap-2">
-            <button id="recarregar-btn" class="btn btn-outline-secondary btn-icon">
-              <i class="bi bi-arrow-clockwise"></i>
-              Recarregar
+            <button id="recarregar-btn" class="btn btn-outline-secondary">
+              <i class="bi bi-arrow-clockwise me-2"></i>Recarregar
             </button>
-            <button id="novo-espaco-btn" class="btn btn-primary btn-icon">
-              <i class="bi bi-plus-circle"></i>
-              Novo espaço
+            <button id="novo-espaco-btn" class="btn btn-primary">
+              <i class="bi bi-plus-circle me-2"></i>Novo espaço
             </button>
           </div>
         </div>
@@ -258,32 +164,32 @@
   <script defer src="/js/ui-kit.js"></script>
   <script>
     document.addEventListener('DOMContentLoaded', () => {
-      let token = typeof window.getAdminToken === 'function' ? window.getAdminToken() : null;
-      if (!token) {
-        token = localStorage.getItem('adminToken') || localStorage.getItem('adminAuthToken');
-      }
+      const adminNameEl = document.getElementById('adminName');
+      const token = typeof window.getAdminToken === 'function'
+        ? window.getAdminToken()
+        : localStorage.getItem('adminToken') || localStorage.getItem('adminAuthToken');
 
       if (!token) {
-        window.location.href = '/admin/login.html';
+        window.location.replace('/admin/login.html');
         return;
       }
-
-      localStorage.setItem('adminToken', token);
-      localStorage.setItem('adminAuthToken', token);
 
       try {
         const base64url = token.split('.')[1] || '';
         const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(base64url.length / 4) * 4, '=');
         const payload = JSON.parse(atob(base64));
-        if (payload?.nome) {
-          document.getElementById('adminName').innerText = payload.nome;
+        if (payload?.nome && adminNameEl) {
+          adminNameEl.textContent = payload.nome;
         }
       } catch (err) {
         console.warn('Não foi possível decodificar token do admin:', err);
       }
 
+      localStorage.setItem('adminToken', token);
+      localStorage.setItem('adminAuthToken', token);
+
       const AUTH_HEADERS = { Authorization: `Bearer ${token}` };
-      const JSON_HEADERS = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+      const JSON_HEADERS = { ...AUTH_HEADERS, 'Content-Type': 'application/json' };
 
       const tabelaBody = document.getElementById('espacos-tbody');
       const vazioState = document.getElementById('espacos-vazio');
@@ -318,6 +224,36 @@
       const toggleLoading = (mostrar) => {
         carregando = Boolean(mostrar);
         tabelaBody.classList.toggle('opacity-50', carregando);
+      };
+
+      const parseBoolean = (valor) => {
+        if (typeof valor === 'boolean') return valor;
+        if (valor === 1 || valor === '1') return true;
+        if (valor === 0 || valor === '0') return false;
+        return Boolean(valor);
+      };
+
+      const normalizarEspaco = (espaco) => ({
+        ...espaco,
+        ativo: parseBoolean(espaco?.ativo),
+        capacidade: espaco?.capacidade ?? 0,
+        area_m2: espaco?.area_m2 ?? 0,
+        valor_diaria_1: espaco?.valor_diaria_1 ?? 0,
+        valor_diaria_2: espaco?.valor_diaria_2 ?? 0,
+        valor_diaria_3: espaco?.valor_diaria_3 ?? 0,
+        valor_diaria_adicional: espaco?.valor_diaria_adicional ?? 0,
+      });
+
+      const apiFetchJson = async (url, options = {}) => {
+        const baseOptions = window.apiFetch
+          ? options
+          : { ...options, headers: { ...(options.headers || {}), ...AUTH_HEADERS } };
+        const resp = await (window.apiFetch ? window.apiFetch(url, baseOptions) : fetch(url, baseOptions));
+        if (!resp.ok) {
+          const msg = await resp.text();
+          throw new Error(msg || 'Falha na requisição.');
+        }
+        return resp.json().catch(() => ({}));
       };
 
       function resetForm() {
@@ -388,15 +324,10 @@
         if (carregando) return;
         toggleLoading(true);
         try {
-          const resp = await fetch('/api/admin/espacos-evento?todos=1', { headers: AUTH_HEADERS, cache: 'no-store' });
-          if (!resp.ok) {
-            const erro = await resp.text();
-            throw new Error(erro || 'Não foi possível carregar a lista de espaços.');
-          }
-          const data = await resp.json().catch(() => ({}));
+          const data = await apiFetchJson('/api/admin/espacos-evento?todos=1', { cache: 'no-store' });
           const lista = Array.isArray(data.espacos) ? data.espacos : [];
           espacos = lista
-            .slice()
+            .map(normalizarEspaco)
             .sort((a, b) => (a?.nome || '').localeCompare(b?.nome || '', 'pt-BR', { sensitivity: 'base' }));
           renderTabela();
         } catch (err) {
@@ -453,7 +384,9 @@
         try {
           const url = editId ? `/api/admin/espacos-evento/${editId}` : '/api/admin/espacos-evento';
           const method = editId ? 'PUT' : 'POST';
-          const resp = await fetch(url, { method, headers: JSON_HEADERS, body: JSON.stringify(payload) });
+          const resp = await (window.apiFetch
+            ? window.apiFetch(url, { method, body: JSON.stringify(payload) })
+            : fetch(url, { method, headers: JSON_HEADERS, body: JSON.stringify(payload) }));
           const data = await resp.json().catch(() => ({}));
           if (!resp.ok) throw new Error(data.error || 'Não foi possível salvar o espaço.');
 
@@ -469,11 +402,16 @@
 
       async function alterarStatus(id, ativo) {
         try {
-          const resp = await fetch(`/api/admin/espacos-evento/${id}/status`, {
-            method: 'PATCH',
-            headers: JSON_HEADERS,
-            body: JSON.stringify({ ativo }),
-          });
+          const resp = await (window.apiFetch
+            ? window.apiFetch(`/api/admin/espacos-evento/${id}/status`, {
+                method: 'PATCH',
+                body: JSON.stringify({ ativo }),
+              })
+            : fetch(`/api/admin/espacos-evento/${id}/status`, {
+                method: 'PATCH',
+                headers: JSON_HEADERS,
+                body: JSON.stringify({ ativo }),
+              }));
           const data = await resp.json().catch(() => ({}));
           if (!resp.ok) throw new Error(data.error || 'Não foi possível atualizar o status.');
           AppUI?.toast?.('Status atualizado!', 'success');
