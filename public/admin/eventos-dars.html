@@ -735,17 +735,25 @@ window.onload = async () => {
   function detectarTabelaPorEspacos(lista){
     const nomes = Array.isArray(lista) ? lista.map(normalizarNomeEspaco).filter(Boolean) : [];
     if (!nomes.length) return 'AUDITORIO';
-    let chaveEscolhida = 'AUDITORIO';
-    let valorAtual = tabelaPrecos[chaveEscolhida]?.valores?.[0] ?? 0;
+
+    let chaveEscolhida = null;
+    let prioridadeAtual = Number.NEGATIVE_INFINITY;
+
     nomes.forEach((nome) => {
       const chave = aliasesTabela?.[nome] || nome;
       const valores = tabelaPrecos[chave]?.valores;
-      if (Array.isArray(valores) && valores.length && Number(valores[0]) > valorAtual) {
-        valorAtual = Number(valores[0]);
+      if (!Array.isArray(valores) || !valores.length) return;
+
+      const prioridade = Number(valores[0]);
+      if (!Number.isFinite(prioridade)) return;
+
+      if (prioridade > prioridadeAtual) {
+        prioridadeAtual = prioridade;
         chaveEscolhida = chave;
       }
     });
-    if (!tabelaPrecos[chaveEscolhida]) return 'AUDITORIO';
+
+    if (!chaveEscolhida || !tabelaPrecos[chaveEscolhida]) return 'AUDITORIO';
     return chaveEscolhida;
   }
 
