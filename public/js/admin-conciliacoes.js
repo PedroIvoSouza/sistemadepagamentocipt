@@ -80,6 +80,11 @@
     const detalhesTabelaBody = document.querySelector('#tabelaPagamentos tbody');
     const detalhesTabelaWrapper = document.getElementById('detalhesTabelaWrapper');
     const detalhesVazio = document.getElementById('detalhesVazio');
+    const pendentesWrapper = document.getElementById('pendentesWrapper');
+    const pendentesQuantidade = document.getElementById('pendentesQuantidade');
+    const pendentesTabelaWrapper = document.getElementById('pendentesTabelaWrapper');
+    const pendentesTabelaBody = document.querySelector('#tabelaPagamentosPendentes tbody');
+    const pendentesVazio = document.getElementById('pendentesVazio');
     const refreshButton = document.getElementById('btnRecarregar');
 
     let conciliacoes = [];
@@ -188,10 +193,16 @@
       detalhesVazio.classList.add('d-none');
 
       detalhesTabelaBody.innerHTML = lista.map((item) => {
-        const contribuinte = [item.contribuinte, item.documento_contribuinte].filter(Boolean).join(' • ');
+        const contribuinteParts = [item.contribuinte, item.documento_contribuinte].filter(Boolean);
+        if (!contribuinteParts.length && item.pagamento?.documento) {
+          contribuinteParts.push(item.pagamento.documento);
+        }
+        const contribuinte = contribuinteParts.join(' • ');
         const pagamentoInfo = [
           item.pagamento?.data ? formatDate(item.pagamento.data) : null,
           item.pagamento?.guia ? `Guia ${item.pagamento.guia}` : null,
+          item.pagamento?.codigo_barras ? `Código de barras ${item.pagamento.codigo_barras}` : null,
+          item.pagamento?.linha_digitavel ? `Linha digitável ${item.pagamento.linha_digitavel}` : null,
           item.pagamento?.valor != null ? formatCurrency(item.pagamento.valor) : null,
         ].filter(Boolean).join('<br>');
         const numeroDar = item.numero_documento || (item.dar_id ? `DAR #${item.dar_id}` : '—');
@@ -211,6 +222,57 @@
       }).join('');
     };
 
+    const renderPendentes = (lista, mostrar) => {
+      if (!pendentesWrapper || !pendentesTabelaWrapper || !pendentesTabelaBody || !pendentesVazio) return;
+      if (!mostrar) {
+        pendentesWrapper.classList.add('d-none');
+        pendentesTabelaWrapper.classList.add('d-none');
+        pendentesVazio.classList.add('d-none');
+        pendentesTabelaBody.innerHTML = '';
+        if (pendentesQuantidade) pendentesQuantidade.textContent = '';
+        return;
+      }
+
+      pendentesWrapper.classList.remove('d-none');
+      const listaValida = Array.isArray(lista) ? lista : [];
+      if (!listaValida.length) {
+        pendentesTabelaWrapper.classList.add('d-none');
+        pendentesVazio.classList.remove('d-none');
+        pendentesTabelaBody.innerHTML = '';
+        if (pendentesQuantidade) pendentesQuantidade.textContent = '0 pendentes';
+        return;
+      }
+
+      pendentesTabelaWrapper.classList.remove('d-none');
+      pendentesVazio.classList.add('d-none');
+      if (pendentesQuantidade) {
+        pendentesQuantidade.textContent = `${listaValida.length} pendente${listaValida.length === 1 ? '' : 's'}`;
+      }
+
+      pendentesTabelaBody.innerHTML = listaValida.map((item) => {
+        const pagamento = item.pagamento || {};
+        const refs = [
+          pagamento.guia ? `Guia ${pagamento.guia}` : null,
+          pagamento.codigo_barras ? `Código de barras ${pagamento.codigo_barras}` : null,
+          pagamento.linha_digitavel ? `Linha digitável ${pagamento.linha_digitavel}` : null,
+        ].filter(Boolean).join('<br>');
+        const documento = pagamento.documento || '—';
+        const valor = pagamento.valor != null ? formatCurrency(pagamento.valor) : '—';
+        const data = pagamento.data ? formatDateTime(pagamento.data) : '—';
+        const observacao = item.observacao || '—';
+
+        return `
+          <tr>
+            <td>${refs || '—'}</td>
+            <td>${documento}</td>
+            <td>${valor}</td>
+            <td>${data}</td>
+            <td>${observacao}</td>
+          </tr>
+        `;
+      }).join('');
+    };
+
     const atualizarDetalhes = (registro, detalhes) => {
       if (detalhesSubtitulo) {
         if (registro) {
@@ -221,10 +283,23 @@
         }
       }
       if (detalhesQuantidade) {
-        const qtd = detalhes?.pagamentos?.length || 0;
-        detalhesQuantidade.textContent = registro ? `${qtd} pagamento${qtd === 1 ? '' : 's'}` : '';
+        if (registro) {
+          const conciliados = Array.isArray(detalhes?.pagamentos) ? detalhes.pagamentos.length : 0;
+          const pendentes = Array.isArray(detalhes?.pendentes) ? detalhes.pendentes.length : 0;
+          const partes = [`${conciliados} conciliado${conciliados === 1 ? '' : 's'}`];
+          partes.push(`${pendentes} pendente${pendentes === 1 ? '' : 's'}`);
+          detalhesQuantidade.textContent = partes.join(' · ');
+        } else {
+          detalhesQuantidade.textContent = '';
+        }
       }
-      renderPagamentos(detalhes?.pagamentos || []);
+      const listaConciliados = Array.isArray(detalhes?.pagamentos) ? detalhes.pagamentos : [];
+      const listaPendentes = Array.isArray(detalhes?.pendentes) ? detalhes.pendentes : [];
+      renderPagamentos(listaConciliados);
+      renderPendentes(listaPendentes, Boolean(registro));
+      if (pendentesQuantidade && registro && !listaPendentes.length) {
+        pendentesQuantidade.textContent = '0 pendentes';
+      }
     };
 
     const selecionarConciliacao = async (id) => {
@@ -246,7 +321,7 @@
         atualizarDetalhes(registro, detalhes);
       } catch (error) {
         console.error('Detalhes da conciliação:', error);
-        atualizarDetalhes(registro, { pagamentos: [] });
+        atualizarDetalhes(registro, { pagamentos: [], pendentes: [] });
         if (detalhesSubtitulo) {
           detalhesSubtitulo.textContent = error.message || 'Erro ao carregar os pagamentos conciliados.';
         }
@@ -273,7 +348,7 @@
           await selecionarConciliacao(primeiro.id);
         } else {
           renderResumo(null);
-          atualizarDetalhes(null, { pagamentos: [] });
+          atualizarDetalhes(null, { pagamentos: [], pendentes: [] });
         }
       } catch (error) {
         console.error('Histórico de conciliações:', error);
@@ -281,7 +356,7 @@
           tabelaConciliacoes.innerHTML = `<tr><td colspan="6" class="text-center text-danger py-4">${error.message || 'Erro ao carregar conciliações.'}</td></tr>`;
         }
         renderResumo(null);
-        atualizarDetalhes(null, { pagamentos: [] });
+        atualizarDetalhes(null, { pagamentos: [], pendentes: [] });
         if (totalLabel) totalLabel.textContent = '';
       }
     };
