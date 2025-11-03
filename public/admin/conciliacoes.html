@@ -107,6 +107,27 @@
               </table>
             </div>
             <div id="detalhesVazio" class="empty-placeholder d-none">Nenhum pagamento conciliado na execução selecionada.</div>
+            <div id="pendentesWrapper" class="mt-4 d-none">
+              <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <h3 class="h6 mb-0">Pagamentos não conciliados</h3>
+                <span class="badge bg-warning-subtle text-warning-emphasis" id="pendentesQuantidade"></span>
+              </div>
+              <div class="table-responsive mt-3 d-none" id="pendentesTabelaWrapper">
+                <table class="table table-sm align-middle" id="tabelaPagamentosPendentes">
+                  <thead class="table-light">
+                    <tr>
+                      <th scope="col">Pagamento</th>
+                      <th scope="col">Documento</th>
+                      <th scope="col">Valor</th>
+                      <th scope="col">Data</th>
+                      <th scope="col">Observação</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+              <div id="pendentesVazio" class="empty-placeholder d-none">Nenhum pagamento pendente na execução selecionada.</div>
+            </div>
           </div>
         </div>
       </main>
