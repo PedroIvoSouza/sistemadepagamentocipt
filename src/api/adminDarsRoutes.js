@@ -141,6 +141,19 @@ const dbAllAsync = (sql, params = []) =>
 const dbRunAsync = (sql, params = []) =>
   new Promise((resolve, reject) => db.run(sql, params, function (err) { return err ? reject(err) : resolve(this); }));
 
+async function getTableColumnNames(tableName) {
+  try {
+    const columns = await dbAllAsync(`PRAGMA table_info('${tableName}')`).catch(() => []);
+    return columns
+      .map((col) => String(col?.name || ''))
+      .filter(Boolean)
+      .map((name) => name.toLowerCase());
+  } catch (error) {
+    console.error(`[AdminDARs] Não foi possível obter colunas da tabela ${tableName}:`, error);
+    return [];
+  }
+}
+
 let ensuredAdvertenciaColumn = false;
 async function ensureAdvertenciaColumn() {
   if (ensuredAdvertenciaColumn) return;
@@ -493,22 +506,49 @@ router.get(
         return res.json({ ok: true, conciliacaoId, total: 0, pagamentos: [] });
       }
 
+      const columnNames = await getTableColumnNames('dar_conciliacoes_pagamentos');
+      const hasColumn = (name) => columnNames.includes(String(name).toLowerCase());
+
+      const selectFields = [
+        'p.id',
+        'p.dar_id',
+        'p.status_anterior',
+        'p.status_atual',
+        'p.numero_documento',
+        'p.valor',
+        'p.data_vencimento',
+        'p.data_pagamento',
+        'p.origem',
+        'p.contribuinte',
+        'p.documento_contribuinte',
+        'p.pagamento_guia',
+        'p.pagamento_documento',
+        'p.pagamento_valor',
+        'p.pagamento_data',
+        hasColumn('pagamento_codigo_barras')
+          ? 'p.pagamento_codigo_barras AS pagamento_codigo_barras'
+          : 'NULL AS pagamento_codigo_barras',
+        hasColumn('pagamento_linha_digitavel')
+          ? 'p.pagamento_linha_digitavel AS pagamento_linha_digitavel'
+          : 'NULL AS pagamento_linha_digitavel',
+        hasColumn('conciliado') ? 'p.conciliado AS conciliado' : '1 AS conciliado',
+        hasColumn('observacao') ? 'p.observacao AS observacao' : 'NULL AS observacao',
+        hasColumn('criado_em') ? 'p.criado_em AS criado_em' : 'NULL AS criado_em',
+        'd.numero_documento AS dar_numero_documento',
+        'd.valor AS dar_valor',
+        'd.data_vencimento AS dar_data_vencimento',
+        'd.data_pagamento AS dar_data_pagamento',
+        'd.status AS dar_status',
+        'perm.nome_empresa AS perm_nome',
+        'perm.cnpj AS perm_cnpj',
+        'ce.nome_razao_social AS cliente_nome',
+        'ce.documento AS cliente_documento',
+        'ce.documento_responsavel AS cliente_doc_responsavel',
+        'e.nome_evento AS evento_nome',
+      ].join(',\n                ');
+
       const rows = await dbAllAsync(
-        `SELECT p.id, p.dar_id, p.status_anterior, p.status_atual, p.numero_documento, p.valor,
-                p.data_vencimento, p.data_pagamento, p.origem, p.contribuinte, p.documento_contribuinte,
-                p.pagamento_guia, p.pagamento_documento, p.pagamento_valor, p.pagamento_data,
-                p.pagamento_codigo_barras, p.pagamento_linha_digitavel, p.conciliado, p.observacao, p.criado_em,
-                d.numero_documento AS dar_numero_documento,
-                d.valor AS dar_valor,
-                d.data_vencimento AS dar_data_vencimento,
-                d.data_pagamento AS dar_data_pagamento,
-                d.status AS dar_status,
-                perm.nome_empresa AS perm_nome,
-                perm.cnpj AS perm_cnpj,
-                ce.nome_razao_social AS cliente_nome,
-                ce.documento AS cliente_documento,
-                ce.documento_responsavel AS cliente_doc_responsavel,
-                e.nome_evento AS evento_nome
+        `SELECT ${selectFields}
            FROM dar_conciliacoes_pagamentos p
       LEFT JOIN dars d ON d.id = p.dar_id
       LEFT JOIN permissionarios perm ON perm.id = d.permissionario_id
