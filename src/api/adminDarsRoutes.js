@@ -141,6 +141,19 @@ const dbAllAsync = (sql, params = []) =>
 const dbRunAsync = (sql, params = []) =>
   new Promise((resolve, reject) => db.run(sql, params, function (err) { return err ? reject(err) : resolve(this); }));
 
+async function getTableColumnNames(tableName) {
+  try {
+    const columns = await dbAllAsync(`PRAGMA table_info('${tableName}')`).catch(() => []);
+    return columns
+      .map((col) => String(col?.name || ''))
+      .filter(Boolean)
+      .map((name) => name.toLowerCase());
+  } catch (error) {
+    console.error(`[AdminDARs] Não foi possível obter colunas da tabela ${tableName}:`, error);
+    return [];
+  }
+}
+
 let ensuredAdvertenciaColumn = false;
 async function ensureAdvertenciaColumn() {
   if (ensuredAdvertenciaColumn) return;
@@ -493,49 +506,131 @@ router.get(
         return res.json({ ok: true, conciliacaoId, total: 0, pagamentos: [] });
       }
 
+      const columnNames = await getTableColumnNames('dar_conciliacoes_pagamentos');
+      const hasColumn = (name) => columnNames.includes(String(name).toLowerCase());
+
+      const selectColumn = (name, alias = Array.isArray(name) ? name[0] : name, fallback = 'NULL') => {
+        const candidates = Array.isArray(name) ? name : [name];
+        const found = candidates.find((candidate) => hasColumn(candidate));
+        return found ? `p.${found} AS ${alias}` : `${fallback} AS ${alias}`;
+      };
+
+      const selectFields = [
+        selectColumn('id'),
+        selectColumn(['dar_id', 'darId'], 'dar_id'),
+        selectColumn(['status_anterior', 'statusAnterior'], 'status_anterior'),
+        selectColumn(['status_atual', 'statusAtual'], 'status_atual'),
+        selectColumn(['numero_documento', 'numeroDocumento'], 'numero_documento'),
+        selectColumn('valor'),
+        selectColumn(['data_vencimento', 'dataVencimento'], 'data_vencimento'),
+        selectColumn(['data_pagamento', 'dataPagamento'], 'data_pagamento'),
+        selectColumn('origem'),
+        selectColumn('contribuinte'),
+        selectColumn(['documento_contribuinte', 'documentoContribuinte'], 'documento_contribuinte'),
+        selectColumn(['pagamento_guia', 'pagamentoGuia'], 'pagamento_guia'),
+        selectColumn(['pagamento_documento', 'pagamentoDocumento'], 'pagamento_documento'),
+        selectColumn(['pagamento_valor', 'pagamentoValor'], 'pagamento_valor'),
+        selectColumn(['pagamento_data', 'pagamentoData'], 'pagamento_data'),
+        selectColumn(['pagamento_codigo_barras', 'pagamentoCodigoBarras'], 'pagamento_codigo_barras'),
+        selectColumn(['pagamento_linha_digitavel', 'pagamentoLinhaDigitavel'], 'pagamento_linha_digitavel'),
+        selectColumn('conciliado', 'conciliado', '1'),
+        selectColumn('observacao'),
+        selectColumn(['criado_em', 'criadoEm'], 'criado_em'),
+        'd.numero_documento AS dar_numero_documento',
+        'd.valor AS dar_valor',
+        'd.data_vencimento AS dar_data_vencimento',
+        'd.data_pagamento AS dar_data_pagamento',
+        'd.status AS dar_status',
+        'perm.nome_empresa AS perm_nome',
+        'perm.cnpj AS perm_cnpj',
+        'ce.nome_razao_social AS cliente_nome',
+        'ce.documento AS cliente_documento',
+        'ce.documento_responsavel AS cliente_doc_responsavel',
+        'e.nome_evento AS evento_nome',
+      ].join(',\n                ');
+
       const rows = await dbAllAsync(
-        `SELECT p.id, p.dar_id, p.status_anterior, p.status_atual, p.numero_documento, p.valor,
-                p.data_vencimento, p.data_pagamento, p.origem, p.contribuinte, p.documento_contribuinte,
-                p.pagamento_guia, p.pagamento_documento, p.pagamento_valor, p.pagamento_data, p.criado_em,
-                d.numero_documento AS dar_numero_documento,
-                d.valor AS dar_valor,
-                d.data_vencimento AS dar_data_vencimento,
-                d.data_pagamento AS dar_data_pagamento,
-                d.status AS dar_status
+        `SELECT ${selectFields}
            FROM dar_conciliacoes_pagamentos p
       LEFT JOIN dars d ON d.id = p.dar_id
+      LEFT JOIN permissionarios perm ON perm.id = d.permissionario_id
+      LEFT JOIN DARs_Eventos de ON de.id_dar = d.id
+      LEFT JOIN Eventos e ON e.id = de.id_evento
+      LEFT JOIN Clientes_Eventos ce ON ce.id = e.id_cliente
           WHERE p.conciliacao_id = ?
           ORDER BY p.id ASC`,
         [conciliacaoId]
       );
 
-      const pagamentos = rows.map((row) => ({
-        id: row.id,
-        dar_id: row.dar_id || null,
-        status_anterior: row.status_anterior || null,
-        status_atual: row.status_atual || row.dar_status || null,
-        numero_documento: row.numero_documento || row.dar_numero_documento || null,
-        valor:
+      const pagamentosConciliados = [];
+      const pagamentosPendentes = [];
+
+      for (const row of rows) {
+        const conciliado = row.conciliado === 0 ? false : true;
+        const contribuinte =
+          row.contribuinte ||
+          row.perm_nome ||
+          row.evento_nome ||
+          row.cliente_nome ||
+          null;
+        const documentoContribuinte =
+          row.documento_contribuinte ||
+          row.perm_cnpj ||
+          row.cliente_documento ||
+          row.cliente_doc_responsavel ||
+          row.pagamento_documento ||
+          null;
+        const valor =
           row.valor != null
             ? Number(row.valor)
             : row.dar_valor != null
             ? Number(row.dar_valor)
-            : null,
-        data_vencimento: row.data_vencimento || row.dar_data_vencimento || null,
-        data_pagamento: row.data_pagamento || row.dar_data_pagamento || null,
-        origem: row.origem || null,
-        contribuinte: row.contribuinte || null,
-        documento_contribuinte: row.documento_contribuinte || null,
-        pagamento: {
+            : row.pagamento_valor != null
+            ? Number(row.pagamento_valor)
+            : null;
+        const pagamentoInfo = {
           guia: row.pagamento_guia || null,
           documento: row.pagamento_documento || null,
           valor: row.pagamento_valor != null ? Number(row.pagamento_valor) : null,
           data: row.pagamento_data || null,
-        },
-        registrado_em: row.criado_em || null,
-      }));
+          codigo_barras: row.pagamento_codigo_barras || null,
+          linha_digitavel: row.pagamento_linha_digitavel || null,
+        };
 
-      return res.json({ ok: true, conciliacaoId, total: pagamentos.length, pagamentos });
+        const item = {
+          id: row.id,
+          dar_id: row.dar_id || null,
+          status_anterior: row.status_anterior || null,
+          status_atual: row.status_atual || row.dar_status || null,
+          numero_documento: row.numero_documento || row.dar_numero_documento || null,
+          valor,
+          data_vencimento: row.data_vencimento || row.dar_data_vencimento || null,
+          data_pagamento: row.data_pagamento || row.dar_data_pagamento || null,
+          origem: row.origem || null,
+          contribuinte,
+          documento_contribuinte: documentoContribuinte,
+          pagamento: pagamentoInfo,
+          registrado_em: row.criado_em || null,
+          conciliado,
+          observacao: row.observacao || null,
+        };
+
+        if (conciliado) pagamentosConciliados.push(item);
+        else pagamentosPendentes.push(item);
+      }
+
+      const totalConciliados = pagamentosConciliados.length;
+      const totalPendentes = pagamentosPendentes.length;
+
+      return res.json({
+        ok: true,
+        conciliacaoId,
+        total: totalConciliados,
+        totalPendentes,
+        totalGeral: totalConciliados + totalPendentes,
+        pagamentos: pagamentosConciliados,
+        pendentes: pagamentosPendentes,
+      });
     } catch (error) {
       console.error('[AdminDARs] ERRO GET /api/admin/dars/conciliacoes/:id/pagamentos:', error);
       return res.status(500).json({ error: 'Erro ao listar pagamentos conciliados.' });

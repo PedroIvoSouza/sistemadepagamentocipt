@@ -103,7 +103,9 @@ async function ensureConciliacaoDetalhesTable() {
     const row = await dbGet(
       "SELECT name FROM sqlite_master WHERE type='table' AND name='dar_conciliacoes_pagamentos' LIMIT 1"
     );
-    if (!row || !row.name) {
+
+    const tableExists = !!row?.name;
+    if (!tableExists) {
       await dbRun(
         `CREATE TABLE IF NOT EXISTS dar_conciliacoes_pagamentos (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -122,15 +124,34 @@ async function ensureConciliacaoDetalhesTable() {
           pagamento_documento TEXT,
           pagamento_valor REAL,
           pagamento_data TEXT,
+          pagamento_codigo_barras TEXT,
+          pagamento_linha_digitavel TEXT,
+          conciliado INTEGER NOT NULL DEFAULT 1 CHECK(conciliado IN (0,1)),
+          observacao TEXT,
           criado_em TEXT DEFAULT (datetime('now')),
           FOREIGN KEY (conciliacao_id) REFERENCES dar_conciliacoes(id) ON DELETE CASCADE
         )`
       );
-      await dbRun(
-        'CREATE INDEX IF NOT EXISTS idx_dar_conc_pag_conciliacao ON dar_conciliacoes_pagamentos(conciliacao_id)'
-      );
-      await dbRun('CREATE INDEX IF NOT EXISTS idx_dar_conc_pag_dar ON dar_conciliacoes_pagamentos(dar_id)');
     }
+
+    const columns = await dbAll(`PRAGMA table_info('dar_conciliacoes_pagamentos')`).catch(() => []);
+    const colNames = columns.map((c) => c.name);
+
+    const ensureColumn = async (name, definition) => {
+      if (!colNames.includes(name)) {
+        await dbRun(`ALTER TABLE dar_conciliacoes_pagamentos ADD COLUMN ${definition}`);
+      }
+    };
+
+    await ensureColumn('pagamento_codigo_barras', 'pagamento_codigo_barras TEXT');
+    await ensureColumn('pagamento_linha_digitavel', 'pagamento_linha_digitavel TEXT');
+    await ensureColumn('conciliado', "conciliado INTEGER NOT NULL DEFAULT 1 CHECK(conciliado IN (0,1))");
+    await ensureColumn('observacao', 'observacao TEXT');
+
+    await dbRun(
+      'CREATE INDEX IF NOT EXISTS idx_dar_conc_pag_conciliacao ON dar_conciliacoes_pagamentos(conciliacao_id)'
+    );
+    await dbRun('CREATE INDEX IF NOT EXISTS idx_dar_conc_pag_dar ON dar_conciliacoes_pagamentos(dar_id)');
   } catch (err) {
     console.error('[CONCILIA] Falha ao garantir tabela de detalhes da conciliação:', err?.message || err);
   } finally {
@@ -181,12 +202,25 @@ async function registrarConciliacaoLog(entry) {
     );
 
     const conciliacaoId = insert?.lastID || insert?.lastId || insert?.id || null;
-    const detalhes = Array.isArray(entry?.pagamentosDetalhes) ? entry.pagamentosDetalhes : [];
+    const detalhesConciliados = Array.isArray(entry?.pagamentosDetalhes) ? entry.pagamentosDetalhes : [];
+    const detalhesPendentes = Array.isArray(entry?.pagamentosNaoConciliados) ? entry.pagamentosNaoConciliados : [];
+    const todosDetalhes = [...detalhesConciliados, ...detalhesPendentes];
 
-    if (conciliacaoId && detalhes.length) {
+    if (conciliacaoId && todosDetalhes.length) {
       await ensureConciliacaoDetalhesTable();
-      for (const detalhe of detalhes) {
+      for (const detalhe of todosDetalhes) {
         try {
+          const pagamento = detalhe?.pagamento || {};
+          const pagamentoValor = pagamento?.valor != null ? Number(pagamento.valor) : null;
+          const pagamentoData = pagamento?.data || null;
+          const pagamentoGuia = pagamento?.guia || null;
+          const pagamentoDocumento = pagamento?.documento || null;
+          const pagamentoCodigoBarras = pagamento?.codigo_barras || pagamento?.codigoBarras || null;
+          const pagamentoLinhaDigitavel = pagamento?.linha_digitavel || pagamento?.linhaDigitavel || null;
+          const conciliado = detalhe?.conciliado === false ? 0 : 1;
+          const observacaoBase = detalhe?.observacao ? String(detalhe.observacao) : null;
+          const observacao = observacaoBase ? observacaoBase.slice(0, 500) : conciliado ? null : 'Pagamento não conciliado automaticamente.';
+
           await dbRun(
             `INSERT INTO dar_conciliacoes_pagamentos (
               conciliacao_id,
@@ -203,8 +237,12 @@ async function registrarConciliacaoLog(entry) {
               pagamento_guia,
               pagamento_documento,
               pagamento_valor,
-              pagamento_data
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              pagamento_data,
+              pagamento_codigo_barras,
+              pagamento_linha_digitavel,
+              conciliado,
+              observacao
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
               conciliacaoId,
               detalhe?.darId || null,
@@ -217,10 +255,14 @@ async function registrarConciliacaoLog(entry) {
               detalhe?.origem || null,
               detalhe?.contribuinte || null,
               detalhe?.documentoContribuinte || null,
-              detalhe?.pagamento?.guia || null,
-              detalhe?.pagamento?.documento || null,
-              detalhe?.pagamento?.valor != null ? Number(detalhe.pagamento.valor) : null,
-              detalhe?.pagamento?.data || null,
+              pagamentoGuia,
+              pagamentoDocumento,
+              pagamentoValor,
+              pagamentoData,
+              pagamentoCodigoBarras,
+              pagamentoLinhaDigitavel,
+              conciliado,
+              observacao,
             ]
           );
         } catch (err) {
@@ -372,6 +414,9 @@ async function tentarVincularPagamento(pagamento) {
     documento: numeroInscricao || null,
     valor: valorPago != null ? Number(valorPago) : null,
     data: dataPagamento || null,
+    codigo_barras: codigoBarras || null,
+    linha_digitavel: linhaDigitavel || null,
+    numero_doc_origem: numeroDocOrigem || null,
   };
 
   const anexarPagamento = (resultado) => {
@@ -627,7 +672,13 @@ async function conciliarPagamentosDoDia(dataISO) {
   const dtHoraFimDia = toDateTimeString(dia, 23, 59, 59);
 
   const pagamentosMap = new Map();
-  let resumo = { dataDia, totalPagamentos: 0, totalAtualizados: 0, pagamentosAtualizados: [] };
+  let resumo = {
+    dataDia,
+    totalPagamentos: 0,
+    totalAtualizados: 0,
+    pagamentosAtualizados: [],
+    pagamentosNaoConciliados: [],
+  };
   let sucesso = false;
   let mensagemErro = null;
 
@@ -667,6 +718,7 @@ async function conciliarPagamentosDoDia(dataISO) {
 
     let totalAtualizados = 0;
     const detalhesAtualizados = [];
+    const detalhesNaoConciliados = [];
     for (const pagamento of todosPagamentos) {
       const resultado = await tentarVincularPagamento(pagamento);
       if (resultado?.vinculado) {
@@ -677,6 +729,7 @@ async function conciliarPagamentosDoDia(dataISO) {
           const resumoDar = await obterResumoDarParaLog(resultado.darId);
           if (resumoDar) {
             detalhesAtualizados.push({
+              conciliado: true,
               darId: resultado.darId,
               statusAnterior: resultado.statusAnterior || null,
               statusAtual: resumoDar.status || 'Pago',
@@ -695,14 +748,52 @@ async function conciliarPagamentosDoDia(dataISO) {
                   pagamento.linhaDigitavel ||
                   null,
                 documento: resultado.pagamento?.documento || pagamento.numeroInscricao || null,
-                valor: resultado.pagamento?.valor != null ? Number(resultado.pagamento.valor) : pagamento.valorPago || null,
-                data: resultado.pagamento?.data || pagamento.dataPagamento || null,
+                valor:
+                  resultado.pagamento?.valor != null
+                    ? Number(resultado.pagamento.valor)
+                    : pagamento.valorPago != null
+                    ? Number(pagamento.valorPago)
+                    : null,
+                data:
+                  resultado.pagamento?.data ||
+                  pagamento.dataPagamento ||
+                  pagamento.raw?.dataPagamento ||
+                  pagamento.raw?.dataArrecadacao ||
+                  pagamento.raw?.dataInclusao ||
+                  null,
+                codigo_barras: resultado.pagamento?.codigo_barras || pagamento.codigoBarras || null,
+                linha_digitavel: resultado.pagamento?.linha_digitavel || pagamento.linhaDigitavel || null,
               },
             });
           }
         }
       } else {
         console.warn(`--> ALERTA: Pagamento não vinculado. SEFAZ -> Doc: ${pagamento.numeroInscricao}, Guia: ${pagamento.numeroGuia || '—'}, Valor: ${pagamento.valorPago}`);
+        const extras = [];
+        const dataInclusao = pagamento.raw?.dataInclusao || pagamento.raw?.dataHoraInclusao;
+        const dataArrecadacao = pagamento.raw?.dataArrecadacao;
+        if (dataInclusao) extras.push(`Inclusão: ${dataInclusao}`);
+        if (dataArrecadacao) extras.push(`Arrecadação: ${dataArrecadacao}`);
+        detalhesNaoConciliados.push({
+          conciliado: false,
+          observacao:
+            extras.length
+              ? `Pagamento não conciliado automaticamente. ${extras.join(' | ')}`
+              : 'Pagamento não conciliado automaticamente.',
+          pagamento: {
+            guia: pagamento.numeroGuia || pagamento.codigoBarras || pagamento.linhaDigitavel || null,
+            documento: pagamento.numeroInscricao || null,
+            valor: pagamento.valorPago != null ? Number(pagamento.valorPago) : null,
+            data:
+              pagamento.dataPagamento ||
+              pagamento.raw?.dataPagamento ||
+              pagamento.raw?.dataArrecadacao ||
+              pagamento.raw?.dataInclusao ||
+              null,
+            codigo_barras: pagamento.codigoBarras || null,
+            linha_digitavel: pagamento.linhaDigitavel || null,
+          },
+        });
       }
     }
     console.log(`[CONCILIA] ${dataDia} finalizado. DARs atualizadas: ${totalAtualizados}/${todosPagamentos.length}.`);
@@ -712,6 +803,7 @@ async function conciliarPagamentosDoDia(dataISO) {
       totalPagamentos: todosPagamentos.length,
       totalAtualizados,
       pagamentosAtualizados: detalhesAtualizados,
+      pagamentosNaoConciliados: detalhesNaoConciliados,
     };
     sucesso = true;
     return resumo;
@@ -731,6 +823,7 @@ async function conciliarPagamentosDoDia(dataISO) {
       sucesso,
       mensagem: mensagemErro,
       pagamentosDetalhes: resumo.pagamentosAtualizados,
+      pagamentosNaoConciliados: resumo.pagamentosNaoConciliados,
     });
   }
 }
