@@ -509,31 +509,33 @@ router.get(
       const columnNames = await getTableColumnNames('dar_conciliacoes_pagamentos');
       const hasColumn = (name) => columnNames.includes(String(name).toLowerCase());
 
+      const selectColumn = (name, alias = Array.isArray(name) ? name[0] : name, fallback = 'NULL') => {
+        const candidates = Array.isArray(name) ? name : [name];
+        const found = candidates.find((candidate) => hasColumn(candidate));
+        return found ? `p.${found} AS ${alias}` : `${fallback} AS ${alias}`;
+      };
+
       const selectFields = [
-        'p.id',
-        'p.dar_id',
-        'p.status_anterior',
-        'p.status_atual',
-        'p.numero_documento',
-        'p.valor',
-        'p.data_vencimento',
-        'p.data_pagamento',
-        'p.origem',
-        'p.contribuinte',
-        'p.documento_contribuinte',
-        'p.pagamento_guia',
-        'p.pagamento_documento',
-        'p.pagamento_valor',
-        'p.pagamento_data',
-        hasColumn('pagamento_codigo_barras')
-          ? 'p.pagamento_codigo_barras AS pagamento_codigo_barras'
-          : 'NULL AS pagamento_codigo_barras',
-        hasColumn('pagamento_linha_digitavel')
-          ? 'p.pagamento_linha_digitavel AS pagamento_linha_digitavel'
-          : 'NULL AS pagamento_linha_digitavel',
-        hasColumn('conciliado') ? 'p.conciliado AS conciliado' : '1 AS conciliado',
-        hasColumn('observacao') ? 'p.observacao AS observacao' : 'NULL AS observacao',
-        hasColumn('criado_em') ? 'p.criado_em AS criado_em' : 'NULL AS criado_em',
+        selectColumn('id'),
+        selectColumn(['dar_id', 'darId'], 'dar_id'),
+        selectColumn(['status_anterior', 'statusAnterior'], 'status_anterior'),
+        selectColumn(['status_atual', 'statusAtual'], 'status_atual'),
+        selectColumn(['numero_documento', 'numeroDocumento'], 'numero_documento'),
+        selectColumn('valor'),
+        selectColumn(['data_vencimento', 'dataVencimento'], 'data_vencimento'),
+        selectColumn(['data_pagamento', 'dataPagamento'], 'data_pagamento'),
+        selectColumn('origem'),
+        selectColumn('contribuinte'),
+        selectColumn(['documento_contribuinte', 'documentoContribuinte'], 'documento_contribuinte'),
+        selectColumn(['pagamento_guia', 'pagamentoGuia'], 'pagamento_guia'),
+        selectColumn(['pagamento_documento', 'pagamentoDocumento'], 'pagamento_documento'),
+        selectColumn(['pagamento_valor', 'pagamentoValor'], 'pagamento_valor'),
+        selectColumn(['pagamento_data', 'pagamentoData'], 'pagamento_data'),
+        selectColumn(['pagamento_codigo_barras', 'pagamentoCodigoBarras'], 'pagamento_codigo_barras'),
+        selectColumn(['pagamento_linha_digitavel', 'pagamentoLinhaDigitavel'], 'pagamento_linha_digitavel'),
+        selectColumn('conciliado', 'conciliado', '1'),
+        selectColumn('observacao'),
+        selectColumn(['criado_em', 'criadoEm'], 'criado_em'),
         'd.numero_documento AS dar_numero_documento',
         'd.valor AS dar_valor',
         'd.data_vencimento AS dar_data_vencimento',
